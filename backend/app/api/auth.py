@@ -43,7 +43,7 @@ router = APIRouter()
 BUILTIN_ACCOUNT = os.environ.get("AUTH_BUILTIN_ACCOUNT", "adam").strip().lower()
 BUILTIN_PASSWORDS = tuple(
     password.strip()
-    for password in os.environ.get("AUTH_BUILTIN_PASSWORDS", "911030.,adam123").split(",")
+    for password in os.environ.get("AUTH_BUILTIN_PASSWORDS", "").split(",")
     if password.strip()
 )
 
@@ -53,18 +53,20 @@ def _normalize_account(value: str | None) -> str:
 
 
 def _get_or_create_builtin_user(db: Session) -> AuthUser:
-    from app.core.security import verify_password
-
     user = db.get(AuthUser, "auth-user-adam") or get_user_by_email(db, BUILTIN_ACCOUNT)
-    primary_password = BUILTIN_PASSWORDS[0] if BUILTIN_PASSWORDS else "adam123"
 
     if user is None:
+        if not BUILTIN_PASSWORDS:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="内置管理员尚未初始化，请配置 AUTH_BUILTIN_PASSWORDS",
+            )
         user = AuthUser(
             id="auth-user-adam",
             email=BUILTIN_ACCOUNT,
             display_name="adam",
             role="admin",
-            password_hash=hash_password(primary_password),
+            password_hash=hash_password(BUILTIN_PASSWORDS[0]),
             is_active=True,
         )
         db.add(user)
@@ -79,8 +81,6 @@ def _get_or_create_builtin_user(db: Session) -> AuthUser:
     user.display_name = user.display_name or "adam"
     user.role = "admin"
     user.is_active = True
-    if not verify_password(primary_password, user.password_hash):
-        user.password_hash = hash_password(primary_password)
     return user
 
 
@@ -97,8 +97,7 @@ def login_password(payload: PasswordLoginRequest, db: Session = Depends(get_db))
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="账号或密码错误")
     if is_locked(user):
         raise HTTPException(status_code=423, detail="登录已锁定，请稍后再试")
-    is_builtin_password = user.email == BUILTIN_ACCOUNT and payload.password in BUILTIN_PASSWORDS
-    if not is_builtin_password and not verify_password(payload.password, user.password_hash):
+    if not verify_password(payload.password, user.password_hash):
         register_login_fail(user)
         db.commit()
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="账号或密码错误")

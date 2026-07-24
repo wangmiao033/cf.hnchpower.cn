@@ -4,12 +4,13 @@ import Settings from '@/components/Settings.jsx'
 import HelpTooltip from '@/components/HelpTooltip.jsx'
 import MobileMenu from '@/components/MobileMenu.jsx'
 import ConfirmDialog from '@/components/ConfirmDialog.jsx'
-import { SIDEBAR_GROUPS } from '@/app/routes.js'
+import { getPageMeta, SIDEBAR_GROUPS } from '@/app/routes.js'
 import { useAuth } from '@/features/auth/AuthContext.jsx'
 import './Header.css'
 
 function Header({ activeView, onNavigate, onSettingsChange }) {
   const { user, signOut, updateMyPassword } = useAuth()
+  const pageMeta = getPageMeta(activeView)
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [showPasswordDialog, setShowPasswordDialog] = useState(false)
   const [showLogoutDialog, setShowLogoutDialog] = useState(false)
@@ -51,7 +52,7 @@ function Header({ activeView, onNavigate, onSettingsChange }) {
   return (
     <header className="app-admin-header">
       <div className="app-admin-header__toolbar">
-        <div className="app-admin-header__right">
+        <div className="app-admin-header__left">
           <div className="app-admin-header__mobile">
             <MobileMenu>
               <nav className="header-mobile-sidebar">
@@ -73,6 +74,12 @@ function Header({ activeView, onNavigate, onSettingsChange }) {
               </nav>
             </MobileMenu>
           </div>
+          <div className="app-admin-header__title-block">
+            <strong>{pageMeta.title}</strong>
+            <span>{pageMeta.description}</span>
+          </div>
+        </div>
+        <div className="app-admin-header__right">
           <NotificationCenter />
           <HelpTooltip />
           <Settings onSettingsChange={onSettingsChange} />

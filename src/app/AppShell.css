@@ -25,15 +25,61 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  background: var(--admin-page-bg);
+  background: #eef3f9;
+}
+
+.sidebar-toggle-rail {
+  position: relative;
+  z-index: 10;
+  flex: 0 0 0;
+  width: 0;
+  min-width: 0;
+  min-height: 100vh;
+  box-sizing: border-box;
+  overflow: visible;
+}
+
+.sidebar-rail-button {
+  position: absolute;
+  top: 136px;
+  left: -13px;
+  width: 26px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid #d5deeb;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #78869a;
+  box-shadow: 0 1px 4px rgba(42, 62, 91, 0.08);
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.sidebar-toggle-rail.is-collapsed .sidebar-rail-button {
+  left: 6px;
+}
+
+.sidebar-rail-button:hover {
+  background: #edf4ff;
+  border-color: #b8cdf0;
+  color: var(--admin-primary);
+}
+
+.sidebar-rail-button span {
+  font-size: 19px;
+  line-height: 1;
+  transform: translateY(-1px);
 }
 
 .app-workspace {
   flex: 1;
   min-height: 0;
   width: 100%;
-  background: var(--admin-page-bg);
-  padding: 16px var(--admin-workspace-pad-x) 18px;
+  background: #eef3f9;
+  padding: 16px 22px 18px;
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -55,5 +101,9 @@
 
   .app-workspace {
     padding: 14px 16px;
+  }
+
+  .sidebar-toggle-rail {
+    display: none;
   }
 }

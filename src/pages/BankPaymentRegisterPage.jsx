@@ -101,7 +101,7 @@ function BankPaymentRegisterPage() {
     const local = records.find((r) => String(r.id) === String(id))
     if (local) {
       applyFrontendRecordToRdLink(local)
-      showToast('已预选关联的研发对账单', 'success')
+      showToast('已预选关联的研发账单', 'success')
       consume()
       return
     }
@@ -112,7 +112,7 @@ function BankPaymentRegisterPage() {
         const row = await getReconciliationRecord(String(id))
         if (cancelled) return
         applyFrontendRecordToRdLink(apiRowToFrontend(row))
-        showToast('已预选关联的研发对账单', 'success')
+        showToast('已预选关联的研发账单', 'success')
       } catch (e) {
         if (!cancelled) {
           showToast(
@@ -183,7 +183,7 @@ function BankPaymentRegisterPage() {
     e.preventDefault()
     const rid = rdLink.reconciliationId?.trim()
     if (!rid) {
-      showToast('请选择研发对账单', 'info')
+      showToast('请选择研发账单', 'info')
       return
     }
     const linked = parseFloat(String(rdLink.linkedAmount || '').replace(/,/g, ''))
@@ -277,7 +277,7 @@ function BankPaymentRegisterPage() {
                   />
                 </label>
                 <label className="rec-bank-payment__field rec-bank-rd-link__field--full">
-                  选择研发对账单
+                  选择研发账单
                   <select
                     className="admin-input"
                     value={rdLink.reconciliationId}

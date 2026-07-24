@@ -291,7 +291,7 @@ export function buildSettlementWorkbookFromSelected(selectedRecords) {
     applySettlementSheetLayout(ws)
     XLSX.utils.book_append_sheet(wb, ws, sheetName)
     const no = sanitizeFileSegment(r.settlementNumber) || '未命名'
-    const fileName = `研发对账单_${no}.xlsx`
+    const fileName = `研发账单_${no}.xlsx`
     return { wb, fileName }
   }
 
@@ -303,7 +303,7 @@ export function buildSettlementWorkbookFromSelected(selectedRecords) {
     XLSX.utils.book_append_sheet(wb, ws, names[i])
   })
 
-  const fileName = `研发对账单_批量导出_${dayjs().format('YYYYMMDD_HHmm')}.xlsx`
+  const fileName = `研发账单_批量导出_${dayjs().format('YYYYMMDD_HHmm')}.xlsx`
   return { wb, fileName }
 }
 

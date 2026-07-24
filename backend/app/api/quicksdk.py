@@ -1,20 +1,26 @@
-"""QuickSDK流水库读取 API。"""
+"""QuickSDK flow library API."""
 
 from __future__ import annotations
 
 import re
+import uuid
 from dataclasses import dataclass, field
 
-from fastapi import APIRouter, Depends, Query
-from sqlalchemy import func, select
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_db
 from app.models.quicksdk import QuickSdkFlow, QuickSdkImportBatch
 from app.schemas.quicksdk import (
+    QuickSdkAnalyticsResponse,
     QuickSdkBatchListResponse,
     QuickSdkBatchRead,
+    QuickSdkFlowListResponse,
+    QuickSdkFlowRead,
     QuickSdkGameFlowResponse,
+    QuickSdkImportRequest,
+    QuickSdkRankItem,
     QuickSdkRdLineListResponse,
     QuickSdkRdLineSuggestion,
     QuickSdkSummaryResponse,
@@ -24,13 +30,13 @@ router = APIRouter()
 
 
 def _normalize_month(raw: str | None) -> str | None:
-    """将 2026年5月 / 2026-5 / 202605 统一为 2026-05。"""
+    """Normalize 2026年5月 / 2026-5 / 202605 to 2026-05."""
     if raw is None:
         return None
     text = str(raw).strip()
     if not text:
         return None
-    match = re.match(r"^(\d{4})年(\d{1,2})月$", text)
+    match = re.match(r"^(\d{4})年(\d{1,2})月?$", text)
     if match:
         return f"{match.group(1)}-{int(match.group(2)):02d}"
     match = re.match(r"^(\d{4})[-/.](\d{1,2})$", text)
@@ -43,10 +49,6 @@ def _normalize_month(raw: str | None) -> str | None:
 
 
 def _normalize_product_name(raw: str | None) -> str:
-    """
-    QuickSDK 原始游戏名常带包服/折扣后缀。研发账单通常按项目组出单，
-    这里只做确定性高的归并，剩余名称保持原样。
-    """
     text = str(raw or "").strip()
     if not text:
         return ""
@@ -66,6 +68,13 @@ def _matches_query(summary_name: str, source_names: set[str], query: str | None)
     if q in summary_name.lower():
         return True
     return any(q in name.lower() for name in source_names)
+
+
+def _safe_float(value: object) -> float:
+    try:
+        return float(value or 0)
+    except (TypeError, ValueError):
+        return 0.0
 
 
 @dataclass
@@ -133,7 +142,7 @@ def _build_flow_summaries(
         if item is None:
             item = _FlowSummary(game_name=product_name, settlement_month=month)
             grouped[key] = item
-        item.add(source_game_text, str(channel or "").strip(), float(gross_flow or 0))
+        item.add(source_game_text, str(channel or "").strip(), _safe_float(gross_flow))
 
     summaries = [
         item
@@ -142,6 +151,69 @@ def _build_flow_summaries(
     ]
     summaries.sort(key=lambda item: (-item.total_flow, item.game_name))
     return summaries
+
+
+@router.post("/imports", response_model=QuickSdkBatchRead, status_code=status.HTTP_201_CREATED)
+def import_quicksdk_flows(
+    payload: QuickSdkImportRequest,
+    db: Session = Depends(get_db),
+) -> QuickSdkBatchRead:
+    if not payload.rows:
+        raise HTTPException(status_code=400, detail="导入内容不能为空")
+
+    months = {
+        _normalize_month(row.settlement_month or payload.settlement_month or row.flow_date)
+        for row in payload.rows
+    }
+    months.discard(None)
+    settlement_month = _normalize_month(payload.settlement_month) or (months.pop() if len(months) == 1 else None)
+
+    batch_id = str(uuid.uuid4())
+    games: set[str] = set()
+    channels: set[str] = set()
+    total_flow = 0.0
+    flows: list[QuickSdkFlow] = []
+
+    for row in payload.rows:
+        game_name = row.game_name.strip()
+        channel_name = row.channel_name.strip()
+        if not game_name or not channel_name:
+            continue
+        row_month = _normalize_month(row.settlement_month) or settlement_month
+        flow = round(_safe_float(row.gross_flow), 2)
+        games.add(game_name)
+        channels.add(channel_name)
+        total_flow += flow
+        flows.append(
+            QuickSdkFlow(
+                id=str(uuid.uuid4()),
+                batch_id=batch_id,
+                flow_date=row.flow_date,
+                settlement_month=row_month,
+                game_name=game_name,
+                channel_name=channel_name,
+                gross_flow=flow,
+            )
+        )
+
+    if not flows:
+        raise HTTPException(status_code=400, detail="没有可导入的有效流水")
+
+    batch = QuickSdkImportBatch(
+        id=batch_id,
+        source_file=(payload.source_file or "").strip() or None,
+        settlement_month=settlement_month,
+        row_count=len(flows),
+        game_count=len(games),
+        channel_count=len(channels),
+        total_flow=round(total_flow, 2),
+        note=(payload.note or "").strip() or None,
+    )
+    db.add(batch)
+    db.add_all(flows)
+    db.commit()
+    db.refresh(batch)
+    return QuickSdkBatchRead.model_validate(batch)
 
 
 @router.get("/batches", response_model=QuickSdkBatchListResponse)
@@ -198,7 +270,92 @@ def get_quicksdk_summary(
         row_count=int(row_count or 0),
         game_count=int(game_count or 0),
         channel_count=int(channel_count or 0),
-        total_flow=float(total_flow or 0),
+        total_flow=round(_safe_float(total_flow), 2),
+    )
+
+
+@router.get("/flows", response_model=QuickSdkFlowListResponse)
+def list_quicksdk_flows(
+    db: Session = Depends(get_db),
+    settlement_month: str | None = Query(None),
+    game_name: str | None = Query(None),
+    channel_name: str | None = Query(None),
+    q: str | None = Query(None),
+    limit: int = Query(200, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+) -> QuickSdkFlowListResponse:
+    month = _normalize_month(settlement_month)
+    stmt = select(QuickSdkFlow)
+    count_stmt = select(func.count(QuickSdkFlow.id))
+
+    filters = []
+    if month:
+        filters.append(QuickSdkFlow.settlement_month == month)
+    if game_name:
+        filters.append(QuickSdkFlow.game_name.ilike(f"%{game_name.strip()}%"))
+    if channel_name:
+        filters.append(QuickSdkFlow.channel_name.ilike(f"%{channel_name.strip()}%"))
+    if q:
+        keyword = f"%{q.strip()}%"
+        filters.append(or_(QuickSdkFlow.game_name.ilike(keyword), QuickSdkFlow.channel_name.ilike(keyword)))
+
+    for item in filters:
+        stmt = stmt.where(item)
+        count_stmt = count_stmt.where(item)
+
+    total = int(db.execute(count_stmt).scalar_one())
+    rows = (
+        db.execute(
+            stmt.order_by(QuickSdkFlow.gross_flow.desc(), QuickSdkFlow.game_name.asc())
+            .limit(limit)
+            .offset(offset)
+        )
+        .scalars()
+        .all()
+    )
+    return QuickSdkFlowListResponse(
+        items=[QuickSdkFlowRead.model_validate(row) for row in rows],
+        total=total,
+    )
+
+
+@router.get("/analytics", response_model=QuickSdkAnalyticsResponse)
+def get_quicksdk_analytics(
+    db: Session = Depends(get_db),
+    settlement_month: str | None = Query(None),
+    limit: int = Query(10, ge=1, le=100),
+) -> QuickSdkAnalyticsResponse:
+    month = _normalize_month(settlement_month)
+    total_stmt = select(func.coalesce(func.sum(QuickSdkFlow.gross_flow), 0))
+    if month:
+        total_stmt = total_stmt.where(QuickSdkFlow.settlement_month == month)
+    total_flow = _safe_float(db.execute(total_stmt).scalar_one())
+
+    def rankings(column) -> list[QuickSdkRankItem]:
+        stmt = select(
+            column.label("name"),
+            func.coalesce(func.sum(QuickSdkFlow.gross_flow), 0).label("flow"),
+            func.count(QuickSdkFlow.id).label("row_count"),
+        )
+        if month:
+            stmt = stmt.where(QuickSdkFlow.settlement_month == month)
+        rows = (
+            db.execute(stmt.group_by(column).order_by(func.sum(QuickSdkFlow.gross_flow).desc()).limit(limit))
+            .all()
+        )
+        return [
+            QuickSdkRankItem(
+                name=str(name or "未填写"),
+                flow=round(_safe_float(flow), 2),
+                row_count=int(row_count or 0),
+                percentage=round((_safe_float(flow) / total_flow * 100), 1) if total_flow else 0,
+            )
+            for name, flow, row_count in rows
+        ]
+
+    return QuickSdkAnalyticsResponse(
+        game_rankings=rankings(QuickSdkFlow.game_name),
+        channel_rankings=rankings(QuickSdkFlow.channel_name),
     )
 
 

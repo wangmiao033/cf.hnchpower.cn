@@ -1,0 +1,302 @@
+.core-recon-page .page-container-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.core-recon-head,
+.core-recon-filters,
+.core-recon-stats > div,
+.core-recon-panel {
+  background: #ffffff;
+  border: 1px solid var(--admin-border);
+  border-radius: 8px;
+}
+
+.core-recon-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 18px;
+}
+
+.core-recon-head p {
+  margin: 0 0 6px;
+  color: var(--admin-primary);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.core-recon-head h1 {
+  margin: 0;
+  color: var(--admin-text-main);
+  font-size: 23px;
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+
+.core-recon-head span {
+  display: block;
+  margin-top: 8px;
+  color: var(--admin-text-sub);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.core-recon-actions,
+.core-recon-filters {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.core-recon-actions button,
+.core-recon-filters button,
+.core-recon-table button {
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--admin-border);
+  border-radius: 7px;
+  background: #ffffff;
+  color: var(--admin-text-main);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.core-recon-actions button:hover,
+.core-recon-filters button:hover,
+.core-recon-table button:hover {
+  border-color: var(--admin-primary);
+  color: var(--admin-primary);
+}
+
+.core-recon-actions .primary {
+  border-color: var(--admin-primary);
+  background: var(--admin-primary);
+  color: #ffffff;
+}
+
+.core-recon-actions .primary:hover {
+  color: #ffffff;
+}
+
+.core-recon-filters {
+  align-items: flex-end;
+  padding: 10px 12px;
+}
+
+.core-recon-filters label,
+.core-recon-filter-field {
+  display: grid;
+  gap: 5px;
+  min-width: 150px;
+}
+
+.core-recon-filters label > span,
+.core-recon-filter-field > span {
+  color: var(--admin-text-tertiary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.core-recon-filters input,
+.core-recon-filters select {
+  height: 34px;
+  border: 1px solid var(--admin-border);
+  border-radius: 7px;
+  background: #ffffff;
+  color: var(--admin-text-main);
+  padding: 0 10px;
+  font-size: 13px;
+}
+
+.core-recon-filter-search {
+  flex: 1;
+  min-width: 220px;
+}
+
+.core-recon-filter-search input[type='search'] {
+  width: 100%;
+}
+
+.core-recon-partner-filter {
+  min-width: 320px;
+}
+
+.core-recon-partner-search {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+}
+
+.core-recon-partner-search input {
+  width: 100%;
+  min-width: 0;
+}
+
+.core-recon-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.core-recon-stats--five {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.core-recon-stats > div {
+  min-height: 72px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 12px 14px;
+  border-top: 3px solid #dbeafe;
+}
+
+.core-recon-stats span,
+.core-recon-panel-head span {
+  color: var(--admin-text-tertiary);
+  font-size: 12px;
+}
+
+.core-recon-stats strong {
+  margin-top: 6px;
+  color: var(--admin-text-main);
+  font-size: 20px;
+  line-height: 1.2;
+}
+
+.core-recon-panel {
+  overflow: hidden;
+}
+
+.core-recon-panel-head {
+  min-height: 46px;
+  padding: 0 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--admin-border-soft);
+}
+
+.core-recon-panel-head h2 {
+  margin: 0;
+  color: var(--admin-text-main);
+  font-size: 15px;
+}
+
+.core-recon-table-wrap {
+  max-height: calc(100vh - 490px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.core-recon-table {
+  width: 100%;
+  min-width: 1120px;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.core-recon-table th,
+.core-recon-table td {
+  height: 38px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--admin-border-soft);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.core-recon-table th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  color: var(--admin-text-tertiary);
+  background: #f8fafc;
+  font-weight: 600;
+  box-shadow: 0 1px 0 var(--admin-border-soft);
+}
+
+.core-recon-table td {
+  color: var(--admin-text-main);
+}
+
+.core-recon-table td:nth-last-child(2),
+.core-recon-table td:nth-last-child(3),
+.core-recon-table td:nth-last-child(4) {
+  font-variant-numeric: tabular-nums;
+}
+
+.core-recon-table td:last-child {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.core-recon-table button {
+  height: 28px;
+  padding: 0 9px;
+  font-size: 12px;
+}
+
+.core-recon-table button.danger {
+  color: #be123c;
+}
+
+.core-recon-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 56px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: var(--admin-text-sub);
+  font-size: 12px;
+}
+
+.core-recon-empty {
+  height: 64px;
+  text-align: center !important;
+  color: var(--admin-text-tertiary) !important;
+}
+
+@media (max-width: 1180px) {
+  .core-recon-head {
+    display: grid;
+    align-items: stretch;
+  }
+
+  .core-recon-stats,
+  .core-recon-stats--five {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .core-recon-actions,
+  .core-recon-filters {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .core-recon-filters label,
+  .core-recon-filter-field,
+  .core-recon-filter-search {
+    min-width: 0;
+  }
+
+  .core-recon-stats,
+  .core-recon-stats--five {
+    grid-template-columns: 1fr;
+  }
+
+  .core-recon-table-wrap {
+    max-height: 58vh;
+  }
+}

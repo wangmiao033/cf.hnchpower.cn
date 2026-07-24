@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { listQuickSdkRdLines } from '@/lib/api/quicksdk.ts'
+import { getQuickSdkAnalytics, listQuickSdkRdLines } from '@/lib/api/quicksdk.ts'
 
 function currentMonthValue() {
   const now = new Date()
@@ -94,8 +94,27 @@ function QuickSdkRdBillingTool({ defaultMonth, onCreateBill, onNotify }) {
   const [message, setMessage] = useState(null)
 
   useEffect(() => {
-    setMonth(normalizeMonthValue(defaultMonth))
+    if (defaultMonth) {
+      setMonth(normalizeMonthValue(defaultMonth))
+    }
   }, [defaultMonth])
+
+  useEffect(() => {
+    let cancelled = false
+
+    getQuickSdkAnalytics({})
+      .then((overview) => {
+        const latestMonth = overview?.monthly?.[0]?.settlement_month
+        if (!cancelled && latestMonth) {
+          setMonth(latestMonth)
+        }
+      })
+      .catch(() => {})
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const visibleItems = useMemo(() => {
     const keyword = query.trim().toLowerCase()

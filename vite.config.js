@@ -11,7 +11,26 @@ export default defineConfig({
   },
   server: {
     port: 3000,
-    open: true
+    open: true,
+    proxy: {
+      '/api': {
+        target: 'https://cf.hnchpower.cn',
+        changeOrigin: true,
+        secure: true,
+        cookieDomainRewrite: '',
+        configure(proxy) {
+          proxy.on('proxyRes', (proxyResponse) => {
+            const cookies = proxyResponse.headers['set-cookie']
+            if (!cookies) return
+            proxyResponse.headers['set-cookie'] = cookies.map((cookie) =>
+              cookie
+                .replace(/;\s*Secure/gi, '')
+                .replace(/;\s*SameSite=None/gi, '; SameSite=Lax')
+            )
+          })
+        }
+      }
+    }
   },
   build: {
     outDir: 'dist',

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { findGamePreset } from '@/components/GamePresets.jsx'
 import GamePresets from '@/components/GamePresets.jsx'
 import { STATUS_OPTIONS } from '@/components/StatusManager.jsx'
@@ -6,6 +6,7 @@ import LineItemsTable from '@/components/shared/LineItemsTable.jsx'
 import {
   calculateRdSettlementRow
 } from '@/domain/settlement/calculateSettlementAmount.js'
+import { getQuickSdkGameFlow, listQuickSdkRdLines } from '@/lib/api/quicksdk.ts'
 import '@/components/ChannelBilling.css'
 
 export function createEmptyRdLine(sortOrder = 0, settlementCycle = '') {
@@ -90,6 +91,18 @@ function normalizeSettlementCycleLabel(raw) {
   return text
 }
 
+function settlementCycleToMonthValue(raw) {
+  const normalized = normalizeSettlementCycleLabel(raw)
+  const match = normalized.match(/^(\d{4})年(\d{1,2})月$/)
+  return match ? `${match[1]}-${String(Number(match[2])).padStart(2, '0')}` : ''
+}
+
+function flowInputValue(value) {
+  const number = Number(value || 0)
+  if (!Number.isFinite(number)) return '0'
+  return String(Math.round(number * 100) / 100)
+}
+
 function formatIssueDateLabel(raw) {
   const d = raw ? new Date(raw) : new Date()
   const date = Number.isNaN(d.getTime()) ? new Date() : d
@@ -125,7 +138,7 @@ function resolveCanonicalSettlementMonth(lines, fallbackMonth) {
   if (cycles.length > 1) {
     return {
       month: null,
-      error: '同一张研发对账单的结算周期必须一致，请统一后再保存'
+      error: '同一张研发账单的结算周期必须一致，请统一后再保存'
     }
   }
 
@@ -153,7 +166,6 @@ function ReconciliationLineItemsForm({
   onPreviewChange,
   submitIntentRef
 }) {
-  const partnerListId = `${formId || 'rd'}-partner-list`
   const cycleListId = `${formId || 'rd'}-cycle-list`
   const initialCycle = settlementMonth || getCurrentCycleLabel()
 
@@ -167,6 +179,9 @@ function ReconciliationLineItemsForm({
     status: 'pending'
   })
   const [lines, setLines] = useState([createEmptyRdLine(0, initialCycle)])
+  const [gameSuggestions, setGameSuggestions] = useState({})
+  const [flowStatuses, setFlowStatuses] = useState({})
+  const gameSearchTimersRef = useRef({})
   const cycleOptions = useMemo(() => {
     const set = new Set()
     for (const recent of buildRecentCycleOptions(12)) {
@@ -208,7 +223,7 @@ function ReconciliationLineItemsForm({
   }, [mode, editRecord, settlementMonth, initialCycle])
 
   useEffect(() => {
-    if (!quickFillData) return
+    if (mode !== 'add' || !quickFillData) return
     const prefillLines = Array.isArray(quickFillData.rdLines)
       ? quickFillData.rdLines.filter((line) => line && typeof line === 'object')
       : []
@@ -245,7 +260,14 @@ function ReconciliationLineItemsForm({
         testFee: quickFillData.testingFee || row.testFee
       }))
     )
-  }, [quickFillData, settlementMonth, initialCycle])
+  }, [mode, quickFillData, settlementMonth, initialCycle])
+
+  useEffect(
+    () => () => {
+      Object.values(gameSearchTimersRef.current).forEach((timer) => clearTimeout(timer))
+    },
+    []
+  )
 
   const totals = useMemo(() => {
     let sumRevenue = 0
@@ -414,6 +436,104 @@ function ReconciliationLineItemsForm({
     if (preset) applyGamePresetToRow(index, preset)
   }
 
+  const setFlowStatus = (lineId, nextStatus) => {
+    setFlowStatuses((prev) => ({ ...prev, [lineId]: nextStatus }))
+  }
+
+  const queueGameSuggestions = (index, rawName) => {
+    const line = lines[index]
+    if (!line) return
+    const lineId = line.id
+    const query = String(rawName || '').trim()
+    const month = settlementCycleToMonthValue(line.settlementCycle || header.settlementMonth)
+    clearTimeout(gameSearchTimersRef.current[lineId])
+    if (!query || !month) {
+      setGameSuggestions((prev) => ({ ...prev, [lineId]: [] }))
+      return
+    }
+    gameSearchTimersRef.current[lineId] = setTimeout(async () => {
+      try {
+        const response = await listQuickSdkRdLines({
+          settlement_month: month,
+          q: query,
+          limit: 20
+        })
+        setGameSuggestions((prev) => ({ ...prev, [lineId]: response.items || [] }))
+      } catch {
+        setGameSuggestions((prev) => ({ ...prev, [lineId]: [] }))
+      }
+    }, 220)
+  }
+
+  const syncGameFlow = async (index, rawName, cycleOverride = '') => {
+    const line = lines[index]
+    if (!line) return
+    const lineId = line.id
+    const gameName = String(rawName || '').trim()
+    const month = settlementCycleToMonthValue(
+      cycleOverride || line.settlementCycle || header.settlementMonth
+    )
+    if (!gameName) {
+      setFlowStatus(lineId, null)
+      return
+    }
+    if (!month) {
+      setFlowStatus(lineId, { type: 'warning', label: '缺少月份', detail: '请先填写结算周期' })
+      return
+    }
+
+    setFlowStatus(lineId, { type: 'loading', label: '读取中', detail: '正在查询数据库流水' })
+    try {
+      const result = await getQuickSdkGameFlow({
+        settlement_month: month,
+        game_name: gameName
+      })
+      const totalFlow = Number(result?.total_flow || 0)
+      if (!Number.isFinite(totalFlow) || totalFlow <= 0) {
+        setFlowStatus(lineId, {
+          type: 'warning',
+          label: '未找到',
+          detail: `${month} 的数据库中没有「${gameName}」流水`
+        })
+        return
+      }
+
+      setLines((prev) =>
+        prev.map((row, rowIndex) =>
+          rowIndex === index
+            ? {
+                ...row,
+                gameName: result.game_name || gameName,
+                revenue: flowInputValue(totalFlow),
+                quicksdkFlow: totalFlow,
+                quicksdkFlowMonth: result.settlement_month || month,
+                quicksdkRowCount: result.row_count || 0,
+                quicksdkChannelCount: result.channel_count || 0,
+                quicksdkSourceGameCount: result.source_game_count || 0,
+                quicksdkTopChannel: result.top_channel || ''
+              }
+            : row
+        )
+      )
+      const preset = findGamePreset(result.game_name || gameName)
+      if (preset) applyGamePresetToRow(index, preset)
+      setFlowStatus(lineId, {
+        type: 'success',
+        label: '已关联',
+        detail: `${result.settlement_month || month} 数据库流水 ¥${totalFlow.toLocaleString('zh-CN', {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2
+        })}`
+      })
+    } catch (error) {
+      setFlowStatus(lineId, {
+        type: 'error',
+        label: '读取失败',
+        detail: error instanceof Error ? error.message : '数据库流水读取失败'
+      })
+    }
+  }
+
   const addRow = () => {
     setLines((prev) => [...prev, createEmptyRdLine(prev.length, header.settlementMonth || '')])
   }
@@ -491,36 +611,12 @@ function ReconciliationLineItemsForm({
             </div>
             <div className="form-group">
               <label>合作方</label>
-              <div className="partner-select-wrapper" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <input
-                  type="text"
-                  list={partnerListId}
-                  className="admin-input"
-                  style={{ flex: 1 }}
-                  value={header.partner}
-                  onChange={(e) => setHeader((h) => ({ ...h, partner: e.target.value }))}
-                  placeholder="选择或输入合作方名称"
-                />
-                <datalist id={partnerListId}>
-                  {partners.map((p) => (
-                    <option key={p.id} value={p.name}>
-                      {p.name} {p.category ? `(${p.category})` : ''}
-                    </option>
-                  ))}
-                </datalist>
-                {header.partner && !partners.find((p) => p.name === header.partner) && (
-                  <button
-                    type="button"
-                    className="rec-btn rec-btn--ghost"
-                    onClick={() => {
-                      if (onAddPartner && header.partner.trim()) onAddPartner(header.partner.trim())
-                    }}
-                    title="添加到客户库"
-                  >
-                    {'\u2795'}
-                  </button>
-                )}
-              </div>
+              <PartnerPicker
+                value={header.partner}
+                partners={partners}
+                onChange={(partner) => setHeader((h) => ({ ...h, partner }))}
+                onAddPartner={onAddPartner}
+              />
             </div>
           </div>
           <div className="form-row">
@@ -567,7 +663,7 @@ function ReconciliationLineItemsForm({
           <LineItemsTable
             onAddRow={addRow}
             showAddButton={false}
-            hint="折扣系数与历史口径一致（如 1 无折扣，0.005 为 0.05 折档）。自动计算列不可编辑。"
+            hint="输入游戏名称后，会按结算周期自动读取数据库流水；绿色“已关联”表示取数成功，后台流水仍可人工调整。"
           >
             <div className="rd-line-items-grid">
               <div className="rd-line-items-grid-head" aria-hidden="true">
@@ -591,6 +687,8 @@ function ReconciliationLineItemsForm({
                 const net = calc.totalFlow
                 const gross = calc.shareAmount
                 const settlement = calc.settlementAmount
+                const flowStatus = flowStatuses[line.id]
+                const gameListId = `${formId || 'rd'}-game-list-${index}`
                 return (
                   <div key={line.id} className="rd-line-items-grid-row">
                     <div className="channel-cell">
@@ -600,22 +698,59 @@ function ReconciliationLineItemsForm({
                         className="admin-input"
                         value={line.settlementCycle || header.settlementMonth}
                         onChange={(e) => updateLine(index, 'settlementCycle', e.target.value)}
-                        onBlur={(e) =>
-                          updateLine(index, 'settlementCycle', normalizeSettlementCycleLabel(e.target.value))
-                        }
+                        onBlur={(e) => {
+                          const normalized = normalizeSettlementCycleLabel(e.target.value)
+                          updateLine(index, 'settlementCycle', normalized)
+                          if (String(line.gameName || '').trim()) {
+                            syncGameFlow(index, line.gameName, normalized)
+                          }
+                        }}
                         placeholder="如：2025年10月"
                         title="可选历史周期，也支持自定义录入"
                       />
                     </div>
                     <div className="channel-cell">
-                      <input
-                        type="text"
-                        className="admin-input"
-                        value={line.gameName}
-                        onChange={(e) => updateLine(index, 'gameName', e.target.value)}
-                        onBlur={(e) => onGameNameBlur(index, e.target.value)}
-                        placeholder="必填"
-                      />
+                      <div className={`rd-game-source-field${flowStatus ? ` is-${flowStatus.type}` : ''}`}>
+                        <input
+                          type="search"
+                          list={gameListId}
+                          className="admin-input"
+                          value={line.gameName}
+                          onFocus={(e) => queueGameSuggestions(index, e.target.value)}
+                          onChange={(e) => {
+                            updateLine(index, 'gameName', e.target.value)
+                            setFlowStatus(line.id, null)
+                            queueGameSuggestions(index, e.target.value)
+                          }}
+                          onBlur={(e) => {
+                            onGameNameBlur(index, e.target.value)
+                            syncGameFlow(index, e.target.value)
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault()
+                              e.currentTarget.blur()
+                            }
+                          }}
+                          placeholder="搜索数据库游戏"
+                          title={flowStatus?.detail || '输入游戏名称，自动读取该月份数据库流水'}
+                        />
+                        {flowStatus ? (
+                          <span className="rd-game-source-field__status" title={flowStatus.detail}>
+                            {flowStatus.label}
+                          </span>
+                        ) : null}
+                      </div>
+                      <datalist id={gameListId}>
+                        {(gameSuggestions[line.id] || []).map((item) => (
+                          <option
+                            key={`${item.settlement_month || ''}-${item.game_name}`}
+                            value={item.game_name}
+                          >
+                            ¥{Number(item.total_flow || 0).toLocaleString('zh-CN')}
+                          </option>
+                        ))}
+                      </datalist>
                     </div>
                     <div className="channel-cell channel-cell--num">
                       <input
@@ -623,7 +758,15 @@ function ReconciliationLineItemsForm({
                         step="0.01"
                         className="admin-input channel-input-num"
                         value={line.revenue}
-                        onChange={(e) => updateLine(index, 'revenue', e.target.value)}
+                        onChange={(e) => {
+                          updateLine(index, 'revenue', e.target.value)
+                          setFlowStatus(line.id, {
+                            type: 'manual',
+                            label: '已调整',
+                            detail: '该流水已由人工调整'
+                          })
+                        }}
+                        title={flowStatus?.detail || '后台流水'}
                       />
                     </div>
                     <div className="channel-cell channel-cell--num">
@@ -819,6 +962,134 @@ function ReconciliationLineItemsForm({
       </form>
     </div>
   )
+}
+
+function PartnerPicker({ value, partners, onChange, onAddPartner }) {
+  const inputRef = useRef(null)
+  const [open, setOpen] = useState(false)
+  const query = String(value || '').trim().toLowerCase()
+  const matches = useMemo(() => {
+    const source = (partners || []).filter((partner) => partner?.name)
+    if (!query) return source.slice(0, 8)
+    return source
+      .filter((partner) =>
+        [
+          partner.name,
+          partner.category,
+          partner.taxRegistrationNo,
+          partner.tag2
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase()
+          .includes(query)
+      )
+      .slice(0, 8)
+  }, [partners, query])
+  const exactMatch = (partners || []).some((partner) => partnerKey(partner.name) === partnerKey(value))
+
+  const selectPartner = (partner) => {
+    onChange(partner.name)
+    setOpen(false)
+  }
+
+  const addPartner = () => {
+    const name = String(value || '').trim()
+    if (!name) {
+      inputRef.current?.focus()
+      setOpen(true)
+      return
+    }
+    onAddPartner?.(name)
+    setOpen(false)
+  }
+
+  return (
+    <div className="rd-partner-picker">
+      <div className="rd-partner-picker__control">
+        <input
+          ref={inputRef}
+          type="search"
+          role="combobox"
+          aria-label="搜索客户库合作方"
+          aria-expanded={open}
+          aria-autocomplete="list"
+          className="admin-input"
+          value={value}
+          onFocus={() => setOpen(true)}
+          onBlur={() => window.setTimeout(() => setOpen(false), 120)}
+          onChange={(event) => {
+            onChange(event.target.value)
+            setOpen(true)
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') setOpen(false)
+            if (event.key === 'Enter' && open && matches.length === 1) {
+              event.preventDefault()
+              selectPartner(matches[0])
+            }
+          }}
+          placeholder="搜索客户库中的合作方"
+        />
+        <button
+          type="button"
+          className="rd-partner-picker__add"
+          onClick={addPartner}
+          title={value && !exactMatch ? '新增到客户库' : '输入新的合作方名称'}
+          aria-label="新增合作方"
+        >
+          +
+        </button>
+      </div>
+      {open ? (
+        <div className="rd-partner-picker__menu" role="listbox" aria-label="客户库合作方">
+          <div className="rd-partner-picker__menu-head">
+            <strong>客户库</strong>
+            <span>{(partners || []).length} 个合作方</span>
+          </div>
+          {matches.map((partner) => (
+            <button
+              key={partner.id || partner.name}
+              type="button"
+              role="option"
+              aria-selected={partner.name === value}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => selectPartner(partner)}
+            >
+              <span>
+                <strong>{partner.name}</strong>
+                <small>{partner.category || '未分类'}</small>
+              </span>
+              <em>{partner.taxRegistrationNo || partner.tag2 || ''}</em>
+            </button>
+          ))}
+          {matches.length === 0 ? (
+            <div className="rd-partner-picker__empty">客户库中没有匹配的合作方</div>
+          ) : null}
+          {String(value || '').trim() && !exactMatch ? (
+            <button
+              type="button"
+              className="rd-partner-picker__create"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={addPartner}
+            >
+              <span>+</span>
+              将“{String(value || '').trim()}”新增到客户库
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function partnerKey(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[（(]/g, '(')
+    .replace(/[）)]/g, ')')
+    .replace(/\s+/g, '')
 }
 
 export default ReconciliationLineItemsForm

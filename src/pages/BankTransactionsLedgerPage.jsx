@@ -421,7 +421,7 @@ export default function BankTransactionsLedgerPage() {
         <DetailKV label="创建时间" value={fmtDtShort(editForm.created_at)} />
         {hasReconciliation(editForm) ? (
           <DetailKV
-            label="关联研发对账单号"
+            label="关联研发账单号"
             value={reconciliationDisplayNo(editForm) || NA}
           />
         ) : null}

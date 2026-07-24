@@ -13,7 +13,7 @@ export default function ChannelGroupReceiptStrip({
   onReceiptQuickFull
 }) {
   return (
-    <div className="channel-bill-card__receipts" role="region" aria-label="渠道对账单收款">
+    <div className="channel-bill-card__receipts" role="region" aria-label="渠道账单收款">
       {records.map((rec) => {
         const rid = getChannelRecordId(rec) || rec.id
         const settled = isChannelReceiptSettled(rec)

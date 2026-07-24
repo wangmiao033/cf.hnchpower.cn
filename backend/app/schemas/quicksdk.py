@@ -1,4 +1,4 @@
-"""QuickSDK流水库 API 模型。"""
+"""QuickSDK flow library API schemas."""
 
 from __future__ import annotations
 
@@ -11,13 +11,13 @@ class QuickSdkBatchRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
-    source_file: str | None
-    settlement_month: str | None
-    row_count: int
-    game_count: int
-    channel_count: int
-    total_flow: float
-    note: str | None
+    source_file: str | None = None
+    settlement_month: str | None = None
+    row_count: int = 0
+    game_count: int = 0
+    channel_count: int = 0
+    total_flow: float = 0
+    note: str | None = None
     imported_at: datetime
 
 
@@ -32,6 +32,51 @@ class QuickSdkSummaryResponse(BaseModel):
     game_count: int = 0
     channel_count: int = 0
     total_flow: float = 0
+
+
+class QuickSdkFlowRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    batch_id: str
+    flow_date: str | None = None
+    settlement_month: str | None = None
+    game_name: str
+    channel_name: str
+    gross_flow: float
+    created_at: datetime
+
+
+class QuickSdkFlowListResponse(BaseModel):
+    items: list[QuickSdkFlowRead]
+    total: int
+
+
+class QuickSdkImportRow(BaseModel):
+    flow_date: str | None = None
+    settlement_month: str | None = None
+    game_name: str = Field(min_length=1)
+    channel_name: str = Field(min_length=1)
+    gross_flow: float = 0
+
+
+class QuickSdkImportRequest(BaseModel):
+    source_file: str | None = None
+    settlement_month: str | None = None
+    note: str | None = None
+    rows: list[QuickSdkImportRow]
+
+
+class QuickSdkRankItem(BaseModel):
+    name: str
+    flow: float = 0
+    row_count: int = 0
+    percentage: float = 0
+
+
+class QuickSdkAnalyticsResponse(BaseModel):
+    game_rankings: list[QuickSdkRankItem] = []
+    channel_rankings: list[QuickSdkRankItem] = []
 
 
 class QuickSdkGameFlowResponse(BaseModel):
