@@ -18,7 +18,7 @@ function TopSubnav({ activeView, onNavigate, openTabs = [], onCloseTab }) {
           <span className="app-top-subnav__caption">当前模块</span>
           <strong>{group.label}</strong>
         </div>
-        <div className="app-top-subnav__tabs" role="tablist" aria-label={group.label}>
+        <div className="app-top-subnav__tabs">
           {visibleItems.map((item) => {
             const active = item.view === activeTab
 
@@ -29,8 +29,7 @@ function TopSubnav({ activeView, onNavigate, openTabs = [], onCloseTab }) {
               >
                 <button
                   type="button"
-                  role="tab"
-                  aria-selected={active}
+                  aria-current={active ? 'page' : undefined}
                   className="app-top-subnav__tab-main"
                   onClick={() => onNavigate?.(item.view)}
                 >
