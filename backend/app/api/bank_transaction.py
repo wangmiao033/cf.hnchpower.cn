@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.core.bank_transaction_uploads import ensure_bank_transaction_upload_root
 from app.core.deps import get_db
+from app.core.runtime_paths import ensure_upload_root
 from app.models.bank_transaction import BankTransaction
 from app.schemas.bank_transaction import (
     BankTransactionCreate,
@@ -27,8 +28,8 @@ router = APIRouter()
 
 _ALLOWED_TYPES = frozenset({"statement_import", "payment_register", "collection_register"})
 
-# 与 main.py 中 StaticFiles(directory="uploads") 一致；请在 backend 目录下启动 uvicorn，使路径落在 backend/uploads/…
-UPLOAD_DIR = Path("uploads/bank_attachments")
+# 与 main.py 中的静态文件挂载使用同一个可写根目录。
+UPLOAD_DIR = ensure_upload_root() / "bank_attachments"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 
