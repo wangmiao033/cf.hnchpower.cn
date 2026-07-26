@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import os
-from pathlib import Path
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -23,6 +22,7 @@ from app.api.bank_transaction import router as bank_transaction_router
 from app.api.reconciliation import router as reconciliation_router
 from app.api.contract import router as contract_router
 from app.api.quicksdk import router as quicksdk_router
+from app.core.runtime_paths import ensure_upload_root
 from app.core.security import require_current_user
 
 logger = logging.getLogger(__name__)
@@ -133,8 +133,8 @@ app.include_router(
     dependencies=[Depends(require_current_user)],
 )
 
-Path("uploads").mkdir(parents=True, exist_ok=True)
-app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+_upload_root = ensure_upload_root()
+app.mount("/uploads", StaticFiles(directory=str(_upload_root)), name="uploads")
 
 
 @app.exception_handler(SQLAlchemyError)
