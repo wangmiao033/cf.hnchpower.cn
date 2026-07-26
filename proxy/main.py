@@ -113,6 +113,19 @@ PARTNER_FIELDS = {
     "mailing_address",
 }
 LEGACY_SHORT_NAME_PATTERN = re.compile(r"^简称[:：]\s*([^；;]+)[；;]?\s*")
+PARTNER_ALIAS_REPAIR_MIGRATION = "20260726_split_combined_customer_aliases_v1"
+PARTNER_ALIAS_REPAIRS = {
+    "玩咖": "玩咖",
+    "广州熊动科技有限公司": "熊动",
+    "北京千幻文化传媒有限公司": "千幻",
+    "广州超凡响应网络科技有限公司": "超凡响应",
+    "杭州司墨网络科技有限公司": "司墨",
+    "杭州速发网络科技有限公司": "速发",
+    "广州沙巴克网络科技有限公司": "沙巴克",
+    "广州玺越网络科技有限公司": "玺越",
+    "西安游海网络科技有限公司": "游海",
+    "西安麦游网络科技有限公司": "麦游",
+}
 
 
 def _partner_name_key(value: object) -> str:
@@ -194,6 +207,82 @@ def _ensure_partners_table(conn: psycopg.Connection) -> None:
         WHERE short_name = '' AND tag ~ '^简称[:：]'
         """
     )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS cf_partner_data_migrations (
+          migration_key TEXT PRIMARY KEY,
+          applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS cf_partner_alias_repair_backup (
+          migration_key TEXT NOT NULL,
+          partner_id TEXT NOT NULL,
+          partner_name TEXT NOT NULL,
+          old_short_name TEXT NOT NULL,
+          new_short_name TEXT NOT NULL,
+          backed_up_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          PRIMARY KEY (migration_key, partner_id)
+        )
+        """
+    )
+    alias_repair_applied = conn.execute(
+        """
+        SELECT 1
+        FROM cf_partner_data_migrations
+        WHERE migration_key = %s
+        """,
+        [PARTNER_ALIAS_REPAIR_MIGRATION],
+    ).fetchone()
+    if alias_repair_applied is None:
+        repair_placeholders = ", ".join(["(%s, %s)"] * len(PARTNER_ALIAS_REPAIRS))
+        repair_params = [
+            item
+            for partner_name, short_name in PARTNER_ALIAS_REPAIRS.items()
+            for item in (_partner_name_key(partner_name), short_name)
+        ]
+        conn.execute(
+            f"""
+            WITH repairs(normalized_name, new_short_name) AS (
+              VALUES {repair_placeholders}
+            )
+            INSERT INTO cf_partner_alias_repair_backup (
+              migration_key, partner_id, partner_name, old_short_name, new_short_name
+            )
+            SELECT
+              %s, partner.id, partner.name, partner.short_name, repairs.new_short_name
+            FROM cf_partner_records AS partner
+            JOIN repairs USING (normalized_name)
+            WHERE partner.short_name IS DISTINCT FROM repairs.new_short_name
+            ON CONFLICT (migration_key, partner_id) DO NOTHING
+            """,
+            [*repair_params, PARTNER_ALIAS_REPAIR_MIGRATION],
+        )
+        conn.execute(
+            f"""
+            WITH repairs(normalized_name, new_short_name) AS (
+              VALUES {repair_placeholders}
+            )
+            UPDATE cf_partner_records AS partner
+            SET
+              short_name = repairs.new_short_name,
+              updated_at = NOW()
+            FROM repairs
+            WHERE partner.normalized_name = repairs.normalized_name
+              AND partner.short_name IS DISTINCT FROM repairs.new_short_name
+            """,
+            repair_params,
+        )
+        conn.execute(
+            """
+            INSERT INTO cf_partner_data_migrations (migration_key)
+            VALUES (%s)
+            ON CONFLICT (migration_key) DO NOTHING
+            """,
+            [PARTNER_ALIAS_REPAIR_MIGRATION],
+        )
     conn.execute(
         """
         CREATE INDEX IF NOT EXISTS idx_cf_partner_records_category
@@ -381,7 +470,10 @@ def partner_health() -> dict:
             """
             SELECT
               COUNT(*) AS count,
-              COUNT(*) FILTER (WHERE short_name <> '') AS short_name_count
+              COUNT(*) FILTER (WHERE short_name <> '') AS short_name_count,
+              COUNT(DISTINCT NULLIF(short_name, '')) AS unique_short_name_count,
+              COUNT(*) FILTER (WHERE short_name <> '')
+                - COUNT(DISTINCT NULLIF(short_name, '')) AS duplicate_short_name_count
             FROM cf_partner_records
             """
         ).fetchone()
@@ -391,6 +483,8 @@ def partner_health() -> dict:
         "storage": "postgres",
         "count": int(row["count"]),
         "short_name_count": int(row["short_name_count"]),
+        "unique_short_name_count": int(row["unique_short_name_count"]),
+        "duplicate_short_name_count": int(row["duplicate_short_name_count"]),
     }
 
 
