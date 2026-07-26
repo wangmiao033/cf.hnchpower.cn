@@ -1382,7 +1382,7 @@
 
 .channel-line-items-summary .summary-item .label {
   font-size: 12px;
-  color: var(--muted-text, #6b7280);
+  color: var(--admin-text-sub, #4d5f7a);
 }
 
 .channel-line-items-summary .summary-item .value {
