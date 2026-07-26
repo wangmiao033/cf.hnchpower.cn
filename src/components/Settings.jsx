@@ -21,23 +21,22 @@ function Settings({ onSettingsChange }) {
   })
 
   useEffect(() => {
-    loadSettings()
-  }, [])
-
-  const loadSettings = () => {
     const saved = localStorage.getItem('appSettings')
+    let loaded = {}
     if (saved) {
       try {
-        const loaded = JSON.parse(saved)
-        setSettings({ ...settings, ...loaded })
+        loaded = JSON.parse(saved)
       } catch (e) {
         console.error('加载设置失败', e)
       }
     }
-    // 加载编号格式配置
     const numberFormat = getNumberFormatFromStorage()
-    setSettings(prev => ({ ...prev, settlementNumberFormat: numberFormat }))
-  }
+    setSettings((current) => ({
+      ...current,
+      ...loaded,
+      settlementNumberFormat: numberFormat
+    }))
+  }, [])
 
   const saveSettings = () => {
     localStorage.setItem('appSettings', JSON.stringify(settings))
@@ -78,12 +77,18 @@ function Settings({ onSettingsChange }) {
 
   return (
     <div className="settings">
-      <button 
+      <button
+        type="button"
         className="settings-btn"
         onClick={() => setIsOpen(!isOpen)}
         title="系统设置"
+        aria-label="系统设置"
+        aria-expanded={isOpen}
       >
-        ⚙
+        <svg viewBox="0 0 20 20" aria-hidden="true">
+          <circle cx="10" cy="10" r="2.6" />
+          <path d="M8.7 3.1h2.6l.5 1.8c.5.2.9.4 1.3.7l1.8-.6 1.3 2.2-1.3 1.3c.1.5.1 1 0 1.5l1.3 1.3-1.3 2.2-1.8-.6c-.4.3-.8.5-1.3.7l-.5 1.8H8.7l-.5-1.8c-.5-.2-.9-.4-1.3-.7l-1.8.6-1.3-2.2L5.1 10a6 6 0 0 1 0-1.5L3.8 7.2 5.1 5l1.8.6c.4-.3.8-.5 1.3-.7l.5-1.8Z" />
+        </svg>
       </button>
 
       {isOpen && (
@@ -91,7 +96,14 @@ function Settings({ onSettingsChange }) {
           <div className="settings-dialog" onClick={(e) => e.stopPropagation()}>
             <div className="settings-header">
               <h4>系统设置</h4>
-              <button className="close-settings-btn" onClick={() => setIsOpen(false)}>×</button>
+              <button
+                type="button"
+                className="close-settings-btn"
+                aria-label="关闭设置"
+                onClick={() => setIsOpen(false)}
+              >
+                ×
+              </button>
             </div>
 
             <div className="settings-content">
@@ -206,10 +218,10 @@ function Settings({ onSettingsChange }) {
             </div>
 
             <div className="settings-footer">
-              <button className="reset-btn" onClick={resetSettings}>
+              <button type="button" className="reset-btn" onClick={resetSettings}>
                 重置设置
               </button>
-              <button className="save-settings-btn" onClick={saveSettings}>
+              <button type="button" className="save-settings-btn" onClick={saveSettings}>
                 保存设置
               </button>
             </div>
@@ -221,4 +233,3 @@ function Settings({ onSettingsChange }) {
 }
 
 export default Settings
-

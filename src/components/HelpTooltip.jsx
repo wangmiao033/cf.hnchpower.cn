@@ -6,19 +6,32 @@ function HelpTooltip() {
 
   return (
     <div className="help-tooltip">
-      <button 
-        className="help-btn" 
+      <button
+        type="button"
+        className="help-btn"
         onClick={() => setIsOpen(!isOpen)}
         title="快捷键帮助"
+        aria-label="快捷键与使用帮助"
+        aria-expanded={isOpen}
       >
-        ?
+        <svg viewBox="0 0 20 20" aria-hidden="true">
+          <circle cx="10" cy="10" r="7" />
+          <path d="M7.9 7.5A2.2 2.2 0 0 1 10 6.1c1.3 0 2.3.8 2.3 2 0 1.8-2.3 1.9-2.3 3.6M10 14.5h.01" />
+        </svg>
       </button>
       
       {isOpen && (
         <div className="help-content">
           <div className="help-header">
             <h4>快捷键说明</h4>
-            <button className="close-help" onClick={() => setIsOpen(false)}>×</button>
+            <button
+              type="button"
+              className="close-help"
+              aria-label="关闭帮助"
+              onClick={() => setIsOpen(false)}
+            >
+              ×
+            </button>
           </div>
           <div className="help-list">
             <div className="help-item">

@@ -108,9 +108,11 @@ function Header({ activeView, onNavigate, onSettingsChange }) {
           </div>
         </div>
         <div className="app-admin-header__right">
-          <NotificationCenter />
-          <HelpTooltip />
-          <Settings onSettingsChange={onSettingsChange} />
+          <div className="app-admin-header__utility-group" role="group" aria-label="工作区工具">
+            <NotificationCenter />
+            <HelpTooltip />
+            <Settings onSettingsChange={onSettingsChange} />
+          </div>
           <div className="app-admin-header__user-wrap" ref={userMenuRef}>
             <button
               type="button"

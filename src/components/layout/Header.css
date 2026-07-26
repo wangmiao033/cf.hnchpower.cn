@@ -365,26 +365,59 @@
   font-size: var(--admin-font-sm);
 }
 
-.app-admin-header__right .help-btn,
-.app-admin-header__right .settings-btn,
-.app-admin-header__right .notification-btn {
+.app-admin-header__utility-group {
   min-height: var(--admin-btn-h);
-  height: var(--admin-btn-h);
-  padding: 0 10px;
-  font-size: var(--admin-font-sm);
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  box-sizing: border-box;
+  border: 1px solid var(--admin-border);
   border-radius: var(--admin-radius-sm);
-  background: var(--admin-surface-bg);
-  border-color: var(--admin-border);
+  background: #f8fafc;
+}
+
+.app-admin-header__utility-group .help-btn,
+.app-admin-header__utility-group .settings-btn,
+.app-admin-header__utility-group .notification-btn {
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  min-height: 28px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
   color: var(--admin-text-sub);
   box-shadow: none;
 }
 
-.app-admin-header__right .help-btn:hover,
-.app-admin-header__right .settings-btn:hover,
-.app-admin-header__right .notification-btn:hover {
-  background: var(--admin-surface-hover);
-  border-color: #a9bee0;
+.app-admin-header__utility-group .help-btn svg,
+.app-admin-header__utility-group .settings-btn svg,
+.app-admin-header__utility-group .notification-btn svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.app-admin-header__utility-group .help-btn:hover,
+.app-admin-header__utility-group .settings-btn:hover,
+.app-admin-header__utility-group .notification-btn:hover {
+  background: #eaf2ff;
   color: var(--admin-primary);
+}
+
+.app-admin-header__utility-group .help-btn:focus-visible,
+.app-admin-header__utility-group .settings-btn:focus-visible,
+.app-admin-header__utility-group .notification-btn:focus-visible {
+  outline: 2px solid var(--admin-primary);
+  outline-offset: 1px;
 }
 
 @media (max-width: 960px) {
