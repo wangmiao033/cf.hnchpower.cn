@@ -2,11 +2,15 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
+  flex: 0 0 auto;
+  min-height: auto;
+  overflow: visible;
 }
 
 .core-bill-form-head,
 .core-bill-card,
 .core-bill-footer {
+  flex: 0 0 auto;
   background: #ffffff;
   border: 1px solid var(--admin-border);
   border-radius: 8px;
@@ -74,6 +78,7 @@
 
 .core-bill-card--embedded {
   padding: 12px;
+  overflow: visible;
 }
 
 .core-bill-card--embedded .channel-form {
