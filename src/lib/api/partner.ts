@@ -3,6 +3,7 @@ import { apiDelete, apiGet, apiPost, apiPut } from '@/lib/api/client.ts'
 export type ApiPartnerRow = {
   id: string
   name: string
+  short_name: string
   category: string
   tag: string
   tax_registration_no: string
@@ -24,6 +25,7 @@ export type PartnerListResponse = {
 
 export type PartnerPayload = {
   name: string
+  short_name: string
   category: string
   tag: string
   tax_registration_no: string
@@ -67,6 +69,7 @@ export function apiPartnerRowToFrontend(row: ApiPartnerRow): Record<string, unkn
   return {
     id: String(row.id),
     name: row.name ?? '',
+    shortName: row.short_name ?? '',
     category: row.category || '研发商',
     tag2: row.tag ?? '',
     taxRegistrationNo: row.tax_registration_no ?? '',
@@ -86,6 +89,7 @@ export function frontendPartnerToPayload(
 ): PartnerPayload {
   return {
     name: String(partner.name ?? '').trim(),
+    short_name: String(partner.shortName ?? partner.short_name ?? '').trim(),
     category: String(partner.category || '研发商').trim(),
     tag: String(partner.tag2 ?? partner.tag ?? '').trim(),
     tax_registration_no: String(

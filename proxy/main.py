@@ -101,6 +101,7 @@ def _month_filter(month: str | None) -> tuple[str, list[str]]:
 PARTNER_CATEGORIES = {"研发商", "发行商", "渠道", "供应商", "其他"}
 PARTNER_FIELDS = {
     "name",
+    "short_name",
     "category",
     "tag",
     "tax_registration_no",
@@ -111,6 +112,7 @@ PARTNER_FIELDS = {
     "recipient_phone",
     "mailing_address",
 }
+LEGACY_SHORT_NAME_PATTERN = re.compile(r"^简称[:：]\s*([^；;]+)[；;]?\s*")
 
 
 def _partner_name_key(value: object) -> str:
@@ -135,6 +137,11 @@ def _partner_payload(raw: dict, *, require_name: bool = True) -> dict[str, str]:
     }
     if require_name and not payload["name"]:
         raise HTTPException(status_code=422, detail="请填写客户名称")
+    if not payload["short_name"] and payload["tag"]:
+        legacy_short_name = LEGACY_SHORT_NAME_PATTERN.match(payload["tag"])
+        if legacy_short_name:
+            payload["short_name"] = legacy_short_name.group(1).strip()
+            payload["tag"] = payload["tag"][legacy_short_name.end() :].strip()
     category = payload["category"] or "研发商"
     if category not in PARTNER_CATEGORIES:
         category = "其他"
@@ -149,6 +156,7 @@ def _ensure_partners_table(conn: psycopg.Connection) -> None:
           id TEXT PRIMARY KEY,
           normalized_name TEXT NOT NULL UNIQUE,
           name TEXT NOT NULL,
+          short_name TEXT NOT NULL DEFAULT '',
           category TEXT NOT NULL DEFAULT '研发商',
           tag TEXT NOT NULL DEFAULT '',
           tax_registration_no TEXT NOT NULL DEFAULT '',
@@ -165,6 +173,29 @@ def _ensure_partners_table(conn: psycopg.Connection) -> None:
     )
     conn.execute(
         """
+        ALTER TABLE cf_partner_records
+        ADD COLUMN IF NOT EXISTS short_name TEXT NOT NULL DEFAULT ''
+        """
+    )
+    conn.execute(
+        """
+        UPDATE cf_partner_records
+        SET
+          short_name = BTRIM(
+            SUBSTRING(tag FROM '^简称[:：][[:space:]]*([^；;]+)')
+          ),
+          tag = BTRIM(
+            REGEXP_REPLACE(
+              tag,
+              '^简称[:：][[:space:]]*[^；;]+[；;]?[[:space:]]*',
+              ''
+            )
+          )
+        WHERE short_name = '' AND tag ~ '^简称[:：]'
+        """
+    )
+    conn.execute(
+        """
         CREATE INDEX IF NOT EXISTS idx_cf_partner_records_category
         ON cf_partner_records (category)
         """
@@ -175,6 +206,7 @@ def _partner_row(row: dict) -> dict:
     return {
         "id": row["id"],
         "name": row["name"],
+        "short_name": row["short_name"],
         "category": row["category"],
         "tag": row["tag"],
         "tax_registration_no": row["tax_registration_no"],
@@ -279,17 +311,21 @@ def _upsert_partner(conn: psycopg.Connection, payload: dict[str, str]) -> None:
     conn.execute(
         """
         INSERT INTO cf_partner_records (
-          id, normalized_name, name, category, tag, tax_registration_no,
+          id, normalized_name, name, short_name, category, tag, tax_registration_no,
           bank_name, bank_account, invoice_content, recipient,
           recipient_phone, mailing_address
         )
         VALUES (
-          %s, %s, %s, %s, %s, %s,
+          %s, %s, %s, %s, %s, %s, %s,
           %s, %s, %s, %s,
           %s, %s
         )
         ON CONFLICT (normalized_name) DO UPDATE SET
           name = EXCLUDED.name,
+          short_name = COALESCE(
+            NULLIF(EXCLUDED.short_name, ''),
+            cf_partner_records.short_name
+          ),
           category = CASE
             WHEN cf_partner_records.category = '' THEN EXCLUDED.category
             ELSE cf_partner_records.category
@@ -323,6 +359,7 @@ def _upsert_partner(conn: psycopg.Connection, payload: dict[str, str]) -> None:
             str(uuid4()),
             key,
             payload["name"],
+            payload["short_name"],
             payload["category"],
             payload["tag"],
             payload["tax_registration_no"],
@@ -340,11 +377,21 @@ def _upsert_partner(conn: psycopg.Connection, payload: dict[str, str]) -> None:
 def partner_health() -> dict:
     with psycopg.connect(_database_url(), connect_timeout=15, row_factory=dict_row) as conn:
         _ensure_partners_table(conn)
-        count = int(
-            conn.execute("SELECT COUNT(*) AS count FROM cf_partner_records").fetchone()["count"]
-        )
+        row = conn.execute(
+            """
+            SELECT
+              COUNT(*) AS count,
+              COUNT(*) FILTER (WHERE short_name <> '') AS short_name_count
+            FROM cf_partner_records
+            """
+        ).fetchone()
         conn.commit()
-    return {"status": "ok", "storage": "postgres", "count": count}
+    return {
+        "status": "ok",
+        "storage": "postgres",
+        "count": int(row["count"]),
+        "short_name_count": int(row["short_name_count"]),
+    }
 
 
 @app.get("/api/partners")
@@ -376,12 +423,13 @@ async def list_partners(
     if q and q.strip():
         filters.append(
             """
-            (name ILIKE %s OR tag ILIKE %s OR tax_registration_no ILIKE %s
-             OR bank_name ILIKE %s OR recipient ILIKE %s)
+            (name ILIKE %s OR short_name ILIKE %s OR tag ILIKE %s
+             OR tax_registration_no ILIKE %s OR bank_name ILIKE %s
+             OR recipient ILIKE %s)
             """
         )
         term = f"%{q.strip()}%"
-        params.extend([term, term, term, term, term])
+        params.extend([term, term, term, term, term, term])
     if category and category.strip():
         filters.append("category = %s")
         params.append(category.strip())
@@ -414,12 +462,13 @@ async def create_partner(request: Request, payload: dict) -> dict:
             row = conn.execute(
                 """
                 INSERT INTO cf_partner_records (
-                  id, normalized_name, name, category, tag, tax_registration_no,
+                  id, normalized_name, name, short_name, category, tag,
+                  tax_registration_no,
                   bank_name, bank_account, invoice_content, recipient,
                   recipient_phone, mailing_address
                 )
                 VALUES (
-                  %s, %s, %s, %s, %s, %s,
+                  %s, %s, %s, %s, %s, %s, %s,
                   %s, %s, %s, %s,
                   %s, %s
                 )
@@ -429,6 +478,7 @@ async def create_partner(request: Request, payload: dict) -> dict:
                     str(uuid4()),
                     key,
                     clean["name"],
+                    clean["short_name"],
                     clean["category"],
                     clean["tag"],
                     clean["tax_registration_no"],
@@ -458,6 +508,7 @@ async def update_partner(partner_id: str, request: Request, payload: dict) -> di
                 UPDATE cf_partner_records SET
                   normalized_name = %s,
                   name = %s,
+                  short_name = %s,
                   category = %s,
                   tag = %s,
                   tax_registration_no = %s,
@@ -474,6 +525,7 @@ async def update_partner(partner_id: str, request: Request, payload: dict) -> di
                 [
                     _partner_name_key(clean["name"]),
                     clean["name"],
+                    clean["short_name"],
                     clean["category"],
                     clean["tag"],
                     clean["tax_registration_no"],

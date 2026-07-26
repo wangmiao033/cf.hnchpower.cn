@@ -5,6 +5,7 @@ import './PartnerPage.css'
 
 const EMPTY_PARTNER = {
   name: '',
+  shortName: '',
   category: '研发商',
   tag2: '',
   taxRegistrationNo: '',
@@ -39,6 +40,7 @@ function PartnerPage() {
       const matchesCategory = category === '全部' || partner.category === category
       const searchable = [
         partner.name,
+        partner.shortName,
         partner.category,
         partner.tag2,
         partner.taxRegistrationNo,
@@ -67,6 +69,7 @@ function PartnerPage() {
     const payload = {
       ...form,
       name,
+      shortName: form.shortName.trim(),
       tag2: form.tag2.trim(),
       taxRegistrationNo: form.taxRegistrationNo.trim(),
       bankName: form.bankName.trim(),
@@ -122,7 +125,7 @@ function PartnerPage() {
             type="search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="搜索名称、税号、联系人"
+            placeholder="搜索名称、简称、税号、联系人"
           />
         </div>
       </section>
@@ -134,6 +137,7 @@ function PartnerPage() {
         </div>
         <div className="customer-form-grid">
           <Field label="客户名称" required value={form.name} onChange={(name) => setForm({ ...form, name })} />
+          <Field label="客户简称" value={form.shortName} onChange={(shortName) => setForm({ ...form, shortName })} />
           <label>
             <span>客户类型</span>
             <select value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })}>
@@ -190,6 +194,7 @@ function PartnerPage() {
                   <tr key={partner.id || partner.name}>
                     <td>
                       <strong>{partner.name}</strong>
+                      {partner.shortName ? <small>简称：{partner.shortName}</small> : null}
                       {partner.tag2 ? <small>{partner.tag2}</small> : null}
                     </td>
                     <td>{partner.category || '-'}</td>

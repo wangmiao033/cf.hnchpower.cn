@@ -10,6 +10,7 @@ describe('partner api mapping', () => {
       apiPartnerRowToFrontend({
         id: 'partner-1',
         name: '示例客户',
+        short_name: '示例',
         category: '研发商',
         tag: '重点',
         tax_registration_no: 'TAX-001',
@@ -25,6 +26,7 @@ describe('partner api mapping', () => {
     ).toMatchObject({
       id: 'partner-1',
       name: '示例客户',
+      shortName: '示例',
       tag2: '重点',
       taxRegistrationNo: 'TAX-001',
       bankName: '示例银行',
@@ -40,6 +42,7 @@ describe('partner api mapping', () => {
     expect(
       frontendPartnerToPayload({
         name: ' 示例客户 ',
+        shortName: ' 示例 ',
         category: '研发商',
         tag2: ' 重点 ',
         taxRegistrationNo: ' TAX-001 ',
@@ -52,6 +55,7 @@ describe('partner api mapping', () => {
       })
     ).toEqual({
       name: '示例客户',
+      short_name: '示例',
       category: '研发商',
       tag: '重点',
       tax_registration_no: 'TAX-001',
