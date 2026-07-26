@@ -32,12 +32,16 @@ _HOP_BY_HOP_HEADERS = {
 
 
 def _request_headers(request: Request) -> dict[str, str]:
-    excluded = _HOP_BY_HOP_HEADERS | {"host", "content-length"}
+    excluded = _HOP_BY_HOP_HEADERS | {"host", "content-length", "accept-encoding"}
     headers = {
         name: value
         for name, value in request.headers.items()
         if name.lower() not in excluded
     }
+    # The proxy returns httpx's decoded response body, so request an identity
+    # payload from the upstream to avoid forwarding compressed bytes without
+    # their original Content-Encoding header.
+    headers["accept-encoding"] = "identity"
     headers["x-forwarded-host"] = request.headers.get("host", "")
     headers["x-forwarded-proto"] = request.url.scheme
     return headers
