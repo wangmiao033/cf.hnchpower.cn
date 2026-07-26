@@ -50,7 +50,9 @@ function App() {
   }, [])
 
   const settings = useSettingsStore({ showToast })
-  const recon = useReconciliationStore(settings, showToast)
+  const recon = useReconciliationStore(settings, showToast, {
+    enabled: isAuthenticated && !loading
+  })
 
   const navigate = useCallback((view) => {
     const nextView = view || VIEWS.DASHBOARD
