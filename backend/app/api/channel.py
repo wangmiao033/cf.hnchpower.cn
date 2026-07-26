@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import shutil
 from datetime import datetime, timezone
-from pathlib import Path
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
@@ -13,6 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.deps import get_db
+from app.core.runtime_paths import ensure_upload_root
 from app.models.channel import ChannelReceipt, ChannelRecord, ChannelRecordLineItem
 from app.schemas.channel import (
     ChannelLineItemCreate,
@@ -28,7 +28,7 @@ from app.schemas.channel import (
 
 router = APIRouter()
 
-UPLOAD_DIR = Path("uploads/channel_receipts")
+UPLOAD_DIR = ensure_upload_root() / "channel_receipts"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 
