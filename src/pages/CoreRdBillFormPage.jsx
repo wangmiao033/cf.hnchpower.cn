@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { useAppState } from '@/app/AppStateContext.jsx'
 import PageContainer from '@/components/layout/PageContainer.jsx'
 import ReconciliationLineItemsForm from '@/components/reconciliation/ReconciliationLineItemsForm.jsx'
@@ -26,24 +26,16 @@ function CoreRdBillFormPage({ mode }) {
   const [remoteRecord, setRemoteRecord] = useState(null)
   const [loading, setLoading] = useState(isEdit)
 
-  const recordFromList = useMemo(() => {
-    if (!isEdit || !reconEditRecordId) return null
-    return (recon.records || []).find((row) => String(row.id) === String(reconEditRecordId)) || null
-  }, [isEdit, recon.records, reconEditRecordId])
-
   useEffect(() => {
     if (!isEdit) return
     if (!reconEditRecordId) {
-      setLoading(false)
-      return
-    }
-    if (recordFromList) {
       setRemoteRecord(null)
       setLoading(false)
       return
     }
     let cancelled = false
     async function loadRecord() {
+      setRemoteRecord(null)
       setLoading(true)
       try {
         const row = await getReconciliationRecord(String(reconEditRecordId))
@@ -58,9 +50,9 @@ function CoreRdBillFormPage({ mode }) {
     return () => {
       cancelled = true
     }
-  }, [isEdit, reconEditRecordId, recordFromList, showToast])
+  }, [isEdit, reconEditRecordId, showToast])
 
-  const editRecord = recordFromList || remoteRecord
+  const editRecord = remoteRecord
   const stableEditRecord =
     editRecord && getReconciliationRecordId(editRecord) === ''
       ? { ...editRecord, id: String(reconEditRecordId) }
