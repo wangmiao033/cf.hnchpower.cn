@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { useAppState } from '@/app/AppStateContext.jsx'
 import PageContainer from '@/components/layout/PageContainer.jsx'
 import ChannelBillingForm from '@/components/channel/ChannelBillingForm.jsx'
@@ -22,24 +22,16 @@ function CoreChannelBillFormPage({ mode }) {
   const [remoteRecord, setRemoteRecord] = useState(null)
   const [loading, setLoading] = useState(isEdit)
 
-  const recordFromList = useMemo(() => {
-    if (!isEdit || !channelEditRecordId) return null
-    return (recon.channelRecords || []).find((row) => String(row.id) === String(channelEditRecordId)) || null
-  }, [isEdit, recon.channelRecords, channelEditRecordId])
-
   useEffect(() => {
     if (!isEdit) return
     if (!channelEditRecordId) {
-      setLoading(false)
-      return
-    }
-    if (recordFromList) {
       setRemoteRecord(null)
       setLoading(false)
       return
     }
     let cancelled = false
     async function loadRecord() {
+      setRemoteRecord(null)
       setLoading(true)
       try {
         const row = await getChannelRecord(String(channelEditRecordId))
@@ -54,9 +46,9 @@ function CoreChannelBillFormPage({ mode }) {
     return () => {
       cancelled = true
     }
-  }, [isEdit, channelEditRecordId, recordFromList, showToast])
+  }, [isEdit, channelEditRecordId, showToast])
 
-  const editRecord = recordFromList || remoteRecord
+  const editRecord = remoteRecord
   const stableRecord =
     editRecord && (!editRecord.id || editRecord.id === '')
       ? { ...editRecord, id: String(channelEditRecordId) }
