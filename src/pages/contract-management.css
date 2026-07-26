@@ -500,6 +500,21 @@
   color: #6d45c4;
 }
 
+.contract-attachment-count small {
+  margin: 0 2px;
+  color: #a594d5;
+  font-size: 9px;
+}
+
+.contract-attachment-count.has-files {
+  background: #e9f9f0;
+  color: #168248;
+}
+
+.contract-attachment-count.has-files small {
+  color: #70b98f;
+}
+
 .contract-page .contract-table .col-sticky-right {
   position: sticky;
   right: 0;
@@ -805,32 +820,143 @@
   color: #334155;
 }
 
+.contract-attachment-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.contract-attachment-heading > div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.contract-attachment-heading h4 {
+  margin: 0;
+}
+
+.contract-attachment-heading span {
+  color: #7b8ba3;
+  font-size: 11px;
+}
+
+.contract-bulk-upload,
+.contract-file-actions label,
+.contract-file-actions a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  border: 1px solid #d5e1f2;
+  border-radius: 8px;
+  padding: 4px 10px;
+  background: #fff;
+  color: #2563eb;
+  font-size: 11px;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+  transition: border-color 150ms ease, background 150ms ease, color 150ms ease;
+}
+
+.contract-bulk-upload:hover,
+.contract-file-actions label:hover,
+.contract-file-actions a:hover {
+  border-color: #8cb4f5;
+  background: #f4f8ff;
+}
+
+.contract-bulk-upload.is-loading,
+.contract-file-actions label.is-loading {
+  color: #7b8ba3;
+  cursor: wait;
+}
+
+.contract-bulk-upload input,
+.contract-file-actions input {
+  display: none;
+}
+
 .contract-attachment-list {
   display: grid;
-  gap: 7px;
+  gap: 8px;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
 .contract-attachment-list li {
-  position: relative;
-  padding: 8px 10px 8px 30px;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
   border: 1px solid #e4eaf2;
-  border-radius: 8px;
+  border-radius: 10px;
   background: #fafbfd;
   color: #475569;
-  font-size: 11px;
   overflow-wrap: anywhere;
 }
 
-.contract-attachment-list li::before {
-  content: '件';
-  position: absolute;
-  left: 9px;
-  top: 7px;
+.contract-attachment-list li.is-imported {
+  border-color: #c9ead7;
+  background: #f5fcf8;
+}
+
+.contract-file-icon {
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
+  background: #eaf2ff;
   color: #2563eb;
+  font-size: 10px;
   font-weight: 800;
+}
+
+.contract-attachment-list li.is-imported .contract-file-icon {
+  background: #ddf5e7;
+  color: #168248;
+}
+
+.contract-file-copy {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.contract-file-copy strong {
+  overflow: hidden;
+  color: #334155;
+  font-size: 11px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.contract-file-copy small {
+  color: #8a98ad;
+  font-size: 10px;
+}
+
+.contract-attachment-list li.is-imported .contract-file-copy small {
+  color: #168248;
+}
+
+.contract-file-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.contract-file-actions a:last-child {
+  border-color: transparent;
+  background: #edf4ff;
 }
 
 .contract-placeholder {
@@ -908,5 +1034,19 @@
   .contract-search,
   .contract-form-grid label.is-wide {
     grid-column: auto;
+  }
+
+  .contract-attachment-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .contract-attachment-list li {
+    grid-template-columns: 34px minmax(0, 1fr);
+  }
+
+  .contract-file-actions {
+    grid-column: 1 / -1;
+    padding-left: 44px;
   }
 }

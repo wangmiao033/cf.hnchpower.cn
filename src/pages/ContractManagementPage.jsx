@@ -391,6 +391,13 @@ function ContractManagementPage() {
     }
   }
 
+  const handleAttachmentUploaded = (updatedContract) => {
+    setSelectedContract(updatedContract)
+    setRecords((items) =>
+      items.map((item) => (item.id === updatedContract.id ? updatedContract : item))
+    )
+  }
+
   return (
     <PageContainer hideHeader className="contract-page">
       <section className="contract-hero">
@@ -506,7 +513,7 @@ function ContractManagementPage() {
             <h2>合同列表</h2>
             <span>显示 {filteredRecords.length} / {records.length} 条</span>
           </div>
-          <p>点击任意合同查看完整字段与附件名称</p>
+          <p>点击任意合同查看详情、预览或导入真实附件</p>
         </div>
 
         {loading ? (
@@ -586,8 +593,15 @@ function ContractManagementPage() {
                         </span>
                       </td>
                       <td>
-                        <span className="contract-attachment-count">
-                          {contract.attachments?.length || 0} 个
+                        <span
+                          className={`contract-attachment-count ${
+                            contract.attachment_files?.length ? 'has-files' : ''
+                          }`}
+                          title={`已导入 ${contract.attachment_files?.length || 0} 个真实文件`}
+                        >
+                          {contract.attachment_files?.length || 0}
+                          <small>/</small>
+                          {contract.attachments?.length || 0}
                         </span>
                       </td>
                       <td className="col-sticky-right" onClick={(event) => event.stopPropagation()}>
@@ -672,6 +686,8 @@ function ContractManagementPage() {
           setSelectedContract(null)
           openEditForm(contract)
         }}
+        onAttachmentUploaded={handleAttachmentUploaded}
+        onToast={showToast}
       />
     </PageContainer>
   )

@@ -5,16 +5,19 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import mimetypes
 import os
 import re
+from pathlib import PurePath
 from datetime import date
 from decimal import Decimal, InvalidOperation
+from urllib.parse import quote, unquote
 from uuid import uuid4
 
 import httpx
 import psycopg
 from fastapi import FastAPI, HTTPException, Query, Request
-from fastapi.responses import Response
+from fastapi.responses import Response, StreamingResponse
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
@@ -25,6 +28,26 @@ UPSTREAM_ORIGIN = os.environ.get(
     "https://caiwuapi.hnchpower.cn",
 ).rstrip("/")
 QUICKSDK_DATABASE_URL = os.environ.get("QUICKSDK_DATABASE_URL", "").strip()
+BLOB_READ_WRITE_TOKEN = os.environ.get("BLOB_READ_WRITE_TOKEN", "").strip()
+BLOB_API_ORIGIN = "https://vercel.com/api/blob"
+CONTRACT_ATTACHMENT_MAX_BYTES = 50 * 1024 * 1024
+CONTRACT_ATTACHMENT_EXTENSIONS = {
+    ".pdf",
+    ".doc",
+    ".docx",
+    ".xls",
+    ".xlsx",
+    ".wps",
+    ".et",
+    ".ofd",
+    ".txt",
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".zip",
+    ".rar",
+    ".7z",
+}
 
 _HOP_BY_HOP_HEADERS = {
     "connection",
@@ -816,6 +839,36 @@ def _ensure_contracts_table(conn: psycopg.Connection) -> None:
         ON cf_contract_records (partner_id)
         """
     )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS cf_contract_attachment_files (
+          id TEXT PRIMARY KEY,
+          contract_id TEXT NOT NULL REFERENCES cf_contract_records(id) ON DELETE CASCADE,
+          expected_name TEXT NOT NULL DEFAULT '',
+          file_name TEXT NOT NULL,
+          blob_url TEXT NOT NULL,
+          blob_pathname TEXT NOT NULL,
+          content_type TEXT NOT NULL DEFAULT 'application/octet-stream',
+          size_bytes BIGINT NOT NULL DEFAULT 0,
+          checksum_sha256 TEXT NOT NULL DEFAULT '',
+          source TEXT NOT NULL DEFAULT 'manual',
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_cf_contract_attachment_files_contract
+        ON cf_contract_attachment_files (contract_id, created_at)
+        """
+    )
+    conn.execute(
+        """
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_cf_contract_attachment_files_dedupe
+        ON cf_contract_attachment_files (contract_id, checksum_sha256)
+        WHERE checksum_sha256 <> ''
+        """
+    )
 
 
 def _resolve_contract_partner(conn: psycopg.Connection, counterparty: object) -> dict | None:
@@ -859,6 +912,73 @@ def _contract_timeline_status(row: dict) -> str:
     return "生效中"
 
 
+def _contract_attachment_public_row(row: dict) -> dict:
+    contract_id = str(row["contract_id"])
+    attachment_id = str(row["id"])
+    base_url = (
+        f"/api/contracts/{quote(contract_id, safe='')}/attachments/"
+        f"{quote(attachment_id, safe='')}"
+    )
+    return {
+        "id": attachment_id,
+        "expected_name": row.get("expected_name") or "",
+        "file_name": row.get("file_name") or "",
+        "content_type": row.get("content_type") or "application/octet-stream",
+        "size_bytes": int(row.get("size_bytes") or 0),
+        "source": row.get("source") or "manual",
+        "preview_url": base_url,
+        "download_url": f"{base_url}?download=1",
+        "created_at": row["created_at"].isoformat(),
+    }
+
+
+def _attach_contract_files(conn: psycopg.Connection, rows: list[dict]) -> None:
+    contract_ids = [str(row["id"]) for row in rows]
+    files_by_contract: dict[str, list[dict]] = {contract_id: [] for contract_id in contract_ids}
+    if contract_ids:
+        attachment_rows = conn.execute(
+            """
+            SELECT *
+            FROM cf_contract_attachment_files
+            WHERE contract_id = ANY(%s)
+            ORDER BY created_at, file_name
+            """,
+            [contract_ids],
+        ).fetchall()
+        for attachment in attachment_rows:
+            files_by_contract.setdefault(str(attachment["contract_id"]), []).append(
+                _contract_attachment_public_row(attachment)
+            )
+    for row in rows:
+        row["attachment_files"] = files_by_contract.get(str(row["id"]), [])
+
+
+def _load_contract_with_relations(conn: psycopg.Connection, contract_id: str) -> dict | None:
+    row = conn.execute(
+        """
+        SELECT
+          contract.*,
+          partner.name AS partner_name,
+          partner.short_name AS partner_short_name,
+          CASE
+            WHEN contract.contract_no <> '' THEN (
+              SELECT COUNT(*)
+              FROM cf_contract_records AS duplicate
+              WHERE duplicate.contract_no = contract.contract_no
+            )
+            ELSE 0
+          END AS contract_no_count
+        FROM cf_contract_records AS contract
+        LEFT JOIN cf_partner_records AS partner ON partner.id = contract.partner_id
+        WHERE contract.id = %s
+        """,
+        [contract_id],
+    ).fetchone()
+    if row is not None:
+        _attach_contract_files(conn, [row])
+    return row
+
+
 def _contract_row(row: dict) -> dict:
     return {
         "id": row["id"],
@@ -875,6 +995,9 @@ def _contract_row(row: dict) -> dict:
         "performance_status": row["performance_status"],
         "payment_type": row["payment_type"],
         "attachments": row["attachments"] if isinstance(row["attachments"], list) else [],
+        "attachment_files": (
+            row["attachment_files"] if isinstance(row.get("attachment_files"), list) else []
+        ),
         "partner_id": row.get("partner_id"),
         "partner_name": row.get("partner_name"),
         "partner_short_name": row.get("partner_short_name"),
@@ -1201,13 +1324,18 @@ def contract_health() -> dict:
             FROM cf_contract_records
             """
         ).fetchone()
+        attachment_count = conn.execute(
+            "SELECT COUNT(*) AS count FROM cf_contract_attachment_files"
+        ).fetchone()
         conn.commit()
     return {
         "status": "ok",
         "storage": "postgres",
+        "attachment_storage": "vercel-blob-private" if BLOB_READ_WRITE_TOKEN else "not-configured",
         "count": int(row["count"] or 0),
         "linked_count": int(row["linked_count"] or 0),
         "numbered_count": int(row["numbered_count"] or 0),
+        "attachment_count": int(attachment_count["count"] or 0),
     }
 
 
@@ -1312,6 +1440,7 @@ async def list_contracts(
             """,
             [*params, limit, offset],
         ).fetchall()
+        _attach_contract_files(conn, rows)
         summary = conn.execute(
             """
             SELECT
@@ -1426,6 +1555,7 @@ async def create_contract(request: Request, payload: dict) -> dict:
     with psycopg.connect(_database_url(), connect_timeout=15, row_factory=dict_row) as conn:
         _ensure_contracts_table(conn)
         row, _ = _upsert_contract(conn, clean, source="manual")
+        row = _load_contract_with_relations(conn, str(row["id"]))
         conn.commit()
     return _contract_row(row)
 
@@ -1501,10 +1631,207 @@ async def update_contract(contract_id: str, request: Request, payload: dict) -> 
             conn.commit()
         except psycopg.errors.UniqueViolation as exc:
             raise HTTPException(status_code=409, detail="相同合同已存在") from exc
-    row["partner_name"] = partner["name"] if partner else None
-    row["partner_short_name"] = partner["short_name"] if partner else None
-    row["contract_no_count"] = int(duplicate_count["count"] or 0)
+    with psycopg.connect(_database_url(), connect_timeout=15, row_factory=dict_row) as conn:
+        _ensure_contracts_table(conn)
+        row = _load_contract_with_relations(conn, contract_id)
+        conn.commit()
     return _contract_row(row)
+
+
+def _blob_headers(*, content_type: str | None = None) -> dict[str, str]:
+    if not BLOB_READ_WRITE_TOKEN:
+        raise HTTPException(status_code=503, detail="合同附件私有存储尚未配置")
+    headers = {
+        "authorization": f"Bearer {BLOB_READ_WRITE_TOKEN}",
+        "x-api-version": "12",
+        "x-api-blob-request-id": f"contract:{uuid4().hex}",
+        "x-api-blob-request-attempt": "0",
+    }
+    if content_type:
+        headers.update(
+            {
+                "x-vercel-blob-access": "private",
+                "x-content-type": content_type,
+                "x-add-random-suffix": "0",
+                "x-allow-overwrite": "0",
+            }
+        )
+    return headers
+
+
+def _contract_attachment_name(request: Request, header_name: str) -> str:
+    raw_value = request.headers.get(header_name, "")
+    try:
+        value = unquote(raw_value)
+    except (TypeError, ValueError):
+        value = raw_value
+    return PurePath(value.replace("\\", "/")).name.strip()[:500]
+
+
+@app.post("/api/contracts/{contract_id}/attachments", status_code=201)
+async def upload_contract_attachment(contract_id: str, request: Request) -> dict:
+    await _require_authenticated(request)
+    file_name = _contract_attachment_name(request, "x-file-name")
+    expected_name = _contract_attachment_name(request, "x-expected-name")
+    if not file_name:
+        raise HTTPException(status_code=422, detail="附件文件名不能为空")
+    extension = PurePath(file_name).suffix.lower()
+    if extension not in CONTRACT_ATTACHMENT_EXTENSIONS:
+        raise HTTPException(status_code=422, detail=f"暂不支持 {extension or '无后缀'} 文件")
+    content_length = int(request.headers.get("content-length") or 0)
+    if content_length > CONTRACT_ATTACHMENT_MAX_BYTES:
+        raise HTTPException(status_code=413, detail="单个附件不能超过 50MB")
+    body = await request.body()
+    if not body:
+        raise HTTPException(status_code=422, detail="附件内容为空")
+    if len(body) > CONTRACT_ATTACHMENT_MAX_BYTES:
+        raise HTTPException(status_code=413, detail="单个附件不能超过 50MB")
+
+    checksum = hashlib.sha256(body).hexdigest()
+    content_type = (
+        request.headers.get("content-type", "").split(";", 1)[0].strip()
+        or mimetypes.guess_type(file_name)[0]
+        or "application/octet-stream"
+    )
+
+    with psycopg.connect(_database_url(), connect_timeout=15, row_factory=dict_row) as conn:
+        _ensure_contracts_table(conn)
+        contract = conn.execute(
+            "SELECT id, attachments FROM cf_contract_records WHERE id = %s",
+            [contract_id],
+        ).fetchone()
+        if contract is None:
+            raise HTTPException(status_code=404, detail="合同不存在")
+        existing = conn.execute(
+            """
+            SELECT *
+            FROM cf_contract_attachment_files
+            WHERE contract_id = %s AND checksum_sha256 = %s
+            """,
+            [contract_id, checksum],
+        ).fetchone()
+        if existing is not None:
+            if expected_name and expected_name != existing["expected_name"]:
+                existing = conn.execute(
+                    """
+                    UPDATE cf_contract_attachment_files
+                    SET expected_name = %s
+                    WHERE id = %s
+                    RETURNING *
+                    """,
+                    [expected_name, existing["id"]],
+                ).fetchone()
+            full_contract = _load_contract_with_relations(conn, contract_id)
+            conn.commit()
+            return {
+                "contract": _contract_row(full_contract),
+                "attachment": _contract_attachment_public_row(existing),
+                "deduplicated": True,
+            }
+
+    attachment_id = str(uuid4())
+    safe_extension = extension if extension in CONTRACT_ATTACHMENT_EXTENSIONS else ""
+    pathname = f"contracts/{contract_id}/{attachment_id}{safe_extension}"
+    blob_headers = _blob_headers(content_type=content_type)
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        blob_response = await client.put(
+            f"{BLOB_API_ORIGIN}/",
+            params={"pathname": pathname},
+            headers=blob_headers,
+            content=body,
+        )
+    if not blob_response.is_success:
+        raise HTTPException(status_code=502, detail="附件上传到私有存储失败")
+    blob = blob_response.json()
+
+    with psycopg.connect(_database_url(), connect_timeout=15, row_factory=dict_row) as conn:
+        _ensure_contracts_table(conn)
+        row = conn.execute(
+            """
+            INSERT INTO cf_contract_attachment_files (
+              id, contract_id, expected_name, file_name, blob_url, blob_pathname,
+              content_type, size_bytes, checksum_sha256, source
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING *
+            """,
+            [
+                attachment_id,
+                contract_id,
+                expected_name or file_name,
+                file_name,
+                blob["url"],
+                blob["pathname"],
+                blob.get("contentType") or content_type,
+                len(body),
+                checksum,
+                "wps" if expected_name else "manual",
+            ],
+        ).fetchone()
+        full_contract = _load_contract_with_relations(conn, contract_id)
+        conn.commit()
+    return {
+        "contract": _contract_row(full_contract),
+        "attachment": _contract_attachment_public_row(row),
+        "deduplicated": False,
+    }
+
+
+@app.get("/api/contracts/{contract_id}/attachments/{attachment_id}")
+async def download_contract_attachment(
+    contract_id: str,
+    attachment_id: str,
+    request: Request,
+    download: bool = Query(False),
+) -> StreamingResponse:
+    await _require_authenticated(request)
+    if not BLOB_READ_WRITE_TOKEN:
+        raise HTTPException(status_code=503, detail="合同附件私有存储尚未配置")
+    with psycopg.connect(_database_url(), connect_timeout=15, row_factory=dict_row) as conn:
+        _ensure_contracts_table(conn)
+        attachment = conn.execute(
+            """
+            SELECT *
+            FROM cf_contract_attachment_files
+            WHERE id = %s AND contract_id = %s
+            """,
+            [attachment_id, contract_id],
+        ).fetchone()
+        conn.commit()
+    if attachment is None:
+        raise HTTPException(status_code=404, detail="附件不存在")
+
+    client = httpx.AsyncClient(timeout=None)
+    blob_request = client.build_request(
+        "GET",
+        attachment["blob_url"],
+        headers={"authorization": f"Bearer {BLOB_READ_WRITE_TOKEN}"},
+    )
+    blob_response = await client.send(blob_request, stream=True)
+    if not blob_response.is_success:
+        await blob_response.aclose()
+        await client.aclose()
+        raise HTTPException(status_code=502, detail="附件读取失败")
+
+    async def stream_blob():
+        try:
+            async for chunk in blob_response.aiter_bytes():
+                yield chunk
+        finally:
+            await blob_response.aclose()
+            await client.aclose()
+
+    disposition = "attachment" if download else "inline"
+    encoded_name = quote(attachment["file_name"], safe="")
+    return StreamingResponse(
+        stream_blob(),
+        media_type=attachment["content_type"] or "application/octet-stream",
+        headers={
+            "Content-Disposition": f"{disposition}; filename*=UTF-8''{encoded_name}",
+            "Cache-Control": "private, no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 @app.delete("/api/contracts/{contract_id}", status_code=204)

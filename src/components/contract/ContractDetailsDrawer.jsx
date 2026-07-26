@@ -1,4 +1,5 @@
-import React from 'react'
+import React, { useMemo, useState } from 'react'
+import { uploadContractAttachment } from '@/lib/api/contract.ts'
 import ContractStatusTag from './ContractStatusTag.jsx'
 
 function DetailRow({ label, value }) {
@@ -18,8 +19,97 @@ function formatAmount(value) {
   })}`
 }
 
-function ContractDetailsDrawer({ contract, onClose, onEdit }) {
+function normalizeAttachmentName(value) {
+  return String(value || '').normalize('NFKC').trim().toLowerCase()
+}
+
+function formatFileSize(size) {
+  const bytes = Number(size || 0)
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+}
+
+function fileIcon(fileName) {
+  const extension = String(fileName || '').split('.').pop()?.toLowerCase()
+  if (extension === 'pdf') return 'PDF'
+  if (['doc', 'docx', 'wps'].includes(extension)) return 'W'
+  if (['xls', 'xlsx', 'et'].includes(extension)) return 'X'
+  if (['jpg', 'jpeg', 'png'].includes(extension)) return '图'
+  return '件'
+}
+
+function ContractDetailsDrawer({
+  contract,
+  onClose,
+  onEdit,
+  onAttachmentUploaded,
+  onToast
+}) {
+  const [uploadingNames, setUploadingNames] = useState([])
+  const [bulkUploading, setBulkUploading] = useState(false)
+
+  const filesByExpectedName = useMemo(() => {
+    const map = new Map()
+    ;(contract?.attachment_files || []).forEach((file) => {
+      const keys = [file.expected_name, file.file_name]
+        .map(normalizeAttachmentName)
+        .filter(Boolean)
+      keys.forEach((key) => {
+        if (!map.has(key)) map.set(key, file)
+      })
+    })
+    return map
+  }, [contract?.attachment_files])
+
   if (!contract) return null
+
+  const expectedAttachments = contract.attachments || []
+  const importedCount = contract.attachment_files?.length || 0
+
+  const uploadOne = async (file, expectedName, { quiet = false } = {}) => {
+    const key = expectedName || file.name
+    setUploadingNames((items) => [...items, key])
+    try {
+      const result = await uploadContractAttachment(contract.id, file, expectedName)
+      onAttachmentUploaded?.(result.contract)
+      if (!quiet) {
+        onToast?.(
+          result.deduplicated ? `附件「${file.name}」已经导入过` : `附件「${file.name}」已导入`,
+          'success'
+        )
+      }
+      return true
+    } catch (error) {
+      onToast?.(error?.message || `附件「${file.name}」导入失败`, 'error')
+      return false
+    } finally {
+      setUploadingNames((items) => items.filter((item) => item !== key))
+    }
+  }
+
+  const handleBulkFiles = async (event) => {
+    const files = Array.from(event.target.files || [])
+    event.target.value = ''
+    if (!files.length) return
+    setBulkUploading(true)
+    let matched = 0
+    let succeeded = 0
+    for (const file of files) {
+      const expectedName = expectedAttachments.find(
+        (name) => normalizeAttachmentName(name) === normalizeAttachmentName(file.name)
+      )
+      if (!expectedName) continue
+      matched += 1
+      if (await uploadOne(file, expectedName, { quiet: true })) succeeded += 1
+    }
+    setBulkUploading(false)
+    if (!matched) {
+      onToast?.('所选文件名与当前合同的附件名称不一致，请单独选择对应文件。', 'info')
+    } else {
+      onToast?.(`批量导入完成：成功 ${succeeded} 个，匹配 ${matched} 个`, 'success')
+    }
+  }
 
   return (
     <div className="contract-drawer-mask" onClick={onClose}>
@@ -76,16 +166,81 @@ function ContractDetailsDrawer({ contract, onClose, onEdit }) {
           <DetailRow label="终止日期" value={contract.end_date} />
         </div>
 
-        <div className="contract-drawer-section">
-          <h4>合同附件</h4>
-          {contract.attachments?.length ? (
+        <div className="contract-drawer-section contract-drawer-section--attachments">
+          <div className="contract-attachment-heading">
+            <div>
+              <h4>合同附件</h4>
+              <span>
+                已导入 {importedCount} / {expectedAttachments.length} 个真实文件
+              </span>
+            </div>
+            <label className={`contract-bulk-upload ${bulkUploading ? 'is-loading' : ''}`}>
+              <input
+                type="file"
+                multiple
+                accept=".pdf,.doc,.docx,.xls,.xlsx,.wps,.et,.ofd,.txt,.jpg,.jpeg,.png,.zip,.rar,.7z"
+                onChange={handleBulkFiles}
+                disabled={bulkUploading}
+              />
+              {bulkUploading ? '正在匹配…' : '批量选择文件'}
+            </label>
+          </div>
+
+          {expectedAttachments.length ? (
             <ul className="contract-attachment-list">
-              {contract.attachments.map((attachment) => (
-                <li key={attachment}>{attachment}</li>
-              ))}
+              {expectedAttachments.map((attachment, index) => {
+                const importedFile = filesByExpectedName.get(normalizeAttachmentName(attachment))
+                const uploading = uploadingNames.includes(attachment)
+                return (
+                  <li
+                    className={importedFile ? 'is-imported' : 'is-pending'}
+                    key={`${attachment}-${index}`}
+                  >
+                    <span className="contract-file-icon">
+                      {fileIcon(importedFile?.file_name || attachment)}
+                    </span>
+                    <span className="contract-file-copy">
+                      <strong>{attachment}</strong>
+                      <small>
+                        {importedFile
+                          ? `已导入 · ${formatFileSize(importedFile.size_bytes)}`
+                          : '等待导入真实文件'}
+                      </small>
+                    </span>
+                    <span className="contract-file-actions">
+                      {importedFile ? (
+                        <>
+                          <a
+                            href={importedFile.preview_url}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            预览
+                          </a>
+                          <a href={importedFile.download_url}>下载</a>
+                        </>
+                      ) : (
+                        <label className={uploading ? 'is-loading' : ''}>
+                          <input
+                            type="file"
+                            accept=".pdf,.doc,.docx,.xls,.xlsx,.wps,.et,.ofd,.txt,.jpg,.jpeg,.png,.zip,.rar,.7z"
+                            disabled={uploading}
+                            onChange={(event) => {
+                              const file = event.target.files?.[0]
+                              event.target.value = ''
+                              if (file) uploadOne(file, attachment)
+                            }}
+                          />
+                          {uploading ? '导入中…' : '选择文件'}
+                        </label>
+                      )}
+                    </span>
+                  </li>
+                )
+              })}
             </ul>
           ) : (
-            <p className="contract-placeholder">暂无附件名称</p>
+            <p className="contract-placeholder">该合同没有记录附件名称</p>
           )}
         </div>
 

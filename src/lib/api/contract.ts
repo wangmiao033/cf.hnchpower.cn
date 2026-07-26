@@ -1,4 +1,23 @@
-import { apiDelete, apiGet, apiPost, apiPut } from '@/lib/api/client.ts'
+import {
+  API_BASE_URL,
+  apiDelete,
+  apiGet,
+  apiPost,
+  apiPut,
+  parseResponse
+} from '@/lib/api/client.ts'
+
+export type ApiContractAttachment = {
+  id: string
+  expected_name: string
+  file_name: string
+  content_type: string
+  size_bytes: number
+  source: 'wps' | 'manual'
+  preview_url: string
+  download_url: string
+  created_at: string
+}
 
 export type ApiContractRow = {
   id: string
@@ -15,6 +34,7 @@ export type ApiContractRow = {
   performance_status: string
   payment_type: string
   attachments: string[]
+  attachment_files: ApiContractAttachment[]
   partner_id: string | null
   partner_name: string | null
   partner_short_name: string | null
@@ -64,6 +84,12 @@ export type ContractImportResult = {
   duplicate_contract_numbers: Array<{ contract_no: string; count: number }>
 }
 
+export type ContractAttachmentUploadResult = {
+  contract: ApiContractRow
+  attachment: ApiContractAttachment
+  deduplicated: boolean
+}
+
 const PATH = '/api/contracts'
 
 export function listContracts(params?: {
@@ -103,4 +129,30 @@ export function updateContract(id: string, payload: ContractPayload) {
 
 export function deleteContract(id: string) {
   return apiDelete(`${PATH}/${encodeURIComponent(id)}`)
+}
+
+export async function uploadContractAttachment(
+  contractId: string,
+  file: File,
+  expectedName = ''
+): Promise<ContractAttachmentUploadResult> {
+  let response: Response
+  try {
+    response = await fetch(
+      `${API_BASE_URL}${PATH}/${encodeURIComponent(contractId)}/attachments`,
+      {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': file.type || 'application/octet-stream',
+          'X-File-Name': encodeURIComponent(file.name),
+          'X-Expected-Name': encodeURIComponent(expectedName)
+        },
+        body: file
+      }
+    )
+  } catch {
+    throw new Error('附件上传失败，请检查网络后重试。')
+  }
+  return parseResponse<ContractAttachmentUploadResult>(response)
 }
