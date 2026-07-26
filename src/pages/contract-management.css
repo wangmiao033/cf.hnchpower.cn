@@ -287,7 +287,7 @@
 }
 
 .contract-table-wrap {
-  max-height: min(61vh, 720px);
+  max-height: none;
   overflow: auto;
 }
 
@@ -328,6 +328,32 @@
 
 .contract-page .contract-table tbody tr:hover {
   background: #f8fbff;
+}
+
+.contract-page .contract-table .contract-index-col {
+  width: 58px;
+  min-width: 58px;
+  padding-right: 8px;
+  padding-left: 8px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.contract-page .contract-table thead .contract-index-col {
+  left: 0;
+  z-index: 5;
+  box-shadow: 1px 0 0 #e5eaf1;
+}
+
+.contract-page .contract-table tbody .contract-index-col {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: inherit;
+  color: #7b8ba3;
+  font-size: 11px;
+  font-weight: 700;
+  box-shadow: 1px 0 0 #edf1f6;
 }
 
 .contract-table .is-number {

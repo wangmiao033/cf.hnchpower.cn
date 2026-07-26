@@ -206,7 +206,7 @@ function ContractManagementPage() {
   const [quickTab, setQuickTab] = useState('全部')
   const [contractType, setContractType] = useState('全部')
   const [paymentType, setPaymentType] = useState('全部')
-  const [pageSize, setPageSize] = useState(20)
+  const [pageSize, setPageSize] = useState(100)
   const [page, setPage] = useState(1)
   const [selectedContract, setSelectedContract] = useState(null)
   const [editingId, setEditingId] = useState(null)
@@ -283,6 +283,8 @@ function ContractManagementPage() {
     const start = (page - 1) * pageSize
     return filteredRecords.slice(start, start + pageSize)
   }, [filteredRecords, page, pageSize])
+  const rangeStart = filteredRecords.length ? (page - 1) * pageSize + 1 : 0
+  const rangeEnd = Math.min(page * pageSize, filteredRecords.length)
 
   useEffect(() => {
     setPage(1)
@@ -513,7 +515,9 @@ function ContractManagementPage() {
             <h2>合同列表</h2>
             <span>显示 {filteredRecords.length} / {records.length} 条</span>
           </div>
-          <p>点击任意合同查看详情、预览或导入真实附件</p>
+          <p>
+            当前展示第 {rangeStart}–{rangeEnd} 条 · 点击合同查看详情和附件
+          </p>
         </div>
 
         {loading ? (
@@ -537,6 +541,7 @@ function ContractManagementPage() {
               <table className="contract-table">
                 <thead>
                   <tr>
+                    <th className="contract-index-col">序号</th>
                     <th>合同名称</th>
                     <th>签约方 / 客户</th>
                     <th>合同类型</th>
@@ -549,8 +554,11 @@ function ContractManagementPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {pagedRecords.map((contract) => (
+                  {pagedRecords.map((contract, index) => (
                     <tr key={contract.id} onClick={() => setSelectedContract(contract)}>
+                      <td className="contract-index-col">
+                        {(page - 1) * pageSize + index + 1}
+                      </td>
                       <td className="contract-name-cell">
                         <strong title={contract.contract_name}>{contract.contract_name}</strong>
                         <span>{contract.contract_no || '未填写合同编号'}</span>
@@ -615,7 +623,7 @@ function ContractManagementPage() {
                   ))}
                   {!pagedRecords.length ? (
                     <tr>
-                      <td colSpan={9} className="contract-empty">
+                      <td colSpan={10} className="contract-empty">
                         没有找到符合条件的合同
                       </td>
                     </tr>
@@ -624,7 +632,9 @@ function ContractManagementPage() {
               </table>
             </div>
             <div className="contract-pagination">
-              <span>第 {page} / {pageCount} 页</span>
+              <span>
+                第 {rangeStart}–{rangeEnd} 条，共 {filteredRecords.length} 条
+              </span>
               <select value={pageSize} onChange={(event) => setPageSize(Number(event.target.value))}>
                 {PAGE_SIZE_OPTIONS.map((size) => (
                   <option key={size} value={size}>{size} 条/页</option>
