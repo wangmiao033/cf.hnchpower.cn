@@ -13,6 +13,8 @@ def bank_transaction_upload_root() -> Path:
     raw = os.environ.get("BANK_TRANSACTION_UPLOAD_DIR", "").strip()
     if raw:
         return Path(raw).expanduser().resolve()
+    if os.environ.get("VERCEL"):
+        return Path("/tmp/bank_transaction_attachments")
     return _DEFAULT_DIR.resolve()
 
 
