@@ -348,33 +348,12 @@ function CoreReconciliationPage() {
                     <td>{text(row.settlementNumber)}</td>
                     <td>{text(row.settlementMonth)}</td>
                     <td>
-                      <div
-                        className="core-recon-partner-cell"
+                      <strong
+                        className="core-recon-partner-short-name"
                         title={text(row.partner || row.partyBName)}
                       >
-                        <span className="core-recon-partner-avatar" aria-hidden="true">
-                          {text(row.partnerShortName || row.partner || row.partyBName).slice(0, 1)}
-                        </span>
-                        <span className="core-recon-partner-copy">
-                          <span className="core-recon-partner-title">
-                            <strong>
-                              {text(row.partnerShortName || row.partner || row.partyBName)}
-                            </strong>
-                            <span
-                              className={
-                                row.partnerId
-                                  ? 'core-recon-link-badge core-recon-link-badge--linked'
-                                  : 'core-recon-link-badge'
-                              }
-                            >
-                              {row.partnerId ? '✓ 已关联' : '待关联'}
-                            </span>
-                          </span>
-                          {row.partnerShortName ? (
-                            <small>{text(row.partner || row.partyBName)}</small>
-                          ) : null}
-                        </span>
-                      </div>
+                        {text(row.partnerShortName || row.partner || row.partyBName)}
+                      </strong>
                     </td>
                     <td>
                       <span className="core-recon-game-text" title={text(gameText(row))}>

@@ -234,7 +234,7 @@
 }
 
 .core-rd-recon-table {
-  min-width: 1480px;
+  min-width: 1380px;
   table-layout: fixed;
 }
 
@@ -247,15 +247,15 @@
 }
 
 .core-rd-recon-table .core-rd-col-month {
-  width: 105px;
+  width: 100px;
 }
 
 .core-rd-recon-table .core-rd-col-partner {
-  width: 245px;
+  width: 120px;
 }
 
 .core-rd-recon-table .core-rd-col-game {
-  width: 380px;
+  width: 405px;
 }
 
 .core-rd-recon-table .core-rd-col-flow {
@@ -279,7 +279,7 @@
 }
 
 .core-rd-recon-table tbody td {
-  height: 64px;
+  height: 50px;
   vertical-align: middle;
 }
 
@@ -296,83 +296,16 @@
   cursor: pointer;
 }
 
-.core-recon-partner-cell {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 9px;
-}
-
-.core-recon-partner-avatar {
-  flex: 0 0 32px;
-  width: 32px;
-  height: 32px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid #bfdbfe;
-  border-radius: 9px;
-  background: linear-gradient(145deg, #eff6ff, #dbeafe);
-  color: #2563eb;
-  font-size: 13px;
-  font-weight: 800;
-  box-shadow: 0 2px 5px rgba(37, 99, 235, 0.08);
-}
-
-.core-recon-partner-copy {
-  flex: 1 1 auto;
-  min-width: 0;
-  display: grid;
-  gap: 4px;
-}
-
-.core-recon-partner-title {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.core-recon-partner-title strong {
-  min-width: 0;
+.core-recon-partner-short-name {
+  display: block;
+  max-width: 100%;
   overflow: hidden;
-  color: var(--admin-text-main);
+  color: #1e3a5f;
   font-size: 13px;
   font-weight: 700;
-  line-height: 1.25;
+  line-height: 1.4;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.core-recon-partner-copy small {
-  max-width: 185px;
-  overflow: hidden;
-  color: var(--admin-text-tertiary);
-  font-size: 11px;
-  line-height: 1.25;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.core-recon-link-badge {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  min-height: 17px;
-  padding: 0 5px;
-  border: 1px solid #fed7aa;
-  border-radius: 999px;
-  background: #fff7ed;
-  color: #b45309;
-  font-size: 9px;
-  font-weight: 600;
-  line-height: 1;
-}
-
-.core-recon-link-badge--linked {
-  border-color: #a7f3d0;
-  background: #ecfdf5;
-  color: #047857;
 }
 
 .core-recon-game-text {
