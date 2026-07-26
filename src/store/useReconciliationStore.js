@@ -90,8 +90,9 @@ function normalizeLocalReconciliationRecords(savedRecords) {
   return out
 }
 
-export function useReconciliationStore(settings, showToast) {
+export function useReconciliationStore(settings, showToast, options = {}) {
   const { partyA, partyB, settlementMonth, partners, deliveries, settlementNumberFormat } = settings
+  const enabled = options.enabled !== false
 
   const [records, setRecords] = useState([])
   const [channelRecords, setChannelRecords] = useState([])
@@ -127,6 +128,7 @@ export function useReconciliationStore(settings, showToast) {
   }, [])
 
   useEffect(() => {
+    if (!enabled) return undefined
     let cancelled = false
     ;(async () => {
       try {
@@ -147,9 +149,10 @@ export function useReconciliationStore(settings, showToast) {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [enabled])
 
   useEffect(() => {
+    if (!enabled) return undefined
     let cancelled = false
     ;(async () => {
       try {
@@ -170,7 +173,7 @@ export function useReconciliationStore(settings, showToast) {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [enabled])
 
   useEffect(() => {
     storageSet(STORAGE_KEYS.RECONCILIATION_RECORDS, records)
