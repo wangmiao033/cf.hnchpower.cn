@@ -126,6 +126,7 @@ PARTNER_ALIAS_REPAIRS = {
     "西安游海网络科技有限公司": "游海",
     "西安麦游网络科技有限公司": "麦游",
 }
+RECONCILIATION_PATH_PATTERN = re.compile(r"^/api/reconciliation(?:/([^/]+))?$")
 
 
 def _partner_name_key(value: object) -> str:
@@ -289,6 +290,222 @@ def _ensure_partners_table(conn: psycopg.Connection) -> None:
         ON cf_partner_records (category)
         """
     )
+
+
+def _ensure_reconciliation_links_table(conn: psycopg.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS cf_reconciliation_partner_links (
+          reconciliation_id TEXT PRIMARY KEY,
+          partner_id TEXT NOT NULL REFERENCES cf_partner_records(id) ON DELETE RESTRICT,
+          partner_name_snapshot TEXT NOT NULL DEFAULT '',
+          match_method TEXT NOT NULL DEFAULT 'exact_name',
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_cf_reconciliation_partner_links_partner
+        ON cf_reconciliation_partner_links (partner_id)
+        """
+    )
+
+
+def _resolve_reconciliation_partner(
+    conn: psycopg.Connection,
+    *,
+    partner_id: object = None,
+    partner_name: object = None,
+) -> dict | None:
+    requested_id = _clean_partner_value(partner_id, limit=200)
+    if requested_id:
+        return conn.execute(
+            """
+            SELECT id, name, short_name
+            FROM cf_partner_records
+            WHERE id = %s
+            """,
+            [requested_id],
+        ).fetchone()
+
+    key = _partner_name_key(partner_name)
+    if not key:
+        return None
+    exact = conn.execute(
+        """
+        SELECT id, name, short_name
+        FROM cf_partner_records
+        WHERE normalized_name = %s
+        """,
+        [key],
+    ).fetchone()
+    if exact is not None:
+        return exact
+
+    alias_matches = [
+        row
+        for row in conn.execute(
+            """
+            SELECT id, name, short_name
+            FROM cf_partner_records
+            WHERE short_name <> ''
+            """
+        ).fetchall()
+        if _partner_name_key(row["short_name"]) == key
+    ]
+    return alias_matches[0] if len(alias_matches) == 1 else None
+
+
+def _upsert_reconciliation_partner_link(
+    conn: psycopg.Connection,
+    *,
+    reconciliation_id: object,
+    partner: dict,
+    snapshot: object,
+    match_method: str,
+) -> None:
+    record_id = _clean_partner_value(reconciliation_id, limit=200)
+    if not record_id:
+        return
+    conn.execute(
+        """
+        INSERT INTO cf_reconciliation_partner_links (
+          reconciliation_id, partner_id, partner_name_snapshot, match_method
+        )
+        VALUES (%s, %s, %s, %s)
+        ON CONFLICT (reconciliation_id) DO UPDATE SET
+          partner_id = EXCLUDED.partner_id,
+          partner_name_snapshot = EXCLUDED.partner_name_snapshot,
+          match_method = EXCLUDED.match_method,
+          updated_at = NOW()
+        """,
+        [
+            record_id,
+            partner["id"],
+            _clean_partner_value(snapshot, limit=500) or partner["name"],
+            match_method,
+        ],
+    )
+
+
+def _reconciliation_rows(payload: object) -> list[dict]:
+    if not isinstance(payload, dict):
+        return []
+    items = payload.get("items")
+    if isinstance(items, list):
+        return [item for item in items if isinstance(item, dict)]
+    item = payload.get("item")
+    if isinstance(item, dict):
+        return [item]
+    return [payload] if payload.get("id") is not None else []
+
+
+def _sync_reconciliation_partner_links(
+    payload: object,
+    *,
+    selected_partner_id: object = None,
+    selected_snapshot: object = None,
+) -> object:
+    rows = _reconciliation_rows(payload)
+    if not rows:
+        return payload
+
+    record_ids = [
+        _clean_partner_value(row.get("id"), limit=200)
+        for row in rows
+        if _clean_partner_value(row.get("id"), limit=200)
+    ]
+    if not record_ids:
+        return payload
+
+    with psycopg.connect(_database_url(), connect_timeout=15, row_factory=dict_row) as conn:
+        _ensure_partners_table(conn)
+        _ensure_reconciliation_links_table(conn)
+        existing = {
+            row["reconciliation_id"]: row
+            for row in conn.execute(
+                """
+                SELECT
+                  link.reconciliation_id,
+                  link.partner_id,
+                  partner.name,
+                  partner.short_name
+                FROM cf_reconciliation_partner_links AS link
+                JOIN cf_partner_records AS partner ON partner.id = link.partner_id
+                WHERE link.reconciliation_id = ANY(%s)
+                """,
+                [record_ids],
+            ).fetchall()
+        }
+
+        selected_partner = None
+        if _clean_partner_value(selected_partner_id, limit=200):
+            selected_partner = _resolve_reconciliation_partner(
+                conn,
+                partner_id=selected_partner_id,
+            )
+            if selected_partner is None:
+                raise HTTPException(status_code=422, detail="所选客户不存在，请刷新客户库后重试")
+
+        for row in rows:
+            record_id = _clean_partner_value(row.get("id"), limit=200)
+            if not record_id:
+                continue
+            if selected_partner is not None:
+                _upsert_reconciliation_partner_link(
+                    conn,
+                    reconciliation_id=record_id,
+                    partner=selected_partner,
+                    snapshot=selected_snapshot or row.get("partner_name"),
+                    match_method="selected",
+                )
+                continue
+            if record_id in existing:
+                continue
+            matched = _resolve_reconciliation_partner(
+                conn,
+                partner_name=row.get("partner_name"),
+            )
+            if matched is not None:
+                _upsert_reconciliation_partner_link(
+                    conn,
+                    reconciliation_id=record_id,
+                    partner=matched,
+                    snapshot=row.get("partner_name"),
+                    match_method="exact_name",
+                )
+
+        linked = {
+            row["reconciliation_id"]: row
+            for row in conn.execute(
+                """
+                SELECT
+                  link.reconciliation_id,
+                  link.partner_id,
+                  link.partner_name_snapshot,
+                  link.match_method,
+                  partner.name,
+                  partner.short_name
+                FROM cf_reconciliation_partner_links AS link
+                JOIN cf_partner_records AS partner ON partner.id = link.partner_id
+                WHERE link.reconciliation_id = ANY(%s)
+                """,
+                [record_ids],
+            ).fetchall()
+        }
+        conn.commit()
+
+    for row in rows:
+        link = linked.get(_clean_partner_value(row.get("id"), limit=200))
+        row["partner_id"] = link["partner_id"] if link else None
+        row["partner_short_name"] = link["short_name"] if link else None
+        row["partner_link_status"] = "linked" if link else "unlinked"
+        if link:
+            row["partner_name_snapshot"] = link["partner_name_snapshot"]
+            row["partner_name"] = link["name"]
+    return payload
 
 
 def _partner_row(row: dict) -> dict:
@@ -645,6 +862,23 @@ async def delete_partner(partner_id: str, request: Request) -> Response:
     await _require_authenticated(request)
     with psycopg.connect(_database_url(), connect_timeout=15, row_factory=dict_row) as conn:
         _ensure_partners_table(conn)
+        _ensure_reconciliation_links_table(conn)
+        linked_count = int(
+            conn.execute(
+                """
+                SELECT COUNT(*)
+                FROM cf_reconciliation_partner_links
+                WHERE partner_id = %s
+                """,
+                [partner_id],
+            ).fetchone()["count"]
+            or 0
+        )
+        if linked_count:
+            raise HTTPException(
+                status_code=409,
+                detail=f"该客户已关联 {linked_count} 张研发账单，请先调整账单合作方",
+            )
         row = conn.execute(
             "DELETE FROM cf_partner_records WHERE id = %s RETURNING id",
             [partner_id],
@@ -889,6 +1123,32 @@ async def quicksdk_analytics(
     }
 
 
+@app.get("/api/reconciliation-links/health")
+async def reconciliation_links_health() -> dict:
+    with psycopg.connect(_database_url(), connect_timeout=15, row_factory=dict_row) as conn:
+        _ensure_partners_table(conn)
+        _ensure_reconciliation_links_table(conn)
+        row = conn.execute(
+            """
+            SELECT
+              COUNT(*) AS linked_count,
+              COUNT(DISTINCT partner_id) AS distinct_partner_count,
+              COUNT(*) FILTER (WHERE match_method = 'selected') AS selected_count,
+              COUNT(*) FILTER (WHERE match_method = 'exact_name') AS exact_name_count
+            FROM cf_reconciliation_partner_links
+            """
+        ).fetchone()
+        conn.commit()
+    return {
+        "status": "ok",
+        "storage": "postgres",
+        "linked_count": int(row["linked_count"] or 0),
+        "distinct_partner_count": int(row["distinct_partner_count"] or 0),
+        "selected_count": int(row["selected_count"] or 0),
+        "exact_name_count": int(row["exact_name_count"] or 0),
+    }
+
+
 @app.api_route(
     "/{path:path}",
     methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
@@ -898,17 +1158,82 @@ async def proxy(request: Request, path: str) -> Response:
     if request.url.query:
         url = f"{url}?{request.url.query}"
 
+    body = await request.body()
+    outgoing_body = body
+    reconciliation_match = RECONCILIATION_PATH_PATTERN.fullmatch(request.url.path)
+    selected_partner_id = None
+    selected_partner_name = None
+    if (
+        reconciliation_match
+        and request.method in {"POST", "PUT", "PATCH"}
+        and "application/json" in request.headers.get("content-type", "")
+    ):
+        try:
+            outgoing_payload = json.loads(body or b"{}")
+        except (TypeError, ValueError):
+            outgoing_payload = None
+        if isinstance(outgoing_payload, dict):
+            selected_partner_id = outgoing_payload.pop("partner_id", None)
+            selected_partner_name = outgoing_payload.get("partner_name")
+            if _clean_partner_value(selected_partner_id, limit=200):
+                with psycopg.connect(
+                    _database_url(),
+                    connect_timeout=15,
+                    row_factory=dict_row,
+                ) as conn:
+                    _ensure_partners_table(conn)
+                    selected_partner = _resolve_reconciliation_partner(
+                        conn,
+                        partner_id=selected_partner_id,
+                    )
+                    if selected_partner is None:
+                        raise HTTPException(
+                            status_code=422,
+                            detail="所选客户不存在，请刷新客户库后重试",
+                        )
+                    outgoing_payload["partner_name"] = selected_partner["name"]
+                    selected_partner_name = selected_partner["name"]
+            outgoing_body = json.dumps(
+                outgoing_payload,
+                ensure_ascii=False,
+            ).encode("utf-8")
+
     async with httpx.AsyncClient(follow_redirects=False, timeout=60.0) as client:
         upstream = await client.request(
             request.method,
             url,
             headers=_request_headers(request),
-            content=await request.body(),
+            content=outgoing_body,
         )
 
-    if request.method == "GET" and request.url.path == "/api/reconciliation":
+    response_content = upstream.content
+    if reconciliation_match and 200 <= upstream.status_code < 300 and request.method != "DELETE":
         try:
             payload = upstream.json()
+            if (
+                request.method in {"PUT", "PATCH"}
+                and reconciliation_match.group(1)
+                and not _reconciliation_rows(payload)
+            ):
+                _sync_reconciliation_partner_links(
+                    {
+                        "id": reconciliation_match.group(1),
+                        "partner_name": selected_partner_name,
+                    },
+                    selected_partner_id=selected_partner_id,
+                    selected_snapshot=selected_partner_name,
+                )
+            else:
+                payload = _sync_reconciliation_partner_links(
+                    payload,
+                    selected_partner_id=selected_partner_id,
+                    selected_snapshot=selected_partner_name,
+                )
+            response_content = json.dumps(
+                payload,
+                ensure_ascii=False,
+                default=str,
+            ).encode("utf-8")
             items = payload.get("items") if isinstance(payload, dict) else None
             print(
                 "[reconciliation-proxy] response summary",
@@ -916,6 +1241,9 @@ async def proxy(request: Request, path: str) -> Response:
                     "status": upstream.status_code,
                     "total": payload.get("total") if isinstance(payload, dict) else None,
                     "item_count": len(items) if isinstance(items, list) else None,
+                    "linked_count": sum(
+                        1 for item in (items or []) if item.get("partner_id")
+                    ),
                 },
             )
         except ValueError:
@@ -923,9 +1251,26 @@ async def proxy(request: Request, path: str) -> Response:
                 "[reconciliation-proxy] non-json response",
                 {"status": upstream.status_code, "bytes": len(upstream.content)},
             )
+    elif (
+        reconciliation_match
+        and request.method == "DELETE"
+        and 200 <= upstream.status_code < 300
+        and reconciliation_match.group(1)
+    ):
+        with psycopg.connect(_database_url(), connect_timeout=15) as conn:
+            _ensure_partners_table(conn)
+            _ensure_reconciliation_links_table(conn)
+            conn.execute(
+                """
+                DELETE FROM cf_reconciliation_partner_links
+                WHERE reconciliation_id = %s
+                """,
+                [reconciliation_match.group(1)],
+            )
+            conn.commit()
 
     result = Response(
-        content=upstream.content,
+        content=response_content,
         status_code=upstream.status_code,
         headers=_response_headers(upstream),
         media_type=None,

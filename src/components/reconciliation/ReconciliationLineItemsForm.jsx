@@ -173,6 +173,7 @@ function ReconciliationLineItemsForm({
     settlementMonth: initialCycle,
     issueDate: formatIssueDateLabel(),
     settlementNumber: '',
+    partnerId: '',
     partner: '',
     channelFeeRate: '0',
     memo: '',
@@ -206,6 +207,7 @@ function ReconciliationLineItemsForm({
         settlementMonth: editRecord.settlementMonth ?? initialCycle,
         issueDate: formatIssueDateLabel(editRecord.createdAt ?? editRecord.created_at),
         settlementNumber: editRecord.settlementNumber != null ? String(editRecord.settlementNumber) : '',
+        partnerId: editRecord.partnerId != null ? String(editRecord.partnerId) : '',
         partner: editRecord.partner != null ? String(editRecord.partner) : '',
         channelFeeRate: editRecord.channelFeeRate != null ? String(editRecord.channelFeeRate) : '0',
         memo: editRecord.memo != null ? String(editRecord.memo) : '',
@@ -221,6 +223,17 @@ function ReconciliationLineItemsForm({
     }))
     setLines([createEmptyRdLine(0, settlementMonth || getCurrentCycleLabel())])
   }, [mode, editRecord, settlementMonth, initialCycle])
+
+  useEffect(() => {
+    if (!header.partner || header.partnerId) return
+    const matched = findExactPartner(partners, header.partner)
+    if (!matched) return
+    setHeader((current) => ({
+      ...current,
+      partnerId: String(matched.id || ''),
+      partner: matched.name
+    }))
+  }, [partners, header.partner, header.partnerId])
 
   useEffect(() => {
     if (mode !== 'add' || !quickFillData) return
@@ -311,6 +324,7 @@ function ReconciliationLineItemsForm({
       ...(mode === 'edit' && editRecord ? { id: editRecord.id } : {}),
       settlementMonth: canonicalSettlementMonth,
       settlementNumber: header.settlementNumber,
+      partnerId: header.partnerId,
       partner: header.partner,
       channelFeeRate: header.channelFeeRate,
       taxPoint: first ? first.taxRate : '0',
@@ -339,6 +353,9 @@ function ReconciliationLineItemsForm({
   const validate = () => {
     const { error: monthError } = resolveCanonicalSettlementMonth(lines, header.settlementMonth)
     if (monthError) return monthError
+    if (!header.partnerId) {
+      return '请从客户库选择合作方（支持按客户简称搜索）'
+    }
     const cf = parseFloat(header.channelFeeRate || 0)
     if (Number.isNaN(cf) || cf < 0 || cf > 100) {
       return '通道费率必须在0-100%之间'
@@ -398,6 +415,7 @@ function ReconciliationLineItemsForm({
       settlementMonth: settlementMonth || getCurrentCycleLabel(),
       issueDate: formatIssueDateLabel(),
       settlementNumber: '',
+      partnerId: '',
       partner: '',
       channelFeeRate: '0',
       memo: '',
@@ -613,8 +631,11 @@ function ReconciliationLineItemsForm({
               <label>合作方</label>
               <PartnerPicker
                 value={header.partner}
+                partnerId={header.partnerId}
                 partners={partners}
-                onChange={(partner) => setHeader((h) => ({ ...h, partner }))}
+                onChange={(partner, partnerId = '') =>
+                  setHeader((h) => ({ ...h, partner, partnerId }))
+                }
                 onAddPartner={onAddPartner}
               />
             </div>
@@ -978,7 +999,7 @@ function ReconciliationLineItemsForm({
   )
 }
 
-function PartnerPicker({ value, partners, onChange, onAddPartner }) {
+function PartnerPicker({ value, partnerId, partners, onChange, onAddPartner }) {
   const inputRef = useRef(null)
   const [open, setOpen] = useState(false)
   const query = String(value || '').trim().toLowerCase()
@@ -988,6 +1009,7 @@ function PartnerPicker({ value, partners, onChange, onAddPartner }) {
     return source
       .filter((partner) =>
         [
+          partner.shortName,
           partner.name,
           partner.category,
           partner.taxRegistrationNo,
@@ -1000,10 +1022,10 @@ function PartnerPicker({ value, partners, onChange, onAddPartner }) {
       )
       .slice(0, 8)
   }, [partners, query])
-  const exactMatch = (partners || []).some((partner) => partnerKey(partner.name) === partnerKey(value))
+  const exactMatch = findExactPartner(partners, value)
 
   const selectPartner = (partner) => {
-    onChange(partner.name)
+    onChange(partner.name, String(partner.id || ''))
     setOpen(false)
   }
 
@@ -1033,7 +1055,9 @@ function PartnerPicker({ value, partners, onChange, onAddPartner }) {
           onFocus={() => setOpen(true)}
           onBlur={() => window.setTimeout(() => setOpen(false), 120)}
           onChange={(event) => {
-            onChange(event.target.value)
+            const nextValue = event.target.value
+            const matched = findExactPartner(partners, nextValue)
+            onChange(nextValue, matched ? String(matched.id || '') : '')
             setOpen(true)
           }}
           onKeyDown={(event) => {
@@ -1055,6 +1079,13 @@ function PartnerPicker({ value, partners, onChange, onAddPartner }) {
           +
         </button>
       </div>
+      <div
+        className={`rd-partner-picker__link-state ${
+          partnerId ? 'rd-partner-picker__link-state--linked' : ''
+        }`}
+      >
+        {partnerId ? '已关联客户库，客户资料更新后账单仍保持关联' : '请从客户库结果中选择合作方'}
+      </div>
       {open ? (
         <div className="rd-partner-picker__menu" role="listbox" aria-label="客户库合作方">
           <div className="rd-partner-picker__menu-head">
@@ -1066,15 +1097,15 @@ function PartnerPicker({ value, partners, onChange, onAddPartner }) {
               key={partner.id || partner.name}
               type="button"
               role="option"
-              aria-selected={partner.name === value}
+              aria-selected={String(partner.id || '') === String(partnerId || '')}
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => selectPartner(partner)}
             >
               <span>
-                <strong>{partner.name}</strong>
-                <small>{partner.category || '未分类'}</small>
+                <strong>{partner.shortName || partner.name}</strong>
+                <small>{partner.shortName ? partner.name : partner.category || '未分类'}</small>
               </span>
-              <em>{partner.taxRegistrationNo || partner.tag2 || ''}</em>
+              <em>{partner.category || partner.taxRegistrationNo || partner.tag2 || ''}</em>
             </button>
           ))}
           {matches.length === 0 ? (
@@ -1104,6 +1135,18 @@ function partnerKey(value) {
     .replace(/[（(]/g, '(')
     .replace(/[）)]/g, ')')
     .replace(/\s+/g, '')
+}
+
+function findExactPartner(partners, value) {
+  const key = partnerKey(value)
+  if (!key) return null
+  const matches = (partners || []).filter(
+    (partner) =>
+      partner?.name &&
+      [partner.name, partner.shortName].some((candidate) => partnerKey(candidate) === key)
+  )
+  const unique = new Map(matches.map((partner) => [String(partner.id || partner.name), partner]))
+  return unique.size === 1 ? [...unique.values()][0] : null
 }
 
 export default ReconciliationLineItemsForm

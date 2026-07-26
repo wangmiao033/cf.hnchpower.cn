@@ -88,8 +88,14 @@ function CoreReconciliationPage() {
 
   const partnerOptions = useMemo(() => {
     const names = [
-      ...(settings.partners || []).map((item) => String(item.name || '').trim()),
-      ...(recon.records || []).map((row) => text(row.partner || row.partyBName, ''))
+      ...(settings.partners || []).flatMap((item) => [
+        String(item.shortName || '').trim(),
+        String(item.name || '').trim()
+      ]),
+      ...(recon.records || []).flatMap((row) => [
+        text(row.partnerShortName, ''),
+        text(row.partner || row.partyBName, '')
+      ])
     ].filter(Boolean)
     const unique = new Map()
     names.forEach((name) => {
@@ -104,11 +110,17 @@ function CoreReconciliationPage() {
     return (recon.records || []).filter((row) => {
       const matchesMonth = !month || monthKey(monthOf(row)) === month
       const rowPartner = text(row.partner || row.partyBName, '')
-      const matchesPartner = !partner || partnerKey(rowPartner).includes(partnerKey(partner))
+      const rowPartnerShortName = text(row.partnerShortName, '')
+      const matchesPartner =
+        !partner ||
+        [rowPartner, rowPartnerShortName].some((value) =>
+          partnerKey(value).includes(partnerKey(partner))
+        )
       const matchesStatus = !status || String(row.status || 'pending') === status
       const haystack = [
         row.settlementNumber,
         rowPartner,
+        rowPartnerShortName,
         row.game,
         gameText(row),
         row.remark
@@ -127,7 +139,11 @@ function CoreReconciliationPage() {
 
   const stats = useMemo(() => {
     const total = rows.reduce((sum, row) => sum + recordSettlementAmount(row), 0)
-    const partners = new Set(rows.map((row) => text(row.partner || row.partyBName, '')).filter(Boolean))
+    const partners = new Set(
+      rows
+        .map((row) => text(row.partnerId || row.partner || row.partyBName, ''))
+        .filter(Boolean)
+    )
     const games = new Set(rows.flatMap((row) => gameText(row).split('、').filter(Boolean)))
     return [
       { label: '账单数量', value: rows.length },
@@ -319,7 +335,25 @@ function CoreReconciliationPage() {
                     </td>
                     <td>{text(row.settlementNumber)}</td>
                     <td>{text(row.settlementMonth)}</td>
-                    <td>{text(row.partner || row.partyBName)}</td>
+                    <td>
+                      <div className="core-recon-partner-cell">
+                        <strong>{text(row.partnerShortName || row.partner || row.partyBName)}</strong>
+                        {row.partnerShortName ? (
+                          <small title={text(row.partner || row.partyBName)}>
+                            {text(row.partner || row.partyBName)}
+                          </small>
+                        ) : null}
+                        <span
+                          className={
+                            row.partnerId
+                              ? 'core-recon-link-badge core-recon-link-badge--linked'
+                              : 'core-recon-link-badge'
+                          }
+                        >
+                          {row.partnerId ? '已关联客户库' : '待关联'}
+                        </span>
+                      </div>
+                    </td>
                     <td>{text(gameText(row))}</td>
                     <td>{money(row.gameFlow || sumItems(row, 'revenue'))}</td>
                     <td>{text(row.revenueShareRatio != null ? `${row.revenueShareRatio}%` : '')}</td>

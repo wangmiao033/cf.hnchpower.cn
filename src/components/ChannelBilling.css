@@ -2207,6 +2207,17 @@
   width: 100%;
 }
 
+.rd-partner-picker__link-state {
+  margin-top: 5px;
+  color: #b45309;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.rd-partner-picker__link-state--linked {
+  color: var(--admin-success, #059669);
+}
+
 .rd-partner-picker__add {
   width: 34px;
   height: 34px;

@@ -35,7 +35,11 @@ export type ApiReconciliationRow = {
   id: string
   statement_no: string
   settlement_month: string | null
+  partner_id?: string | null
   partner_name: string | null
+  partner_short_name?: string | null
+  partner_name_snapshot?: string | null
+  partner_link_status?: 'linked' | 'unlinked'
   game_name: string | null
   game_flow: number
   test_cost: number
@@ -145,6 +149,7 @@ export type ReconciliationLineItemPayload = {
 export type ReconciliationCreatePayload = {
   statement_no?: string | null
   settlement_month?: string | null
+  partner_id?: string | null
   partner_name?: string | null
   game_name?: string | null
   game_flow: number
@@ -325,7 +330,10 @@ export function apiRowToFrontend(row: ApiReconciliationRow): Record<string, unkn
     id: idStr,
     settlementMonth: row.settlement_month ?? '',
     settlementNumber: row.statement_no ?? '',
+    partnerId: row.partner_id ?? '',
     partner: row.partner_name ?? '',
+    partnerShortName: row.partner_short_name ?? '',
+    partnerLinkStatus: row.partner_link_status ?? (row.partner_id ? 'linked' : 'unlinked'),
     game: row.game_name ?? '',
     gameFlow: row.game_flow != null ? String(row.game_flow) : '0',
     testingFee: row.test_cost != null ? String(row.test_cost) : '0',
@@ -389,6 +397,7 @@ export function frontendRecordToApiPayload(
   return {
     ...(includeNo ? { statement_no: settlementNumber || null } : {}),
     settlement_month: (record.settlementMonth as string) || null,
+    partner_id: (record.partnerId as string) || null,
     partner_name: (record.partner as string) || null,
     game_name: (record.game as string) || null,
     game_flow: parseFloat(String(record.gameFlow ?? 0)),

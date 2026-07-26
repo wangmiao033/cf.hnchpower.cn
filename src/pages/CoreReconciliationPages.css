@@ -225,6 +225,50 @@
   color: var(--admin-text-main);
 }
 
+.core-recon-table td:nth-child(4) {
+  height: auto;
+  min-width: 190px;
+  padding-top: 7px;
+  padding-bottom: 7px;
+  white-space: normal;
+}
+
+.core-recon-partner-cell {
+  display: grid;
+  justify-items: start;
+  gap: 2px;
+}
+
+.core-recon-partner-cell strong {
+  color: var(--admin-text-main);
+  font-size: 13px;
+}
+
+.core-recon-partner-cell small {
+  max-width: 250px;
+  overflow: hidden;
+  color: var(--admin-text-tertiary);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.core-recon-link-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #fff7ed;
+  color: #b45309;
+  font-size: 10px;
+}
+
+.core-recon-link-badge--linked {
+  background: #ecfdf5;
+  color: #047857;
+}
+
 .core-recon-table td:nth-last-child(2),
 .core-recon-table td:nth-last-child(3),
 .core-recon-table td:nth-last-child(4) {
