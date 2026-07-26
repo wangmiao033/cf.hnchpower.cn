@@ -26,6 +26,11 @@ function money(value) {
   return `¥ ${n.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
+function recordSettlementAmount(row) {
+  const stored = Number.parseFloat(row?.settlementAmount)
+  return Number.isFinite(stored) ? stored : totalReconciliationSettlementAmount(row)
+}
+
 function text(value, fallback = '-') {
   const raw = value == null ? '' : String(value).trim()
   return raw || fallback
@@ -121,7 +126,7 @@ function CoreReconciliationPage() {
   )
 
   const stats = useMemo(() => {
-    const total = rows.reduce((sum, row) => sum + totalReconciliationSettlementAmount(row), 0)
+    const total = rows.reduce((sum, row) => sum + recordSettlementAmount(row), 0)
     const partners = new Set(rows.map((row) => text(row.partner || row.partyBName, '')).filter(Boolean))
     const games = new Set(rows.flatMap((row) => gameText(row).split('、').filter(Boolean)))
     return [
@@ -307,6 +312,7 @@ function CoreReconciliationPage() {
                     <td>
                       <input
                         type="checkbox"
+                        aria-label={`选择账单 ${text(row.settlementNumber)}`}
                         checked={selectedIds.includes(String(row.id))}
                         onChange={() => toggleSelected(row.id)}
                       />
@@ -317,7 +323,7 @@ function CoreReconciliationPage() {
                     <td>{text(gameText(row))}</td>
                     <td>{money(row.gameFlow || sumItems(row, 'revenue'))}</td>
                     <td>{text(row.revenueShareRatio != null ? `${row.revenueShareRatio}%` : '')}</td>
-                    <td>{money(totalReconciliationSettlementAmount(row))}</td>
+                    <td>{money(recordSettlementAmount(row))}</td>
                     <td><span className="core-recon-status">{STATUS_LABELS[row.status] || row.status || '待处理'}</span></td>
                     <td>
                       <button type="button" onClick={() => openReconciliationEdit(String(row.id))}>编辑</button>
