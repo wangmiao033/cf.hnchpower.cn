@@ -695,6 +695,7 @@ function ReconciliationLineItemsForm({
                       <input
                         type="text"
                         list={cycleListId}
+                        aria-label={`第 ${index + 1} 行结算周期`}
                         className="admin-input"
                         value={line.settlementCycle || header.settlementMonth}
                         onChange={(e) => updateLine(index, 'settlementCycle', e.target.value)}
@@ -714,6 +715,7 @@ function ReconciliationLineItemsForm({
                         <input
                           type="search"
                           list={gameListId}
+                          aria-label={`第 ${index + 1} 行游戏名称`}
                           className="admin-input"
                           value={line.gameName}
                           onFocus={(e) => queueGameSuggestions(index, e.target.value)}
@@ -756,6 +758,7 @@ function ReconciliationLineItemsForm({
                       <input
                         type="number"
                         step="0.01"
+                        aria-label={`第 ${index + 1} 行后台流水`}
                         className="admin-input channel-input-num"
                         value={line.revenue}
                         onChange={(e) => {
@@ -775,6 +778,7 @@ function ReconciliationLineItemsForm({
                         step="0.001"
                         min="0"
                         max="1"
+                        aria-label={`第 ${index + 1} 行折扣`}
                         className="admin-input channel-input-num"
                         value={line.discountRate}
                         onChange={(e) => updateLine(index, 'discountRate', e.target.value)}
@@ -786,6 +790,7 @@ function ReconciliationLineItemsForm({
                         type="text"
                         readOnly
                         disabled
+                        aria-label={`第 ${index + 1} 行总流水`}
                         className="admin-input readonly-input channel-input-num"
                         value={net.toFixed(2)}
                       />
@@ -794,6 +799,7 @@ function ReconciliationLineItemsForm({
                       <input
                         type="number"
                         step="0.01"
+                        aria-label={`第 ${index + 1} 行代金券`}
                         className="admin-input channel-input-num"
                         value={line.couponAmount}
                         onChange={(e) => updateLine(index, 'couponAmount', e.target.value)}
@@ -803,6 +809,7 @@ function ReconciliationLineItemsForm({
                       <input
                         type="number"
                         step="0.01"
+                        aria-label={`第 ${index + 1} 行测试费`}
                         className="admin-input channel-input-num"
                         value={line.testFee}
                         onChange={(e) => updateLine(index, 'testFee', e.target.value)}
@@ -812,6 +819,7 @@ function ReconciliationLineItemsForm({
                       <input
                         type="number"
                         step="0.01"
+                        aria-label={`第 ${index + 1} 行额外费用`}
                         className="admin-input channel-input-num"
                         value={line.extraFee}
                         onChange={(e) => updateLine(index, 'extraFee', e.target.value)}
@@ -821,6 +829,7 @@ function ReconciliationLineItemsForm({
                       <input
                         type="number"
                         step="0.01"
+                        aria-label={`第 ${index + 1} 行通道费率`}
                         className="admin-input channel-input-num"
                         value={header.channelFeeRate}
                         onChange={(e) => setHeader((h) => ({ ...h, channelFeeRate: e.target.value }))}
@@ -830,6 +839,7 @@ function ReconciliationLineItemsForm({
                       <input
                         type="number"
                         step="0.01"
+                        aria-label={`第 ${index + 1} 行税率`}
                         className="admin-input channel-input-num"
                         value={line.taxRate}
                         onChange={(e) => updateLine(index, 'taxRate', e.target.value)}
@@ -839,6 +849,7 @@ function ReconciliationLineItemsForm({
                       <input
                         type="number"
                         step="0.01"
+                        aria-label={`第 ${index + 1} 行分成比例`}
                         className="admin-input channel-input-num"
                         value={line.shareRatio}
                         onChange={(e) => updateLine(index, 'shareRatio', e.target.value)}
@@ -849,6 +860,7 @@ function ReconciliationLineItemsForm({
                         type="text"
                         readOnly
                         disabled
+                        aria-label={`第 ${index + 1} 行参与分成金额`}
                         className="admin-input readonly-input channel-input-num"
                         value={gross.toFixed(2)}
                       />
@@ -858,6 +870,7 @@ function ReconciliationLineItemsForm({
                         type="text"
                         readOnly
                         disabled
+                        aria-label={`第 ${index + 1} 行结算金额`}
                         className="admin-input readonly-input channel-input-num"
                         value={settlement.toFixed(2)}
                       />
@@ -926,6 +939,7 @@ function ReconciliationLineItemsForm({
               <div className="form-group">
                 <label>记录状态</label>
                 <select
+                  aria-label="记录状态"
                   className="admin-input"
                   value={header.status || 'pending'}
                   onChange={(e) => setHeader((h) => ({ ...h, status: e.target.value }))}
