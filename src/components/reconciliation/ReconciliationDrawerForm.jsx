@@ -81,17 +81,7 @@ function ReconciliationDrawerForm({
             onError={(msg) => showToast(msg, 'error')}
             quickFillData={quickFillData}
             partners={partners}
-            onAddPartner={(name) => {
-              const newPartner = {
-                id: Date.now(),
-                name,
-                category: '游戏研发商',
-                tag2: '',
-                createdAt: new Date().toISOString()
-              }
-              setPartners([...partners, newPartner])
-              showToast(`客户"${name}"已添加到客户库`, 'success')
-            }}
+            onAddPartner={onAddPartner}
           />
         </div>
         <div className="rec-drawer__footer">

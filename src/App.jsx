@@ -49,7 +49,10 @@ function App() {
     showNotification(message, type, 3000)
   }, [])
 
-  const settings = useSettingsStore({ showToast })
+  const settings = useSettingsStore({
+    showToast,
+    enabled: isAuthenticated && !loading
+  })
   const recon = useReconciliationStore(settings, showToast, {
     enabled: isAuthenticated && !loading
   })

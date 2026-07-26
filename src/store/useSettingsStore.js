@@ -9,6 +9,15 @@ import {
   apiPaymentRowToFrontend,
   frontendPaymentToPayload
 } from '@/lib/api/payment.ts'
+import {
+  listPartners,
+  createPartner,
+  updatePartner,
+  deletePartner,
+  importPartners,
+  apiPartnerRowToFrontend,
+  frontendPartnerToPayload
+} from '@/lib/api/partner.ts'
 
 const defaultPartyA = {
   invoiceTitle: '厦门巴掌互动科技有限公司',
@@ -33,13 +42,15 @@ function normalizeLocalDeliveries(saved) {
   }))
 }
 
-export function useSettingsStore({ showToast } = {}) {
+export function useSettingsStore({ showToast, enabled = true } = {}) {
   const [partyA, setPartyA] = useState(defaultPartyA)
   const [partyB, setPartyB] = useState(defaultPartyB)
   const [settlementMonth, setSettlementMonth] = useState('')
   const [partners, setPartners] = useState([])
   const [deliveries, setDeliveries] = useState([])
   const [settlementNumberFormat, setSettlementNumberFormat] = useState(getNumberFormatFromStorage())
+  const [partnerApiEnabled, setPartnerApiEnabled] = useState(false)
+  const [partnerLoading, setPartnerLoading] = useState(true)
   const [paymentApiEnabled, setPaymentApiEnabled] = useState(false)
 
   const showToastRef = useRef(showToast)
@@ -48,6 +59,11 @@ export function useSettingsStore({ showToast } = {}) {
   const refetchPaymentsFromApi = useCallback(async () => {
     const { items } = await listPayments({ limit: 500, offset: 0 })
     setDeliveries(items.map(apiPaymentRowToFrontend))
+  }, [])
+
+  const refetchPartnersFromApi = useCallback(async () => {
+    const { items } = await listPartners()
+    setPartners(items.map(apiPartnerRowToFrontend))
   }, [])
 
   useEffect(() => {
@@ -69,6 +85,31 @@ export function useSettingsStore({ showToast } = {}) {
   }, [])
 
   useEffect(() => {
+    if (!enabled) {
+      setPartnerLoading(true)
+      return undefined
+    }
+    let cancelled = false
+    ;(async () => {
+      try {
+        await refetchPartnersFromApi()
+        if (cancelled) return
+        setPartnerApiEnabled(true)
+      } catch (err) {
+        console.warn('Partner API unavailable, falling back to local cache.', err)
+        if (cancelled) return
+        setPartnerApiEnabled(false)
+      } finally {
+        if (!cancelled) setPartnerLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [enabled, refetchPartnersFromApi])
+
+  useEffect(() => {
+    if (!enabled) return undefined
     let cancelled = false
     ;(async () => {
       try {
@@ -88,7 +129,7 @@ export function useSettingsStore({ showToast } = {}) {
     return () => {
       cancelled = true
     }
-  }, [refetchPaymentsFromApi])
+  }, [enabled, refetchPaymentsFromApi])
 
   useEffect(() => {
     storageSet(STORAGE_KEYS.PARTY_A, partyA)
@@ -147,6 +188,88 @@ export function useSettingsStore({ showToast } = {}) {
     [paymentApiEnabled, refetchPaymentsFromApi]
   )
 
+  const persistPartner = useCallback(
+    async (record, { editingId } = {}) => {
+      const rec = {
+        ...record,
+        id: record.id != null ? String(record.id) : String(Date.now()),
+        createdAt: record.createdAt || new Date().toISOString()
+      }
+      if (partnerApiEnabled) {
+        try {
+          if (editingId != null) {
+            await updatePartner(String(editingId), frontendPartnerToPayload(rec))
+          } else {
+            await createPartner(frontendPartnerToPayload(rec))
+          }
+          await refetchPartnersFromApi()
+          return true
+        } catch (e) {
+          console.error(e)
+          showToastRef.current?.(
+            e?.message || '客户资料保存服务器失败',
+            'error'
+          )
+          return false
+        }
+      }
+      if (editingId != null) {
+        const sid = String(editingId)
+        setPartners((prev) =>
+          prev.map((item) => (String(item.id) === sid ? { ...item, ...rec, id: sid } : item))
+        )
+      } else {
+        setPartners((prev) => [...prev, rec])
+      }
+      return true
+    },
+    [partnerApiEnabled, refetchPartnersFromApi]
+  )
+
+  const deletePartnerById = useCallback(
+    async (rawId) => {
+      const sid = String(rawId)
+      if (partnerApiEnabled) {
+        try {
+          await deletePartner(sid)
+          await refetchPartnersFromApi()
+          return true
+        } catch (e) {
+          console.error(e)
+          showToastRef.current?.(
+            e?.message || '从服务器删除客户失败',
+            'error'
+          )
+          return false
+        }
+      }
+      setPartners((prev) => prev.filter((item) => String(item.id) !== sid))
+      return true
+    },
+    [partnerApiEnabled, refetchPartnersFromApi]
+  )
+
+  const replacePartners = useCallback(
+    async (records) => {
+      const next = Array.isArray(records) ? records : []
+      setPartners(next)
+      if (!partnerApiEnabled || next.length === 0) return true
+      try {
+        await importPartners(next)
+        await refetchPartnersFromApi()
+        return true
+      } catch (e) {
+        console.error(e)
+        showToastRef.current?.(
+          e?.message || '客户资料导入服务器失败',
+          'error'
+        )
+        return false
+      }
+    },
+    [partnerApiEnabled, refetchPartnersFromApi]
+  )
+
   const patchDeliveryRecord = useCallback(
     async (next) => {
       const sid = String(next.id)
@@ -196,6 +319,12 @@ export function useSettingsStore({ showToast } = {}) {
     setSettlementMonth,
     partners,
     setPartners,
+    partnerApiEnabled,
+    partnerLoading,
+    persistPartner,
+    deletePartnerById,
+    replacePartners,
+    refetchPartnersFromApi,
     deliveries,
     setDeliveries,
     settlementNumberFormat,

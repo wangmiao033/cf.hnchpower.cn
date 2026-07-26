@@ -115,16 +115,17 @@ function CoreRdBillFormPage({ mode }) {
           onError={(msg) => showToast(msg, 'error')}
           quickFillData={isEdit ? null : recon.quickFillData}
           partners={settings.partners || []}
-          onAddPartner={(name) => {
+          onAddPartner={async (name) => {
             const newPartner = {
-              id: Date.now(),
               name,
               category: '研发商',
               tag2: '',
               createdAt: new Date().toISOString()
             }
-            settings.setPartners([...(settings.partners || []), newPartner])
-            showToast(`客户「${name}」已加入客户库`, 'success')
+            const ok = await settings.persistPartner(newPartner)
+            if (ok) {
+              showToast(`客户「${name}」已加入服务器客户库`, 'success')
+            }
           }}
         />
       </section>

@@ -13,6 +13,11 @@ export default defineConfig({
     port: 3000,
     open: false,
     proxy: {
+      '/api/partners': {
+        target: 'https://cf-hnchpower-cn.vercel.app',
+        changeOrigin: true,
+        secure: true
+      },
       '/api/quicksdk': {
         target: 'https://cf-hnchpower-cn.vercel.app',
         changeOrigin: true,

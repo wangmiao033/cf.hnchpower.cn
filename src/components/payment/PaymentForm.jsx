@@ -108,7 +108,9 @@ function PaymentForm({
             className="admin-input"
             value={formData.partnerId}
             onChange={(e) => {
-              const selectedPartner = partners.find((p) => p.id === parseInt(e.target.value, 10))
+              const selectedPartner = partners.find(
+                (p) => String(p.id) === String(e.target.value)
+              )
               setFormData((prev) => ({
                 ...prev,
                 partnerId: e.target.value,

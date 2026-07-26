@@ -36,7 +36,9 @@ function DeliveryCenter({ deliveries, onDeliveriesChange, partners = [] }) {
       recipientPhone: formData.recipientPhone.trim(),
       address: formData.address.trim(),
       partnerId: formData.partnerId || null,
-      partnerName: formData.partnerId ? partners.find(p => p.id === parseInt(formData.partnerId))?.name : '',
+      partnerName: formData.partnerId
+        ? partners.find((p) => String(p.id) === String(formData.partnerId))?.name
+        : '',
       status: formData.status,
       sendDate: formData.sendDate || '',
       expectedDate: formData.expectedDate || '',
@@ -81,8 +83,10 @@ function DeliveryCenter({ deliveries, onDeliveriesChange, partners = [] }) {
             recipient: formData.recipient.trim(),
             recipientPhone: formData.recipientPhone.trim(),
             address: formData.address.trim(),
-            partnerId: formData.partnerId ? parseInt(formData.partnerId) : null,
-            partnerName: formData.partnerId ? partners.find(p => p.id === parseInt(formData.partnerId))?.name : '',
+            partnerId: formData.partnerId ? String(formData.partnerId) : null,
+            partnerName: formData.partnerId
+              ? partners.find((p) => String(p.id) === String(formData.partnerId))?.name
+              : '',
             status: formData.status,
             sendDate: formData.sendDate || '',
             expectedDate: formData.expectedDate || '',

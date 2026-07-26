@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
 import os
 import re
+from uuid import uuid4
 
 import httpx
 import psycopg
@@ -67,7 +70,7 @@ def _host_cookie(value: str) -> str:
     return re.sub(r";\s*Domain=[^;]+", "", value, flags=re.IGNORECASE)
 
 
-async def _require_authenticated(request: Request) -> None:
+async def _require_authenticated(request: Request) -> str:
     """Validate the proxied session with the existing production auth service."""
     cookie = request.headers.get("cookie", "")
     if not cookie:
@@ -79,6 +82,7 @@ async def _require_authenticated(request: Request) -> None:
         )
     if response.status_code != 200:
         raise HTTPException(status_code=401, detail="请先登录")
+    return cookie
 
 
 def _database_url() -> str:
@@ -92,6 +96,438 @@ def _month_filter(month: str | None) -> tuple[str, list[str]]:
     if not normalized:
         return "", []
     return ' AND d."reportDate" LIKE %s', [f"{normalized}%"]
+
+
+PARTNER_CATEGORIES = {"研发商", "发行商", "渠道", "供应商", "其他"}
+PARTNER_FIELDS = {
+    "name",
+    "category",
+    "tag",
+    "tax_registration_no",
+    "bank_name",
+    "bank_account",
+    "invoice_content",
+    "recipient",
+    "recipient_phone",
+    "mailing_address",
+}
+
+
+def _partner_name_key(value: object) -> str:
+    return (
+        str(value or "")
+        .strip()
+        .lower()
+        .replace("（", "(")
+        .replace("）", ")")
+        .replace(" ", "")
+    )
+
+
+def _clean_partner_value(value: object, *, limit: int = 2000) -> str:
+    return str(value or "").strip()[:limit]
+
+
+def _partner_payload(raw: dict, *, require_name: bool = True) -> dict[str, str]:
+    payload = {
+        key: _clean_partner_value(raw.get(key), limit=500 if key != "mailing_address" else 2000)
+        for key in PARTNER_FIELDS
+    }
+    if require_name and not payload["name"]:
+        raise HTTPException(status_code=422, detail="请填写客户名称")
+    category = payload["category"] or "研发商"
+    if category not in PARTNER_CATEGORIES:
+        category = "其他"
+    payload["category"] = category
+    return payload
+
+
+def _ensure_partners_table(conn: psycopg.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS cf_partner_records (
+          id TEXT PRIMARY KEY,
+          normalized_name TEXT NOT NULL UNIQUE,
+          name TEXT NOT NULL,
+          category TEXT NOT NULL DEFAULT '研发商',
+          tag TEXT NOT NULL DEFAULT '',
+          tax_registration_no TEXT NOT NULL DEFAULT '',
+          bank_name TEXT NOT NULL DEFAULT '',
+          bank_account TEXT NOT NULL DEFAULT '',
+          invoice_content TEXT NOT NULL DEFAULT '',
+          recipient TEXT NOT NULL DEFAULT '',
+          recipient_phone TEXT NOT NULL DEFAULT '',
+          mailing_address TEXT NOT NULL DEFAULT '',
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_cf_partner_records_category
+        ON cf_partner_records (category)
+        """
+    )
+
+
+def _partner_row(row: dict) -> dict:
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        "category": row["category"],
+        "tag": row["tag"],
+        "tax_registration_no": row["tax_registration_no"],
+        "bank_name": row["bank_name"],
+        "bank_account": row["bank_account"],
+        "invoice_content": row["invoice_content"],
+        "recipient": row["recipient"],
+        "recipient_phone": row["recipient_phone"],
+        "mailing_address": row["mailing_address"],
+        "created_at": row["created_at"].isoformat(),
+        "updated_at": row["updated_at"].isoformat(),
+    }
+
+
+async def _upstream_list(client: httpx.AsyncClient, cookie: str, path: str) -> list[dict]:
+    try:
+        response = await client.get(
+            f"{UPSTREAM_ORIGIN}{path}",
+            headers={"cookie": cookie, "accept-encoding": "identity"},
+        )
+        if response.status_code != 200:
+            return []
+        payload = response.json()
+        items = payload.get("items") if isinstance(payload, dict) else None
+        return items if isinstance(items, list) else []
+    except (httpx.HTTPError, ValueError):
+        return []
+
+
+def _payment_remark_fields(raw: object) -> dict[str, str]:
+    if not raw:
+        return {}
+    try:
+        payload = json.loads(str(raw))
+    except (TypeError, ValueError):
+        return {}
+    if not isinstance(payload, dict) or payload.get("v") != 1:
+        return {}
+    return {
+        "recipient_phone": _clean_partner_value(payload.get("recipientPhone"), limit=200),
+        "mailing_address": _clean_partner_value(payload.get("address"), limit=2000),
+    }
+
+
+async def _bootstrap_partners(cookie: str) -> list[dict]:
+    """Recover server-known customer data when the new partner table is empty."""
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        reconciliation, channels, invoices, payments = await asyncio.gather(
+            _upstream_list(client, cookie, "/api/reconciliation?limit=500&offset=0"),
+            _upstream_list(client, cookie, "/api/channel-records?limit=500&offset=0"),
+            _upstream_list(client, cookie, "/api/invoices?limit=500&offset=0"),
+            _upstream_list(client, cookie, "/api/payments?limit=500&offset=0"),
+        )
+
+    recovered: dict[str, dict[str, str]] = {}
+
+    def add_name(value: object, category: str) -> None:
+        name = _clean_partner_value(value, limit=500)
+        key = _partner_name_key(name)
+        if not key:
+            return
+        recovered.setdefault(
+            key,
+            _partner_payload({"name": name, "category": category}),
+        )
+
+    for item in reconciliation:
+        add_name(item.get("partner_name") or item.get("partner"), "研发商")
+    for item in channels:
+        add_name(item.get("partner_name") or item.get("partner"), "渠道")
+
+    for item in invoices:
+        candidates = [
+            (item.get("buyer_name"), item.get("buyer_tax_no")),
+            (item.get("seller_name"), item.get("seller_tax_no")),
+            (item.get("title"), item.get("tax_no")),
+        ]
+        for raw_name, raw_tax_no in candidates:
+            partner = recovered.get(_partner_name_key(raw_name))
+            tax_no = _clean_partner_value(raw_tax_no, limit=500)
+            if partner is not None and tax_no and not partner["tax_registration_no"]:
+                partner["tax_registration_no"] = tax_no
+
+    for item in payments:
+        partner = recovered.get(_partner_name_key(item.get("customer")))
+        if partner is None:
+            continue
+        recipient = _clean_partner_value(item.get("recipient"), limit=500)
+        if recipient and not partner["recipient"]:
+            partner["recipient"] = recipient
+        for key, value in _payment_remark_fields(item.get("remark")).items():
+            if value and not partner[key]:
+                partner[key] = value
+
+    return list(recovered.values())
+
+
+def _upsert_partner(conn: psycopg.Connection, payload: dict[str, str]) -> None:
+    key = _partner_name_key(payload["name"])
+    if not key:
+        return
+    conn.execute(
+        """
+        INSERT INTO cf_partner_records (
+          id, normalized_name, name, category, tag, tax_registration_no,
+          bank_name, bank_account, invoice_content, recipient,
+          recipient_phone, mailing_address
+        )
+        VALUES (
+          %s, %s, %s, %s, %s, %s,
+          %s, %s, %s, %s,
+          %s, %s
+        )
+        ON CONFLICT (normalized_name) DO UPDATE SET
+          name = EXCLUDED.name,
+          category = CASE
+            WHEN cf_partner_records.category = '' THEN EXCLUDED.category
+            ELSE cf_partner_records.category
+          END,
+          tag = COALESCE(NULLIF(EXCLUDED.tag, ''), cf_partner_records.tag),
+          tax_registration_no = COALESCE(
+            NULLIF(EXCLUDED.tax_registration_no, ''),
+            cf_partner_records.tax_registration_no
+          ),
+          bank_name = COALESCE(NULLIF(EXCLUDED.bank_name, ''), cf_partner_records.bank_name),
+          bank_account = COALESCE(
+            NULLIF(EXCLUDED.bank_account, ''),
+            cf_partner_records.bank_account
+          ),
+          invoice_content = COALESCE(
+            NULLIF(EXCLUDED.invoice_content, ''),
+            cf_partner_records.invoice_content
+          ),
+          recipient = COALESCE(NULLIF(EXCLUDED.recipient, ''), cf_partner_records.recipient),
+          recipient_phone = COALESCE(
+            NULLIF(EXCLUDED.recipient_phone, ''),
+            cf_partner_records.recipient_phone
+          ),
+          mailing_address = COALESCE(
+            NULLIF(EXCLUDED.mailing_address, ''),
+            cf_partner_records.mailing_address
+          ),
+          updated_at = NOW()
+        """,
+        [
+            str(uuid4()),
+            key,
+            payload["name"],
+            payload["category"],
+            payload["tag"],
+            payload["tax_registration_no"],
+            payload["bank_name"],
+            payload["bank_account"],
+            payload["invoice_content"],
+            payload["recipient"],
+            payload["recipient_phone"],
+            payload["mailing_address"],
+        ],
+    )
+
+
+@app.get("/api/partners/health")
+def partner_health() -> dict:
+    with psycopg.connect(_database_url(), connect_timeout=15, row_factory=dict_row) as conn:
+        _ensure_partners_table(conn)
+        count = int(
+            conn.execute("SELECT COUNT(*) AS count FROM cf_partner_records").fetchone()["count"]
+        )
+        conn.commit()
+    return {"status": "ok", "storage": "postgres", "count": count}
+
+
+@app.get("/api/partners")
+async def list_partners(
+    request: Request,
+    q: str | None = Query(None),
+    category: str | None = Query(None),
+) -> dict:
+    cookie = await _require_authenticated(request)
+    with psycopg.connect(_database_url(), connect_timeout=15, row_factory=dict_row) as conn:
+        _ensure_partners_table(conn)
+        count = int(conn.execute("SELECT COUNT(*) AS count FROM cf_partner_records").fetchone()["count"])
+        conn.commit()
+
+    bootstrapped = False
+    if count == 0:
+        recovered = await _bootstrap_partners(cookie)
+        if recovered:
+            with psycopg.connect(_database_url(), connect_timeout=15, row_factory=dict_row) as conn:
+                _ensure_partners_table(conn)
+                for partner in recovered:
+                    _upsert_partner(conn, partner)
+                conn.commit()
+            print("[partners] recovered customers from server records", {"count": len(recovered)})
+            bootstrapped = True
+
+    filters: list[str] = []
+    params: list[object] = []
+    if q and q.strip():
+        filters.append(
+            """
+            (name ILIKE %s OR tag ILIKE %s OR tax_registration_no ILIKE %s
+             OR bank_name ILIKE %s OR recipient ILIKE %s)
+            """
+        )
+        term = f"%{q.strip()}%"
+        params.extend([term, term, term, term, term])
+    if category and category.strip():
+        filters.append("category = %s")
+        params.append(category.strip())
+    where = f"WHERE {' AND '.join(filters)}" if filters else ""
+    with psycopg.connect(_database_url(), connect_timeout=15, row_factory=dict_row) as conn:
+        _ensure_partners_table(conn)
+        rows = conn.execute(
+            f"""
+            SELECT * FROM cf_partner_records
+            {where}
+            ORDER BY category, name
+            """,
+            params,
+        ).fetchall()
+    return {
+        "items": [_partner_row(row) for row in rows],
+        "total": len(rows),
+        "bootstrapped": bootstrapped,
+    }
+
+
+@app.post("/api/partners", status_code=201)
+async def create_partner(request: Request, payload: dict) -> dict:
+    await _require_authenticated(request)
+    clean = _partner_payload(payload)
+    key = _partner_name_key(clean["name"])
+    with psycopg.connect(_database_url(), connect_timeout=15, row_factory=dict_row) as conn:
+        _ensure_partners_table(conn)
+        try:
+            row = conn.execute(
+                """
+                INSERT INTO cf_partner_records (
+                  id, normalized_name, name, category, tag, tax_registration_no,
+                  bank_name, bank_account, invoice_content, recipient,
+                  recipient_phone, mailing_address
+                )
+                VALUES (
+                  %s, %s, %s, %s, %s, %s,
+                  %s, %s, %s, %s,
+                  %s, %s
+                )
+                RETURNING *
+                """,
+                [
+                    str(uuid4()),
+                    key,
+                    clean["name"],
+                    clean["category"],
+                    clean["tag"],
+                    clean["tax_registration_no"],
+                    clean["bank_name"],
+                    clean["bank_account"],
+                    clean["invoice_content"],
+                    clean["recipient"],
+                    clean["recipient_phone"],
+                    clean["mailing_address"],
+                ],
+            ).fetchone()
+            conn.commit()
+        except psycopg.errors.UniqueViolation as exc:
+            raise HTTPException(status_code=409, detail="同名客户已存在") from exc
+    return _partner_row(row)
+
+
+@app.put("/api/partners/{partner_id}")
+async def update_partner(partner_id: str, request: Request, payload: dict) -> dict:
+    await _require_authenticated(request)
+    clean = _partner_payload(payload)
+    with psycopg.connect(_database_url(), connect_timeout=15, row_factory=dict_row) as conn:
+        _ensure_partners_table(conn)
+        try:
+            row = conn.execute(
+                """
+                UPDATE cf_partner_records SET
+                  normalized_name = %s,
+                  name = %s,
+                  category = %s,
+                  tag = %s,
+                  tax_registration_no = %s,
+                  bank_name = %s,
+                  bank_account = %s,
+                  invoice_content = %s,
+                  recipient = %s,
+                  recipient_phone = %s,
+                  mailing_address = %s,
+                  updated_at = NOW()
+                WHERE id = %s
+                RETURNING *
+                """,
+                [
+                    _partner_name_key(clean["name"]),
+                    clean["name"],
+                    clean["category"],
+                    clean["tag"],
+                    clean["tax_registration_no"],
+                    clean["bank_name"],
+                    clean["bank_account"],
+                    clean["invoice_content"],
+                    clean["recipient"],
+                    clean["recipient_phone"],
+                    clean["mailing_address"],
+                    partner_id,
+                ],
+            ).fetchone()
+            if row is None:
+                raise HTTPException(status_code=404, detail="客户不存在")
+            conn.commit()
+        except psycopg.errors.UniqueViolation as exc:
+            raise HTTPException(status_code=409, detail="同名客户已存在") from exc
+    return _partner_row(row)
+
+
+@app.delete("/api/partners/{partner_id}", status_code=204)
+async def delete_partner(partner_id: str, request: Request) -> Response:
+    await _require_authenticated(request)
+    with psycopg.connect(_database_url(), connect_timeout=15, row_factory=dict_row) as conn:
+        _ensure_partners_table(conn)
+        row = conn.execute(
+            "DELETE FROM cf_partner_records WHERE id = %s RETURNING id",
+            [partner_id],
+        ).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="客户不存在")
+        conn.commit()
+    return Response(status_code=204)
+
+
+@app.post("/api/partners/import")
+async def import_partners(request: Request, payload: dict) -> dict:
+    await _require_authenticated(request)
+    raw_items = payload.get("items")
+    if not isinstance(raw_items, list):
+        raise HTTPException(status_code=422, detail="客户数据格式无效")
+    imported = 0
+    with psycopg.connect(_database_url(), connect_timeout=15, row_factory=dict_row) as conn:
+        _ensure_partners_table(conn)
+        for raw in raw_items[:1000]:
+            if not isinstance(raw, dict):
+                continue
+            clean = _partner_payload(raw, require_name=False)
+            if not clean["name"]:
+                continue
+            _upsert_partner(conn, clean)
+            imported += 1
+        conn.commit()
+    return {"imported": imported}
 
 
 @app.get("/api/quicksdk/summary")

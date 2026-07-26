@@ -26,8 +26,10 @@ export function buildDeliveryRecord(formData, partners, { editingId, existing } 
     return { ok: false, error: '已寄出的快递需要填写快递单号' }
   }
 
-  const partnerIdParsed = formData.partnerId ? parseInt(formData.partnerId, 10) : null
-  const partner = partnerIdParsed ? partners.find((p) => p.id === partnerIdParsed) : null
+  const partnerId = formData.partnerId ? String(formData.partnerId) : null
+  const partner = partnerId
+    ? partners.find((p) => String(p.id) === partnerId)
+    : null
 
   const base = {
     trackingNumber: formData.trackingNumber.trim(),
@@ -35,7 +37,7 @@ export function buildDeliveryRecord(formData, partners, { editingId, existing } 
     recipient: formData.recipient.trim(),
     recipientPhone: formData.recipientPhone.trim(),
     address: formData.address.trim(),
-    partnerId: partnerIdParsed,
+    partnerId,
     partnerName: partner?.name || '',
     status: formData.status,
     sendDate: formData.sendDate || '',

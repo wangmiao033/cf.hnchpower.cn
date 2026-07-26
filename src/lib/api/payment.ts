@@ -42,7 +42,7 @@ type UnpackedRemark = {
   text: string
   recipientPhone: string
   address: string
-  partnerId: number | null
+  partnerId: string | null
   expectedDate: string
 }
 
@@ -59,10 +59,9 @@ function unpackRemark(remark: string | null | undefined): UnpackedRemark {
     const o = JSON.parse(remark) as Record<string, unknown>
     if (o && o.v === 1) {
       const pid = o.partnerId
-      let partnerId: number | null = null
+      let partnerId: string | null = null
       if (pid !== undefined && pid !== null && String(pid).trim() !== '') {
-        const n = typeof pid === 'number' ? pid : parseInt(String(pid), 10)
-        partnerId = Number.isFinite(n) ? n : null
+        partnerId = String(pid)
       }
       return {
         text: o.t != null ? String(o.t) : '',
@@ -84,13 +83,12 @@ function packRemark(record: Record<string, unknown>): string | null {
   const address = String(record.address ?? '').trim()
   const expectedDate = String(record.expectedDate ?? '').trim()
   const pid = record.partnerId
-  let partnerId: number | null = null
+  let partnerId: string | null = null
   if (pid !== undefined && pid !== null && String(pid).trim() !== '') {
-    const n = typeof pid === 'number' ? pid : parseInt(String(pid), 10)
-    partnerId = Number.isFinite(n) ? n : null
+    partnerId = String(pid)
   }
   const hasExt = Boolean(
-    recipientPhone || address || expectedDate || (partnerId != null && !Number.isNaN(partnerId))
+    recipientPhone || address || expectedDate || partnerId != null
   )
   if (!t && !hasExt) return null
   if (!hasExt) return t || null

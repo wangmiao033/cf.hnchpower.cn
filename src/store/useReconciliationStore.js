@@ -810,7 +810,7 @@ export function useReconciliationStore(settings, showToast, options = {}) {
       if (data.partyA) settings.setPartyA(data.partyA)
       if (data.partyB) settings.setPartyB(data.partyB)
       if (data.settlementMonth) settings.setSettlementMonth(data.settlementMonth)
-      if (data.partners) settings.setPartners(data.partners)
+      if (data.partners) void settings.replacePartners(data.partners)
       if (data.deliveries) settings.setDeliveries(data.deliveries)
     },
     [settings]

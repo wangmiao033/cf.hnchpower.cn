@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import { useAppState } from '@/app/AppStateContext.jsx'
 import PageContainer from '@/components/layout/PageContainer.jsx'
 import './PartnerPage.css'
@@ -18,63 +18,20 @@ const EMPTY_PARTNER = {
 
 const CATEGORIES = ['研发商', '发行商', '渠道', '供应商', '其他']
 
-function partnerNameKey(value) {
-  return String(value || '')
-    .trim()
-    .toLowerCase()
-    .replace(/[（(]/g, '(')
-    .replace(/[）)]/g, ')')
-    .replace(/\s+/g, '')
-}
-
 function PartnerPage() {
-  const { settings, recon, showToast } = useAppState()
-  const { partners, setPartners } = settings
+  const { settings, showToast } = useAppState()
+  const {
+    partners,
+    partnerApiEnabled,
+    partnerLoading,
+    persistPartner,
+    deletePartnerById
+  } = settings
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState('全部')
   const [editingId, setEditingId] = useState(null)
   const [form, setForm] = useState(EMPTY_PARTNER)
-
-  useEffect(() => {
-    const existingNames = new Set()
-    const retainedPartners = []
-    for (const partner of partners || []) {
-      const key = partnerNameKey(partner.name)
-      const isMigrated = String(partner.id || '').startsWith('migrated-')
-      if (key && existingNames.has(key) && isMigrated) continue
-      if (key) existingNames.add(key)
-      retainedPartners.push(partner)
-    }
-    const candidates = [
-      ...(recon.records || []).map((record) => ({
-        name: record.partner,
-        category: '研发商'
-      })),
-      ...(recon.channelRecords || []).map((record) => ({
-        name: record.partner || record.partnerName,
-        category: '渠道'
-      }))
-    ]
-    const additions = []
-
-    for (const candidate of candidates) {
-      const name = String(candidate.name || '').trim()
-      const key = partnerNameKey(name)
-      if (!key || existingNames.has(key)) continue
-      existingNames.add(key)
-      additions.push({
-        ...EMPTY_PARTNER,
-        name,
-        category: candidate.category,
-        id: `migrated-${candidate.category}-${key}`,
-        createdAt: new Date().toISOString()
-      })
-    }
-
-    if (additions.length > 0 || retainedPartners.length !== (partners || []).length) {
-      setPartners([...retainedPartners, ...additions])
-    }
-  }, [partners, recon.channelRecords, recon.records, setPartners])
+  const [saving, setSaving] = useState(false)
 
   const filteredPartners = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -100,7 +57,7 @@ function PartnerPage() {
     setForm(EMPTY_PARTNER)
   }
 
-  const savePartner = () => {
+  const savePartner = async () => {
     const name = form.name.trim()
     if (!name) {
       showToast('请填写客户名称', 'error')
@@ -120,13 +77,11 @@ function PartnerPage() {
       mailingAddress: form.mailingAddress.trim()
     }
 
-    if (editingId) {
-      setPartners((partners || []).map((item) => (item.id === editingId ? { ...item, ...payload } : item)))
-      showToast('客户资料已更新', 'success')
-    } else {
-      setPartners([...(partners || []), { ...payload, id: Date.now(), createdAt: new Date().toISOString() }])
-      showToast('客户已加入客户库', 'success')
-    }
+    setSaving(true)
+    const ok = await persistPartner(payload, { editingId })
+    setSaving(false)
+    if (!ok) return
+    showToast(editingId ? '客户资料已更新并保存到服务器' : '客户已加入服务器客户库', 'success')
     resetForm()
   }
 
@@ -135,9 +90,10 @@ function PartnerPage() {
     setForm({ ...EMPTY_PARTNER, ...partner })
   }
 
-  const deletePartner = (partner) => {
+  const deletePartner = async (partner) => {
     if (!window.confirm(`确定删除「${partner.name}」吗？`)) return
-    setPartners((partners || []).filter((item) => item.id !== partner.id))
+    const ok = await deletePartnerById(partner.id)
+    if (!ok) return
     showToast('客户已删除', 'success')
   }
 
@@ -147,7 +103,13 @@ function PartnerPage() {
         <div>
           <p>基础资料</p>
           <h1>客户库</h1>
-          <span>维护合作方资料，供研发账单和渠道账单复用。</span>
+          <span>
+            {partnerLoading
+              ? '正在从服务器读取客户资料…'
+              : partnerApiEnabled
+                ? '客户资料已由服务器统一保存，可跨设备复用。'
+                : '服务器暂不可用，当前显示本机缓存。'}
+          </span>
         </div>
         <div className="customer-filters">
           <select value={category} onChange={(event) => setCategory(event.target.value)}>
@@ -190,8 +152,13 @@ function PartnerPage() {
           <Field label="邮寄地址" value={form.mailingAddress} onChange={(mailingAddress) => setForm({ ...form, mailingAddress })} wide />
         </div>
         <div className="customer-form-actions">
-          <button type="button" className="customer-primary-btn" onClick={savePartner}>
-            {editingId ? '保存修改' : '新增客户'}
+          <button
+            type="button"
+            className="customer-primary-btn"
+            onClick={savePartner}
+            disabled={saving || partnerLoading}
+          >
+            {saving ? '正在保存…' : editingId ? '保存修改' : '新增客户'}
           </button>
         </div>
       </section>
