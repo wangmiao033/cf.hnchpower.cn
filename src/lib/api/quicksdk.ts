@@ -5,6 +5,7 @@
 import { ApiError, apiGet, apiPost } from '@/lib/api/client.ts'
 
 const PATH = '/api/quicksdk'
+const READ_OPTIONS = { timeoutMs: 30_000 }
 
 export type QuickSdkSummaryResponse = {
   batch_count: number
@@ -96,7 +97,7 @@ function queryString(params: Record<string, unknown> = {}): string {
 }
 
 export function getQuickSdkSummary(params: { settlement_month?: string } = {}) {
-  return apiGet<QuickSdkSummaryResponse>(`${PATH}/summary${queryString(params)}`)
+  return apiGet<QuickSdkSummaryResponse>(`${PATH}/summary${queryString(params)}`, READ_OPTIONS)
 }
 
 export function listQuickSdkBatches(params: {
@@ -104,7 +105,7 @@ export function listQuickSdkBatches(params: {
   limit?: number
   offset?: number
 } = {}) {
-  return apiGet<QuickSdkBatchListResponse>(`${PATH}/batches${queryString(params)}`)
+  return apiGet<QuickSdkBatchListResponse>(`${PATH}/batches${queryString(params)}`, READ_OPTIONS)
 }
 
 export async function listQuickSdkFlows(params: {
@@ -119,7 +120,10 @@ export async function listQuickSdkFlows(params: {
   const requestParams = hasClientFilter
     ? { ...params, limit: Math.max(Number(params.limit || 0), 1000), offset: 0 }
     : params
-  const response = await apiGet<QuickSdkFlowListResponse>(`${PATH}/flows${queryString(requestParams)}`)
+  const response = await apiGet<QuickSdkFlowListResponse>(
+    `${PATH}/flows${queryString(requestParams)}`,
+    READ_OPTIONS
+  )
 
   if (!hasClientFilter) return response
 
@@ -145,7 +149,7 @@ export async function listQuickSdkFlows(params: {
 }
 
 export function getQuickSdkAnalytics(params: { settlement_month?: string } = {}) {
-  return apiGet<QuickSdkAnalyticsResponse>(`${PATH}/analytics${queryString(params)}`)
+  return apiGet<QuickSdkAnalyticsResponse>(`${PATH}/analytics${queryString(params)}`, READ_OPTIONS)
     .then(normalizeAnalytics)
     .catch(async (error) => {
       if (!(error instanceof ApiError) || error.status !== 404) throw error
@@ -173,7 +177,10 @@ export function listQuickSdkRdLines(params: {
   q?: string
   limit?: number
 }): Promise<QuickSdkRdLineListResponse> {
-  return apiGet<QuickSdkRdLineListResponse>(`${PATH}/rd-lines${queryString(params)}`).catch(
+  return apiGet<QuickSdkRdLineListResponse>(
+    `${PATH}/rd-lines${queryString(params)}`,
+    READ_OPTIONS
+  ).catch(
     async (error) => {
       if (!(error instanceof ApiError) || error.status !== 404) throw error
       return listQuickSdkRdLinesFromFlows(params)
@@ -185,7 +192,10 @@ export function getQuickSdkGameFlow(params: {
   settlement_month?: string
   game_name: string
 }): Promise<QuickSdkGameFlowResponse> {
-  return apiGet<QuickSdkGameFlowResponse>(`${PATH}/game-flow${queryString(params)}`)
+  return apiGet<QuickSdkGameFlowResponse>(
+    `${PATH}/game-flow${queryString(params)}`,
+    READ_OPTIONS
+  )
 }
 
 async function buildAnalyticsFromFlows(params: { settlement_month?: string }) {
