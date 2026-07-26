@@ -21,6 +21,7 @@ const ChannelReconciliationCreatePage = lazy(() => import('./pages/ChannelReconc
 const ChannelReconciliationEditPage = lazy(() => import('./pages/ChannelReconciliationEditPage.jsx'))
 const QuickSdkLibraryPage = lazy(() => import('./pages/QuickSdkLibraryPage.jsx'))
 const PartnerPage = lazy(() => import('./pages/PartnerPage.jsx'))
+const UserCenterPage = lazy(() => import('./pages/UserCenterPage.jsx'))
 const LoginPage = lazy(() => import('./pages/LoginPage.jsx'))
 
 function PageLoading() {
@@ -156,6 +157,8 @@ function App() {
         return <QuickSdkLibraryPage />
       case VIEWS.PARTNER_CONTACTS:
         return <PartnerPage section={VIEWS.PARTNER_CONTACTS} />
+      case VIEWS.USER_CENTER:
+        return <UserCenterPage />
       case VIEWS.DASHBOARD:
       default:
         return <CoreDashboardPage />

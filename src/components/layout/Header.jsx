@@ -4,20 +4,15 @@ import Settings from '@/components/Settings.jsx'
 import HelpTooltip from '@/components/HelpTooltip.jsx'
 import MobileMenu from '@/components/MobileMenu.jsx'
 import ConfirmDialog from '@/components/ConfirmDialog.jsx'
-import { getPageMeta, SIDEBAR_GROUPS } from '@/app/routes.js'
+import { getPageMeta, SIDEBAR_GROUPS, VIEWS } from '@/app/routes.js'
 import { useAuth } from '@/features/auth/AuthContext.jsx'
 import './Header.css'
 
 function Header({ activeView, onNavigate, onSettingsChange }) {
-  const { user, signOut, updateMyPassword } = useAuth()
+  const { user, signOut } = useAuth()
   const pageMeta = getPageMeta(activeView)
   const [showUserMenu, setShowUserMenu] = useState(false)
-  const [showPasswordDialog, setShowPasswordDialog] = useState(false)
   const [showLogoutDialog, setShowLogoutDialog] = useState(false)
-  const [currentPassword, setCurrentPassword] = useState('')
-  const [newPassword, setNewPassword] = useState('')
-  const [passwordError, setPasswordError] = useState('')
-  const [submittingPassword, setSubmittingPassword] = useState(false)
   const userMenuRef = useRef(null)
   const accountLabel = user?.display_name || user?.email || '当前用户'
   const accountDetail =
@@ -45,37 +40,6 @@ function Header({ activeView, onNavigate, onSettingsChange }) {
       document.removeEventListener('keydown', handleKeyDown)
     }
   }, [showUserMenu])
-
-  const closePasswordDialog = () => {
-    setShowPasswordDialog(false)
-    setPasswordError('')
-    setCurrentPassword('')
-    setNewPassword('')
-    setSubmittingPassword(false)
-  }
-
-  const handlePasswordConfirm = async () => {
-    if (submittingPassword) return
-    if (!currentPassword.trim()) {
-      setPasswordError('请输入当前密码')
-      return
-    }
-    if (!newPassword.trim() || newPassword.trim().length < 6) {
-      setPasswordError('新密码至少 6 位')
-      return
-    }
-    setPasswordError('')
-    setSubmittingPassword(true)
-    try {
-      await updateMyPassword(currentPassword, newPassword.trim())
-      closePasswordDialog()
-      window.alert('密码修改成功')
-    } catch (err) {
-      setPasswordError(`修改失败：${String(err?.message || err)}`)
-    } finally {
-      setSubmittingPassword(false)
-    }
-  }
 
   return (
     <header className="app-admin-header">
@@ -162,17 +126,18 @@ function Header({ activeView, onNavigate, onSettingsChange }) {
                     className="app-admin-header__user-menu-item"
                     onClick={() => {
                       setShowUserMenu(false)
-                      setShowPasswordDialog(true)
+                      onNavigate?.(VIEWS.USER_CENTER)
                     }}
                   >
                     <span className="app-admin-header__menu-icon" aria-hidden="true">
                       <svg viewBox="0 0 20 20">
-                        <path d="M7.7 11.9a4.7 4.7 0 1 1 3.4-3.4L17 14.4V17h-2.6v-1.8h-2v-2h-2.1l-1-1" />
+                        <circle cx="10" cy="7" r="3.2" />
+                        <path d="M4.2 16c.8-3 2.7-4.5 5.8-4.5s5 1.5 5.8 4.5" />
                       </svg>
                     </span>
                     <span>
-                      <strong>修改密码</strong>
-                      <small>更新当前账号的登录密码</small>
+                      <strong>用户中心</strong>
+                      <small>账号信息、密码与登录安全</small>
                     </span>
                     <svg className="app-admin-header__menu-arrow" viewBox="0 0 16 16" aria-hidden="true">
                       <path d="m6 3.5 4.5 4.5L6 12.5" />
@@ -205,39 +170,6 @@ function Header({ activeView, onNavigate, onSettingsChange }) {
           </div>
         </div>
       </div>
-      <ConfirmDialog
-        isOpen={showPasswordDialog}
-        title="修改密码"
-        message={
-          <div className="app-admin-header__password-form">
-            <label className="app-admin-header__password-label">
-              <span>当前密码</span>
-              <input
-                className="admin-input"
-                type="password"
-                value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
-                autoComplete="current-password"
-              />
-            </label>
-            <label className="app-admin-header__password-label">
-              <span>新密码</span>
-              <input
-                className="admin-input"
-                type="password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                autoComplete="new-password"
-              />
-            </label>
-            {passwordError ? <div className="app-admin-header__password-error">{passwordError}</div> : null}
-          </div>
-        }
-        onConfirm={handlePasswordConfirm}
-        onCancel={closePasswordDialog}
-        confirmText={submittingPassword ? '提交中...' : '确认修改'}
-        cancelText="取消"
-      />
       <ConfirmDialog
         isOpen={showLogoutDialog}
         title="退出登录"

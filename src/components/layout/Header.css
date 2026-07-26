@@ -348,23 +348,6 @@
   }
 }
 
-.app-admin-header__password-form {
-  display: grid;
-  gap: 10px;
-}
-
-.app-admin-header__password-label {
-  display: grid;
-  gap: 6px;
-  font-size: var(--admin-font-sm);
-  color: var(--admin-text-sub);
-}
-
-.app-admin-header__password-error {
-  color: #dc2626;
-  font-size: var(--admin-font-sm);
-}
-
 .app-admin-header__utility-group {
   min-height: var(--admin-btn-h);
   display: inline-flex;

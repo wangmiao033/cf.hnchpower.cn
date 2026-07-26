@@ -11,7 +11,8 @@ export const VIEWS = {
   CHANNEL_RECON_CREATE: 'channel-recon-create',
   CHANNEL_RECON_EDIT: 'channel-recon-edit',
   QUICKSDK_LIBRARY: 'quicksdk-library',
-  PARTNER_CONTACTS: 'partner-contacts'
+  PARTNER_CONTACTS: 'partner-contacts',
+  USER_CENTER: 'user-center'
 }
 
 export const SIDEBAR_GROUPS = [
@@ -47,7 +48,8 @@ const VIEW_TITLES = {
   [VIEWS.CHANNEL_RECON_CREATE]: '新增渠道账单',
   [VIEWS.CHANNEL_RECON_EDIT]: '编辑渠道账单',
   [VIEWS.QUICKSDK_LIBRARY]: '数据库',
-  [VIEWS.PARTNER_CONTACTS]: '客户库'
+  [VIEWS.PARTNER_CONTACTS]: '客户库',
+  [VIEWS.USER_CENTER]: '用户中心'
 }
 
 const VIEW_DESCRIPTIONS = {
@@ -59,7 +61,8 @@ const VIEW_DESCRIPTIONS = {
   [VIEWS.CHANNEL_RECON_CREATE]: '使用现有渠道账单录入逻辑新增记录。',
   [VIEWS.CHANNEL_RECON_EDIT]: '使用现有渠道账单编辑逻辑维护记录。',
   [VIEWS.QUICKSDK_LIBRARY]: '查看已导入月份、批次、产品、渠道和流水明细。',
-  [VIEWS.PARTNER_CONTACTS]: '维护合作方/客户资料，供对账单复用。'
+  [VIEWS.PARTNER_CONTACTS]: '维护合作方/客户资料，供对账单复用。',
+  [VIEWS.USER_CENTER]: '管理当前账号、登录密码和设备会话。'
 }
 
 export const VIEW_ICONS = {
@@ -71,7 +74,8 @@ export const VIEW_ICONS = {
   [VIEWS.CHANNEL_RECON_CREATE]: '增',
   [VIEWS.CHANNEL_RECON_EDIT]: '编',
   [VIEWS.QUICKSDK_LIBRARY]: '流',
-  [VIEWS.PARTNER_CONTACTS]: '客'
+  [VIEWS.PARTNER_CONTACTS]: '客',
+  [VIEWS.USER_CENTER]: '户'
 }
 
 export function getPageTitle(view) {
@@ -102,6 +106,10 @@ export function getGroupForView(view) {
 }
 
 export function getTabView(view) {
+  if (view === VIEWS.USER_CENTER) {
+    return VIEWS.DASHBOARD
+  }
+
   if (view === VIEWS.RECON_CREATE || view === VIEWS.RECON_EDIT) {
     return VIEWS.RECON_RD
   }
@@ -116,6 +124,13 @@ export function getTabView(view) {
 export function getBreadcrumb(view) {
   if (view === VIEWS.DASHBOARD) {
     return [{ label: getPageTitle(view), current: true }]
+  }
+
+  if (view === VIEWS.USER_CENTER) {
+    return [
+      { label: '核心工作台', view: VIEWS.DASHBOARD },
+      { label: getPageTitle(view), current: true }
+    ]
   }
 
   if (view === VIEWS.RECON_CREATE || view === VIEWS.RECON_EDIT) {
