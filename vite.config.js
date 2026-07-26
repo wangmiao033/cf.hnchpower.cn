@@ -11,10 +11,15 @@ export default defineConfig({
   },
   server: {
     port: 3000,
-    open: true,
+    open: false,
     proxy: {
+      '/api/quicksdk': {
+        target: 'https://cf-hnchpower-cn.vercel.app',
+        changeOrigin: true,
+        secure: true
+      },
       '/api': {
-        target: 'https://cf.hnchpower.cn',
+        target: 'https://caiwuapi.hnchpower.cn',
         changeOrigin: true,
         secure: true,
         cookieDomainRewrite: '',
@@ -62,4 +67,3 @@ export default defineConfig({
     include: ['src/**/*.{test,spec}.{js,ts}']
   }
 })
-
