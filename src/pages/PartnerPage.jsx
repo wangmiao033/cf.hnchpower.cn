@@ -36,22 +36,36 @@ function PartnerPage() {
 
   const filteredPartners = useMemo(() => {
     const q = query.trim().toLowerCase()
-    return (partners || []).filter((partner) => {
-      const matchesCategory = category === '全部' || partner.category === category
-      const searchable = [
-        partner.name,
-        partner.shortName,
-        partner.category,
-        partner.tag2,
-        partner.taxRegistrationNo,
-        partner.bankName,
-        partner.recipient
-      ]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase()
-      return matchesCategory && (!q || searchable.includes(q))
-    })
+    return (partners || [])
+      .filter((partner) => {
+        const matchesCategory = category === '全部' || partner.category === category
+        const searchable = [
+          partner.name,
+          partner.shortName,
+          partner.category,
+          partner.tag2,
+          partner.taxRegistrationNo,
+          partner.bankName,
+          partner.recipient
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase()
+        return matchesCategory && (!q || searchable.includes(q))
+      })
+      .sort((left, right) => {
+        const leftKey = String(left.shortName || left.name || '').trim()
+        const rightKey = String(right.shortName || right.name || '').trim()
+        const primary = leftKey.localeCompare(rightKey, 'zh-CN', {
+          numeric: true,
+          sensitivity: 'base'
+        })
+        if (primary !== 0) return primary
+        return String(left.name || '').localeCompare(String(right.name || ''), 'zh-CN', {
+          numeric: true,
+          sensitivity: 'base'
+        })
+      })
   }, [partners, query, category])
 
   const resetForm = () => {
@@ -176,31 +190,23 @@ function PartnerPage() {
           <table className="customer-table">
             <thead>
               <tr>
+                <th>客户简称</th>
                 <th>客户名称</th>
                 <th>类型</th>
-                <th>税号</th>
-                <th>开户行</th>
-                <th>联系人</th>
-                <th>操作</th>
+                <th>编辑/删除</th>
               </tr>
             </thead>
             <tbody>
               {filteredPartners.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="customer-empty">暂无客户资料</td>
+                  <td colSpan={4} className="customer-empty">暂无客户资料</td>
                 </tr>
               ) : (
                 filteredPartners.map((partner) => (
                   <tr key={partner.id || partner.name}>
-                    <td>
-                      <strong>{partner.name}</strong>
-                      {partner.shortName ? <small>简称：{partner.shortName}</small> : null}
-                      {partner.tag2 ? <small>{partner.tag2}</small> : null}
-                    </td>
+                    <td><strong>{partner.shortName || '-'}</strong></td>
+                    <td>{partner.name}</td>
                     <td>{partner.category || '-'}</td>
-                    <td>{partner.taxRegistrationNo || '-'}</td>
-                    <td>{partner.bankName || '-'}</td>
-                    <td>{partner.recipient || '-'}</td>
                     <td>
                       <button type="button" onClick={() => editPartner(partner)}>编辑</button>
                       <button type="button" className="danger" onClick={() => deletePartner(partner)}>删除</button>

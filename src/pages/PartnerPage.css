@@ -165,9 +165,29 @@
 
 .customer-table {
   width: 100%;
-  min-width: 900px;
+  min-width: 680px;
   border-collapse: collapse;
   font-size: 13px;
+}
+
+.customer-table th:nth-child(1),
+.customer-table td:nth-child(1) {
+  width: 22%;
+}
+
+.customer-table th:nth-child(2),
+.customer-table td:nth-child(2) {
+  width: 52%;
+}
+
+.customer-table th:nth-child(3),
+.customer-table td:nth-child(3) {
+  width: 12%;
+}
+
+.customer-table th:nth-child(4),
+.customer-table td:nth-child(4) {
+  width: 14%;
 }
 
 .customer-table th,
@@ -189,16 +209,8 @@
   color: var(--admin-text-main);
 }
 
-.customer-table strong,
-.customer-table small {
-  display: block;
-}
-
-.customer-table small {
-  margin-top: 3px;
-  color: var(--admin-text-tertiary);
-  font-size: 12px;
-  font-weight: 400;
+.customer-table strong {
+  color: var(--admin-primary);
 }
 
 .customer-table td:last-child {
