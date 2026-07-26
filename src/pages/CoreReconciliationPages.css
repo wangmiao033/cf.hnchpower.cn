@@ -225,66 +225,209 @@
   color: var(--admin-text-main);
 }
 
-.core-recon-table td:nth-child(4) {
-  height: auto;
-  min-width: 190px;
-  padding-top: 7px;
-  padding-bottom: 7px;
-  white-space: normal;
+.core-recon-table tbody tr {
+  transition: background-color 140ms ease;
+}
+
+.core-recon-table tbody tr:hover {
+  background: #f8fbff;
+}
+
+.core-rd-recon-table {
+  min-width: 1480px;
+  table-layout: fixed;
+}
+
+.core-rd-recon-table .core-rd-col-check {
+  width: 54px;
+}
+
+.core-rd-recon-table .core-rd-col-number {
+  width: 150px;
+}
+
+.core-rd-recon-table .core-rd-col-month {
+  width: 105px;
+}
+
+.core-rd-recon-table .core-rd-col-partner {
+  width: 245px;
+}
+
+.core-rd-recon-table .core-rd-col-game {
+  width: 380px;
+}
+
+.core-rd-recon-table .core-rd-col-flow {
+  width: 150px;
+}
+
+.core-rd-recon-table .core-rd-col-share {
+  width: 72px;
+}
+
+.core-rd-recon-table .core-rd-col-settlement {
+  width: 130px;
+}
+
+.core-rd-recon-table .core-rd-col-status {
+  width: 90px;
+}
+
+.core-rd-recon-table .core-rd-col-actions {
+  width: 112px;
+}
+
+.core-rd-recon-table tbody td {
+  height: 64px;
+  vertical-align: middle;
+}
+
+.core-rd-recon-table th:first-child,
+.core-rd-recon-table td:first-child {
+  text-align: center;
+}
+
+.core-rd-recon-table input[type='checkbox'] {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: var(--admin-primary);
+  cursor: pointer;
 }
 
 .core-recon-partner-cell {
-  display: grid;
-  justify-items: start;
-  gap: 2px;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 9px;
 }
 
-.core-recon-partner-cell strong {
+.core-recon-partner-avatar {
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #bfdbfe;
+  border-radius: 9px;
+  background: linear-gradient(145deg, #eff6ff, #dbeafe);
+  color: #2563eb;
+  font-size: 13px;
+  font-weight: 800;
+  box-shadow: 0 2px 5px rgba(37, 99, 235, 0.08);
+}
+
+.core-recon-partner-copy {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.core-recon-partner-title {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.core-recon-partner-title strong {
+  min-width: 0;
+  overflow: hidden;
   color: var(--admin-text-main);
   font-size: 13px;
+  font-weight: 700;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.core-recon-partner-cell small {
-  max-width: 250px;
+.core-recon-partner-copy small {
+  max-width: 185px;
   overflow: hidden;
   color: var(--admin-text-tertiary);
   font-size: 11px;
+  line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .core-recon-link-badge {
+  flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
-  min-height: 18px;
-  padding: 0 6px;
+  min-height: 17px;
+  padding: 0 5px;
+  border: 1px solid #fed7aa;
   border-radius: 999px;
   background: #fff7ed;
   color: #b45309;
-  font-size: 10px;
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1;
 }
 
 .core-recon-link-badge--linked {
+  border-color: #a7f3d0;
   background: #ecfdf5;
   color: #047857;
 }
 
-.core-recon-table td:nth-last-child(2),
-.core-recon-table td:nth-last-child(3),
-.core-recon-table td:nth-last-child(4) {
+.core-recon-game-text {
+  display: block;
+  overflow: hidden;
+  color: #334155;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.core-recon-align-right,
+.core-recon-money,
+.core-recon-rate {
+  text-align: right !important;
+}
+
+.core-recon-money,
+.core-recon-rate {
   font-variant-numeric: tabular-nums;
 }
 
-.core-recon-table td:last-child {
+.core-recon-money {
+  color: #334155 !important;
+  font-weight: 500;
+}
+
+.core-recon-money--settlement {
+  color: #1d4ed8 !important;
+  font-weight: 700;
+}
+
+.core-recon-rate {
+  color: #475569 !important;
+}
+
+.core-recon-row-actions {
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+.core-recon-table td:last-child > button + button {
+  margin-left: 6px;
 }
 
 .core-recon-table button {
   height: 28px;
   padding: 0 9px;
   font-size: 12px;
+}
+
+.core-recon-row-actions button {
+  border-color: #dbe5f1;
+  background: #ffffff;
 }
 
 .core-recon-table button.danger {
@@ -302,6 +445,25 @@
   background: #f1f5f9;
   color: var(--admin-text-sub);
   font-size: 12px;
+  font-weight: 600;
+}
+
+.core-recon-status--confirmed,
+.core-recon-status--completed,
+.core-recon-status--settled,
+.core-recon-status--reconciled {
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.core-recon-status--invoiced {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.core-recon-status--cancelled {
+  background: #fff1f2;
+  color: #be123c;
 }
 
 .core-recon-empty {

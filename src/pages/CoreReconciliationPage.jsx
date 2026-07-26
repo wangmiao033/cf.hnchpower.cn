@@ -302,7 +302,19 @@ function CoreReconciliationPage() {
           <span>{selectedRows.length > 0 ? `已选 ${selectedRows.length} 条` : `${rows.length} 条`}</span>
         </div>
         <div className="core-recon-table-wrap">
-          <table className="core-recon-table">
+          <table className="core-recon-table core-rd-recon-table">
+            <colgroup>
+              <col className="core-rd-col-check" />
+              <col className="core-rd-col-number" />
+              <col className="core-rd-col-month" />
+              <col className="core-rd-col-partner" />
+              <col className="core-rd-col-game" />
+              <col className="core-rd-col-flow" />
+              <col className="core-rd-col-share" />
+              <col className="core-rd-col-settlement" />
+              <col className="core-rd-col-status" />
+              <col className="core-rd-col-actions" />
+            </colgroup>
             <thead>
               <tr>
                 <th>选择</th>
@@ -310,9 +322,9 @@ function CoreReconciliationPage() {
                 <th>月份</th>
                 <th>合作方</th>
                 <th>游戏</th>
-                <th>流水</th>
-                <th>分成</th>
-                <th>结算金额</th>
+                <th className="core-recon-align-right">流水</th>
+                <th className="core-recon-align-right">分成</th>
+                <th className="core-recon-align-right">结算金额</th>
                 <th>状态</th>
                 <th>操作</th>
               </tr>
@@ -336,32 +348,62 @@ function CoreReconciliationPage() {
                     <td>{text(row.settlementNumber)}</td>
                     <td>{text(row.settlementMonth)}</td>
                     <td>
-                      <div className="core-recon-partner-cell">
-                        <strong>{text(row.partnerShortName || row.partner || row.partyBName)}</strong>
-                        {row.partnerShortName ? (
-                          <small title={text(row.partner || row.partyBName)}>
-                            {text(row.partner || row.partyBName)}
-                          </small>
-                        ) : null}
-                        <span
-                          className={
-                            row.partnerId
-                              ? 'core-recon-link-badge core-recon-link-badge--linked'
-                              : 'core-recon-link-badge'
-                          }
-                        >
-                          {row.partnerId ? '已关联客户库' : '待关联'}
+                      <div
+                        className="core-recon-partner-cell"
+                        title={text(row.partner || row.partyBName)}
+                      >
+                        <span className="core-recon-partner-avatar" aria-hidden="true">
+                          {text(row.partnerShortName || row.partner || row.partyBName).slice(0, 1)}
+                        </span>
+                        <span className="core-recon-partner-copy">
+                          <span className="core-recon-partner-title">
+                            <strong>
+                              {text(row.partnerShortName || row.partner || row.partyBName)}
+                            </strong>
+                            <span
+                              className={
+                                row.partnerId
+                                  ? 'core-recon-link-badge core-recon-link-badge--linked'
+                                  : 'core-recon-link-badge'
+                              }
+                            >
+                              {row.partnerId ? '✓ 已关联' : '待关联'}
+                            </span>
+                          </span>
+                          {row.partnerShortName ? (
+                            <small>{text(row.partner || row.partyBName)}</small>
+                          ) : null}
                         </span>
                       </div>
                     </td>
-                    <td>{text(gameText(row))}</td>
-                    <td>{money(row.gameFlow || sumItems(row, 'revenue'))}</td>
-                    <td>{text(row.revenueShareRatio != null ? `${row.revenueShareRatio}%` : '')}</td>
-                    <td>{money(recordSettlementAmount(row))}</td>
-                    <td><span className="core-recon-status">{STATUS_LABELS[row.status] || row.status || '待处理'}</span></td>
                     <td>
-                      <button type="button" onClick={() => openReconciliationEdit(String(row.id))}>编辑</button>
-                      <button type="button" className="danger" onClick={() => recon.deleteRecord(row.id)}>删除</button>
+                      <span className="core-recon-game-text" title={text(gameText(row))}>
+                        {text(gameText(row))}
+                      </span>
+                    </td>
+                    <td className="core-recon-money">
+                      {money(row.gameFlow || sumItems(row, 'revenue'))}
+                    </td>
+                    <td className="core-recon-rate">
+                      {text(row.revenueShareRatio != null ? `${row.revenueShareRatio}%` : '')}
+                    </td>
+                    <td className="core-recon-money core-recon-money--settlement">
+                      {money(recordSettlementAmount(row))}
+                    </td>
+                    <td>
+                      <span className={`core-recon-status core-recon-status--${row.status || 'pending'}`}>
+                        {STATUS_LABELS[row.status] || row.status || '待处理'}
+                      </span>
+                    </td>
+                    <td>
+                      <div className="core-recon-row-actions">
+                        <button type="button" onClick={() => openReconciliationEdit(String(row.id))}>
+                          编辑
+                        </button>
+                        <button type="button" className="danger" onClick={() => recon.deleteRecord(row.id)}>
+                          删除
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
