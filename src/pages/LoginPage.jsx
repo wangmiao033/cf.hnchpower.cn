@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react'
+import React, { useState } from 'react'
 import { ApiError } from '@/lib/api/client'
 import { useAuth } from '@/features/auth/AuthContext.jsx'
 import './LoginPage.css'
@@ -21,13 +21,11 @@ function LoginPage() {
   const [account, setAccount] = useState(savedAccount || DEFAULT_ACCOUNT)
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
-  const [rememberAccount, setRememberAccount] = useState(Boolean(savedAccount) || true)
+  const [rememberAccount, setRememberAccount] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
 
-  const canSubmit = useMemo(() => {
-    return account.trim().length > 0 && password.trim().length >= 6
-  }, [account, password])
+  const canSubmit = account.trim().length > 0 && password.trim().length >= 6
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -53,36 +51,74 @@ function LoginPage() {
     <div className="login-page">
       <div className="login-shell">
         <section className="login-hero-panel" aria-label="系统介绍">
-          <div className="login-shield" aria-hidden="true">
-            <span>✓</span>
+          <div className="login-hero-glow login-hero-glow--one" aria-hidden="true" />
+          <div className="login-hero-glow login-hero-glow--two" aria-hidden="true" />
+          <div className="login-brand">
+            <span className="login-brand-mark" aria-hidden="true">
+              <svg viewBox="0 0 32 32">
+                <path d="M9 9.5h14M9 16h9M9 22.5h14" />
+                <path d="m20.5 16 2.2 2.2L27 13.8" />
+              </svg>
+            </span>
+            <span>
+              <strong>CAIWU</strong>
+              <small>财务协同中心</small>
+            </span>
           </div>
-          <p className="login-kicker">Caiwu 2026</p>
-          <h1 className="login-hero-title">对账管理系统</h1>
+
+          <div className="login-hero-main">
+            <p className="login-kicker">
+              <span />
+              企业内部财务工作台
+            </p>
+            <h1 className="login-hero-title">
+              让每一笔对账
+              <br />
+              <em>清晰、准确、可追溯</em>
+            </h1>
+          </div>
           <p className="login-hero-copy">
-            研发对账、渠道结算、发票与回款资料统一管理。登录后保持 1 天有效，刷新页面不会退出。
+            集中管理研发对账、渠道结算、数据库流水与客户资料，让日常财务协作更简单。
           </p>
-          <div className="login-hero-notes" aria-hidden="true">
-            <div className="login-hero-note">
-              <span>▣</span>
-              <span>1 天内无需重复输入密码</span>
+
+          <div className="login-hero-metrics" aria-label="系统特点">
+            <div className="login-hero-metric">
+              <strong>4</strong>
+              <span>核心业务模块</span>
             </div>
-            <div className="login-hero-note">
-              <span>▢</span>
-              <span>会话信息由安全 Cookie 保存</span>
+            <div className="login-hero-metric">
+              <strong>云端</strong>
+              <span>数据统一保存</span>
+            </div>
+            <div className="login-hero-metric">
+              <strong>1 天</strong>
+              <span>安全会话时效</span>
             </div>
           </div>
+
+          <p className="login-hero-footer">© 2026 财务管理系统 · 内部授权使用</p>
         </section>
 
         <section className="login-card" aria-label="账号登录">
-          <div className="login-mode-badge">账号登录</div>
-          <h2 className="login-title">欢迎回来</h2>
-          <p className="login-subtitle">登录后本设备 1 天内可直接进入系统。</p>
+          <div className="login-card-head">
+            <div className="login-mode-badge">
+              <span />
+              安全登录
+            </div>
+            <h2 className="login-title">欢迎回来</h2>
+            <p className="login-subtitle">请输入你的内部账号，继续进入财务工作台。</p>
+          </div>
 
           <form onSubmit={handleSubmit} className="login-form">
             <label className="login-label">
               <span>账号</span>
               <div className="login-input-wrap">
-                <span className="login-input-icon" aria-hidden="true">□</span>
+                <span className="login-input-icon" aria-hidden="true">
+                  <svg viewBox="0 0 20 20">
+                    <circle cx="10" cy="7" r="3.2" />
+                    <path d="M4.5 16c.6-3 2.4-4.6 5.5-4.6s4.9 1.6 5.5 4.6" />
+                  </svg>
+                </span>
                 <input
                   className="login-input"
                   type="text"
@@ -98,7 +134,12 @@ function LoginPage() {
             <label className="login-label">
               <span>密码</span>
               <div className="login-input-wrap">
-                <span className="login-input-icon" aria-hidden="true">◇</span>
+                <span className="login-input-icon" aria-hidden="true">
+                  <svg viewBox="0 0 20 20">
+                    <rect x="4.3" y="8.5" width="11.4" height="8" rx="2" />
+                    <path d="M6.8 8.5V6.8a3.2 3.2 0 0 1 6.4 0v1.7M10 12v1.5" />
+                  </svg>
+                </span>
                 <input
                   className="login-input"
                   type={showPassword ? 'text' : 'password'}
@@ -120,30 +161,55 @@ function LoginPage() {
             </label>
 
             <div className="login-options">
-              <label className="login-option login-option--primary">
-                <input type="checkbox" checked readOnly />
-                <span>
-                  <strong>1 天免输入密码</strong>
-                  <small>适合个人常用设备；公共电脑请退出登录。</small>
+              <div className="login-session-note">
+                <span className="login-session-icon" aria-hidden="true">
+                  <svg viewBox="0 0 20 20">
+                    <path d="M10 2.8 16 5v4.4c0 3.7-2 6.2-6 7.8-4-1.6-6-4.1-6-7.8V5l6-2.2Z" />
+                    <path d="m7.6 9.8 1.5 1.5 3.4-3.5" />
+                  </svg>
                 </span>
-              </label>
+                <span>
+                  <strong>登录状态保留 1 天</strong>
+                  <small>会话由安全 Cookie 保存，公共电脑使用后请退出。</small>
+                </span>
+              </div>
               <label className="login-option">
                 <input
                   type="checkbox"
                   checked={rememberAccount}
                   onChange={(e) => setRememberAccount(e.target.checked)}
                 />
-                <span>记住账号</span>
+                <span>在此设备记住账号</span>
               </label>
             </div>
 
-            {error ? <div className="login-message login-message--error">{error}</div> : null}
+            {error ? (
+              <div className="login-message login-message--error" role="alert">
+                <span aria-hidden="true">!</span>
+                {error}
+              </div>
+            ) : null}
 
             <button type="submit" className="login-submit-btn" disabled={!canSubmit || submitting}>
-              {submitting ? '登录中...' : '登录系统'}
+              {submitting ? (
+                <>
+                  <span className="login-submit-spinner" aria-hidden="true" />
+                  正在验证账号…
+                </>
+              ) : (
+                <>
+                  进入财务工作台
+                  <svg viewBox="0 0 20 20" aria-hidden="true">
+                    <path d="M4 10h11M11 6l4 4-4 4" />
+                  </svg>
+                </>
+              )}
             </button>
 
-            <p className="login-footnote">授权人员方可访问，请妥善保管账号密码。</p>
+            <p className="login-footnote">
+              <span aria-hidden="true">●</span>
+              仅限授权人员访问，操作记录将被安全留存
+            </p>
           </form>
         </section>
       </div>

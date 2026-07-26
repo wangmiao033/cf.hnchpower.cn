@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import NotificationCenter from '@/components/NotificationCenter.jsx'
 import Settings from '@/components/Settings.jsx'
 import HelpTooltip from '@/components/HelpTooltip.jsx'
@@ -18,6 +18,34 @@ function Header({ activeView, onNavigate, onSettingsChange }) {
   const [newPassword, setNewPassword] = useState('')
   const [passwordError, setPasswordError] = useState('')
   const [submittingPassword, setSubmittingPassword] = useState(false)
+  const userMenuRef = useRef(null)
+  const accountLabel = user?.display_name || user?.email || '当前用户'
+  const accountDetail =
+    user?.email && user.email !== accountLabel ? user.email : '系统管理员'
+  const accountInitial = accountLabel.trim().slice(0, 1).toUpperCase() || 'U'
+
+  useEffect(() => {
+    if (!showUserMenu) return undefined
+
+    const handlePointerDown = (event) => {
+      if (!userMenuRef.current?.contains(event.target)) {
+        setShowUserMenu(false)
+      }
+    }
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        setShowUserMenu(false)
+      }
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown)
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [showUserMenu])
+
   const closePasswordDialog = () => {
     setShowPasswordDialog(false)
     setPasswordError('')
@@ -83,39 +111,93 @@ function Header({ activeView, onNavigate, onSettingsChange }) {
           <NotificationCenter />
           <HelpTooltip />
           <Settings onSettingsChange={onSettingsChange} />
-          <div className="app-admin-header__user-wrap">
+          <div className="app-admin-header__user-wrap" ref={userMenuRef}>
             <button
               type="button"
-              className="app-admin-header__user"
+              className={`app-admin-header__user ${showUserMenu ? 'is-open' : ''}`}
               title={user?.email || '用户'}
-              aria-label="用户"
+              aria-label="打开账号菜单"
+              aria-haspopup="menu"
+              aria-expanded={showUserMenu}
+              aria-controls="app-account-menu"
               onClick={() => setShowUserMenu((v) => !v)}
             >
-              <span className="app-admin-header__user-dot" />
+              <span className="app-admin-header__user-avatar" aria-hidden="true">
+                {accountInitial}
+              </span>
+              <span className="app-admin-header__user-name">{accountLabel}</span>
+              <svg
+                className="app-admin-header__user-chevron"
+                viewBox="0 0 16 16"
+                aria-hidden="true"
+              >
+                <path d="m4.5 6 3.5 3.5L11.5 6" />
+              </svg>
             </button>
             {showUserMenu ? (
-              <div className="app-admin-header__user-menu">
-                <div className="app-admin-header__user-email">{user?.email || '当前用户'}</div>
-                <button
-                  type="button"
-                  className="app-admin-header__user-menu-item"
-                  onClick={() => {
-                    setShowUserMenu(false)
-                    setShowPasswordDialog(true)
-                  }}
-                >
-                  修改密码
-                </button>
-                <button
-                  type="button"
-                  className="app-admin-header__user-menu-item danger"
-                  onClick={() => {
-                    setShowUserMenu(false)
-                    setShowLogoutDialog(true)
-                  }}
-                >
-                  退出登录
-                </button>
+              <div
+                id="app-account-menu"
+                className="app-admin-header__user-menu"
+                role="menu"
+                aria-label="账号操作"
+              >
+                <div className="app-admin-header__user-profile">
+                  <span className="app-admin-header__profile-avatar" aria-hidden="true">
+                    {accountInitial}
+                    <i />
+                  </span>
+                  <span className="app-admin-header__profile-copy">
+                    <small>当前登录账号</small>
+                    <strong>{accountLabel}</strong>
+                    <span>{accountDetail}</span>
+                  </span>
+                </div>
+                <div className="app-admin-header__user-actions">
+                  <p>账号设置</p>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="app-admin-header__user-menu-item"
+                    onClick={() => {
+                      setShowUserMenu(false)
+                      setShowPasswordDialog(true)
+                    }}
+                  >
+                    <span className="app-admin-header__menu-icon" aria-hidden="true">
+                      <svg viewBox="0 0 20 20">
+                        <path d="M7.7 11.9a4.7 4.7 0 1 1 3.4-3.4L17 14.4V17h-2.6v-1.8h-2v-2h-2.1l-1-1" />
+                      </svg>
+                    </span>
+                    <span>
+                      <strong>修改密码</strong>
+                      <small>更新当前账号的登录密码</small>
+                    </span>
+                    <svg className="app-admin-header__menu-arrow" viewBox="0 0 16 16" aria-hidden="true">
+                      <path d="m6 3.5 4.5 4.5L6 12.5" />
+                    </svg>
+                  </button>
+                </div>
+                <div className="app-admin-header__user-danger">
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="app-admin-header__user-menu-item danger"
+                    onClick={() => {
+                      setShowUserMenu(false)
+                      setShowLogoutDialog(true)
+                    }}
+                  >
+                    <span className="app-admin-header__menu-icon" aria-hidden="true">
+                      <svg viewBox="0 0 20 20">
+                        <path d="M8 4H4.8A1.8 1.8 0 0 0 3 5.8v8.4A1.8 1.8 0 0 0 4.8 16H8M12.5 6.5 16 10l-3.5 3.5M7 10h9" />
+                      </svg>
+                    </span>
+                    <span>
+                      <strong>退出登录</strong>
+                      <small>安全退出当前设备</small>
+                    </span>
+                  </button>
+                </div>
               </div>
             ) : null}
           </div>
