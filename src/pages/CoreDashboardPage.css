@@ -139,7 +139,7 @@
 
 .core-dashboard-action-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -201,6 +201,11 @@
   border-color: #cbd5e1;
 }
 
+.core-dashboard-action--contract::before {
+  background: #ede9fe;
+  border-color: #ddd6fe;
+}
+
 .core-dashboard-action--rd::before,
 .core-dashboard-action--channel::before {
   background: rgba(255, 255, 255, 0.24);
@@ -222,7 +227,7 @@
 
 .core-dashboard-module-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -259,6 +264,11 @@
 .core-module-card--slate {
   border-top-color: #64748b;
   background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+}
+
+.core-module-card--violet {
+  border-top-color: #7c3aed;
+  background: linear-gradient(180deg, #ffffff 0%, #fbf9ff 100%);
 }
 
 .core-module-card__head,

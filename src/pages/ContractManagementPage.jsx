@@ -1,401 +1,282 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useAppState } from '@/app/AppStateContext.jsx'
 import PageContainer from '@/components/layout/PageContainer.jsx'
-import { createContract, deleteContract, listContracts, updateContract } from '@/lib/api/contract.ts'
+import {
+  createContract,
+  deleteContract,
+  importContracts,
+  listContracts,
+  relinkContracts,
+  updateContract
+} from '@/lib/api/contract.ts'
 import ContractStatusTag from '@/components/contract/ContractStatusTag.jsx'
 import ContractDetailsDrawer from '@/components/contract/ContractDetailsDrawer.jsx'
 import './contract-management.css'
 
-const STORAGE_KEY = 'contractManagementRecords.v1'
 const PAGE_SIZE_OPTIONS = [20, 50, 100]
-const QUICK_TABS = ['全部', '生效中', '即将到期', '已过期', '本月新签', '已归档']
-const STATUS_OPTIONS = ['全部', '生效中', '即将到期', '已过期', '待生效', '已归档']
-const EXPIRY_OPTIONS = ['全部', '30天内到期', '90天内到期', '已过期']
-
-const defaultContracts = [
-  {
-    id: 'sample-1',
-    signingDate: '2026/4/23',
-    channel: '3733游戏',
-    platform: '厦门三七三三网络科技有限公司',
-    address: '厦门市软件园二期观日路50号2F单元之07单元',
-    validPeriod: '2025-07-21 至 2027-07-20',
-    game: '一起来修仙（0.05折）',
-    channelShare: '25%',
-    issueShare: '75%',
-    channelFee: '0%',
-    remark: JSON.stringify({
-      v: 2,
-      note: '示例',
-      contractNo: 'HT-2026-0001',
-      contractType: '联运',
-      owner: '王淼',
-      startDate: '2025-07-21',
-      endDate: '2027-07-20',
-      games: ['一起来修仙（0.05折）'],
-      archived: false
-    })
-  }
-]
-
-function readContractsFromStorage() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return defaultContracts
-    const parsed = JSON.parse(raw)
-    if (!Array.isArray(parsed) || parsed.length === 0) return defaultContracts
-    return parsed
-  } catch {
-    return defaultContracts
-  }
+const QUICK_TABS = ['全部', '生效中', '即将到期', '已过期', '未关联客户', '编号重复']
+const EMPTY_SUMMARY = {
+  total: 0,
+  linked: 0,
+  expiring_30: 0,
+  expired: 0,
+  amount_total: '0'
+}
+const EMPTY_FORM = {
+  contract_name: '',
+  contract_type: '无固定总价合同',
+  amount: '',
+  counterparty: '',
+  contract_no: '',
+  signing_date: '',
+  signing_status: '',
+  effective_date: '',
+  end_date: '',
+  performance_status: '',
+  payment_type: '',
+  attachments: ''
 }
 
-function writeContractsToStorage(records) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(records))
+function formatAmount(value) {
+  if (value === null || value === undefined || value === '') return '-'
+  return `¥ ${Number(value).toLocaleString('zh-CN', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  })}`
 }
 
-function normalizePercentInput(value) {
-  const trimmed = String(value ?? '').trim()
-  if (!trimmed) return ''
-  const clean = trimmed.replace(/%/g, '')
-  if (clean === '' || Number.isNaN(Number(clean))) return ''
-  return `${clean}%`
-}
+function parseCsv(source) {
+  const rows = []
+  let row = []
+  let value = ''
+  let quoted = false
+  const text = String(source || '').replace(/^\uFEFF/, '')
 
-function parseDate(value) {
-  if (!value) return null
-  const src = String(value).trim().replace(/\./g, '-').replace(/\//g, '-')
-  if (!src) return null
-  const d = new Date(src)
-  return Number.isNaN(d.getTime()) ? null : d
-}
-
-function toDateString(date) {
-  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return ''
-  const y = date.getFullYear()
-  const m = String(date.getMonth() + 1).padStart(2, '0')
-  const d = String(date.getDate()).padStart(2, '0')
-  return `${y}-${m}-${d}`
-}
-
-function normalizeDateInputValue(value) {
-  const d = parseDate(value)
-  if (!d) return ''
-  return toDateString(d)
-}
-
-function splitValidPeriod(value) {
-  const src = String(value || '').trim()
-  if (!src) return { startDate: '', endDate: '' }
-  const normalized = src.replace(/[至~—]+/g, '|')
-  const [start, end] = normalized.split('|').map((s) => String(s || '').trim())
-  return { startDate: start || '', endDate: end || '' }
-}
-
-function formatGamesDisplay(games) {
-  if (!Array.isArray(games) || games.length === 0) return '-'
-  if (games.length <= 2) return games.join('、')
-  return `${games[0]} +${games.length - 1}`
-}
-
-function parseRemarkMeta(remark, game, validPeriod, channelShare, issueShare, id, updatedAt) {
-  const fallbackPeriod = splitValidPeriod(validPeriod)
-  const baseGames = String(game || '')
-    .split(/[、,，]/)
-    .map((s) => s.trim())
-    .filter(Boolean)
-  try {
-    const parsed = JSON.parse(String(remark || ''))
-    if (parsed && parsed.v === 2) {
-      const games = Array.isArray(parsed.games)
-        ? parsed.games.map((s) => String(s).trim()).filter(Boolean)
-        : baseGames
-      return {
-        note: parsed.note ? String(parsed.note) : '',
-        contractNo: parsed.contractNo ? String(parsed.contractNo) : `HT-${String(id).slice(0, 8)}`,
-        contractType: parsed.contractType ? String(parsed.contractType) : '未分类',
-        owner: parsed.owner ? String(parsed.owner) : '未指定',
-        startDate: parsed.startDate ? String(parsed.startDate) : fallbackPeriod.startDate,
-        endDate: parsed.endDate ? String(parsed.endDate) : fallbackPeriod.endDate,
-        games,
-        archived: Boolean(parsed.archived),
-        attachments: Array.isArray(parsed.attachments) ? parsed.attachments : [],
-        logs: Array.isArray(parsed.logs) ? parsed.logs : [],
-        updatedAt: parsed.updatedAt ? String(parsed.updatedAt) : updatedAt || ''
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index]
+    if (quoted) {
+      if (char === '"' && text[index + 1] === '"') {
+        value += '"'
+        index += 1
+      } else if (char === '"') {
+        quoted = false
+      } else {
+        value += char
       }
+      continue
     }
-  } catch {
-    // 非 JSON 备注兼容
+
+    if (char === '"') {
+      quoted = true
+    } else if (char === ',') {
+      row.push(value)
+      value = ''
+    } else if (char === '\n') {
+      row.push(value.replace(/\r$/, ''))
+      rows.push(row)
+      row = []
+      value = ''
+    } else {
+      value += char
+    }
   }
+
+  if (value || row.length) {
+    row.push(value.replace(/\r$/, ''))
+    rows.push(row)
+  }
+  return rows.filter((cells) => cells.some((cell) => String(cell).trim()))
+}
+
+function wpsRowsToPayload(rows) {
+  if (rows.length < 2) return []
+  const headers = rows[0].map((header) => String(header).trim())
+  const required = ['合同名称', '合同类型', '合同签约方', '终止日期']
+  const missing = required.filter((header) => !headers.includes(header))
+  if (missing.length) {
+    throw new Error(`缺少 WPS 字段：${missing.join('、')}`)
+  }
+
+  return rows.slice(1).map((row) => {
+    const record = Object.fromEntries(headers.map((header, index) => [header, row[index] ?? '']))
+    return {
+      contract_name: record['合同名称'],
+      contract_type: record['合同类型'],
+      amount: record['合同总额'] || null,
+      counterparty: record['合同签约方'],
+      contract_no: record['合同编号'],
+      signing_date: record['签订日期'] || null,
+      signing_status: record['签订状态'],
+      effective_date: record['生效日期'] || null,
+      end_date: record['终止日期'] || null,
+      performance_status: record['履约状态'],
+      payment_type: record['账款类型'],
+      attachments: String(record['合同附件'] || '')
+        .split(/[;；\n]+/)
+        .map((item) => item.trim())
+        .filter(Boolean)
+    }
+  })
+}
+
+function contractToForm(contract) {
   return {
-    note: String(remark || ''),
-    contractNo: `HT-${String(id).slice(0, 8)}`,
-    contractType: '未分类',
-    owner: '未指定',
-    startDate: fallbackPeriod.startDate,
-    endDate: fallbackPeriod.endDate,
-    games: baseGames.length > 0 ? baseGames : ['未填写游戏'],
-    archived: false,
-    attachments: [],
-    logs: [],
-    updatedAt: updatedAt || ''
+    contract_name: contract.contract_name || '',
+    contract_type: contract.contract_type || '',
+    amount: contract.amount || '',
+    counterparty: contract.counterparty || '',
+    contract_no: contract.contract_no || '',
+    signing_date: contract.signing_date || '',
+    signing_status: contract.signing_status || '',
+    effective_date: contract.effective_date || '',
+    end_date: contract.end_date || '',
+    performance_status: contract.performance_status || '',
+    payment_type: contract.payment_type || '',
+    attachments: (contract.attachments || []).join('；')
   }
 }
 
-function computeStatus({ archived, startDate, endDate }) {
-  if (archived) return '已归档'
-  const now = new Date()
-  now.setHours(0, 0, 0, 0)
-  const start = parseDate(startDate)
-  const end = parseDate(endDate)
-  if (start && start > now) return '待生效'
-  if (end) {
-    if (end < now) return '已过期'
-    const diff = Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
-    if (diff <= 30) return '即将到期'
-  }
-  return '生效中'
-}
-
-function toApiPayload(record) {
-  const validPeriod =
-    record.startDate && record.endDate
-      ? `${record.startDate} 至 ${record.endDate}`
-      : record.validPeriod || ''
+function formToPayload(form) {
   return {
-    signing_date: record.signingDate || null,
-    channel: record.channel || null,
-    platform: record.platform || null,
-    address: record.address || null,
-    valid_period: validPeriod || null,
-    game: (record.games || []).join('、') || record.game || null,
-    channel_share: normalizePercentInput(record.channelShare) || null,
-    issue_share: normalizePercentInput(record.issueShare) || null,
-    channel_fee: normalizePercentInput(record.channelFee) || null,
-    remark: JSON.stringify({
-      v: 2,
-      note: record.note || '',
-      contractNo: record.contractNo || '',
-      contractType: record.contractType || '',
-      owner: record.owner || '',
-      startDate: record.startDate || '',
-      endDate: record.endDate || '',
-      games: record.games || [],
-      archived: Boolean(record.archived),
-      attachments: record.attachments || [],
-      logs: record.logs || [],
-      updatedAt: toDateString(new Date())
-    })
+    ...form,
+    amount: form.amount || null,
+    signing_date: form.signing_date || null,
+    effective_date: form.effective_date || null,
+    end_date: form.end_date || null,
+    attachments: String(form.attachments || '')
+      .split(/[;；\n]+/)
+      .map((item) => item.trim())
+      .filter(Boolean)
   }
 }
 
-function getChannelAbbr(channel) {
-  const src = String(channel || '').trim()
-  if (!src) return 'QD'
-  const letters = src.match(/[A-Za-z0-9]+/g)
-  if (letters && letters.length > 0) {
-    return letters.join('').toUpperCase().slice(0, 8) || 'QD'
-  }
-  return 'QD'
-}
-
-function generateContractNo(channel) {
-  const now = new Date()
-  const pad = (n) => String(n).padStart(2, '0')
-  const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}${pad(
-    now.getHours()
-  )}${pad(now.getMinutes())}${pad(now.getSeconds())}`
-  const abbr = getChannelAbbr(channel)
-  return `HT-${abbr}-${stamp}`
-}
-
-function extractStatusCode(err) {
-  const status = err?.status
-  if (typeof status === 'number') return status
-  const raw = err?.message
-  if (typeof raw === 'string') {
-    const m = raw.match(/\b(\d{3})\b/)
-    if (m) return Number(m[1])
-  }
-  return null
-}
-
-function isSampleOrTempId(id) {
-  const sid = String(id || '')
-  return sid.startsWith('sample-') || sid.startsWith('temp-')
-}
-
-function createEmptyForm() {
-  return {
-    contractNo: generateContractNo(''),
-    contractType: '',
-    owner: '',
-    signingDate: '',
-    startDate: '',
-    endDate: '',
-    channel: '',
-    platform: '',
-    address: '',
-    validPeriod: '',
-    game: '',
-    gamesText: '',
-    channelShare: '',
-    issueShare: '',
-    channelFee: '',
-    note: '',
-    archived: false
-  }
+function exportCsv(records) {
+  const headers = [
+    '合同名称',
+    '合同类型',
+    '合同总额',
+    '合同签约方',
+    '合同编号',
+    '签订日期',
+    '签订状态',
+    '生效日期',
+    '终止日期',
+    '履约状态',
+    '账款类型',
+    '合同附件'
+  ]
+  const lines = records.map((record) =>
+    [
+      record.contract_name,
+      record.contract_type,
+      record.amount,
+      record.counterparty,
+      record.contract_no,
+      record.signing_date,
+      record.signing_status,
+      record.effective_date,
+      record.end_date,
+      record.performance_status,
+      record.payment_type,
+      (record.attachments || []).join('；')
+    ]
+      .map((value) => `"${String(value ?? '').replace(/"/g, '""')}"`)
+      .join(',')
+  )
+  const blob = new Blob([`\uFEFF${[headers.join(','), ...lines].join('\n')}`], {
+    type: 'text/csv;charset=utf-8'
+  })
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = `合同台账_${new Date().toISOString().slice(0, 10)}.csv`
+  anchor.click()
+  URL.revokeObjectURL(url)
 }
 
 function ContractManagementPage() {
-  const [records, setRecords] = useState(() => readContractsFromStorage())
+  const { showToast } = useAppState()
+  const fileInputRef = useRef(null)
+  const [records, setRecords] = useState([])
+  const [summary, setSummary] = useState(EMPTY_SUMMARY)
+  const [loading, setLoading] = useState(true)
+  const [importing, setImporting] = useState(false)
+  const [error, setError] = useState('')
   const [keyword, setKeyword] = useState('')
   const [quickTab, setQuickTab] = useState('全部')
-  const [showAdvanced, setShowAdvanced] = useState(false)
-  const [statusFilter, setStatusFilter] = useState('全部')
-  const [contractTypeFilter, setContractTypeFilter] = useState('全部')
-  const [gameFilter, setGameFilter] = useState('全部')
-  const [expiryFilter, setExpiryFilter] = useState('全部')
-  const [ownerFilter, setOwnerFilter] = useState('全部')
+  const [contractType, setContractType] = useState('全部')
+  const [paymentType, setPaymentType] = useState('全部')
   const [pageSize, setPageSize] = useState(20)
   const [page, setPage] = useState(1)
+  const [selectedContract, setSelectedContract] = useState(null)
   const [editingId, setEditingId] = useState(null)
-  const [showForm, setShowForm] = useState(false)
-  const [formData, setFormData] = useState(createEmptyForm())
-  const [selectedRow, setSelectedRow] = useState(null)
-  const [moreTargetRow, setMoreTargetRow] = useState(null)
-  const [loading, setLoading] = useState(false)
-  const [errorMsg, setErrorMsg] = useState('')
+  const [form, setForm] = useState(EMPTY_FORM)
+  const [saving, setSaving] = useState(false)
 
-  useEffect(() => {
-    let cancelled = false
-    ;(async () => {
-      setLoading(true)
-      setErrorMsg('')
-      try {
-        const res = await listContracts({ limit: 1000, offset: 0 })
-        if (cancelled) return
-        const rows = Array.isArray(res.items) ? res.items : []
-        if (rows.length > 0) {
-          const mapped = rows.map((row) => {
-            const meta = parseRemarkMeta(
-              row.remark,
-              row.game,
-              row.valid_period,
-              row.channel_share,
-              row.issue_share,
-              row.id,
-              row.updated_at
-            )
-            const status = computeStatus(meta)
-            return {
-              id: row.id,
-              contractNo: meta.contractNo,
-              contractType: meta.contractType,
-              owner: meta.owner,
-              signingDate: row.signing_date || meta.startDate || '',
-              startDate: meta.startDate,
-              endDate: meta.endDate,
-              channel: row.channel || '',
-              platform: row.platform || '',
-              address: row.address || '',
-              validPeriod: row.valid_period || '',
-              game: row.game || '',
-              games: meta.games,
-              gameDisplay: formatGamesDisplay(meta.games),
-              channelShare: row.channel_share || '',
-              issueShare: row.issue_share || '',
-              channelFee: row.channel_fee || '',
-              shareRatio: `${row.channel_share || '-'} / ${row.issue_share || '-'}`,
-              note: meta.note,
-              archived: meta.archived,
-              status,
-              attachments: meta.attachments,
-              logs: meta.logs,
-              updatedAt: row.updated_at || meta.updatedAt || ''
-            }
-          })
-          setRecords(mapped)
-          writeContractsToStorage(mapped)
-        }
-      } catch (err) {
-        console.error(err)
-        if (!cancelled) setErrorMsg('合同接口暂不可用，已回退到本地缓存模式。')
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
-    })()
-    return () => {
-      cancelled = true
+  const loadContracts = useCallback(async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const response = await listContracts({ limit: 1000, offset: 0 })
+      setRecords(Array.isArray(response.items) ? response.items : [])
+      setSummary(response.summary || EMPTY_SUMMARY)
+    } catch (loadError) {
+      console.error(loadError)
+      setError('合同数据暂时无法读取，请检查网络后重试。')
+    } finally {
+      setLoading(false)
     }
   }, [])
 
-  const options = useMemo(() => {
-    const contractTypes = new Set()
-    const games = new Set()
-    const owners = new Set()
-    records.forEach((r) => {
-      if (r.contractType) contractTypes.add(r.contractType)
-      ;(r.games || []).forEach((g) => games.add(g))
-      if (r.owner) owners.add(r.owner)
+  useEffect(() => {
+    loadContracts()
+  }, [loadContracts])
+
+  const filterOptions = useMemo(() => {
+    const types = new Set()
+    const paymentTypes = new Set()
+    records.forEach((record) => {
+      if (record.contract_type) types.add(record.contract_type)
+      if (record.payment_type) paymentTypes.add(record.payment_type)
     })
     return {
-      contractTypes: ['全部', ...Array.from(contractTypes)],
-      games: ['全部', ...Array.from(games)],
-      owners: ['全部', ...Array.from(owners)]
+      types: ['全部', ...Array.from(types).sort((left, right) => left.localeCompare(right, 'zh-CN'))],
+      paymentTypes: [
+        '全部',
+        ...Array.from(paymentTypes).sort((left, right) => left.localeCompare(right, 'zh-CN'))
+      ]
     }
   }, [records])
-
-  const matchesQuickTab = (row) => {
-    if (quickTab === '全部') return true
-    if (quickTab === '本月新签') {
-      const d = parseDate(row.signingDate)
-      if (!d) return false
-      const now = new Date()
-      return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()
-    }
-    return row.status === quickTab
-  }
 
   const filteredRecords = useMemo(() => {
     const term = keyword.trim().toLowerCase()
-    return records.filter((row) => {
-      if (!matchesQuickTab(row)) return false
-      if (statusFilter !== '全部' && row.status !== statusFilter) return false
-      if (contractTypeFilter !== '全部' && row.contractType !== contractTypeFilter) return false
-      if (gameFilter !== '全部' && !(row.games || []).includes(gameFilter)) return false
-      if (ownerFilter !== '全部' && row.owner !== ownerFilter) return false
-      if (term) {
-        const text = [row.contractNo, row.channel, row.platform, row.game, row.note].join(' ').toLowerCase()
-        if (!text.includes(term)) return false
+    return records.filter((record) => {
+      if (quickTab === '未关联客户' && record.partner_link_status !== 'unlinked') return false
+      if (quickTab === '编号重复' && !record.contract_no_duplicate) return false
+      if (
+        !['全部', '未关联客户', '编号重复'].includes(quickTab) &&
+        record.timeline_status !== quickTab
+      ) {
+        return false
       }
-      if (expiryFilter !== '全部') {
-        const end = parseDate(row.endDate)
-        const now = new Date()
-        now.setHours(0, 0, 0, 0)
-        if (!end) return false
-        const diff = Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
-        if (expiryFilter === '已过期' && diff >= 0) return false
-        if (expiryFilter === '30天内到期' && !(diff >= 0 && diff <= 30)) return false
-        if (expiryFilter === '90天内到期' && !(diff >= 0 && diff <= 90)) return false
-      }
-      return true
+      if (contractType !== '全部' && record.contract_type !== contractType) return false
+      if (paymentType !== '全部' && record.payment_type !== paymentType) return false
+      if (!term) return true
+      return [
+        record.contract_name,
+        record.contract_type,
+        record.counterparty,
+        record.contract_no,
+        record.partner_name,
+        record.partner_short_name,
+        ...(record.attachments || [])
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+        .includes(term)
     })
-  }, [records, keyword, statusFilter, contractTypeFilter, gameFilter, ownerFilter, expiryFilter, quickTab])
-
-  const stats = useMemo(() => {
-    const now = new Date()
-    now.setHours(0, 0, 0, 0)
-    const total = records.length
-    const active = records.filter((r) => r.status === '生效中').length
-    const expiring30 = records.filter((r) => {
-      const end = parseDate(r.endDate)
-      if (!end) return false
-      const diff = Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
-      return diff >= 0 && diff <= 30 && r.status !== '已归档'
-    }).length
-    const expired = records.filter((r) => r.status === '已过期').length
-    return { total, active, expiring30, expired }
-  }, [records])
+  }, [contractType, keyword, paymentType, quickTab, records])
 
   const pageCount = Math.max(1, Math.ceil(filteredRecords.length / pageSize))
   const pagedRecords = useMemo(() => {
@@ -405,329 +286,210 @@ function ContractManagementPage() {
 
   useEffect(() => {
     setPage(1)
-  }, [keyword, statusFilter, contractTypeFilter, gameFilter, ownerFilter, expiryFilter, quickTab, pageSize])
+  }, [contractType, keyword, pageSize, paymentType, quickTab])
+
+  useEffect(() => {
+    if (page > pageCount) setPage(pageCount)
+  }, [page, pageCount])
+
+  const handleImportFile = async (event) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+    setImporting(true)
+    try {
+      const rows = parseCsv(await file.text())
+      const items = wpsRowsToPayload(rows)
+      if (!items.length) throw new Error('文件中没有可导入的合同')
+      const result = await importContracts(items)
+      showToast(
+        `WPS 台账已同步：新增 ${result.created} 条，更新 ${result.updated} 条，已关联客户 ${result.linked} 条`,
+        'success'
+      )
+      if (result.duplicate_contract_numbers?.length) {
+        showToast(
+          `发现 ${result.duplicate_contract_numbers.length} 组重复合同编号，已保留并标记待核验`,
+          'info'
+        )
+      }
+      await loadContracts()
+    } catch (importError) {
+      console.error(importError)
+      showToast(importError?.message || 'WPS 台账导入失败', 'error')
+    } finally {
+      setImporting(false)
+      event.target.value = ''
+    }
+  }
 
   const openCreateForm = () => {
     setEditingId(null)
-    setFormData((prev) => ({ ...createEmptyForm(), contractNo: generateContractNo(prev.channel || '') }))
-    setShowForm(true)
+    setForm(EMPTY_FORM)
   }
 
-  const openEditForm = (row) => {
-    setEditingId(row.id)
-    setFormData({
-      contractNo: row.contractNo || generateContractNo(row.channel || ''),
-      contractType: row.contractType || '',
-      owner: row.owner || '',
-      signingDate: normalizeDateInputValue(row.signingDate),
-      startDate: normalizeDateInputValue(row.startDate),
-      endDate: normalizeDateInputValue(row.endDate),
-      channel: row.channel || '',
-      platform: row.platform || '',
-      address: row.address || '',
-      validPeriod: row.validPeriod || '',
-      game: row.game || '',
-      gamesText: (row.games || []).join('、'),
-      channelShare: row.channelShare || '',
-      issueShare: row.issueShare || '',
-      channelFee: row.channelFee || '',
-      note: row.note || '',
-      archived: Boolean(row.archived)
-    })
-    setShowForm(true)
+  const openEditForm = (contract) => {
+    setEditingId(contract.id)
+    setForm(contractToForm(contract))
   }
 
-  const openRenewForm = (row) => {
-    const end = parseDate(row.endDate)
-    const start = end ? new Date(end.getTime() + 24 * 60 * 60 * 1000) : new Date()
-    const nextEnd = new Date(start.getFullYear() + 1, start.getMonth(), start.getDate())
+  const closeEditor = () => {
     setEditingId(null)
-    setFormData({
-      contractNo: `${row.contractNo || ''}-R`,
-      contractType: row.contractType || '',
-      owner: row.owner || '',
-      signingDate: toDateString(new Date()),
-      startDate: toDateString(start),
-      endDate: toDateString(nextEnd),
-      channel: row.channel || '',
-      platform: row.platform || '',
-      address: row.address || '',
-      validPeriod: '',
-      game: row.game || '',
-      gamesText: (row.games || []).join('、'),
-      channelShare: row.channelShare || '',
-      issueShare: row.issueShare || '',
-      channelFee: row.channelFee || '',
-      note: row.note || '',
-      archived: false
-    })
-    setShowForm(true)
+    setForm(EMPTY_FORM)
   }
 
-  const handleCopyNew = (row) => {
-    setEditingId(null)
-    setFormData({
-      contractNo: `${row.contractNo || generateContractNo(row.channel || '')}-COPY`,
-      contractType: row.contractType || '',
-      owner: row.owner || '',
-      signingDate: row.signingDate || '',
-      startDate: row.startDate || '',
-      endDate: row.endDate || '',
-      channel: row.channel || '',
-      platform: row.platform || '',
-      address: row.address || '',
-      validPeriod: '',
-      game: row.game || '',
-      gamesText: (row.games || []).join('、'),
-      channelShare: row.channelShare || '',
-      issueShare: row.issueShare || '',
-      channelFee: row.channelFee || '',
-      note: row.note || '',
-      archived: Boolean(row.archived)
-    })
-    setShowForm(true)
-  }
-
-  const handleDelete = async (rowId) => {
-    if (!window.confirm('确定删除这条合同吗？')) return
-    const prev = records
-    const next = prev.filter((row) => row.id !== rowId)
-    setRecords(next)
-    writeContractsToStorage(next)
-    try {
-      await deleteContract(String(rowId))
-    } catch (err) {
-      console.error(err)
-      setRecords(prev)
-      writeContractsToStorage(prev)
-      window.alert('删除失败：接口异常，已回滚。')
-    }
-  }
-
-  const handleSave = async () => {
-    if (!formData.channel.trim() || !formData.platform.trim() || !formData.game.trim()) {
-      window.alert('请至少填写：渠道简称、平台方、签约游戏')
+  const saveContract = async (event) => {
+    event.preventDefault()
+    if (!form.contract_name.trim()) {
+      showToast('请填写合同名称', 'error')
       return
     }
-    const games = String(formData.gamesText || formData.game || '')
-      .split(/[、,，]/)
-      .map((s) => s.trim())
-      .filter(Boolean)
-    const nextRecord = {
-      ...formData,
-      games,
-      game: games.join('、'),
-      validPeriod:
-        formData.startDate && formData.endDate
-          ? `${formData.startDate} 至 ${formData.endDate}`
-          : formData.validPeriod,
-      channelShare: normalizePercentInput(formData.channelShare),
-      issueShare: normalizePercentInput(formData.issueShare),
-      channelFee: normalizePercentInput(formData.channelFee),
-      shareRatio: `${normalizePercentInput(formData.channelShare) || '-'} / ${
-        normalizePercentInput(formData.issueShare) || '-'
-      }`,
-      status: computeStatus({
-        archived: Boolean(formData.archived),
-        startDate: formData.startDate,
-        endDate: formData.endDate
-      }),
-      gameDisplay: formatGamesDisplay(games),
-      updatedAt: new Date().toISOString()
-    }
-
-    if (editingId) {
-      const prev = records
-      const optimistic = prev.map((row) => (row.id === editingId ? { ...row, ...nextRecord } : row))
-      setRecords(optimistic)
-      writeContractsToStorage(optimistic)
-
-      const replaceWithCreated = async () => {
-        const created = await createContract(toApiPayload(nextRecord))
-        const synced = optimistic.map((row) =>
-          row.id === editingId
-            ? {
-                ...row,
-                id: created.id
-              }
-            : row
-        )
-        setRecords(synced)
-        writeContractsToStorage(synced)
-      }
-
-      try {
-        if (isSampleOrTempId(editingId)) {
-          await replaceWithCreated()
-        } else {
-          await updateContract(String(editingId), toApiPayload(nextRecord))
-        }
-      } catch (err) {
-        const statusCode = extractStatusCode(err)
-        // 兼容历史示例记录 / 服务端已删除记录：PUT 404 时自动转为创建新记录
-        if (statusCode === 404) {
-          try {
-            await replaceWithCreated()
-          } catch (fallbackErr) {
-            console.error(fallbackErr)
-            setRecords(prev)
-            writeContractsToStorage(prev)
-            window.alert('更新失败：接口异常（404 后自动转新增也失败），已回滚。')
-            return
-          }
-        } else {
-          console.error(err)
-          setRecords(prev)
-          writeContractsToStorage(prev)
-          window.alert(statusCode ? `更新失败：接口异常（${statusCode}），已回滚。` : '更新失败：接口异常，已回滚。')
-          return
-        }
-      }
-    } else {
-      const tempId = `temp-${Date.now()}`
-      const optimistic = [{ id: tempId, ...nextRecord }, ...records]
-      setRecords(optimistic)
-      writeContractsToStorage(optimistic)
-      try {
-        const created = await createContract(toApiPayload(nextRecord))
-        const synced = optimistic.map((row) =>
-          row.id === tempId
-            ? {
-                ...row,
-                id: created.id
-              }
-            : row
-        )
-        setRecords(synced)
-        writeContractsToStorage(synced)
-      } catch (err) {
-        console.error(err)
-        const rollback = records
-        setRecords(rollback)
-        writeContractsToStorage(rollback)
-        window.alert('新增失败：接口异常，已回滚。')
-        return
-      }
-    }
-    setShowForm(false)
-    setEditingId(null)
-    setFormData(createEmptyForm())
-  }
-
-  const resetFilters = () => {
-    setKeyword('')
-    setQuickTab('全部')
-    setStatusFilter('全部')
-    setContractTypeFilter('全部')
-    setGameFilter('全部')
-    setExpiryFilter('全部')
-    setOwnerFilter('全部')
-  }
-
-  const archiveContract = async (row) => {
-    const next = { ...row, archived: true, status: '已归档' }
-    const prev = records
-    const optimistic = records.map((r) => (r.id === row.id ? next : r))
-    setRecords(optimistic)
-    writeContractsToStorage(optimistic)
-    setMoreTargetRow(null)
+    setSaving(true)
     try {
-      await updateContract(String(row.id), toApiPayload(next))
-    } catch (err) {
-      console.error(err)
-      setRecords(prev)
-      writeContractsToStorage(prev)
-      window.alert('归档失败：接口异常，已回滚。')
+      const payload = formToPayload(form)
+      if (editingId === 'new') {
+        await createContract(payload)
+        showToast('合同已新增并保存到服务器', 'success')
+      } else {
+        await updateContract(editingId, payload)
+        showToast('合同资料已更新', 'success')
+      }
+      closeEditor()
+      setSelectedContract(null)
+      await loadContracts()
+    } catch (saveError) {
+      console.error(saveError)
+      showToast(saveError?.message || '合同保存失败', 'error')
+    } finally {
+      setSaving(false)
     }
   }
 
-  const exportContracts = () => {
-    const headers = [
-      '合同编号',
-      '渠道名称',
-      '平台方',
-      '签约游戏',
-      '合同类型',
-      '开始日期',
-      '结束日期',
-      '状态',
-      '分成比例',
-      '负责人',
-      '更新时间'
-    ]
-    const lines = filteredRecords.map((r) =>
-      [
-        r.contractNo,
-        r.channel,
-        r.platform,
-        (r.games || []).join('、'),
-        r.contractType,
-        r.startDate,
-        r.endDate,
-        r.status,
-        r.shareRatio,
-        r.owner,
-        r.updatedAt || ''
-      ]
-        .map((v) => `"${String(v ?? '').replace(/"/g, '""')}"`)
-        .join(',')
-    )
-    const csv = [headers.join(','), ...lines].join('\n')
-    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `合同台账_${toDateString(new Date())}.csv`
-    a.click()
-    URL.revokeObjectURL(url)
+  const removeContract = async (contract) => {
+    if (!window.confirm(`确定删除合同「${contract.contract_name}」吗？`)) return
+    try {
+      await deleteContract(contract.id)
+      showToast('合同已删除', 'success')
+      await loadContracts()
+    } catch (deleteError) {
+      console.error(deleteError)
+      showToast('合同删除失败', 'error')
+    }
+  }
+
+  const relinkCustomers = async () => {
+    try {
+      const result = await relinkContracts()
+      showToast(
+        result.updated
+          ? `已重新关联 ${result.updated} 条合同，当前共 ${result.linked} 条已关联`
+          : `客户关联已是最新，共 ${result.linked} 条`,
+        'success'
+      )
+      await loadContracts()
+    } catch (relinkError) {
+      console.error(relinkError)
+      showToast('重新关联客户失败', 'error')
+    }
   }
 
   return (
     <PageContainer hideHeader className="contract-page">
-      <section className="contract-toolbar">
-        <div className="contract-toolbar__left">
+      <section className="contract-hero">
+        <div className="contract-hero__copy">
+          <p>合同中心</p>
+          <h1>合同台账</h1>
+          <span>统一维护 WPS 合同、签约方、金额、有效期和附件信息，数据保存于服务器。</span>
+        </div>
+        <div className="contract-hero__status">
+          <span className="contract-sync-dot" aria-hidden="true" />
           <div>
-            <h2 className="contract-page-title">合同管理台账</h2>
-            <p className="contract-page-desc">面向 100+ 合同的高密度查询、筛选与续签管理</p>
+            <strong>WPS 台账已接入</strong>
+            <small>{summary.total ? `服务器现有 ${summary.total} 份合同` : '等待首次同步'}</small>
           </div>
         </div>
         <div className="contract-toolbar__actions">
-          <button type="button" className="btn-primary" onClick={openCreateForm}>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".csv,text/csv"
+            onChange={handleImportFile}
+            hidden
+          />
+          <button
+            type="button"
+            className="btn-primary"
+            disabled={importing}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            {importing ? '正在同步…' : '导入 WPS 台账'}
+          </button>
+          <button type="button" className="btn-secondary" onClick={() => exportCsv(filteredRecords)}>
+            导出当前结果
+          </button>
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={() => {
+              openCreateForm()
+              setEditingId('new')
+            }}
+          >
             新增合同
-          </button>
-          <button type="button" className="btn-secondary" onClick={exportContracts}>
-            导出
-          </button>
-          <button type="button" className="btn-secondary" onClick={() => setShowAdvanced((v) => !v)}>
-            高级筛选
           </button>
         </div>
       </section>
 
-      <section className="contract-stats">
-        <article>
+      <section className="contract-stats" aria-label="合同概览">
+        <article className="is-blue">
           <span>合同总数</span>
-          <strong>{stats.total}</strong>
+          <strong>{summary.total}</strong>
+          <small>当前服务器台账</small>
         </article>
-        <article>
-          <span>生效中</span>
-          <strong>{stats.active}</strong>
+        <article className="is-green">
+          <span>已关联客户</span>
+          <strong>{summary.linked}</strong>
+          <small>共 {Math.max(summary.total - summary.linked, 0)} 条待补充关联</small>
         </article>
-        <article>
-          <span>30天内到期</span>
-          <strong>{stats.expiring30}</strong>
+        <article className="is-amber">
+          <span>30 天内到期</span>
+          <strong>{summary.expiring_30}</strong>
+          <small>已过期 {summary.expired} 条</small>
         </article>
-        <article>
-          <span>已过期</span>
-          <strong>{stats.expired}</strong>
+        <article className="is-violet">
+          <span>合同金额合计</span>
+          <strong>{formatAmount(summary.amount_total)}</strong>
+          <small>按已填写金额统计</small>
         </article>
       </section>
 
       <section className="contract-filter-card">
-        <div className="contract-quick-tabs">
+        <div className="contract-filter-main">
+          <label className="contract-search">
+            <span aria-hidden="true">⌕</span>
+            <input
+              type="search"
+              value={keyword}
+              onChange={(event) => setKeyword(event.target.value)}
+              placeholder="搜索合同名称、签约方、客户简称、合同编号或附件"
+            />
+          </label>
+          <select value={contractType} onChange={(event) => setContractType(event.target.value)}>
+            {filterOptions.types.map((item) => (
+              <option key={item} value={item}>{item === '全部' ? '全部合同类型' : item}</option>
+            ))}
+          </select>
+          <select value={paymentType} onChange={(event) => setPaymentType(event.target.value)}>
+            {filterOptions.paymentTypes.map((item) => (
+              <option key={item} value={item}>{item === '全部' ? '全部账款类型' : item}</option>
+            ))}
+          </select>
+          <button type="button" className="btn-reset" onClick={relinkCustomers}>刷新客户关联</button>
+        </div>
+        <div className="contract-quick-tabs" role="tablist" aria-label="合同状态筛选">
           {QUICK_TABS.map((tab) => (
             <button
               type="button"
+              role="tab"
+              aria-selected={quickTab === tab}
               key={tab}
               className={quickTab === tab ? 'active' : ''}
               onClick={() => setQuickTab(tab)}
@@ -736,237 +498,219 @@ function ContractManagementPage() {
             </button>
           ))}
         </div>
-        <div className="contract-filters-grid">
-          <input
-            value={keyword}
-            onChange={(e) => setKeyword(e.target.value)}
-            placeholder="关键词：渠道/平台/游戏/合同编号"
-          />
-          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-            {STATUS_OPTIONS.map((s) => (
-              <option key={s}>{s}</option>
-            ))}
-          </select>
-          <select value={contractTypeFilter} onChange={(e) => setContractTypeFilter(e.target.value)}>
-            {options.contractTypes.map((v) => (
-              <option key={v}>{v}</option>
-            ))}
-          </select>
-          <button type="button" className="btn-reset" onClick={resetFilters}>
-            重置
-          </button>
-          {showAdvanced && (
-            <>
-              <select value={gameFilter} onChange={(e) => setGameFilter(e.target.value)}>
-                {options.games.map((v) => (
-                  <option key={v}>{v}</option>
-                ))}
-              </select>
-              <select value={expiryFilter} onChange={(e) => setExpiryFilter(e.target.value)}>
-                {EXPIRY_OPTIONS.map((v) => (
-                  <option key={v}>{v}</option>
-                ))}
-              </select>
-              <select value={ownerFilter} onChange={(e) => setOwnerFilter(e.target.value)}>
-                {options.owners.map((v) => (
-                  <option key={v}>{v}</option>
-                ))}
-              </select>
-            </>
-          )}
-        </div>
       </section>
 
       <section className="contract-table-card">
-        {loading && <div className="contract-state">合同数据加载中...</div>}
-        {!loading && errorMsg && <div className="contract-state contract-state--warn">{errorMsg}</div>}
-        <div className="contract-table-wrap">
-          <table className="contract-table contract-table--dense">
-            <thead>
-              <tr>
-                <th className="col-sticky-left">合同编号</th>
-                <th>渠道名称</th>
-                <th>平台方</th>
-                <th>签约游戏</th>
-                <th>合同类型</th>
-                <th>开始日期</th>
-                <th>结束日期</th>
-                <th>状态</th>
-                <th>分成比例</th>
-                <th>负责人</th>
-                <th>更新时间</th>
-                <th className="col-sticky-right">操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              {pagedRecords.map((row) => (
-                <tr key={row.id} onClick={() => setSelectedRow(row)}>
-                  <td className="col-sticky-left text-ellipsis">{row.contractNo || '-'}</td>
-                  <td className="text-ellipsis">{row.channel || '-'}</td>
-                  <td className="text-ellipsis">{row.platform || '-'}</td>
-                  <td className="text-ellipsis" title={(row.games || []).join('、')}>
-                    {row.gameDisplay || '-'}
-                  </td>
-                  <td>{row.contractType || '-'}</td>
-                  <td>{row.startDate || '-'}</td>
-                  <td>{row.endDate || '-'}</td>
-                  <td>
-                    <ContractStatusTag status={row.status} />
-                  </td>
-                  <td>{row.shareRatio || '-'}</td>
-                  <td>{row.owner || '-'}</td>
-                  <td>{row.updatedAt ? String(row.updatedAt).slice(0, 10) : '-'}</td>
-                  <td className="col-sticky-right" onClick={(e) => e.stopPropagation()}>
-                    <div className="contract-row-actions">
-                      <button type="button" onClick={() => setSelectedRow(row)}>
-                        查看
-                      </button>
-                      <button type="button" onClick={() => openEditForm(row)}>
-                        编辑
-                      </button>
-                      <button type="button" onClick={() => openRenewForm(row)}>
-                        续签
-                      </button>
-                      <div className="more-wrapper">
-                        <button type="button" onClick={() => setMoreTargetRow(row)}>
-                          更多
-                        </button>
-                      </div>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              {pagedRecords.length === 0 && (
-                <tr>
-                  <td colSpan={12} className="contract-empty">
-                    暂无匹配数据
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+        <div className="contract-table-head">
+          <div>
+            <h2>合同列表</h2>
+            <span>显示 {filteredRecords.length} / {records.length} 条</span>
+          </div>
+          <p>点击任意合同查看完整字段与附件名称</p>
         </div>
-        <div className="contract-pagination">
-          <span>
-            共 {filteredRecords.length} 条，第 {page}/{pageCount} 页
-          </span>
-          <select value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))}>
-            {PAGE_SIZE_OPTIONS.map((size) => (
-              <option key={size} value={size}>
-                {size}条/页
-              </option>
+
+        {loading ? (
+          <div className="contract-loading" aria-label="正在加载合同">
+            <div className="contract-loading__bar" />
+            {Array.from({ length: 6 }, (_, index) => (
+              <div className="contract-loading__row" key={index}>
+                <span /><span /><span /><span /><span />
+              </div>
             ))}
-          </select>
-          <button type="button" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
-            上一页
-          </button>
-          <button type="button" disabled={page >= pageCount} onClick={() => setPage((p) => Math.min(pageCount, p + 1))}>
-            下一页
-          </button>
-        </div>
+          </div>
+        ) : error ? (
+          <div className="contract-error-state">
+            <strong>合同数据没有加载成功</strong>
+            <p>{error}</p>
+            <button type="button" className="btn-primary" onClick={loadContracts}>重新加载</button>
+          </div>
+        ) : (
+          <>
+            <div className="contract-table-wrap">
+              <table className="contract-table">
+                <thead>
+                  <tr>
+                    <th>合同名称</th>
+                    <th>签约方 / 客户</th>
+                    <th>合同类型</th>
+                    <th className="is-number">合同总额</th>
+                    <th>有效期</th>
+                    <th>状态</th>
+                    <th>账款</th>
+                    <th>附件</th>
+                    <th className="col-sticky-right">操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pagedRecords.map((contract) => (
+                    <tr key={contract.id} onClick={() => setSelectedContract(contract)}>
+                      <td className="contract-name-cell">
+                        <strong title={contract.contract_name}>{contract.contract_name}</strong>
+                        <span>{contract.contract_no || '未填写合同编号'}</span>
+                        {contract.contract_no_duplicate ? (
+                          <em>编号重复待核验</em>
+                        ) : null}
+                      </td>
+                      <td className="contract-party-cell">
+                        {contract.partner_link_status === 'linked' ? (
+                          <span className="contract-party-avatar">
+                            {(contract.partner_short_name || contract.counterparty || '客').slice(0, 1)}
+                          </span>
+                        ) : (
+                          <span className="contract-party-avatar is-unlinked">?</span>
+                        )}
+                        <span>
+                          <strong>
+                            {contract.partner_short_name || contract.counterparty || '未填写签约方'}
+                          </strong>
+                          <small title={contract.counterparty}>
+                            {contract.counterparty || '未关联客户库'}
+                          </small>
+                        </span>
+                      </td>
+                      <td><span className="contract-type-badge">{contract.contract_type || '-'}</span></td>
+                      <td className="is-number contract-amount">{formatAmount(contract.amount)}</td>
+                      <td className="contract-date-cell">
+                        <strong>{contract.effective_date || '-'}</strong>
+                        <span>至 {contract.end_date || '-'}</span>
+                      </td>
+                      <td className="contract-status-cell">
+                        <ContractStatusTag status={contract.timeline_status} />
+                        <small>
+                          {[contract.signing_status, contract.performance_status].filter(Boolean).join(' · ') || '状态未填写'}
+                        </small>
+                      </td>
+                      <td>
+                        <span className={`contract-payment-tag is-${contract.payment_type || 'empty'}`}>
+                          {contract.payment_type || '-'}
+                        </span>
+                      </td>
+                      <td>
+                        <span className="contract-attachment-count">
+                          {contract.attachments?.length || 0} 个
+                        </span>
+                      </td>
+                      <td className="col-sticky-right" onClick={(event) => event.stopPropagation()}>
+                        <div className="contract-row-actions">
+                          <button type="button" onClick={() => setSelectedContract(contract)}>查看</button>
+                          <button type="button" onClick={() => openEditForm(contract)}>编辑</button>
+                          <button type="button" className="danger" onClick={() => removeContract(contract)}>删除</button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {!pagedRecords.length ? (
+                    <tr>
+                      <td colSpan={9} className="contract-empty">
+                        没有找到符合条件的合同
+                      </td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+            <div className="contract-pagination">
+              <span>第 {page} / {pageCount} 页</span>
+              <select value={pageSize} onChange={(event) => setPageSize(Number(event.target.value))}>
+                {PAGE_SIZE_OPTIONS.map((size) => (
+                  <option key={size} value={size}>{size} 条/页</option>
+                ))}
+              </select>
+              <button type="button" disabled={page <= 1} onClick={() => setPage((value) => value - 1)}>
+                上一页
+              </button>
+              <button
+                type="button"
+                disabled={page >= pageCount}
+                onClick={() => setPage((value) => value + 1)}
+              >
+                下一页
+              </button>
+            </div>
+          </>
+        )}
       </section>
 
-      {showForm && (
-        <div className="contract-editor-mask" onClick={() => setShowForm(false)}>
-          <div className="contract-editor" onClick={(e) => e.stopPropagation()}>
-            <h3>{editingId ? '编辑合同' : '新增合同'}</h3>
+      {editingId ? (
+        <div className="contract-editor-mask" onClick={closeEditor}>
+          <form className="contract-editor" onSubmit={saveContract} onClick={(event) => event.stopPropagation()}>
+            <div className="contract-editor-head">
+              <div>
+                <p>{editingId === 'new' ? '新增合同' : '编辑合同'}</p>
+                <h3>{editingId === 'new' ? '录入合同资料' : form.contract_name}</h3>
+              </div>
+              <button type="button" onClick={closeEditor}>关闭</button>
+            </div>
             <div className="contract-form-grid">
-              <label>合同编号<input value={formData.contractNo} onChange={(e)=>setFormData((s)=>({...s,contractNo:e.target.value}))} /></label>
-              <label>
-                系统编号
-                <button
-                  type="button"
-                  className="contract-generate-btn"
-                  onClick={() => setFormData((s) => ({ ...s, contractNo: generateContractNo(s.channel) }))}
-                >
-                  重新生成
-                </button>
-              </label>
-              <label>合同类型<input value={formData.contractType} onChange={(e)=>setFormData((s)=>({...s,contractType:e.target.value}))} /></label>
-              <label>负责人<input value={formData.owner} onChange={(e)=>setFormData((s)=>({...s,owner:e.target.value}))} /></label>
-              <label>签约日期<input type="date" value={formData.signingDate} onChange={(e)=>setFormData((s)=>({...s,signingDate:e.target.value}))} /></label>
-              <label>开始日期<input type="date" value={formData.startDate} onChange={(e)=>setFormData((s)=>({...s,startDate:e.target.value}))} /></label>
-              <label>结束日期<input type="date" value={formData.endDate} onChange={(e)=>setFormData((s)=>({...s,endDate:e.target.value}))} /></label>
-              <label>渠道简称 *<input value={formData.channel} onChange={(e)=>setFormData((s)=>({...s,channel:e.target.value}))} /></label>
-              <label>平台方 *<input value={formData.platform} onChange={(e)=>setFormData((s)=>({...s,platform:e.target.value}))} /></label>
-              <label>签约游戏 *<input value={formData.gamesText} onChange={(e)=>setFormData((s)=>({...s,gamesText:e.target.value, game:e.target.value}))} placeholder="多个游戏用 、 分隔" /></label>
-              <label>渠道分成<input value={formData.channelShare} onChange={(e)=>setFormData((s)=>({...s,channelShare:e.target.value}))} /></label>
-              <label>发行分成<input value={formData.issueShare} onChange={(e)=>setFormData((s)=>({...s,issueShare:e.target.value}))} /></label>
-              <label>通道费<input value={formData.channelFee} onChange={(e)=>setFormData((s)=>({...s,channelFee:e.target.value}))} /></label>
-              <label>地址<input value={formData.address} onChange={(e)=>setFormData((s)=>({...s,address:e.target.value}))} /></label>
-              <label>备注<input value={formData.note} onChange={(e)=>setFormData((s)=>({...s,note:e.target.value}))} /></label>
+              <Field label="合同名称" required value={form.contract_name} onChange={(value) => setForm({ ...form, contract_name: value })} wide />
+              <Field label="合同编号" value={form.contract_no} onChange={(value) => setForm({ ...form, contract_no: value })} />
+              <Field label="合同类型" value={form.contract_type} onChange={(value) => setForm({ ...form, contract_type: value })} />
+              <Field label="合同总额" value={form.amount} onChange={(value) => setForm({ ...form, amount: value })} inputMode="decimal" />
+              <Field label="合同签约方" value={form.counterparty} onChange={(value) => setForm({ ...form, counterparty: value })} wide />
+              <Field label="签订日期" type="date" value={form.signing_date} onChange={(value) => setForm({ ...form, signing_date: value })} />
+              <Field label="生效日期" type="date" value={form.effective_date} onChange={(value) => setForm({ ...form, effective_date: value })} />
+              <Field label="终止日期" type="date" value={form.end_date} onChange={(value) => setForm({ ...form, end_date: value })} />
+              <SelectField label="签订状态" value={form.signing_status} options={['', '签约中', '已签约']} onChange={(value) => setForm({ ...form, signing_status: value })} />
+              <SelectField label="履约状态" value={form.performance_status} options={['', '履约中', '已履约']} onChange={(value) => setForm({ ...form, performance_status: value })} />
+              <SelectField label="账款类型" value={form.payment_type} options={['', '收款', '付款']} onChange={(value) => setForm({ ...form, payment_type: value })} />
+              <Field label="合同附件名称" value={form.attachments} onChange={(value) => setForm({ ...form, attachments: value })} placeholder="多个附件用分号分隔" wide />
             </div>
-            <label className="contract-archive-toggle">
-              <input
-                type="checkbox"
-                checked={Boolean(formData.archived)}
-                onChange={(e) => setFormData((s) => ({ ...s, archived: e.target.checked }))}
-              />
-              标记为已归档
-            </label>
             <div className="contract-form-actions">
-              <button type="button" className="contract-save-btn" onClick={handleSave}>
-                {editingId ? '保存修改' : '添加合同'}
-              </button>
-              <button type="button" className="contract-cancel-btn" onClick={() => setShowForm(false)}>
-                取消
+              <button type="button" className="contract-cancel-btn" onClick={closeEditor}>取消</button>
+              <button type="submit" className="contract-save-btn" disabled={saving}>
+                {saving ? '正在保存…' : '保存合同'}
               </button>
             </div>
-          </div>
+          </form>
         </div>
-      )}
+      ) : null}
 
       <ContractDetailsDrawer
-        contract={selectedRow}
-        onClose={() => setSelectedRow(null)}
-        onEdit={(row) => {
-          setSelectedRow(null)
-          openEditForm(row)
-        }}
-        onRenew={(row) => {
-          setSelectedRow(null)
-          openRenewForm(row)
+        contract={selectedContract}
+        onClose={() => setSelectedContract(null)}
+        onEdit={(contract) => {
+          setSelectedContract(null)
+          openEditForm(contract)
         }}
       />
-
-      {moreTargetRow && (
-        <div className="contract-more-mask" onClick={() => setMoreTargetRow(null)}>
-          <div className="contract-more-panel" onClick={(e) => e.stopPropagation()}>
-            <h4>更多操作</h4>
-            <p>{moreTargetRow.contractNo || moreTargetRow.channel}</p>
-            <div className="contract-more-actions">
-              <button type="button" onClick={() => archiveContract(moreTargetRow)}>
-                归档
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setMoreTargetRow(null)
-                  handleDelete(moreTargetRow.id)
-                }}
-              >
-                删除
-              </button>
-              <button type="button" onClick={() => window.alert('下载附件：占位功能')}>
-                下载附件
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setMoreTargetRow(null)
-                  handleCopyNew(moreTargetRow)
-                }}
-              >
-                复制新增
-              </button>
-            </div>
-            <button type="button" className="contract-more-close" onClick={() => setMoreTargetRow(null)}>
-              关闭
-            </button>
-          </div>
-        </div>
-      )}
     </PageContainer>
+  )
+}
+
+function Field({
+  label,
+  value,
+  onChange,
+  type = 'text',
+  required = false,
+  wide = false,
+  inputMode,
+  placeholder
+}) {
+  return (
+    <label className={wide ? 'is-wide' : ''}>
+      <span>{label}{required ? ' *' : ''}</span>
+      <input
+        type={type}
+        value={value}
+        inputMode={inputMode}
+        placeholder={placeholder}
+        onChange={(event) => onChange(event.target.value)}
+      />
+    </label>
+  )
+}
+
+function SelectField({ label, value, onChange, options }) {
+  return (
+    <label>
+      <span>{label}</span>
+      <select value={value} onChange={(event) => onChange(event.target.value)}>
+        {options.map((option) => (
+          <option key={option || 'empty'} value={option}>{option || '未填写'}</option>
+        ))}
+      </select>
+    </label>
   )
 }
 

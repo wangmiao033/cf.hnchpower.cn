@@ -1,7 +1,8 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { useAppState } from '@/app/AppStateContext.jsx'
 import PageContainer from '@/components/layout/PageContainer.jsx'
 import { VIEWS } from '@/app/routes.js'
+import { listContracts } from '@/lib/api/contract.ts'
 import './CoreDashboardPage.css'
 
 function currency(value) {
@@ -14,6 +15,25 @@ function CoreDashboardPage() {
   const rdRecords = recon.records || []
   const channelRecords = recon.channelRecords || []
   const partners = settings.partners || []
+  const [contractSummary, setContractSummary] = useState({
+    total: 0,
+    amount_total: '0',
+    expiring_30: 0
+  })
+
+  useEffect(() => {
+    let active = true
+    listContracts({ limit: 1, offset: 0 })
+      .then((response) => {
+        if (active && response?.summary) setContractSummary(response.summary)
+      })
+      .catch(() => {
+        // 合同中心会展示完整错误态；工作台保持可用。
+      })
+    return () => {
+      active = false
+    }
+  }, [])
 
   const rdTotal = rdRecords.reduce((sum, row) => sum + Number(row.settlementAmount || 0), 0)
   const channelTotal = channelRecords.reduce((sum, row) => sum + Number(row.totalAmount || row.amount || 0), 0)
@@ -31,6 +51,12 @@ function CoreDashboardPage() {
       desc: '录入渠道结算明细',
       view: VIEWS.CHANNEL_RECON_CREATE,
       tone: 'channel'
+    },
+    {
+      label: '查看合同台账',
+      desc: '履约、到期与客户关联',
+      view: VIEWS.CONTRACTS,
+      tone: 'contract'
     },
     {
       label: '查看数据库流水',
@@ -66,6 +92,15 @@ function CoreDashboardPage() {
       tone: 'green'
     },
     {
+      name: '合同中心',
+      desc: '集中管理 WPS 合同、履约状态、到期提醒和客户关联。',
+      count: `${contractSummary.total} 份`,
+      amount: currency(contractSummary.amount_total),
+      meta: contractSummary.expiring_30 ? `${contractSummary.expiring_30} 份即将到期` : 'WPS 合同台账',
+      view: VIEWS.CONTRACTS,
+      tone: 'violet'
+    },
+    {
       name: '数据库',
       desc: '查看流水批次、产品排行、渠道排行和明细。',
       count: 'QK',
@@ -91,10 +126,10 @@ function CoreDashboardPage() {
         <div className="core-dashboard-hero__copy">
           <p className="core-dashboard-eyebrow">核心财务后台</p>
           <h1>对账管理系统</h1>
-          <p>当前版本只保留四个稳定核心：研发对账、渠道对账、数据库、客户库。日常工作从这里快速进入。</p>
+          <p>研发对账、渠道对账、合同、流水和客户资料集中在一个工作台，重要状态一眼可见。</p>
           <div className="core-dashboard-hero__meta" role="group" aria-label="工作台状态">
             <span>账期：{settlementMonth}</span>
-            <span>核心入口：4 个</span>
+            <span>核心入口：5 个</span>
             <span>客户资料：{partners.length} 个</span>
           </div>
         </div>
@@ -135,7 +170,7 @@ function CoreDashboardPage() {
       <section className="core-dashboard-modules" aria-label="核心模块">
         <div className="core-dashboard-section-title">
           <strong>核心模块</strong>
-          <span>保留已验证稳定的四个业务入口</span>
+          <span>五个核心业务入口统一管理</span>
         </div>
         <div className="core-dashboard-module-grid">
           {modules.map((module) => (

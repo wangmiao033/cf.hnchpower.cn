@@ -10,6 +10,7 @@ export const VIEWS = {
   RECON_CHANNEL: 'recon-channel',
   CHANNEL_RECON_CREATE: 'channel-recon-create',
   CHANNEL_RECON_EDIT: 'channel-recon-edit',
+  CONTRACTS: 'contracts',
   QUICKSDK_LIBRARY: 'quicksdk-library',
   PARTNER_CONTACTS: 'partner-contacts',
   USER_CENTER: 'user-center'
@@ -30,6 +31,11 @@ export const SIDEBAR_GROUPS = [
     ]
   },
   {
+    id: 'contracts',
+    label: '合同中心',
+    items: [{ view: VIEWS.CONTRACTS, label: '合同台账' }]
+  },
+  {
     id: 'data',
     label: '数据中心',
     items: [
@@ -47,19 +53,21 @@ const VIEW_TITLES = {
   [VIEWS.RECON_CHANNEL]: '渠道账单',
   [VIEWS.CHANNEL_RECON_CREATE]: '新增渠道账单',
   [VIEWS.CHANNEL_RECON_EDIT]: '编辑渠道账单',
+  [VIEWS.CONTRACTS]: '合同台账',
   [VIEWS.QUICKSDK_LIBRARY]: '数据库',
   [VIEWS.PARTNER_CONTACTS]: '客户库',
   [VIEWS.USER_CENTER]: '用户中心'
 }
 
 const VIEW_DESCRIPTIONS = {
-  [VIEWS.DASHBOARD]: '只保留稳定核心：研发对账、渠道对账、数据库和客户库。',
+  [VIEWS.DASHBOARD]: '研发对账、渠道对账、合同、数据库和客户资料统一管理。',
   [VIEWS.RECON_RD]: '保留现有研发账单计算、录入、筛选、导入和导出逻辑。',
   [VIEWS.RECON_CREATE]: '使用现有研发账单录入逻辑新增记录。',
   [VIEWS.RECON_EDIT]: '使用现有研发账单编辑逻辑维护记录。',
   [VIEWS.RECON_CHANNEL]: '保留现有渠道账单计算、导入、编辑和导出逻辑。',
   [VIEWS.CHANNEL_RECON_CREATE]: '使用现有渠道账单录入逻辑新增记录。',
   [VIEWS.CHANNEL_RECON_EDIT]: '使用现有渠道账单编辑逻辑维护记录。',
+  [VIEWS.CONTRACTS]: '统一维护 WPS 合同台账、履约状态、到期提醒和客户关联。',
   [VIEWS.QUICKSDK_LIBRARY]: '查看已导入月份、批次、产品、渠道和流水明细。',
   [VIEWS.PARTNER_CONTACTS]: '维护合作方/客户资料，供对账单复用。',
   [VIEWS.USER_CENTER]: '管理当前账号、登录密码和设备会话。'
@@ -73,6 +81,7 @@ export const VIEW_ICONS = {
   [VIEWS.RECON_CHANNEL]: '渠',
   [VIEWS.CHANNEL_RECON_CREATE]: '增',
   [VIEWS.CHANNEL_RECON_EDIT]: '编',
+  [VIEWS.CONTRACTS]: '合',
   [VIEWS.QUICKSDK_LIBRARY]: '流',
   [VIEWS.PARTNER_CONTACTS]: '客',
   [VIEWS.USER_CENTER]: '户'
