@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { useAppState } from '@/app/AppStateContext.jsx'
 import PageContainer from '@/components/layout/PageContainer.jsx'
 import ChannelBillingForm from '@/components/channel/ChannelBillingForm.jsx'
+import { CoreBillLoadingState } from '@/pages/CoreBillLoadingState.jsx'
 import { VIEWS } from '@/app/routes.js'
 import { apiChannelRowToFrontend, getChannelRecord } from '@/lib/api/channel.ts'
 import './CoreBillFormPages.css'
@@ -69,7 +70,7 @@ function CoreChannelBillFormPage({ mode }) {
   }
 
   if (loading) {
-    return <EmptyState title="正在加载渠道账单..." onBack={goList} />
+    return <CoreBillLoadingState billType="渠道账单" />
   }
 
   if (isEdit && !stableRecord) {

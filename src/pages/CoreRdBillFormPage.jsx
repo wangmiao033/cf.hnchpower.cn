@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { useAppState } from '@/app/AppStateContext.jsx'
 import PageContainer from '@/components/layout/PageContainer.jsx'
 import ReconciliationLineItemsForm from '@/components/reconciliation/ReconciliationLineItemsForm.jsx'
+import { CoreBillLoadingState } from '@/pages/CoreBillLoadingState.jsx'
 import { VIEWS } from '@/app/routes.js'
 import {
   apiRowToFrontend,
@@ -77,7 +78,7 @@ function CoreRdBillFormPage({ mode }) {
   }
 
   if (loading) {
-    return <EmptyState title="正在加载研发账单..." onBack={goList} />
+    return <CoreBillLoadingState billType="研发账单" />
   }
 
   if (isEdit && !stableEditRecord) {
