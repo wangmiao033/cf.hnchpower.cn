@@ -92,13 +92,13 @@ function CoreDashboardPage() {
           <p className="core-dashboard-eyebrow">核心财务后台</p>
           <h1>对账管理系统</h1>
           <p>当前版本只保留四个稳定核心：研发对账、渠道对账、数据库、客户库。日常工作从这里快速进入。</p>
-          <div className="core-dashboard-hero__meta" aria-label="工作台状态">
+          <div className="core-dashboard-hero__meta" role="group" aria-label="工作台状态">
             <span>账期：{settlementMonth}</span>
             <span>核心入口：4 个</span>
             <span>客户资料：{partners.length} 个</span>
           </div>
         </div>
-        <div className="core-dashboard-kpis" aria-label="对账金额概览">
+        <div className="core-dashboard-kpis" role="group" aria-label="对账金额概览">
           <button type="button" className="core-dashboard-kpi" onClick={() => setActiveView(VIEWS.RECON_RD)}>
             <span>研发对账金额</span>
             <strong>{currency(rdTotal)}</strong>
