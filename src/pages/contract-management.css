@@ -7,8 +7,10 @@
   max-width: 1700px;
   margin: 0 auto;
   display: flex;
+  flex: 0 0 auto;
   flex-direction: column;
   gap: 10px;
+  min-height: auto;
 }
 
 .contract-hero,
@@ -253,6 +255,7 @@
 }
 
 .contract-table-card {
+  flex: 0 0 auto;
   min-height: 420px;
   overflow: hidden;
 }
@@ -288,7 +291,8 @@
 
 .contract-table-wrap {
   max-height: none;
-  overflow: auto;
+  overflow-x: auto;
+  overflow-y: visible;
 }
 
 .contract-page .contract-table {
