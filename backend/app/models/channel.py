@@ -14,6 +14,7 @@ class ChannelRecord(Base):
     __tablename__ = "channel_records"
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
+    statement_no: Mapped[str | None] = mapped_column(String, nullable=True, unique=True)
     channel_name: Mapped[str | None] = mapped_column(String, nullable=True)
     partner_name: Mapped[str | None] = mapped_column(String, nullable=True)
     game_name: Mapped[str | None] = mapped_column(String, nullable=True)

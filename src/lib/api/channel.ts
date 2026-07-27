@@ -29,6 +29,7 @@ export type ApiChannelLineItem = {
 
 export type ApiChannelRow = {
   id: string
+  statement_no: string | null
   channel_name: string | null
   partner_name: string | null
   game_name: string | null
@@ -84,6 +85,7 @@ export type ChannelLinePayload = {
 }
 
 export type ChannelRecordPayload = {
+  statement_no?: string | null
   channel_name?: string | null
   partner_name?: string | null
   settlement_month?: string | null
@@ -238,6 +240,7 @@ export function apiChannelRowToFrontend(row: ApiChannelRow): Record<string, unkn
   const items = (row.items ?? []).map(apiLineToFrontend)
   const record = {
     id: row.id != null ? String(row.id) : '',
+    statementNo: row.statement_no ?? '',
     createdAt: row.created_at,
     channelName: row.channel_name ?? '',
     partnerName: row.partner_name ?? '',
@@ -270,7 +273,7 @@ export function apiChannelRowToFrontend(row: ApiChannelRow): Record<string, unkn
   }
   return {
     ...record,
-    billNumber: getChannelBillNumber(record)
+    billNumber: row.statement_no || getChannelBillNumber(record)
   }
 }
 
@@ -279,6 +282,10 @@ export function frontendChannelRecordToPayload(record: Record<string, unknown>):
   const rawItems = record.items as Record<string, unknown>[] | undefined
   const items = Array.isArray(rawItems) ? rawItems.map(frontendLineToPayload) : []
   return {
+    statement_no:
+      record.billNumber != null && String(record.billNumber).trim() !== ''
+        ? String(record.billNumber).trim()
+        : null,
     channel_name: (record.channelName as string) || null,
     partner_name: (record.partnerName as string) || null,
     settlement_month: (record.settlementMonth as string) || null,

@@ -78,6 +78,7 @@ class ChannelLineItemRead(BaseModel):
 
 
 class ChannelRecordCreate(BaseModel):
+    statement_no: str | None = None
     channel_name: str | None = None
     partner_name: str | None = None
     settlement_month: str | None = None
@@ -94,6 +95,7 @@ class ChannelRecordCreate(BaseModel):
 
 
 class ChannelRecordUpdate(BaseModel):
+    statement_no: str | None = None
     channel_name: str | None = None
     partner_name: str | None = None
     settlement_month: str | None = None
@@ -113,6 +115,7 @@ class ChannelRecordRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
+    statement_no: str | None = None
     channel_name: str | None
     partner_name: str | None
     game_name: str | None

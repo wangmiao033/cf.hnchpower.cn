@@ -109,6 +109,8 @@ export function useReconciliationStore(settings, showToast, options = {}) {
   const [selectedCycleKey, setSelectedCycleKey] = useState(null)
   const [reconciliationApiEnabled, setReconciliationApiEnabled] = useState(false)
   const [channelApiEnabled, setChannelApiEnabled] = useState(false)
+  const [reconciliationHydrated, setReconciliationHydrated] = useState(false)
+  const [channelHydrated, setChannelHydrated] = useState(false)
 
   const showToastRef = useRef(showToast)
   showToastRef.current = showToast
@@ -134,6 +136,13 @@ export function useReconciliationStore(settings, showToast, options = {}) {
       try {
         const { items } = await listReconciliationRecords({ limit: 500, offset: 0 })
         if (cancelled) return
+        const savedRecords = storageGet(STORAGE_KEYS.RECONCILIATION_RECORDS)
+        if (items.length === 0 && Array.isArray(savedRecords) && savedRecords.length > 0) {
+          console.warn('Reconciliation API returned no records; preserving the non-empty local cache.')
+          setRecords(normalizeLocalReconciliationRecords(savedRecords))
+          setReconciliationApiEnabled(false)
+          return
+        }
         setRecords(items.map(apiRowToFrontend))
         setReconciliationApiEnabled(true)
       } catch (err) {
@@ -144,6 +153,8 @@ export function useReconciliationStore(settings, showToast, options = {}) {
           setRecords(normalizeLocalReconciliationRecords(savedRecords))
         }
         setReconciliationApiEnabled(false)
+      } finally {
+        if (!cancelled) setReconciliationHydrated(true)
       }
     })()
     return () => {
@@ -158,6 +169,13 @@ export function useReconciliationStore(settings, showToast, options = {}) {
       try {
         const { items } = await listChannelRecords({ limit: 500, offset: 0 })
         if (cancelled) return
+        const savedChannel = storageGet(STORAGE_KEYS.CHANNEL_RECORDS)
+        if (items.length === 0 && Array.isArray(savedChannel) && savedChannel.length > 0) {
+          console.warn('Channel API returned no records; preserving the non-empty local cache.')
+          setChannelRecords(normalizeLocalChannelRecords(savedChannel))
+          setChannelApiEnabled(false)
+          return
+        }
         setChannelRecords(items.map(apiChannelRowToFrontend))
         setChannelApiEnabled(true)
       } catch (err) {
@@ -168,6 +186,8 @@ export function useReconciliationStore(settings, showToast, options = {}) {
           setChannelRecords(normalizeLocalChannelRecords(savedChannel))
         }
         setChannelApiEnabled(false)
+      } finally {
+        if (!cancelled) setChannelHydrated(true)
       }
     })()
     return () => {
@@ -176,13 +196,15 @@ export function useReconciliationStore(settings, showToast, options = {}) {
   }, [enabled])
 
   useEffect(() => {
+    if (!reconciliationHydrated) return
     storageSet(STORAGE_KEYS.RECONCILIATION_RECORDS, records)
     setLastSaveTime(new Date())
-  }, [records])
+  }, [records, reconciliationHydrated])
 
   useEffect(() => {
+    if (!channelHydrated) return
     storageSet(STORAGE_KEYS.CHANNEL_RECORDS, channelRecords)
-  }, [channelRecords])
+  }, [channelRecords, channelHydrated])
 
   const filteredRecords = useMemo(
     () =>

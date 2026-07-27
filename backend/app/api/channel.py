@@ -159,6 +159,7 @@ def _apply_filters(
         )
         stmt = stmt.where(
             or_(
+                ChannelRecord.statement_no.ilike(term),
                 ChannelRecord.channel_name.ilike(term),
                 ChannelRecord.game_name.ilike(term),
                 ChannelRecord.settlement_month.ilike(term),

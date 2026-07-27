@@ -1,6 +1,10 @@
 import React from 'react'
 import './ErrorBoundary.css'
 
+const CHUNK_ERROR_PATTERN =
+  /ChunkLoadError|Failed to fetch dynamically imported module|Importing a module script failed|error loading dynamically imported module/i
+const CHUNK_RECOVERY_KEY = 'cf-chunk-recovery'
+
 class ErrorBoundary extends React.Component {
   constructor(props) {
     super(props)
@@ -13,6 +17,13 @@ class ErrorBoundary extends React.Component {
 
   componentDidCatch(error, errorInfo) {
     console.error('错误捕获:', error, errorInfo)
+    const message = `${error?.name || ''} ${error?.message || ''}`
+    if (!CHUNK_ERROR_PATTERN.test(message)) return
+
+    const pageKey = `${window.location.pathname}${window.location.search}`
+    if (window.sessionStorage.getItem(CHUNK_RECOVERY_KEY) === pageKey) return
+    window.sessionStorage.setItem(CHUNK_RECOVERY_KEY, pageKey)
+    window.location.reload()
   }
 
   handleReset = () => {
