@@ -53,6 +53,12 @@ function monthLabel(value) {
   return match ? `${match[1]}年${Number(match[2])}月` : normalized
 }
 
+function billMonthLabel(value) {
+  const normalized = monthKey(value)
+  const match = normalized.match(/^(\d{4})-(\d{2})$/)
+  return match ? `${match[1]}年${Number(match[2])}月` : text(value)
+}
+
 function gameText(row) {
   if (Array.isArray(row.items) && row.items.length > 0) {
     return row.items.map((item) => item.gameName).filter(Boolean).join('、')
@@ -304,27 +310,27 @@ function CoreReconciliationPage() {
         <div className="core-recon-table-wrap">
           <table className="core-recon-table core-rd-recon-table">
             <colgroup>
-              <col className="core-rd-col-check" />
-              <col className="core-rd-col-number" />
               <col className="core-rd-col-month" />
+              <col className="core-rd-col-number" />
               <col className="core-rd-col-partner" />
               <col className="core-rd-col-game" />
               <col className="core-rd-col-flow" />
               <col className="core-rd-col-share" />
               <col className="core-rd-col-settlement" />
+              <col className="core-rd-col-received" />
               <col className="core-rd-col-status" />
               <col className="core-rd-col-actions" />
             </colgroup>
             <thead>
               <tr>
-                <th>选择</th>
+                <th>账单月份</th>
                 <th>编号</th>
-                <th>月份</th>
-                <th>合作方</th>
-                <th>游戏</th>
+                <th>客户简称</th>
+                <th>产品</th>
                 <th className="core-recon-align-right">流水</th>
-                <th className="core-recon-align-right">分成</th>
+                <th className="core-recon-align-right">分成比例</th>
                 <th className="core-recon-align-right">结算金额</th>
+                <th className="core-recon-align-right">收款</th>
                 <th>状态</th>
                 <th>操作</th>
               </tr>
@@ -336,17 +342,20 @@ function CoreReconciliationPage() {
                 </tr>
               ) : (
                 rows.map((row) => (
-                  <tr key={row.id}>
-                    <td>
+                  <tr
+                    key={row.id}
+                    className={selectedIds.includes(String(row.id)) ? 'is-selected' : ''}
+                  >
+                    <td className="core-rd-month-cell">
                       <input
                         type="checkbox"
                         aria-label={`选择账单 ${text(row.settlementNumber)}`}
                         checked={selectedIds.includes(String(row.id))}
                         onChange={() => toggleSelected(row.id)}
                       />
+                      <span>{billMonthLabel(row.settlementMonth)}</span>
                     </td>
                     <td>{text(row.settlementNumber)}</td>
-                    <td>{text(row.settlementMonth)}</td>
                     <td>
                       <strong
                         className="core-recon-partner-short-name"
@@ -368,6 +377,12 @@ function CoreReconciliationPage() {
                     </td>
                     <td className="core-recon-money core-recon-money--settlement">
                       {money(recordSettlementAmount(row))}
+                    </td>
+                    <td
+                      className="core-recon-money core-recon-money--received"
+                      title={row.paymentStatus || '未付款'}
+                    >
+                      {money(row.paidAmount)}
                     </td>
                     <td>
                       <span className={`core-recon-status core-recon-status--${row.status || 'pending'}`}>

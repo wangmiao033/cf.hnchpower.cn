@@ -234,20 +234,16 @@
 }
 
 .core-rd-recon-table {
-  min-width: 1380px;
+  min-width: 1120px;
   table-layout: fixed;
 }
 
-.core-rd-recon-table .core-rd-col-check {
-  width: 54px;
-}
-
 .core-rd-recon-table .core-rd-col-number {
-  width: 150px;
+  width: 145px;
 }
 
 .core-rd-recon-table .core-rd-col-month {
-  width: 100px;
+  width: 128px;
 }
 
 .core-rd-recon-table .core-rd-col-partner {
@@ -255,42 +251,52 @@
 }
 
 .core-rd-recon-table .core-rd-col-game {
-  width: 405px;
+  width: 250px;
 }
 
 .core-rd-recon-table .core-rd-col-flow {
-  width: 150px;
-}
-
-.core-rd-recon-table .core-rd-col-share {
-  width: 72px;
-}
-
-.core-rd-recon-table .core-rd-col-settlement {
   width: 130px;
 }
 
+.core-rd-recon-table .core-rd-col-share {
+  width: 86px;
+}
+
+.core-rd-recon-table .core-rd-col-settlement {
+  width: 120px;
+}
+
+.core-rd-recon-table .core-rd-col-received {
+  width: 110px;
+}
+
 .core-rd-recon-table .core-rd-col-status {
-  width: 90px;
+  width: 82px;
 }
 
 .core-rd-recon-table .core-rd-col-actions {
-  width: 112px;
+  width: 108px;
 }
 
 .core-rd-recon-table tbody td {
-  height: 50px;
+  height: 42px;
   vertical-align: middle;
 }
 
-.core-rd-recon-table th:first-child,
-.core-rd-recon-table td:first-child {
-  text-align: center;
+.core-rd-recon-table tbody tr.is-selected {
+  background: #eff6ff;
+}
+
+.core-rd-month-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .core-rd-recon-table input[type='checkbox'] {
-  width: 15px;
-  height: 15px;
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
   margin: 0;
   accent-color: var(--admin-primary);
   cursor: pointer;
@@ -336,6 +342,11 @@
 .core-recon-money--settlement {
   color: #1d4ed8 !important;
   font-weight: 700;
+}
+
+.core-recon-money--received {
+  color: #0f766e !important;
+  font-weight: 600;
 }
 
 .core-recon-rate {
