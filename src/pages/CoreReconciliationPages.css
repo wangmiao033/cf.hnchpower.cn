@@ -327,12 +327,24 @@
 }
 
 .core-channel-recon-table {
-  min-width: 1240px;
+  min-width: 1390px;
   table-layout: fixed;
 }
 
 .core-channel-recon-table .core-channel-col-month {
   width: 128px;
+}
+
+.core-channel-recon-table .core-channel-col-number {
+  width: 150px;
+}
+
+.core-recon-number {
+  overflow: hidden;
+  color: #1f4c8f;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .core-channel-recon-table .core-channel-col-channel {

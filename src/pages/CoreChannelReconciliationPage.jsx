@@ -4,6 +4,7 @@ import { useAppState } from '@/app/AppStateContext.jsx'
 import PageContainer from '@/components/layout/PageContainer.jsx'
 import { VIEWS } from '@/app/routes.js'
 import { buildChannelBillFromSingleGameForm } from '@/domain/channel/channelBillingForm.js'
+import { getChannelBillNumber } from '@/utils/channelBillNumber.js'
 import './CoreReconciliationPages.css'
 
 const STATUS_LABELS = {
@@ -68,7 +69,7 @@ function CoreChannelReconciliationPage() {
       const matchesChannel =
         !channelQuery || text(row.channelName, '').toLowerCase().includes(channelQuery)
       const matchesStatus = !status || String(row.status || 'pending') === status
-      const haystack = [row.channelName, row.partnerName, row.gameName, row.remark]
+      const haystack = [getChannelBillNumber(row), row.channelName, row.partnerName, row.gameName, row.remark]
         .filter(Boolean)
         .join(' ')
         .toLowerCase()
@@ -108,6 +109,7 @@ function CoreChannelReconciliationPage() {
     }
     const data = target.map((row) => ({
       月份: row.settlementMonth || '',
+      编号: getChannelBillNumber(row),
       渠道: row.channelName || '',
       合作方: row.partnerName || '',
       产品: row.gameName || '',
@@ -266,6 +268,7 @@ function CoreChannelReconciliationPage() {
           <table className="core-recon-table core-channel-recon-table">
             <colgroup>
               <col className="core-channel-col-month" />
+              <col className="core-channel-col-number" />
               <col className="core-channel-col-channel" />
               <col className="core-channel-col-partner" />
               <col className="core-channel-col-game" />
@@ -279,6 +282,7 @@ function CoreChannelReconciliationPage() {
             <thead>
               <tr>
                 <th>账单月份</th>
+                <th>编号</th>
                 <th>渠道</th>
                 <th>合作方</th>
                 <th>产品</th>
@@ -293,7 +297,7 @@ function CoreChannelReconciliationPage() {
             <tbody>
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="core-recon-empty">暂无渠道账单</td>
+                  <td colSpan={11} className="core-recon-empty">暂无渠道账单</td>
                 </tr>
               ) : (
                 rows.map((row) => (
@@ -310,6 +314,7 @@ function CoreChannelReconciliationPage() {
                       />
                       <span>{monthLabel(row.settlementMonth)}</span>
                     </td>
+                    <td className="core-recon-number">{getChannelBillNumber(row)}</td>
                     <td>
                       <strong className="core-recon-partner-short-name" title={text(row.channelName)}>
                         {text(row.channelName)}

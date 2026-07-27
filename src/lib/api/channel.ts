@@ -3,6 +3,7 @@
  */
 
 import { apiDelete, apiGet, apiPost, apiPostMultipart, apiPut } from '@/lib/api/client.ts'
+import { getChannelBillNumber } from '@/utils/channelBillNumber.js'
 
 export type ApiChannelLineItem = {
   id: string
@@ -235,8 +236,9 @@ function frontendLineToPayload(line: Record<string, unknown>): ChannelLinePayloa
 /** API 行 -> 前端列表/表单（含 items） */
 export function apiChannelRowToFrontend(row: ApiChannelRow): Record<string, unknown> {
   const items = (row.items ?? []).map(apiLineToFrontend)
-  return {
+  const record = {
     id: row.id != null ? String(row.id) : '',
+    createdAt: row.created_at,
     channelName: row.channel_name ?? '',
     partnerName: row.partner_name ?? '',
     gameName: row.game_name ?? '',
@@ -265,6 +267,10 @@ export function apiChannelRowToFrontend(row: ApiChannelRow): Record<string, unkn
     devShareRate: row.dev_share_rate,
     profitRate: row.profit_rate,
     items
+  }
+  return {
+    ...record,
+    billNumber: getChannelBillNumber(record)
   }
 }
 
