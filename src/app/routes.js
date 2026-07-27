@@ -5,6 +5,7 @@
 export const VIEWS = {
   DASHBOARD: 'dashboard',
   RECON_RD: 'recon-rd',
+  RECON_PROGRESS: 'recon-progress',
   RECON_CREATE: 'recon-create',
   RECON_EDIT: 'recon-edit',
   RECON_CHANNEL: 'recon-channel',
@@ -27,6 +28,7 @@ export const SIDEBAR_GROUPS = [
     label: '核心对账',
     items: [
       { view: VIEWS.RECON_RD, label: '研发账单' },
+      { view: VIEWS.RECON_PROGRESS, label: '对账进度' },
       { view: VIEWS.RECON_CHANNEL, label: '渠道账单' }
     ]
   },
@@ -48,6 +50,7 @@ export const SIDEBAR_GROUPS = [
 const VIEW_TITLES = {
   [VIEWS.DASHBOARD]: '核心工作台',
   [VIEWS.RECON_RD]: '研发账单',
+  [VIEWS.RECON_PROGRESS]: '研发对账进度',
   [VIEWS.RECON_CREATE]: '新增研发账单',
   [VIEWS.RECON_EDIT]: '编辑研发账单',
   [VIEWS.RECON_CHANNEL]: '渠道账单',
@@ -62,6 +65,7 @@ const VIEW_TITLES = {
 const VIEW_DESCRIPTIONS = {
   [VIEWS.DASHBOARD]: '研发对账、渠道对账、合同、数据库和客户资料统一管理。',
   [VIEWS.RECON_RD]: '保留现有研发账单计算、录入、筛选、导入和导出逻辑。',
+  [VIEWS.RECON_PROGRESS]: '集中查看研发账单核对、结算、付款覆盖率和待处理明细。',
   [VIEWS.RECON_CREATE]: '使用现有研发账单录入逻辑新增记录。',
   [VIEWS.RECON_EDIT]: '使用现有研发账单编辑逻辑维护记录。',
   [VIEWS.RECON_CHANNEL]: '保留现有渠道账单计算、导入、编辑和导出逻辑。',
@@ -76,6 +80,7 @@ const VIEW_DESCRIPTIONS = {
 export const VIEW_ICONS = {
   [VIEWS.DASHBOARD]: '总',
   [VIEWS.RECON_RD]: '研',
+  [VIEWS.RECON_PROGRESS]: '进',
   [VIEWS.RECON_CREATE]: '增',
   [VIEWS.RECON_EDIT]: '编',
   [VIEWS.RECON_CHANNEL]: '渠',

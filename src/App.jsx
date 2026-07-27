@@ -14,6 +14,7 @@ import '@/styles/admin-polish.css'
 
 const CoreDashboardPage = lazy(() => import('./pages/CoreDashboardPage.jsx'))
 const CoreReconciliationPage = lazy(() => import('./pages/CoreReconciliationPage.jsx'))
+const RdReconciliationProgressPage = lazy(() => import('./pages/RdReconciliationProgressPage.jsx'))
 const ReconciliationCreatePage = lazy(() => import('./pages/ReconciliationCreatePage.jsx'))
 const ReconciliationEditPage = lazy(() => import('./pages/ReconciliationEditPage.jsx'))
 const CoreChannelReconciliationPage = lazy(() => import('./pages/CoreChannelReconciliationPage.jsx'))
@@ -42,6 +43,7 @@ function App() {
       .flatMap((group) => group.items.map((item) => item.view))
   )
   const [reconEditRecordId, setReconEditRecordId] = useState(null)
+  const [reconReturnView, setReconReturnView] = useState(VIEWS.RECON_RD)
   const [channelEditRecordId, setChannelEditRecordId] = useState(null)
   const prevActiveViewRef = useRef(activeView)
   const [toast, setToast] = useState({ isVisible: false, message: '', type: 'success' })
@@ -105,8 +107,9 @@ function App() {
     prevActiveViewRef.current = activeView
   }, [activeView])
 
-  const openReconciliationEdit = useCallback((id) => {
+  const openReconciliationEdit = useCallback((id, returnView = VIEWS.RECON_RD) => {
     setReconEditRecordId(id)
+    setReconReturnView(returnView)
     setActiveViewRaw(VIEWS.RECON_EDIT)
   }, [])
 
@@ -128,6 +131,7 @@ function App() {
     setActiveViewRaw,
     activeView,
     reconEditRecordId,
+    reconReturnView,
     openReconciliationEdit,
     channelEditRecordId,
     openChannelReconciliationEdit,
@@ -144,6 +148,8 @@ function App() {
     switch (activeView) {
       case VIEWS.RECON_RD:
         return <CoreReconciliationPage />
+      case VIEWS.RECON_PROGRESS:
+        return <RdReconciliationProgressPage />
       case VIEWS.RECON_CREATE:
         return <ReconciliationCreatePage />
       case VIEWS.RECON_EDIT:

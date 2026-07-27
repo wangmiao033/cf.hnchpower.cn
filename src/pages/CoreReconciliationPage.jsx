@@ -13,8 +13,6 @@ import {
   apiRowToFrontend,
   getReconciliationRecord
 } from '@/lib/api/reconciliation.ts'
-import RdReconciliationProgressPanel from '@/components/reconciliation/RdReconciliationProgressPanel.jsx'
-import { summarizeRdReconciliationProgress } from '@/domain/reconciliation/rdReconciliationProgress.js'
 import './CoreReconciliationPages.css'
 import '@/components/reconciliation/reconciliation-admin.css'
 
@@ -92,7 +90,6 @@ function CoreReconciliationPage() {
   const [query, setQuery] = useState('')
   const [selectedIds, setSelectedIds] = useState([])
   const [isExporting, setIsExporting] = useState(false)
-  const [progressExpanded, setProgressExpanded] = useState(true)
 
   const monthOptions = useMemo(
     () =>
@@ -167,15 +164,6 @@ function CoreReconciliationPage() {
       { label: '结算金额', value: money(total) }
     ]
   }, [rows])
-
-  const progressSnapshot = useMemo(
-    () =>
-      summarizeRdReconciliationProgress(rows, {
-        month,
-        settlementResolver: recordSettlementAmount
-      }),
-    [rows, month]
-  )
 
   const toggleSelected = (id) => {
     const sid = String(id)
@@ -336,13 +324,6 @@ function CoreReconciliationPage() {
           </button>
         </div>
       </section>
-
-      <RdReconciliationProgressPanel
-        snapshot={progressSnapshot}
-        expanded={progressExpanded}
-        onToggle={() => setProgressExpanded((value) => !value)}
-        onEdit={(id) => openReconciliationEdit(String(id))}
-      />
 
       <section className="core-recon-stats">
         {stats.map((item) => (

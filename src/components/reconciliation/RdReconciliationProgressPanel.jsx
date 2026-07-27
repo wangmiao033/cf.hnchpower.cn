@@ -34,7 +34,7 @@ function ProgressBar({ value, tone = 'blue' }) {
 
 function RdReconciliationProgressPanel({
   snapshot,
-  expanded,
+  expanded = true,
   onToggle,
   onEdit
 }) {
@@ -51,11 +51,13 @@ function RdReconciliationProgressPanel({
           </div>
           <p>跟随当前筛选实时统计 · 结算金额为主口径，账单数量为辅助口径</p>
         </div>
-        <div className="channel-progress-actions">
-          <button type="button" className="channel-progress-toggle" onClick={onToggle}>
-            {expanded ? '收起' : '展开'}
-          </button>
-        </div>
+        {typeof onToggle === 'function' && (
+          <div className="channel-progress-actions">
+            <button type="button" className="channel-progress-toggle" onClick={onToggle}>
+              {expanded ? '收起' : '展开'}
+            </button>
+          </div>
+        )}
       </div>
 
       {expanded && (
@@ -157,7 +159,7 @@ function RdReconciliationProgressPanel({
                           <button
                             type="button"
                             className="rd-progress-edit"
-                            onClick={() => onEdit(row.id)}
+                            onClick={() => onEdit?.(row.id)}
                           >
                             编辑
                           </button>

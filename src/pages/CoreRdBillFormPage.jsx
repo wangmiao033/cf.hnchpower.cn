@@ -20,7 +20,14 @@ function money(value) {
 }
 
 function CoreRdBillFormPage({ mode }) {
-  const { recon, settings, showToast, setActiveView, reconEditRecordId } = useAppState()
+  const {
+    recon,
+    settings,
+    showToast,
+    setActiveView,
+    reconEditRecordId,
+    reconReturnView
+  } = useAppState()
   const isEdit = mode === 'edit'
   const submitIntentRef = useRef('back')
   const [previewAmount, setPreviewAmount] = useState(0)
@@ -61,7 +68,7 @@ function CoreRdBillFormPage({ mode }) {
 
   const goList = () => {
     recon.setQuickFillData(null)
-    setActiveView(VIEWS.RECON_RD)
+    setActiveView(isEdit ? reconReturnView || VIEWS.RECON_RD : VIEWS.RECON_RD)
   }
 
   const handleSubmitted = (intent) => {

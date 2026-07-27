@@ -316,6 +316,64 @@
   color: #15803d;
 }
 
+.rd-progress-page .page-container-body {
+  gap: 12px;
+}
+
+.rd-progress-page .page-container-body > * {
+  flex-shrink: 0;
+}
+
+.rd-progress-workbar .core-recon-head {
+  min-height: 76px;
+}
+
+.rd-progress-title-mark {
+  border-color: #bbf7d0;
+  background: #ecfdf5;
+  color: #15803d;
+}
+
+.rd-progress-scope {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  color: var(--admin-text-tertiary);
+}
+
+.rd-progress-scope strong {
+  color: var(--admin-text-main);
+  font-size: 24px;
+  font-variant-numeric: tabular-nums;
+}
+
+.rd-progress-scope span {
+  font-size: 12px;
+}
+
+.rd-progress-filters .core-recon-filter-control:first-child {
+  min-width: 210px;
+}
+
+.rd-progress-page .channel-progress-panel {
+  overflow: hidden;
+}
+
+.rd-progress-page .channel-progress-body {
+  overflow: hidden;
+  border-radius: 0 0 8px 8px;
+}
+
+.rd-progress-page .channel-progress-table-wrap {
+  min-height: 260px;
+  max-height: calc(100vh - 535px);
+}
+
+.rd-progress-page .channel-progress-head {
+  padding-top: 14px;
+  padding-bottom: 14px;
+}
+
 .channel-progress-head p {
   margin: 5px 0 0;
   overflow: hidden;
