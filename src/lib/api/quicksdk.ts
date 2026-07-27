@@ -195,7 +195,7 @@ export function getQuickSdkGameFlow(params: {
   return apiGet<QuickSdkGameFlowResponse>(
     `${PATH}/game-flow${queryString(params)}`,
     READ_OPTIONS
-  )
+  ).catch(() => getQuickSdkGameFlowFromFlows(params))
 }
 
 async function buildAnalyticsFromFlows(params: { settlement_month?: string }) {
@@ -272,6 +272,47 @@ async function listQuickSdkRdLinesFromFlows(params: {
   return {
     items: items.slice(0, params.limit || items.length),
     total: items.length
+  }
+}
+
+async function getQuickSdkGameFlowFromFlows(params: {
+  settlement_month?: string
+  game_name: string
+}): Promise<QuickSdkGameFlowResponse> {
+  const gameName = String(params.game_name || '').trim()
+  const response = await listQuickSdkFlows({
+    settlement_month: params.settlement_month,
+    game_name: gameName,
+    limit: 1000
+  })
+  const sourceGames = new Set<string>()
+  const channels = new Map<string, number>()
+  let totalFlow = 0
+
+  for (const row of response.items || []) {
+    const sourceGame = String(row.game_name || '').trim()
+    if (!sourceGame || !sourceGame.toLowerCase().includes(gameName.toLowerCase())) continue
+    const channelName = String(row.channel_name || '').trim()
+    const flow = safeNumber(row.gross_flow)
+    sourceGames.add(sourceGame)
+    totalFlow += flow
+    if (channelName) {
+      channels.set(channelName, (channels.get(channelName) || 0) + flow)
+    }
+  }
+
+  const [topChannel, topChannelFlow] =
+    Array.from(channels.entries()).sort((a, b) => b[1] - a[1])[0] || [null, 0]
+
+  return {
+    game_name: gameName,
+    settlement_month: params.settlement_month || null,
+    row_count: response.items?.length || 0,
+    channel_count: channels.size,
+    source_game_count: sourceGames.size,
+    total_flow: Number(totalFlow.toFixed(2)),
+    top_channel: topChannel,
+    top_channel_flow: Number(topChannelFlow.toFixed(2))
   }
 }
 
