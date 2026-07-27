@@ -22,6 +22,7 @@ from app.api.bank_transaction import router as bank_transaction_router
 from app.api.reconciliation import router as reconciliation_router
 from app.api.contract import router as contract_router
 from app.api.quicksdk import router as quicksdk_router
+from app.core.migrations import run_schema_migrations
 from app.core.runtime_paths import ensure_upload_root
 from app.core.security import require_current_user
 
@@ -68,6 +69,11 @@ def _cors_headers_for_request(request: Request, allowed: list[str]) -> dict[str,
 _cors_allowed = get_cors_origins()
 
 app = FastAPI(title="caiwuapi", version="0.1.0")
+
+
+@app.on_event("startup")
+def migrate_database_schema() -> None:
+    run_schema_migrations()
 
 app.add_middleware(
     CORSMiddleware,
