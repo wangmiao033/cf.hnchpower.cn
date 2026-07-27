@@ -8,11 +8,15 @@ from pathlib import Path
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
-from fastapi.responses import FileResponse
+from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.bank_payment_uploads import ensure_upload_root
+from app.core.blob_storage import (
+    delete_private_blob,
+    private_blob_response,
+    upload_private_blob,
+)
 from app.core.deps import get_db
 from app.models.bank_payment import BankPaymentRecord
 from app.models.bank_payment_attachment import BankPaymentAttachment
@@ -26,7 +30,6 @@ from app.schemas.bank_payment import (
 
 router = APIRouter()
 
-_MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024
 _ALLOWED_CONTENT_TYPES: dict[str, str] = {
     "image/jpeg": ".jpg",
     "image/png": ".png",
@@ -75,20 +78,6 @@ def _safe_original_name(name: str) -> str:
     base = Path(name or "file").name
     base = re.sub(r"[^\w.\-()\u4e00-\u9fff]+", "_", base)
     return base[:180] if base else "file"
-
-
-def _attachment_disk_path(file_url: str) -> Path:
-    """file_url 存相对路径：{bank_payment_id}/{attachment_id}{ext}"""
-    rel = (file_url or "").strip().lstrip("/").replace("..", "")
-    if not rel or "/" not in rel:
-        raise HTTPException(status_code=400, detail={"error": "invalid_storage_key"})
-    root = ensure_upload_root().resolve()
-    path = (root / rel).resolve()
-    try:
-        path.relative_to(root)
-    except ValueError:
-        raise HTTPException(status_code=400, detail={"error": "invalid_path"})
-    return path
 
 
 def _attachment_to_read(att: BankPaymentAttachment, record_id: str) -> BankPaymentAttachmentRead:
@@ -182,26 +171,16 @@ async def upload_bank_payment_attachment(
         )
     ext = _ALLOWED_CONTENT_TYPES[content_type]
     body = await file.read()
-    if len(body) > _MAX_ATTACHMENT_BYTES:
-        raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail={"error": "file_too_large", "max_bytes": _MAX_ATTACHMENT_BYTES},
-        )
-
     att_id = str(uuid4())
-    rel = f"{bp.id}/{att_id}{ext}"
-    root = ensure_upload_root()
-    dest_dir = root / bp.id
-    dest_dir.mkdir(parents=True, exist_ok=True)
-    dest_path = dest_dir / f"{att_id}{ext}"
-    dest_path.write_bytes(body)
+    pathname = f"bank-payments/{bp.id}/{att_id}{ext}"
+    blob_url = await upload_private_blob(pathname, body, content_type)
 
     orig_name = _safe_original_name(file.filename or f"attachment{ext}")
     row = BankPaymentAttachment(
         id=att_id,
         bank_payment_id=bp.id,
         file_name=orig_name,
-        file_url=rel,
+        file_url=blob_url,
         file_type=content_type,
     )
     db.add(row)
@@ -214,7 +193,7 @@ async def upload_bank_payment_attachment(
     "/{record_id}/bank-payment/attachments/{attachment_id}",
     status_code=status.HTTP_204_NO_CONTENT,
 )
-def delete_bank_payment_attachment(
+async def delete_bank_payment_attachment(
     record_id: str, attachment_id: str, db: Session = Depends(get_db)
 ) -> None:
     _require_reconciliation(db, record_id)
@@ -224,20 +203,16 @@ def delete_bank_payment_attachment(
     att = db.get(BankPaymentAttachment, attachment_id)
     if att is None or att.bank_payment_id != bp.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"error": "not_found"})
-    try:
-        path = _attachment_disk_path(att.file_url)
-        if path.is_file():
-            path.unlink()
-    except HTTPException:
-        pass
+    if str(att.file_url or "").startswith("http"):
+        await delete_private_blob(att.file_url)
     db.delete(att)
     db.commit()
 
 
 @router.get("/{record_id}/bank-payment/attachments/{attachment_id}/file")
-def download_bank_payment_attachment(
+async def download_bank_payment_attachment(
     record_id: str, attachment_id: str, db: Session = Depends(get_db)
-) -> FileResponse:
+) -> StreamingResponse:
     _require_reconciliation(db, record_id)
     bp = _get_bank_payment(db, record_id)
     if bp is None:
@@ -245,12 +220,14 @@ def download_bank_payment_attachment(
     att = db.get(BankPaymentAttachment, attachment_id)
     if att is None or att.bank_payment_id != bp.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"error": "not_found"})
-    path = _attachment_disk_path(att.file_url)
-    if not path.is_file():
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"error": "file_missing"})
-    media = att.file_type or "application/octet-stream"
-    return FileResponse(
-        path,
-        media_type=media,
-        filename=att.file_name,
+    if not str(att.file_url or "").startswith("http"):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": "legacy_attachment_not_migrated"},
+        )
+    return await private_blob_response(
+        att.file_url,
+        file_name=att.file_name,
+        content_type=att.file_type,
+        inline=False,
     )

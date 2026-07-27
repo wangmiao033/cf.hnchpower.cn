@@ -15,19 +15,72 @@
       "root": "proxy/",
       "entrypoint": "main:app",
       "framework": "fastapi"
+    },
+    "core": {
+      "root": "backend/",
+      "entrypoint": "main:app",
+      "framework": "fastapi"
     }
   },
   "rewrites": [
     {
-      "source": "/api/(.*)",
+      "source": "/health",
+      "destination": {
+        "service": "core"
+      }
+    },
+    {
+      "source": "/health/db",
+      "destination": {
+        "service": "core"
+      }
+    },
+    {
+      "source": "/api/partners",
       "destination": {
         "service": "backend"
       }
     },
     {
-      "source": "/uploads/(.*)",
+      "source": "/api/partners/(.*)",
       "destination": {
         "service": "backend"
+      }
+    },
+    {
+      "source": "/api/contracts",
+      "destination": {
+        "service": "backend"
+      }
+    },
+    {
+      "source": "/api/contracts/(.*)",
+      "destination": {
+        "service": "backend"
+      }
+    },
+    {
+      "source": "/api/quicksdk/(.*)",
+      "destination": {
+        "service": "backend"
+      }
+    },
+    {
+      "source": "/api/reconciliation-links/(.*)",
+      "destination": {
+        "service": "backend"
+      }
+    },
+    {
+      "source": "/api/(.*)",
+      "destination": {
+        "service": "core"
+      }
+    },
+    {
+      "source": "/uploads/(.*)",
+      "destination": {
+        "service": "core"
       }
     },
     {

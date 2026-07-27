@@ -2,20 +2,18 @@
 
 from __future__ import annotations
 
-import shutil
 from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
-from fastapi.responses import FileResponse
+from fastapi.responses import StreamingResponse
 from sqlalchemy import func, or_, select, cast, Numeric
 from sqlalchemy.orm import Session
 
-from app.core.bank_transaction_uploads import ensure_bank_transaction_upload_root
+from app.core.blob_storage import private_blob_response, upload_private_blob
 from app.core.deps import get_db
-from app.core.runtime_paths import ensure_upload_root
 from app.models.bank_transaction import BankTransaction
 from app.schemas.bank_transaction import (
     BankTransactionCreate,
@@ -29,30 +27,6 @@ router = APIRouter()
 _ALLOWED_TYPES = frozenset({"statement_import", "payment_register", "collection_register"})
 
 # 与 main.py 中的静态文件挂载使用同一个可写根目录。
-UPLOAD_DIR = ensure_upload_root() / "bank_attachments"
-UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-
-
-def _resolve_bank_tx_upload_file(file_id: str) -> Path:
-    try:
-        UUID(file_id)
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"error": "invalid_file_id"},
-        ) from e
-    root = ensure_bank_transaction_upload_root().resolve()
-    matches = list(root.glob(f"{file_id}.*"))
-    if len(matches) != 1:
-        raise HTTPException(status_code=404, detail={"error": "not_found", "id": file_id})
-    path = matches[0].resolve()
-    try:
-        path.relative_to(root)
-    except ValueError:
-        raise HTTPException(status_code=400, detail={"error": "invalid_path"}) from None
-    return path
-
-
 def _row_to_read(row: BankTransaction) -> BankTransactionRead:
     return BankTransactionRead.model_validate(row)
 
@@ -135,20 +109,26 @@ async def upload_bank_transaction_attachment(file: UploadFile = File(...)) -> di
     if not orig or orig in (".", ".."):
         orig = "file"
     filename = f"{uuid4().hex}_{orig}"
-    file_path = UPLOAD_DIR / filename
-    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-    with open(file_path, "wb") as out:
-        shutil.copyfileobj(file.file, out)
-    return {"url": f"/uploads/bank_attachments/{filename}"}
+    blob_url = await upload_private_blob(
+        f"bank-transactions/{filename}",
+        await file.read(),
+        file.content_type or "application/octet-stream",
+    )
+    return {
+        "url": f"/api/bank-transactions/attachments/{filename}/file",
+        "storage_url": blob_url,
+    }
 
 
 @router.get("/attachments/{file_id}/file")
-def download_bank_transaction_attachment(file_id: str) -> FileResponse:
-    path = _resolve_bank_tx_upload_file(file_id)
-    return FileResponse(
-        path,
-        filename=path.name,
-        content_disposition_type="inline",
+async def download_bank_transaction_attachment(file_id: str) -> StreamingResponse:
+    safe_name = Path(file_id).name
+    if safe_name != file_id or not safe_name:
+        raise HTTPException(status_code=400, detail={"error": "invalid_file_id"})
+    return await private_blob_response(
+        f"bank-transactions/{safe_name}",
+        file_name=safe_name,
+        inline=True,
     )
 
 

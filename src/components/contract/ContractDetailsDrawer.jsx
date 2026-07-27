@@ -166,6 +166,32 @@ function ContractDetailsDrawer({
           <DetailRow label="终止日期" value={contract.end_date} />
         </div>
 
+        <div className="contract-drawer-section">
+          <div className="contract-drawer-section__title">
+            <h4>游戏接入清单</h4>
+            <span>{contract.access_items?.length || 0} 个游戏</span>
+          </div>
+          {contract.access_items?.length ? (
+            <div className="contract-drawer-access-list">
+              {contract.access_items.map((item) => (
+                <div key={item.id}>
+                  <span>
+                    <strong>{item.product_name}</strong>
+                    <small>{item.channel_name || '渠道未填写'} · {item.agreement_type || '业务类型未填写'}</small>
+                  </span>
+                  <span>
+                    <strong>{item.app_id || item.platform_record_id || '-'}</strong>
+                    <small>{item.authorization_start || '-'} 至 {item.authorization_end || '-'}</small>
+                  </span>
+                  <ContractStatusTag status={item.timeline_status} />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="contract-placeholder">尚未建立游戏接入清单</p>
+          )}
+        </div>
+
         <div className="contract-drawer-section contract-drawer-section--attachments">
           <div className="contract-attachment-heading">
             <div>

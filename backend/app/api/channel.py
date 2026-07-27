@@ -2,17 +2,22 @@
 
 from __future__ import annotations
 
-import shutil
 from datetime import datetime, timezone
+from pathlib import Path
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy import delete, exists, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
+from app.core.blob_storage import (
+    delete_private_blob,
+    private_blob_response,
+    upload_private_blob,
+)
 from app.core.deps import get_db
-from app.core.runtime_paths import ensure_upload_root
 from app.models.channel import ChannelReceipt, ChannelRecord, ChannelRecordLineItem
 from app.schemas.channel import (
     ChannelLineItemCreate,
@@ -27,10 +32,6 @@ from app.schemas.channel import (
 )
 
 router = APIRouter()
-
-UPLOAD_DIR = ensure_upload_root() / "channel_receipts"
-UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-
 
 def _recompute_receipt_rollup(db: Session, row: ChannelRecord) -> None:
     """按 channel_receipts 汇总已收金额，并更新 receipt_status（相对结算应收 settlement_amount）。"""
@@ -230,10 +231,27 @@ async def upload_channel_receipt_attachment(file: UploadFile = File(...)) -> dic
     if not orig or orig in (".", ".."):
         orig = "file"
     filename = f"{uuid4().hex}_{orig}"
-    file_path = UPLOAD_DIR / filename
-    with open(file_path, "wb") as out:
-        shutil.copyfileobj(file.file, out)
-    return {"url": f"/uploads/channel_receipts/{filename}"}
+    blob_url = await upload_private_blob(
+        f"channel-receipts/{filename}",
+        await file.read(),
+        file.content_type or "application/octet-stream",
+    )
+    return {
+        "url": f"/api/channel-records/receipt-attachments/{filename}/file",
+        "storage_url": blob_url,
+    }
+
+
+@router.get("/receipt-attachments/{file_id}/file")
+async def download_channel_receipt_attachment(file_id: str) -> StreamingResponse:
+    safe_name = Path(file_id).name
+    if safe_name != file_id or not safe_name:
+        raise HTTPException(status_code=400, detail={"error": "invalid_file_id"})
+    return await private_blob_response(
+        f"channel-receipts/{safe_name}",
+        file_name=safe_name,
+        inline=True,
+    )
 
 
 @router.get("/{record_id}/receipts", response_model=ChannelReceiptListResponse)
@@ -257,7 +275,9 @@ def list_channel_receipts(record_id: str, db: Session = Depends(get_db)) -> Chan
 
 
 @router.delete("/{record_id}/receipts/{receipt_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_channel_receipt(record_id: str, receipt_id: str, db: Session = Depends(get_db)) -> None:
+async def delete_channel_receipt(
+    record_id: str, receipt_id: str, db: Session = Depends(get_db)
+) -> None:
     parent = db.get(ChannelRecord, record_id)
     if parent is None:
         raise HTTPException(
@@ -270,6 +290,10 @@ def delete_channel_receipt(record_id: str, receipt_id: str, db: Session = Depend
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"error": "receipt_not_found", "id": receipt_id},
         )
+    attachment_url = str(rec.attachment_url or "")
+    attachment_name = Path(attachment_url).name
+    if attachment_url.startswith("/api/channel-records/receipt-attachments/"):
+        await delete_private_blob(f"channel-receipts/{attachment_name}")
     db.delete(rec)
     parent.updated_at = datetime.now(timezone.utc)
     db.flush()

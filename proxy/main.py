@@ -1,8 +1,7 @@
-"""Same-origin proxy for the existing Caiwu production API."""
+"""Vercel data service for contracts, partners, and QuickSDK records."""
 
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import json
 import mimetypes
@@ -15,19 +14,17 @@ from urllib.parse import quote, unquote
 from uuid import uuid4
 
 import httpx
+import jwt
 import psycopg
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import Response, StreamingResponse
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
-app = FastAPI(title="caiwu-api-proxy", docs_url=None, redoc_url=None)
+app = FastAPI(title="caiwu-data-service", docs_url=None, redoc_url=None)
 
-UPSTREAM_ORIGIN = os.environ.get(
-    "UPSTREAM_API_ORIGIN",
-    "https://caiwuapi.hnchpower.cn",
-).rstrip("/")
 QUICKSDK_DATABASE_URL = os.environ.get("QUICKSDK_DATABASE_URL", "").strip()
+AUTH_JWT_SECRET = os.environ.get("AUTH_JWT_SECRET", "").strip()
 BLOB_READ_WRITE_TOKEN = os.environ.get("BLOB_READ_WRITE_TOKEN", "").strip()
 BLOB_API_ORIGIN = "https://vercel.com/api/blob"
 CONTRACT_ATTACHMENT_MAX_BYTES = 50 * 1024 * 1024
@@ -49,66 +46,38 @@ CONTRACT_ATTACHMENT_EXTENSIONS = {
     ".7z",
 }
 
-_HOP_BY_HOP_HEADERS = {
-    "connection",
-    "keep-alive",
-    "proxy-authenticate",
-    "proxy-authorization",
-    "te",
-    "trailers",
-    "transfer-encoding",
-    "upgrade",
-}
-
-
-def _request_headers(request: Request) -> dict[str, str]:
-    excluded = _HOP_BY_HOP_HEADERS | {"host", "content-length", "accept-encoding"}
-    headers = {
-        name: value
-        for name, value in request.headers.items()
-        if name.lower() not in excluded
-    }
-    # The proxy returns httpx's decoded response body, so request an identity
-    # payload from the upstream to avoid forwarding compressed bytes without
-    # their original Content-Encoding header.
-    headers["accept-encoding"] = "identity"
-    headers["x-forwarded-host"] = request.headers.get("host", "")
-    headers["x-forwarded-proto"] = request.url.scheme
-    return headers
-
-
-def _response_headers(response: httpx.Response) -> dict[str, str]:
-    excluded = _HOP_BY_HOP_HEADERS | {
-        "content-length",
-        "content-encoding",
-        "set-cookie",
-        "access-control-allow-origin",
-        "access-control-allow-credentials",
-    }
-    return {
-        name: value
-        for name, value in response.headers.items()
-        if name.lower() not in excluded
-    }
-
-
-def _host_cookie(value: str) -> str:
-    """Remove an upstream Domain attribute so browsers accept it for this host."""
-    return re.sub(r";\s*Domain=[^;]+", "", value, flags=re.IGNORECASE)
-
-
 async def _require_authenticated(request: Request) -> str:
-    """Validate the proxied session with the existing production auth service."""
+    """Validate the shared session directly without the legacy server."""
     cookie = request.headers.get("cookie", "")
-    if not cookie:
+    token = request.cookies.get("caiwu_session", "").strip()
+    if not token or not AUTH_JWT_SECRET:
         raise HTTPException(status_code=401, detail="请先登录")
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        response = await client.get(
-            f"{UPSTREAM_ORIGIN}/api/auth/me",
-            headers={"cookie": cookie},
-        )
-    if response.status_code != 200:
+    try:
+        payload = jwt.decode(token, AUTH_JWT_SECRET, algorithms=["HS256"])
+    except Exception as exc:
+        raise HTTPException(status_code=401, detail="登录已失效，请重新登录") from exc
+    user_id = str(payload.get("sub") or "")
+    session_id = str(payload.get("sid") or "")
+    token_jti = str(payload.get("jti") or "")
+    if not user_id or not session_id or not token_jti:
         raise HTTPException(status_code=401, detail="请先登录")
+    with psycopg.connect(_database_url(), connect_timeout=15, row_factory=dict_row) as conn:
+        session = conn.execute(
+            """
+            SELECT session.id
+            FROM auth_sessions AS session
+            JOIN auth_users AS auth_user ON auth_user.id = session.user_id
+            WHERE session.id = %s
+              AND session.user_id = %s
+              AND session.token_jti = %s
+              AND session.revoked_at IS NULL
+              AND session.expires_at > NOW()
+              AND auth_user.is_active = TRUE
+            """,
+            [session_id, user_id, token_jti],
+        ).fetchone()
+    if session is None:
+        raise HTTPException(status_code=401, detail="登录已失效，请重新登录")
     return cookie
 
 
@@ -153,10 +122,11 @@ PARTNER_ALIAS_REPAIRS = {
     "西安游海网络科技有限公司": "游海",
     "西安麦游网络科技有限公司": "麦游",
 }
-RECONCILIATION_PATH_PATTERN = re.compile(r"^/api/reconciliation(?:/([^/]+))?$")
 CONTRACT_FIELDS = {
     "contract_name",
     "contract_type",
+    "document_type",
+    "platform_record_id",
     "amount",
     "counterparty",
     "contract_no",
@@ -167,6 +137,29 @@ CONTRACT_FIELDS = {
     "performance_status",
     "payment_type",
     "attachments",
+}
+CONTRACT_DOCUMENT_TYPES = {"master", "supplement", "transfer", "other"}
+CONTRACT_ACCESS_FIELDS = {
+    "channel_name",
+    "agreement_type",
+    "platform_record_id",
+    "product_name",
+    "app_id",
+    "platform",
+    "language",
+    "category",
+    "rights_source",
+    "game_status",
+    "agreement_status",
+    "authorization_start",
+    "authorization_end",
+    "share_rate",
+    "channel_fee_rate",
+    "software_copyright_no",
+    "isbn",
+    "territory",
+    "status",
+    "remarks",
 }
 
 
@@ -568,21 +561,6 @@ def _partner_row(row: dict) -> dict:
     }
 
 
-async def _upstream_list(client: httpx.AsyncClient, cookie: str, path: str) -> list[dict]:
-    try:
-        response = await client.get(
-            f"{UPSTREAM_ORIGIN}{path}",
-            headers={"cookie": cookie, "accept-encoding": "identity"},
-        )
-        if response.status_code != 200:
-            return []
-        payload = response.json()
-        items = payload.get("items") if isinstance(payload, dict) else None
-        return items if isinstance(items, list) else []
-    except (httpx.HTTPError, ValueError):
-        return []
-
-
 def _payment_remark_fields(raw: object) -> dict[str, str]:
     if not raw:
         return {}
@@ -599,14 +577,25 @@ def _payment_remark_fields(raw: object) -> dict[str, str]:
 
 
 async def _bootstrap_partners(cookie: str) -> list[dict]:
-    """Recover server-known customer data when the new partner table is empty."""
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        reconciliation, channels, invoices, payments = await asyncio.gather(
-            _upstream_list(client, cookie, "/api/reconciliation?limit=500&offset=0"),
-            _upstream_list(client, cookie, "/api/channel-records?limit=500&offset=0"),
-            _upstream_list(client, cookie, "/api/invoices?limit=500&offset=0"),
-            _upstream_list(client, cookie, "/api/payments?limit=500&offset=0"),
-        )
+    """Recover customer data directly from the shared PostgreSQL database."""
+    del cookie
+    with psycopg.connect(_database_url(), connect_timeout=15, row_factory=dict_row) as conn:
+        reconciliation = conn.execute(
+            "SELECT partner_name FROM reconciliation_records "
+            "WHERE COALESCE(partner_name, '') <> ''"
+        ).fetchall()
+        channels = conn.execute(
+            "SELECT partner_name FROM channel_records "
+            "WHERE COALESCE(partner_name, '') <> ''"
+        ).fetchall()
+        invoices = conn.execute(
+            "SELECT title, tax_no FROM invoice_records "
+            "WHERE COALESCE(title, '') <> ''"
+        ).fetchall()
+        payments = conn.execute(
+            "SELECT customer, recipient, remark FROM payment_records "
+            "WHERE COALESCE(customer, '') <> ''"
+        ).fetchall()
 
     recovered: dict[str, dict[str, str]] = {}
 
@@ -626,16 +615,10 @@ async def _bootstrap_partners(cookie: str) -> list[dict]:
         add_name(item.get("partner_name") or item.get("partner"), "渠道")
 
     for item in invoices:
-        candidates = [
-            (item.get("buyer_name"), item.get("buyer_tax_no")),
-            (item.get("seller_name"), item.get("seller_tax_no")),
-            (item.get("title"), item.get("tax_no")),
-        ]
-        for raw_name, raw_tax_no in candidates:
-            partner = recovered.get(_partner_name_key(raw_name))
-            tax_no = _clean_partner_value(raw_tax_no, limit=500)
-            if partner is not None and tax_no and not partner["tax_registration_no"]:
-                partner["tax_registration_no"] = tax_no
+        partner = recovered.get(_partner_name_key(item.get("title")))
+        tax_no = _clean_partner_value(item.get("tax_no"), limit=500)
+        if partner is not None and tax_no and not partner["tax_registration_no"]:
+            partner["tax_registration_no"] = tax_no
 
     for item in payments:
         partner = recovered.get(_partner_name_key(item.get("customer")))
@@ -761,9 +744,14 @@ def _clean_contract_attachments(value: object) -> list[str]:
 
 
 def _contract_payload(raw: dict, *, require_name: bool = True) -> dict:
+    document_type = _clean_partner_value(raw.get("document_type"), limit=30) or "master"
+    if document_type not in CONTRACT_DOCUMENT_TYPES:
+        document_type = "other"
     payload = {
         "contract_name": _clean_partner_value(raw.get("contract_name"), limit=1000),
         "contract_type": _clean_partner_value(raw.get("contract_type"), limit=200),
+        "document_type": document_type,
+        "platform_record_id": _clean_partner_value(raw.get("platform_record_id"), limit=200),
         "amount": _clean_contract_amount(raw.get("amount")),
         "counterparty": _clean_partner_value(raw.get("counterparty"), limit=1000),
         "contract_no": _clean_partner_value(raw.get("contract_no"), limit=300),
@@ -777,6 +765,54 @@ def _contract_payload(raw: dict, *, require_name: bool = True) -> dict:
     }
     if require_name and not payload["contract_name"]:
         raise HTTPException(status_code=422, detail="请填写合同名称")
+    return payload
+
+
+def _clean_contract_percentage(value: object) -> Decimal | None:
+    if value in (None, ""):
+        return None
+    try:
+        cleaned = Decimal(str(value).replace("%", "").replace(",", "").strip())
+    except (InvalidOperation, ValueError) as exc:
+        raise HTTPException(status_code=422, detail="比例必须是有效数字") from exc
+    if cleaned < 0 or cleaned > 100:
+        raise HTTPException(status_code=422, detail="比例必须在 0 到 100 之间")
+    return cleaned.quantize(Decimal("0.01"))
+
+
+def _contract_access_payload(raw: dict) -> dict:
+    payload = {
+        "channel_name": _clean_partner_value(raw.get("channel_name"), limit=200),
+        "agreement_type": _clean_partner_value(raw.get("agreement_type"), limit=200),
+        "platform_record_id": _clean_partner_value(raw.get("platform_record_id"), limit=200),
+        "product_name": _clean_partner_value(raw.get("product_name"), limit=1000),
+        "app_id": _clean_partner_value(raw.get("app_id"), limit=200),
+        "platform": _clean_partner_value(raw.get("platform"), limit=100),
+        "language": _clean_partner_value(raw.get("language"), limit=100),
+        "category": _clean_partner_value(raw.get("category"), limit=100),
+        "rights_source": _clean_partner_value(raw.get("rights_source"), limit=200),
+        "game_status": _clean_partner_value(raw.get("game_status"), limit=100),
+        "agreement_status": _clean_partner_value(raw.get("agreement_status"), limit=100),
+        "authorization_start": _clean_contract_date(raw.get("authorization_start")),
+        "authorization_end": _clean_contract_date(raw.get("authorization_end")),
+        "share_rate": _clean_contract_percentage(raw.get("share_rate")),
+        "channel_fee_rate": _clean_contract_percentage(raw.get("channel_fee_rate")),
+        "software_copyright_no": _clean_partner_value(
+            raw.get("software_copyright_no"), limit=300
+        ),
+        "isbn": _clean_partner_value(raw.get("isbn"), limit=300),
+        "territory": _clean_partner_value(raw.get("territory"), limit=500),
+        "status": _clean_partner_value(raw.get("status"), limit=100) or "生效",
+        "remarks": _clean_partner_value(raw.get("remarks"), limit=2000),
+    }
+    if not payload["product_name"]:
+        raise HTTPException(status_code=422, detail="请填写接入游戏名称")
+    if (
+        payload["authorization_start"]
+        and payload["authorization_end"]
+        and payload["authorization_start"] > payload["authorization_end"]
+    ):
+        raise HTTPException(status_code=422, detail="授权开始日期不能晚于结束日期")
     return payload
 
 
@@ -804,6 +840,8 @@ def _ensure_contracts_table(conn: psycopg.Connection) -> None:
           source_key TEXT NOT NULL UNIQUE,
           contract_name TEXT NOT NULL,
           contract_type TEXT NOT NULL DEFAULT '',
+          document_type TEXT NOT NULL DEFAULT 'master',
+          platform_record_id TEXT NOT NULL DEFAULT '',
           amount NUMERIC(18, 2) NULL,
           counterparty TEXT NOT NULL DEFAULT '',
           normalized_counterparty TEXT NOT NULL DEFAULT '',
@@ -819,6 +857,13 @@ def _ensure_contracts_table(conn: psycopg.Connection) -> None:
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
           updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )
+        """
+    )
+    conn.execute(
+        """
+        ALTER TABLE cf_contract_records
+          ADD COLUMN IF NOT EXISTS document_type TEXT NOT NULL DEFAULT 'master',
+          ADD COLUMN IF NOT EXISTS platform_record_id TEXT NOT NULL DEFAULT ''
         """
     )
     conn.execute(
@@ -867,6 +912,57 @@ def _ensure_contracts_table(conn: psycopg.Connection) -> None:
         CREATE UNIQUE INDEX IF NOT EXISTS idx_cf_contract_attachment_files_dedupe
         ON cf_contract_attachment_files (contract_id, checksum_sha256)
         WHERE checksum_sha256 <> ''
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS cf_contract_access_items (
+          id TEXT PRIMARY KEY,
+          contract_id TEXT NOT NULL REFERENCES cf_contract_records(id) ON DELETE CASCADE,
+          channel_name TEXT NOT NULL DEFAULT '',
+          agreement_type TEXT NOT NULL DEFAULT '',
+          platform_record_id TEXT NOT NULL DEFAULT '',
+          product_name TEXT NOT NULL,
+          app_id TEXT NOT NULL DEFAULT '',
+          platform TEXT NOT NULL DEFAULT '',
+          language TEXT NOT NULL DEFAULT '',
+          category TEXT NOT NULL DEFAULT '',
+          rights_source TEXT NOT NULL DEFAULT '',
+          game_status TEXT NOT NULL DEFAULT '',
+          agreement_status TEXT NOT NULL DEFAULT '',
+          authorization_start DATE NULL,
+          authorization_end DATE NULL,
+          share_rate NUMERIC(7, 2) NULL,
+          channel_fee_rate NUMERIC(7, 2) NULL,
+          software_copyright_no TEXT NOT NULL DEFAULT '',
+          isbn TEXT NOT NULL DEFAULT '',
+          territory TEXT NOT NULL DEFAULT '',
+          status TEXT NOT NULL DEFAULT '生效',
+          remarks TEXT NOT NULL DEFAULT '',
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+        """
+    )
+    conn.execute(
+        """
+        ALTER TABLE cf_contract_access_items
+          ADD COLUMN IF NOT EXISTS channel_name TEXT NOT NULL DEFAULT '',
+          ADD COLUMN IF NOT EXISTS agreement_type TEXT NOT NULL DEFAULT '',
+          ADD COLUMN IF NOT EXISTS game_status TEXT NOT NULL DEFAULT '',
+          ADD COLUMN IF NOT EXISTS agreement_status TEXT NOT NULL DEFAULT ''
+        """
+    )
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_cf_contract_access_items_contract
+        ON cf_contract_access_items (contract_id, authorization_end, created_at)
+        """
+    )
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_cf_contract_access_items_product
+        ON cf_contract_access_items (product_name)
         """
     )
 
@@ -932,6 +1028,57 @@ def _contract_attachment_public_row(row: dict) -> dict:
     }
 
 
+def _contract_access_timeline_status(row: dict) -> str:
+    today = date.today()
+    start_date = row.get("authorization_start")
+    end_date = row.get("authorization_end")
+    if row.get("status") in {"已终止", "终止"}:
+        return "已终止"
+    if start_date and start_date > today:
+        return "待生效"
+    if end_date and end_date < today:
+        return "已过期"
+    if end_date and 0 <= (end_date - today).days <= 30:
+        return "即将到期"
+    return "生效中"
+
+
+def _contract_access_row(row: dict) -> dict:
+    return {
+        "id": str(row["id"]),
+        "contract_id": str(row["contract_id"]),
+        "channel_name": row.get("channel_name") or "",
+        "agreement_type": row.get("agreement_type") or "",
+        "platform_record_id": row.get("platform_record_id") or "",
+        "product_name": row.get("product_name") or "",
+        "app_id": row.get("app_id") or "",
+        "platform": row.get("platform") or "",
+        "language": row.get("language") or "",
+        "category": row.get("category") or "",
+        "rights_source": row.get("rights_source") or "",
+        "game_status": row.get("game_status") or "",
+        "agreement_status": row.get("agreement_status") or "",
+        "authorization_start": (
+            row["authorization_start"].isoformat() if row.get("authorization_start") else None
+        ),
+        "authorization_end": (
+            row["authorization_end"].isoformat() if row.get("authorization_end") else None
+        ),
+        "share_rate": str(row["share_rate"]) if row.get("share_rate") is not None else None,
+        "channel_fee_rate": (
+            str(row["channel_fee_rate"]) if row.get("channel_fee_rate") is not None else None
+        ),
+        "software_copyright_no": row.get("software_copyright_no") or "",
+        "isbn": row.get("isbn") or "",
+        "territory": row.get("territory") or "",
+        "status": row.get("status") or "",
+        "remarks": row.get("remarks") or "",
+        "timeline_status": _contract_access_timeline_status(row),
+        "created_at": row["created_at"].isoformat(),
+        "updated_at": row["updated_at"].isoformat(),
+    }
+
+
 def _attach_contract_files(conn: psycopg.Connection, rows: list[dict]) -> None:
     contract_ids = [str(row["id"]) for row in rows]
     files_by_contract: dict[str, list[dict]] = {contract_id: [] for contract_id in contract_ids}
@@ -951,6 +1098,29 @@ def _attach_contract_files(conn: psycopg.Connection, rows: list[dict]) -> None:
             )
     for row in rows:
         row["attachment_files"] = files_by_contract.get(str(row["id"]), [])
+
+
+def _attach_contract_access_items(conn: psycopg.Connection, rows: list[dict]) -> None:
+    contract_ids = [str(row["id"]) for row in rows]
+    items_by_contract: dict[str, list[dict]] = {
+        contract_id: [] for contract_id in contract_ids
+    }
+    if contract_ids:
+        access_rows = conn.execute(
+            """
+            SELECT *
+            FROM cf_contract_access_items
+            WHERE contract_id = ANY(%s)
+            ORDER BY authorization_end DESC NULLS LAST, created_at
+            """,
+            [contract_ids],
+        ).fetchall()
+        for access_item in access_rows:
+            items_by_contract.setdefault(str(access_item["contract_id"]), []).append(
+                _contract_access_row(access_item)
+            )
+    for row in rows:
+        row["access_items"] = items_by_contract.get(str(row["id"]), [])
 
 
 def _load_contract_with_relations(conn: psycopg.Connection, contract_id: str) -> dict | None:
@@ -976,6 +1146,7 @@ def _load_contract_with_relations(conn: psycopg.Connection, contract_id: str) ->
     ).fetchone()
     if row is not None:
         _attach_contract_files(conn, [row])
+        _attach_contract_access_items(conn, [row])
     return row
 
 
@@ -985,6 +1156,8 @@ def _contract_row(row: dict) -> dict:
         "source": row["source"],
         "contract_name": row["contract_name"],
         "contract_type": row["contract_type"],
+        "document_type": row.get("document_type") or "master",
+        "platform_record_id": row.get("platform_record_id") or "",
         "amount": str(row["amount"]) if row["amount"] is not None else None,
         "counterparty": row["counterparty"],
         "contract_no": row["contract_no"],
@@ -997,6 +1170,9 @@ def _contract_row(row: dict) -> dict:
         "attachments": row["attachments"] if isinstance(row["attachments"], list) else [],
         "attachment_files": (
             row["attachment_files"] if isinstance(row.get("attachment_files"), list) else []
+        ),
+        "access_items": (
+            row["access_items"] if isinstance(row.get("access_items"), list) else []
         ),
         "partner_id": row.get("partner_id"),
         "partner_name": row.get("partner_name"),
@@ -1024,13 +1200,14 @@ def _upsert_contract(
     row = conn.execute(
         """
         INSERT INTO cf_contract_records (
-          id, source, source_key, contract_name, contract_type, amount,
+          id, source, source_key, contract_name, contract_type, document_type,
+          platform_record_id, amount,
           counterparty, normalized_counterparty, contract_no,
           signing_date, signing_status, effective_date, end_date,
           performance_status, payment_type, attachments, partner_id
         )
         VALUES (
-          %s, %s, %s, %s, %s, %s,
+          %s, %s, %s, %s, %s, %s, %s, %s,
           %s, %s, %s,
           %s, %s, %s, %s,
           %s, %s, %s, %s
@@ -1039,6 +1216,8 @@ def _upsert_contract(
           source = EXCLUDED.source,
           contract_name = EXCLUDED.contract_name,
           contract_type = EXCLUDED.contract_type,
+          document_type = EXCLUDED.document_type,
+          platform_record_id = EXCLUDED.platform_record_id,
           amount = EXCLUDED.amount,
           counterparty = EXCLUDED.counterparty,
           normalized_counterparty = EXCLUDED.normalized_counterparty,
@@ -1060,6 +1239,8 @@ def _upsert_contract(
             source_key,
             payload["contract_name"],
             payload["contract_type"],
+            payload["document_type"],
+            payload["platform_record_id"],
             payload["amount"],
             payload["counterparty"],
             _partner_name_key(payload["counterparty"]),
@@ -1327,6 +1508,9 @@ def contract_health() -> dict:
         attachment_count = conn.execute(
             "SELECT COUNT(*) AS count FROM cf_contract_attachment_files"
         ).fetchone()
+        access_count = conn.execute(
+            "SELECT COUNT(*) AS count FROM cf_contract_access_items"
+        ).fetchone()
         conn.commit()
     return {
         "status": "ok",
@@ -1336,6 +1520,7 @@ def contract_health() -> dict:
         "linked_count": int(row["linked_count"] or 0),
         "numbered_count": int(row["numbered_count"] or 0),
         "attachment_count": int(attachment_count["count"] or 0),
+        "access_item_count": int(access_count["count"] or 0),
     }
 
 
@@ -1441,6 +1626,7 @@ async def list_contracts(
             [*params, limit, offset],
         ).fetchall()
         _attach_contract_files(conn, rows)
+        _attach_contract_access_items(conn, rows)
         summary = conn.execute(
             """
             SELECT
@@ -1454,6 +1640,18 @@ async def list_contracts(
             FROM cf_contract_records
             """
         ).fetchone()
+        access_summary = conn.execute(
+            """
+            SELECT
+              COUNT(*) AS total,
+              COUNT(*) FILTER (
+                WHERE authorization_end BETWEEN CURRENT_DATE
+                  AND CURRENT_DATE + INTERVAL '30 days'
+              ) AS expiring_30,
+              COUNT(*) FILTER (WHERE authorization_end < CURRENT_DATE) AS expired
+            FROM cf_contract_access_items
+            """
+        ).fetchone()
         conn.commit()
     return {
         "items": [_contract_row(row) for row in rows],
@@ -1464,6 +1662,9 @@ async def list_contracts(
             "expiring_30": int(summary["expiring_30"] or 0),
             "expired": int(summary["expired"] or 0),
             "amount_total": str(summary["amount_total"] or Decimal("0")),
+            "access_item_total": int(access_summary["total"] or 0),
+            "access_expiring_30": int(access_summary["expiring_30"] or 0),
+            "access_expired": int(access_summary["expired"] or 0),
         },
     }
 
@@ -1585,6 +1786,8 @@ async def update_contract(contract_id: str, request: Request, payload: dict) -> 
                   source_key = %s,
                   contract_name = %s,
                   contract_type = %s,
+                  document_type = %s,
+                  platform_record_id = %s,
                   amount = %s,
                   counterparty = %s,
                   normalized_counterparty = %s,
@@ -1605,6 +1808,8 @@ async def update_contract(contract_id: str, request: Request, payload: dict) -> 
                     source_key,
                     clean["contract_name"],
                     clean["contract_type"],
+                    clean["document_type"],
+                    clean["platform_record_id"],
                     clean["amount"],
                     clean["counterparty"],
                     _partner_name_key(clean["counterparty"]),
@@ -1636,6 +1841,157 @@ async def update_contract(contract_id: str, request: Request, payload: dict) -> 
         row = _load_contract_with_relations(conn, contract_id)
         conn.commit()
     return _contract_row(row)
+
+
+@app.post("/api/contracts/{contract_id}/access-items", status_code=201)
+async def create_contract_access_item(
+    contract_id: str, request: Request, payload: dict
+) -> dict:
+    await _require_authenticated(request)
+    clean = _contract_access_payload(payload)
+    with psycopg.connect(_database_url(), connect_timeout=15, row_factory=dict_row) as conn:
+        _ensure_contracts_table(conn)
+        contract = conn.execute(
+            "SELECT id FROM cf_contract_records WHERE id = %s",
+            [contract_id],
+        ).fetchone()
+        if contract is None:
+            raise HTTPException(status_code=404, detail="主合同不存在")
+        row = conn.execute(
+            """
+            INSERT INTO cf_contract_access_items (
+              id, contract_id, channel_name, agreement_type, platform_record_id,
+              product_name, app_id, platform, language, category, rights_source,
+              game_status, agreement_status, authorization_start, authorization_end,
+              share_rate, channel_fee_rate, software_copyright_no, isbn,
+              territory, status, remarks
+            )
+            VALUES (
+              %s, %s, %s, %s, %s,
+              %s, %s, %s, %s, %s, %s,
+              %s, %s, %s, %s,
+              %s, %s, %s, %s,
+              %s, %s, %s
+            )
+            RETURNING *
+            """,
+            [
+                str(uuid4()),
+                contract_id,
+                clean["channel_name"],
+                clean["agreement_type"],
+                clean["platform_record_id"],
+                clean["product_name"],
+                clean["app_id"],
+                clean["platform"],
+                clean["language"],
+                clean["category"],
+                clean["rights_source"],
+                clean["game_status"],
+                clean["agreement_status"],
+                clean["authorization_start"],
+                clean["authorization_end"],
+                clean["share_rate"],
+                clean["channel_fee_rate"],
+                clean["software_copyright_no"],
+                clean["isbn"],
+                clean["territory"],
+                clean["status"],
+                clean["remarks"],
+            ],
+        ).fetchone()
+        conn.commit()
+    return _contract_access_row(row)
+
+
+@app.put("/api/contracts/{contract_id}/access-items/{item_id}")
+async def update_contract_access_item(
+    contract_id: str, item_id: str, request: Request, payload: dict
+) -> dict:
+    await _require_authenticated(request)
+    clean = _contract_access_payload(payload)
+    with psycopg.connect(_database_url(), connect_timeout=15, row_factory=dict_row) as conn:
+        _ensure_contracts_table(conn)
+        row = conn.execute(
+            """
+            UPDATE cf_contract_access_items SET
+              channel_name = %s,
+              agreement_type = %s,
+              platform_record_id = %s,
+              product_name = %s,
+              app_id = %s,
+              platform = %s,
+              language = %s,
+              category = %s,
+              rights_source = %s,
+              game_status = %s,
+              agreement_status = %s,
+              authorization_start = %s,
+              authorization_end = %s,
+              share_rate = %s,
+              channel_fee_rate = %s,
+              software_copyright_no = %s,
+              isbn = %s,
+              territory = %s,
+              status = %s,
+              remarks = %s,
+              updated_at = NOW()
+            WHERE id = %s AND contract_id = %s
+            RETURNING *
+            """,
+            [
+                clean["channel_name"],
+                clean["agreement_type"],
+                clean["platform_record_id"],
+                clean["product_name"],
+                clean["app_id"],
+                clean["platform"],
+                clean["language"],
+                clean["category"],
+                clean["rights_source"],
+                clean["game_status"],
+                clean["agreement_status"],
+                clean["authorization_start"],
+                clean["authorization_end"],
+                clean["share_rate"],
+                clean["channel_fee_rate"],
+                clean["software_copyright_no"],
+                clean["isbn"],
+                clean["territory"],
+                clean["status"],
+                clean["remarks"],
+                item_id,
+                contract_id,
+            ],
+        ).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="游戏接入清单不存在")
+        conn.commit()
+    return _contract_access_row(row)
+
+
+@app.delete(
+    "/api/contracts/{contract_id}/access-items/{item_id}",
+    status_code=204,
+)
+async def delete_contract_access_item(
+    contract_id: str, item_id: str, request: Request
+) -> Response:
+    await _require_authenticated(request)
+    with psycopg.connect(_database_url(), connect_timeout=15, row_factory=dict_row) as conn:
+        _ensure_contracts_table(conn)
+        row = conn.execute(
+            """
+            DELETE FROM cf_contract_access_items
+            WHERE id = %s AND contract_id = %s
+            RETURNING id
+            """,
+            [item_id, contract_id],
+        ).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="游戏接入清单不存在")
+        conn.commit()
+    return Response(status_code=204)
 
 
 def _blob_headers(*, content_type: str | None = None) -> dict[str, str]:
@@ -2093,127 +2449,4 @@ async def reconciliation_links_health() -> dict:
     methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
 )
 async def proxy(request: Request, path: str) -> Response:
-    url = f"{UPSTREAM_ORIGIN}{request.url.path}"
-    if request.url.query:
-        url = f"{url}?{request.url.query}"
-
-    body = await request.body()
-    outgoing_body = body
-    reconciliation_match = RECONCILIATION_PATH_PATTERN.fullmatch(request.url.path)
-    selected_partner_id = None
-    selected_partner_name = None
-    if (
-        reconciliation_match
-        and request.method in {"POST", "PUT", "PATCH"}
-        and "application/json" in request.headers.get("content-type", "")
-    ):
-        try:
-            outgoing_payload = json.loads(body or b"{}")
-        except (TypeError, ValueError):
-            outgoing_payload = None
-        if isinstance(outgoing_payload, dict):
-            selected_partner_id = outgoing_payload.pop("partner_id", None)
-            selected_partner_name = outgoing_payload.get("partner_name")
-            if _clean_partner_value(selected_partner_id, limit=200):
-                with psycopg.connect(
-                    _database_url(),
-                    connect_timeout=15,
-                    row_factory=dict_row,
-                ) as conn:
-                    _ensure_partners_table(conn)
-                    selected_partner = _resolve_reconciliation_partner(
-                        conn,
-                        partner_id=selected_partner_id,
-                    )
-                    if selected_partner is None:
-                        raise HTTPException(
-                            status_code=422,
-                            detail="所选客户不存在，请刷新客户库后重试",
-                        )
-                    outgoing_payload["partner_name"] = selected_partner["name"]
-                    selected_partner_name = selected_partner["name"]
-            outgoing_body = json.dumps(
-                outgoing_payload,
-                ensure_ascii=False,
-            ).encode("utf-8")
-
-    async with httpx.AsyncClient(follow_redirects=False, timeout=60.0) as client:
-        upstream = await client.request(
-            request.method,
-            url,
-            headers=_request_headers(request),
-            content=outgoing_body,
-        )
-
-    response_content = upstream.content
-    if reconciliation_match and 200 <= upstream.status_code < 300 and request.method != "DELETE":
-        try:
-            payload = upstream.json()
-            if (
-                request.method in {"PUT", "PATCH"}
-                and reconciliation_match.group(1)
-                and not _reconciliation_rows(payload)
-            ):
-                _sync_reconciliation_partner_links(
-                    {
-                        "id": reconciliation_match.group(1),
-                        "partner_name": selected_partner_name,
-                    },
-                    selected_partner_id=selected_partner_id,
-                    selected_snapshot=selected_partner_name,
-                )
-            else:
-                payload = _sync_reconciliation_partner_links(
-                    payload,
-                    selected_partner_id=selected_partner_id,
-                    selected_snapshot=selected_partner_name,
-                )
-            response_content = json.dumps(
-                payload,
-                ensure_ascii=False,
-                default=str,
-            ).encode("utf-8")
-            items = payload.get("items") if isinstance(payload, dict) else None
-            print(
-                "[reconciliation-proxy] response summary",
-                {
-                    "status": upstream.status_code,
-                    "total": payload.get("total") if isinstance(payload, dict) else None,
-                    "item_count": len(items) if isinstance(items, list) else None,
-                    "linked_count": sum(
-                        1 for item in (items or []) if item.get("partner_id")
-                    ),
-                },
-            )
-        except ValueError:
-            print(
-                "[reconciliation-proxy] non-json response",
-                {"status": upstream.status_code, "bytes": len(upstream.content)},
-            )
-    elif (
-        reconciliation_match
-        and request.method == "DELETE"
-        and 200 <= upstream.status_code < 300
-        and reconciliation_match.group(1)
-    ):
-        with psycopg.connect(_database_url(), connect_timeout=15) as conn:
-            _ensure_partners_table(conn)
-            _ensure_reconciliation_links_table(conn)
-            conn.execute(
-                """
-                DELETE FROM cf_reconciliation_partner_links
-                WHERE reconciliation_id = %s
-                """,
-                [reconciliation_match.group(1)],
-            )
-            conn.commit()
-
-    result = Response(
-        content=response_content,
-        status_code=upstream.status_code,
-        headers=_response_headers(upstream),
-        media_type=None,
-    )
-    for cookie in upstream.headers.get_list("set-cookie"):
-        result.headers.append("set-cookie", _host_cookie(cookie))
-    return result
+    raise HTTPException(status_code=404, detail="该接口已迁移到 Vercel 核心服务")

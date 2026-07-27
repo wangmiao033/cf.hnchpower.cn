@@ -3,6 +3,7 @@ import { useAppState } from '@/app/AppStateContext.jsx'
 import PageContainer from '@/components/layout/PageContainer.jsx'
 import {
   createContract,
+  deleteContractAccessItem,
   deleteContract,
   importContracts,
   listContracts,
@@ -11,6 +12,7 @@ import {
 } from '@/lib/api/contract.ts'
 import ContractStatusTag from '@/components/contract/ContractStatusTag.jsx'
 import ContractDetailsDrawer from '@/components/contract/ContractDetailsDrawer.jsx'
+import ContractAccessEditor from '@/components/contract/ContractAccessEditor.jsx'
 import './contract-management.css'
 
 const PAGE_SIZE_OPTIONS = [20, 50, 100]
@@ -20,11 +22,16 @@ const EMPTY_SUMMARY = {
   linked: 0,
   expiring_30: 0,
   expired: 0,
-  amount_total: '0'
+  amount_total: '0',
+  access_item_total: 0,
+  access_expiring_30: 0,
+  access_expired: 0
 }
 const EMPTY_FORM = {
   contract_name: '',
   contract_type: '无固定总价合同',
+  document_type: 'master',
+  platform_record_id: '',
   amount: '',
   counterparty: '',
   contract_no: '',
@@ -123,6 +130,8 @@ function contractToForm(contract) {
   return {
     contract_name: contract.contract_name || '',
     contract_type: contract.contract_type || '',
+    document_type: contract.document_type || 'master',
+    platform_record_id: contract.platform_record_id || '',
     amount: contract.amount || '',
     counterparty: contract.counterparty || '',
     contract_no: contract.contract_no || '',
@@ -212,6 +221,8 @@ function ContractManagementPage() {
   const [editingId, setEditingId] = useState(null)
   const [form, setForm] = useState(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
+  const [expandedContracts, setExpandedContracts] = useState(() => new Set())
+  const [accessEditor, setAccessEditor] = useState(null)
 
   const loadContracts = useCallback(async () => {
     setLoading(true)
@@ -219,7 +230,7 @@ function ContractManagementPage() {
     try {
       const response = await listContracts({ limit: 1000, offset: 0 })
       setRecords(Array.isArray(response.items) ? response.items : [])
-      setSummary(response.summary || EMPTY_SUMMARY)
+      setSummary({ ...EMPTY_SUMMARY, ...(response.summary || {}) })
     } catch (loadError) {
       console.error(loadError)
       setError('合同数据暂时无法读取，请检查网络后重试。')
@@ -269,6 +280,12 @@ function ContractManagementPage() {
         record.contract_no,
         record.partner_name,
         record.partner_short_name,
+        ...(record.access_items || []).flatMap((item) => [
+          item.channel_name,
+          item.product_name,
+          item.app_id,
+          item.platform_record_id
+        ]),
         ...(record.attachments || [])
       ]
         .filter(Boolean)
@@ -400,6 +417,32 @@ function ContractManagementPage() {
     )
   }
 
+  const toggleContract = (contractId) => {
+    setExpandedContracts((current) => {
+      const next = new Set(current)
+      if (next.has(contractId)) next.delete(contractId)
+      else next.add(contractId)
+      return next
+    })
+  }
+
+  const openAccessEditor = (contract, item = null) => {
+    setAccessEditor({ contract, item })
+    setExpandedContracts((current) => new Set(current).add(contract.id))
+  }
+
+  const removeAccessItem = async (contract, item) => {
+    if (!window.confirm(`确定删除游戏接入清单「${item.product_name}」吗？`)) return
+    try {
+      await deleteContractAccessItem(contract.id, item.id)
+      showToast('游戏接入清单已删除', 'success')
+      await loadContracts()
+    } catch (deleteError) {
+      console.error(deleteError)
+      showToast(deleteError?.message || '游戏接入清单删除失败', 'error')
+    }
+  }
+
   return (
     <PageContainer hideHeader className="contract-page">
       <section className="contract-hero">
@@ -457,6 +500,11 @@ function ContractManagementPage() {
           <span>已关联客户</span>
           <strong>{summary.linked}</strong>
           <small>共 {Math.max(summary.total - summary.linked, 0)} 条待补充关联</small>
+        </article>
+        <article className="is-cyan">
+          <span>游戏接入清单</span>
+          <strong>{summary.access_item_total}</strong>
+          <small>30 天内到期 {summary.access_expiring_30} 条</small>
         </article>
         <article className="is-amber">
           <span>30 天内到期</span>
@@ -550,14 +598,34 @@ function ContractManagementPage() {
                     <th>状态</th>
                     <th>账款</th>
                     <th>附件</th>
+                    <th>游戏接入</th>
                     <th className="col-sticky-right">操作</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {pagedRecords.map((contract, index) => (
-                    <tr key={contract.id} onClick={() => setSelectedContract(contract)}>
+                  {pagedRecords.map((contract, index) => {
+                    const expanded = expandedContracts.has(contract.id)
+                    const accessItems = contract.access_items || []
+                    return (
+                    <React.Fragment key={contract.id}>
+                    <tr
+                      className={expanded ? 'is-expanded' : ''}
+                      onClick={() => setSelectedContract(contract)}
+                    >
                       <td className="contract-index-col">
-                        {(page - 1) * pageSize + index + 1}
+                        <button
+                          type="button"
+                          className={`contract-expand-btn ${expanded ? 'is-open' : ''}`}
+                          aria-label={expanded ? '收起游戏接入清单' : '展开游戏接入清单'}
+                          aria-expanded={expanded}
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            toggleContract(contract.id)
+                          }}
+                        >
+                          ›
+                        </button>
+                        <span>{(page - 1) * pageSize + index + 1}</span>
                       </td>
                       <td className="contract-name-cell">
                         <strong title={contract.contract_name}>{contract.contract_name}</strong>
@@ -612,18 +680,101 @@ function ContractManagementPage() {
                           {contract.attachments?.length || 0}
                         </span>
                       </td>
+                      <td>
+                        <button
+                          type="button"
+                          className="contract-access-count"
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            toggleContract(contract.id)
+                          }}
+                        >
+                          <strong>{accessItems.length}</strong>
+                          <span>个游戏</span>
+                        </button>
+                      </td>
                       <td className="col-sticky-right" onClick={(event) => event.stopPropagation()}>
                         <div className="contract-row-actions">
                           <button type="button" onClick={() => setSelectedContract(contract)}>查看</button>
+                          <button type="button" onClick={() => openAccessEditor(contract)}>接入</button>
                           <button type="button" onClick={() => openEditForm(contract)}>编辑</button>
                           <button type="button" className="danger" onClick={() => removeContract(contract)}>删除</button>
                         </div>
                       </td>
                     </tr>
-                  ))}
+                    {expanded ? (
+                      <tr className="contract-access-detail-row">
+                        <td colSpan={11}>
+                          <div className="contract-access-panel">
+                            <div className="contract-access-panel__head">
+                              <div>
+                                <strong>游戏接入清单</strong>
+                                <span>每个游戏独立维护渠道、授权期、应用 ID 和分成规则</span>
+                              </div>
+                              <button type="button" onClick={() => openAccessEditor(contract)}>
+                                + 新增接入清单
+                              </button>
+                            </div>
+                            {accessItems.length ? (
+                              <div className="contract-access-list">
+                                <div className="contract-access-list__header">
+                                  <span>游戏 / 渠道</span>
+                                  <span>应用标识</span>
+                                  <span>业务与平台</span>
+                                  <span>授权期限</span>
+                                  <span>分成</span>
+                                  <span>状态</span>
+                                  <span>操作</span>
+                                </div>
+                                {accessItems.map((item) => (
+                                  <div className="contract-access-list__row" key={item.id}>
+                                    <span>
+                                      <strong>{item.product_name}</strong>
+                                      <small>{item.channel_name || '合同渠道未填写'}</small>
+                                    </span>
+                                    <span>
+                                      <strong>{item.app_id || '-'}</strong>
+                                      <small>{item.platform_record_id ? `记录 ${item.platform_record_id}` : '无平台记录号'}</small>
+                                    </span>
+                                    <span>
+                                      <strong>{item.agreement_type || '-'}</strong>
+                                      <small>{[item.platform, item.category].filter(Boolean).join(' · ') || '-'}</small>
+                                    </span>
+                                    <span>
+                                      <strong>{item.authorization_start || '-'}</strong>
+                                      <small>至 {item.authorization_end || '-'}</small>
+                                    </span>
+                                    <span>
+                                      <strong>{item.share_rate == null ? '-' : `${Number(item.share_rate)}%`}</strong>
+                                      <small>{item.channel_fee_rate == null ? '渠道费未填' : `渠道费 ${Number(item.channel_fee_rate)}%`}</small>
+                                    </span>
+                                    <span>
+                                      <ContractStatusTag status={item.timeline_status} />
+                                      <small>{item.agreement_status || item.game_status || '状态未填写'}</small>
+                                    </span>
+                                    <span className="contract-access-list__actions">
+                                      <button type="button" onClick={() => openAccessEditor(contract, item)}>编辑</button>
+                                      <button type="button" className="danger" onClick={() => removeAccessItem(contract, item)}>删除</button>
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="contract-access-empty">
+                                <strong>这份主合同还没有游戏接入清单</strong>
+                                <span>适合录入小米、火烈鸟等渠道下的应用 ID、授权期限和协议状态。</span>
+                                <button type="button" onClick={() => openAccessEditor(contract)}>新增第一条</button>
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ) : null}
+                    </React.Fragment>
+                  )})}
                   {!pagedRecords.length ? (
                     <tr>
-                      <td colSpan={10} className="contract-empty">
+                      <td colSpan={11} className="contract-empty">
                         没有找到符合条件的合同
                       </td>
                     </tr>
@@ -669,6 +820,14 @@ function ContractManagementPage() {
               <Field label="合同名称" required value={form.contract_name} onChange={(value) => setForm({ ...form, contract_name: value })} wide />
               <Field label="合同编号" value={form.contract_no} onChange={(value) => setForm({ ...form, contract_no: value })} />
               <Field label="合同类型" value={form.contract_type} onChange={(value) => setForm({ ...form, contract_type: value })} />
+              <SelectField
+                label="档案角色"
+                value={form.document_type}
+                options={['master', 'supplement', 'transfer', 'other']}
+                optionLabels={{ master: '主合同', supplement: '补充协议', transfer: '权利义务转让', other: '其他文件' }}
+                onChange={(value) => setForm({ ...form, document_type: value })}
+              />
+              <Field label="平台记录 ID" value={form.platform_record_id} onChange={(value) => setForm({ ...form, platform_record_id: value })} />
               <Field label="合同总额" value={form.amount} onChange={(value) => setForm({ ...form, amount: value })} inputMode="decimal" />
               <Field label="合同签约方" value={form.counterparty} onChange={(value) => setForm({ ...form, counterparty: value })} wide />
               <Field label="签订日期" type="date" value={form.signing_date} onChange={(value) => setForm({ ...form, signing_date: value })} />
@@ -699,6 +858,18 @@ function ContractManagementPage() {
         onAttachmentUploaded={handleAttachmentUploaded}
         onToast={showToast}
       />
+      {accessEditor ? (
+        <ContractAccessEditor
+          contract={accessEditor.contract}
+          item={accessEditor.item}
+          onClose={() => setAccessEditor(null)}
+          onSaved={async () => {
+            setAccessEditor(null)
+            await loadContracts()
+          }}
+          onToast={showToast}
+        />
+      ) : null}
     </PageContainer>
   )
 }
@@ -727,13 +898,15 @@ function Field({
   )
 }
 
-function SelectField({ label, value, onChange, options }) {
+function SelectField({ label, value, onChange, options, optionLabels }) {
   return (
     <label>
       <span>{label}</span>
       <select value={value} onChange={(event) => onChange(event.target.value)}>
         {options.map((option) => (
-          <option key={option || 'empty'} value={option}>{option || '未填写'}</option>
+          <option key={option || 'empty'} value={option}>
+            {optionLabels?.[option] || option || '未填写'}
+          </option>
         ))}
       </select>
     </label>

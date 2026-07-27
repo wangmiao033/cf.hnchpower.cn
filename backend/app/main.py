@@ -32,6 +32,7 @@ DEFAULT_CORS_ORIGINS = [
     "https://caiwu2026.hnchpower.cn",
     "https://duizhang2025.vercel.app",
     "https://www.duizhang2025.vercel.app",
+    "https://cf-hnchpower-cn.vercel.app",
     "http://localhost:5173",
     "http://127.0.0.1:5173",
     "http://localhost:4173",

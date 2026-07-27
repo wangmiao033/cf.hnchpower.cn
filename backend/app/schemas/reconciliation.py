@@ -51,6 +51,7 @@ class ReconciliationCreate(BaseModel):
         description="结算单编号；为空时由服务端生成占位编号",
     )
     settlement_month: str | None = None
+    partner_id: str | None = None
     partner_name: str | None = None
     game_name: str | None = None
     game_flow: float = 0
@@ -70,6 +71,7 @@ class ReconciliationCreate(BaseModel):
 class ReconciliationUpdate(BaseModel):
     statement_no: str | None = None
     settlement_month: str | None = None
+    partner_id: str | None = None
     partner_name: str | None = None
     game_name: str | None = None
     game_flow: float | None = None
@@ -93,6 +95,10 @@ class ReconciliationRead(BaseModel):
     statement_no: str
     settlement_month: str | None
     partner_name: str | None
+    partner_id: str | None = None
+    partner_short_name: str | None = None
+    partner_name_snapshot: str | None = None
+    partner_link_status: str = "unlinked"
     game_name: str | None
     game_flow: float
     test_cost: float

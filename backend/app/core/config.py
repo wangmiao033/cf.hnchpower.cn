@@ -31,11 +31,10 @@ def normalize_database_url(url: str) -> str:
 
 
 def get_database_url() -> str:
-    """Return PostgreSQL URI from DATABASE_URL. Raises if missing or empty."""
-    raw = os.environ.get("DATABASE_URL")
+    """Return the shared PostgreSQL URI used by both Vercel services."""
+    raw = os.environ.get("DATABASE_URL") or os.environ.get("QUICKSDK_DATABASE_URL")
     if raw is None or not str(raw).strip():
         raise RuntimeError(
-            "DATABASE_URL is not set or is empty. "
-            "Copy .env.example to .env in the backend directory and set DATABASE_URL."
+            "DATABASE_URL and QUICKSDK_DATABASE_URL are both missing or empty."
         )
     return normalize_database_url(str(raw))

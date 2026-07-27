@@ -19,11 +19,41 @@ export type ApiContractAttachment = {
   created_at: string
 }
 
+export type ApiContractAccessItem = {
+  id: string
+  contract_id: string
+  channel_name: string
+  agreement_type: string
+  platform_record_id: string
+  product_name: string
+  app_id: string
+  platform: string
+  language: string
+  category: string
+  rights_source: string
+  game_status: string
+  agreement_status: string
+  authorization_start: string | null
+  authorization_end: string | null
+  share_rate: string | null
+  channel_fee_rate: string | null
+  software_copyright_no: string
+  isbn: string
+  territory: string
+  status: string
+  remarks: string
+  timeline_status: '生效中' | '即将到期' | '已过期' | '待生效' | '已终止'
+  created_at: string
+  updated_at: string
+}
+
 export type ApiContractRow = {
   id: string
   source: string
   contract_name: string
   contract_type: string
+  document_type: 'master' | 'supplement' | 'transfer' | 'other'
+  platform_record_id: string
   amount: string | null
   counterparty: string
   contract_no: string
@@ -35,6 +65,7 @@ export type ApiContractRow = {
   payment_type: string
   attachments: string[]
   attachment_files: ApiContractAttachment[]
+  access_items: ApiContractAccessItem[]
   partner_id: string | null
   partner_name: string | null
   partner_short_name: string | null
@@ -51,6 +82,9 @@ export type ContractSummary = {
   expiring_30: number
   expired: number
   amount_total: string
+  access_item_total: number
+  access_expiring_30: number
+  access_expired: number
 }
 
 export type ContractListResponse = {
@@ -62,6 +96,8 @@ export type ContractListResponse = {
 export type ContractPayload = {
   contract_name: string
   contract_type?: string
+  document_type?: 'master' | 'supplement' | 'transfer' | 'other'
+  platform_record_id?: string
   amount?: string | number | null
   counterparty?: string
   contract_no?: string
@@ -72,6 +108,29 @@ export type ContractPayload = {
   performance_status?: string
   payment_type?: string
   attachments?: string[] | string
+}
+
+export type ContractAccessPayload = {
+  channel_name?: string
+  agreement_type?: string
+  platform_record_id?: string
+  product_name: string
+  app_id?: string
+  platform?: string
+  language?: string
+  category?: string
+  rights_source?: string
+  game_status?: string
+  agreement_status?: string
+  authorization_start?: string | null
+  authorization_end?: string | null
+  share_rate?: string | number | null
+  channel_fee_rate?: string | number | null
+  software_copyright_no?: string
+  isbn?: string
+  territory?: string
+  status?: string
+  remarks?: string
 }
 
 export type ContractImportResult = {
@@ -129,6 +188,33 @@ export function updateContract(id: string, payload: ContractPayload) {
 
 export function deleteContract(id: string) {
   return apiDelete(`${PATH}/${encodeURIComponent(id)}`)
+}
+
+export function createContractAccessItem(
+  contractId: string,
+  payload: ContractAccessPayload
+) {
+  return apiPost<ApiContractAccessItem>(
+    `${PATH}/${encodeURIComponent(contractId)}/access-items`,
+    payload
+  )
+}
+
+export function updateContractAccessItem(
+  contractId: string,
+  itemId: string,
+  payload: ContractAccessPayload
+) {
+  return apiPut<ApiContractAccessItem>(
+    `${PATH}/${encodeURIComponent(contractId)}/access-items/${encodeURIComponent(itemId)}`,
+    payload
+  )
+}
+
+export function deleteContractAccessItem(contractId: string, itemId: string) {
+  return apiDelete(
+    `${PATH}/${encodeURIComponent(contractId)}/access-items/${encodeURIComponent(itemId)}`
+  )
 }
 
 export async function uploadContractAttachment(

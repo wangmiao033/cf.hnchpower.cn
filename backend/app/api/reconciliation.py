@@ -22,6 +22,12 @@ from app.services.rd_bank_payment_aggregate import (
     fill_payable_for_row,
 )
 from app.services.rd_reconciliation_line import compute_rd_line_amounts
+from app.services.reconciliation_partner_links import (
+    delete_partner_link,
+    load_partner_links,
+    resolve_partner,
+    save_partner_link,
+)
 from app.schemas.bank_transaction import BankTransactionRead
 from app.schemas.reconciliation import (
     ReconciliationCreate,
@@ -179,6 +185,8 @@ def _enrich_reconciliation_read(db: Session, row: ReconciliationRecord) -> Recon
     except (OperationalError, ProgrammingError):
         agg_map = {}
     pay = fill_payable_for_row(agg_map.get(row.id), row.settlement_amount)
+    links = load_partner_links(db, [row.id])
+    link = links.get(row.id)
     return base_read.model_copy(
         update={
             "items": line_reads,
@@ -188,6 +196,11 @@ def _enrich_reconciliation_read(db: Session, row: ReconciliationRecord) -> Recon
             "payment_status": pay.payment_status,
             "payment_count": pay.payment_count,
             "latest_payment_date": pay.latest_payment_date,
+            "partner_id": link["partner_id"] if link else None,
+            "partner_short_name": link["short_name"] if link else None,
+            "partner_name_snapshot": link["partner_name_snapshot"] if link else None,
+            "partner_link_status": "linked" if link else "unlinked",
+            "partner_name": link["name"] if link else row.partner_name,
         }
     )
 
@@ -268,11 +281,13 @@ def list_reconciliation(
         agg_map = aggregate_rd_payments_for_ids(db, [r.id for r in rows])
     except (OperationalError, ProgrammingError):
         agg_map = {}
+    links = load_partner_links(db, [r.id for r in rows])
     items = []
     for r in rows:
         base_read = ReconciliationRead.model_validate(r)
         st = compute_bank_payment_list_status(float(r.settlement_amount or 0), bp_map.get(r.id))
         pay = fill_payable_for_row(agg_map.get(r.id), r.settlement_amount)
+        link = links.get(r.id)
         display_settlement_month = _resolve_row_display_settlement_month(r)
         items.append(
             base_read.model_copy(
@@ -285,6 +300,11 @@ def list_reconciliation(
                     "payment_status": pay.payment_status,
                     "payment_count": pay.payment_count,
                     "latest_payment_date": pay.latest_payment_date,
+                    "partner_id": link["partner_id"] if link else None,
+                    "partner_short_name": link["short_name"] if link else None,
+                    "partner_name_snapshot": link["partner_name_snapshot"] if link else None,
+                    "partner_link_status": "linked" if link else "unlinked",
+                    "partner_name": link["name"] if link else r.partner_name,
                 }
             )
         )
@@ -325,11 +345,16 @@ def create_reconciliation(payload: ReconciliationCreate, db: Session = Depends(g
         raw_no = ""
     statement_no = raw_no or f"RD-{uuid4().hex[:12].upper()}"
     settlement_month = _resolve_record_settlement_month(payload.settlement_month, payload.items)
+    partner = None
+    if payload.partner_id:
+        partner = resolve_partner(db, partner_id=payload.partner_id)
+        if partner is None:
+            raise HTTPException(status_code=422, detail="所选客户不存在，请刷新客户库后重试")
     row = ReconciliationRecord(
         id=str(uuid4()),
         statement_no=statement_no,
         settlement_month=settlement_month,
-        partner_name=payload.partner_name,
+        partner_name=partner["name"] if partner else payload.partner_name,
         game_name=payload.game_name,
         game_flow=payload.game_flow,
         test_cost=payload.test_cost,
@@ -345,6 +370,12 @@ def create_reconciliation(payload: ReconciliationCreate, db: Session = Depends(g
     )
     db.add(row)
     db.flush()
+    save_partner_link(
+        db,
+        reconciliation_id=row.id,
+        partner_id=payload.partner_id,
+        partner_name=row.partner_name,
+    )
     if payload.items is not None and len(payload.items) > 0:
         _replace_line_items(db, row, payload.items)
     try:
@@ -367,6 +398,8 @@ def update_reconciliation(
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"error": "not_found", "id": record_id})
     data = payload.model_dump(exclude_unset=True)
+    partner_id_supplied = "partner_id" in data
+    partner_id = data.pop("partner_id", None)
     items_payload = data.pop("items", None)
     parsed_items = [ReconciliationLineItemIn.model_validate(x) for x in items_payload] if items_payload is not None else None
     if "settlement_month" in data or parsed_items is not None:
@@ -376,6 +409,15 @@ def update_reconciliation(
         )
     for key, value in data.items():
         setattr(row, key, value)
+    if partner_id_supplied or "partner_name" in data:
+        partner = save_partner_link(
+            db,
+            reconciliation_id=row.id,
+            partner_id=partner_id,
+            partner_name=row.partner_name,
+        )
+        if partner is not None:
+            row.partner_name = partner["name"]
     row.updated_at = datetime.now(timezone.utc)
     if items_payload is not None:
         if len(items_payload) == 0:
@@ -399,5 +441,6 @@ def delete_reconciliation(record_id: str, db: Session = Depends(get_db)) -> None
     row = db.get(ReconciliationRecord, record_id)
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"error": "not_found", "id": record_id})
+    delete_partner_link(db, record_id)
     db.delete(row)
     db.commit()
