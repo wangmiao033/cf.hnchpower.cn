@@ -264,6 +264,24 @@ export function expandRdRecordsForSettlementExport(records) {
   return out
 }
 
+/**
+ * List endpoints may only return a legacy, bill-level summary row. Resolve every
+ * selected bill through the detail endpoint before building the workbook.
+ */
+export async function resolveRdRecordsForSettlementExport(records, loadRecord) {
+  const list = Array.isArray(records) ? records.filter(Boolean) : []
+  if (typeof loadRecord !== 'function') return list
+
+  return Promise.all(
+    list.map(async (record) => {
+      const id = firstText(record?.id)
+      if (!id) return record
+      const resolved = await loadRecord(id, record)
+      return resolved || record
+    })
+  )
+}
+
 function total(expanded, field) {
   return round2(expanded.reduce((sum, row) => sum + numeric(row[field]), 0))
 }

@@ -1,8 +1,9 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   buildSettlementSheetAoa,
   buildSettlementWorkbookFromSelected,
   expandRdRecordsForSettlementExport,
+  resolveRdRecordsForSettlementExport,
   toChineseUppercase
 } from './settlementConfirmationExport.js'
 
@@ -58,6 +59,30 @@ describe('formal R&D settlement export', () => {
       shareAmount: 1352.19,
       settlementAmount: 270.44
     })
+  })
+
+  it('replaces a list summary with the full multi-game detail before export', async () => {
+    const summary = {
+      ...record,
+      game: '六界飞仙、云上征途',
+      gameFlow: '596354',
+      items: [
+        {
+          gameName: '六界飞仙、云上征途',
+          revenue: '596354',
+          discountRate: '0.01',
+          shareRatio: '20'
+        }
+      ]
+    }
+    const loadRecord = vi.fn().mockResolvedValue(record)
+
+    const resolved = await resolveRdRecordsForSettlementExport([summary], loadRecord)
+    const rows = expandRdRecordsForSettlementExport(resolved)
+
+    expect(loadRecord).toHaveBeenCalledWith('5', summary)
+    expect(rows).toHaveLength(2)
+    expect(rows.map((row) => row.game)).toEqual(['六界飞仙0.1折', '云上征途0.05折'])
   })
 
   it('builds the requested statement sections and customer-bank data', () => {

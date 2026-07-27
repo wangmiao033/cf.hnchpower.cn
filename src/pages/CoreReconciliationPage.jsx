@@ -5,9 +5,14 @@ import PageContainer from '@/components/layout/PageContainer.jsx'
 import { VIEWS } from '@/app/routes.js'
 import {
   buildSettlementWorkbookFromSelected,
+  resolveRdRecordsForSettlementExport,
   writeSettlementWorkbookToFile
 } from '@/domain/export/settlementConfirmationExport.js'
 import { totalReconciliationSettlementAmount } from '@/domain/settlement/calculateSettlementAmount.js'
+import {
+  apiRowToFrontend,
+  getReconciliationRecord
+} from '@/lib/api/reconciliation.ts'
 import './CoreReconciliationPages.css'
 import '@/components/reconciliation/reconciliation-admin.css'
 
@@ -84,6 +89,7 @@ function CoreReconciliationPage() {
   const [status, setStatus] = useState('')
   const [query, setQuery] = useState('')
   const [selectedIds, setSelectedIds] = useState([])
+  const [isExporting, setIsExporting] = useState(false)
 
   const monthOptions = useMemo(
     () =>
@@ -164,17 +170,29 @@ function CoreReconciliationPage() {
     setSelectedIds((prev) => (prev.includes(sid) ? prev.filter((item) => item !== sid) : [...prev, sid]))
   }
 
-  const exportSelected = () => {
+  const exportSelected = async () => {
     const target = selectedRows.length > 0 ? selectedRows : rows
     if (target.length === 0) {
       showToast('没有可导出的研发账单', 'error')
       return
     }
-    const { wb, fileName } = buildSettlementWorkbookFromSelected(target, {
-      partners: settings.partners
-    })
-    writeSettlementWorkbookToFile(wb, fileName)
-    showToast(`已导出 ${target.length} 条研发账单`, 'success')
+    setIsExporting(true)
+    try {
+      const fullRecords = await resolveRdRecordsForSettlementExport(
+        target,
+        async (id) => apiRowToFrontend(await getReconciliationRecord(id))
+      )
+      const { wb, fileName } = buildSettlementWorkbookFromSelected(fullRecords, {
+        partners: settings.partners
+      })
+      writeSettlementWorkbookToFile(wb, fileName)
+      showToast(`已导出 ${target.length} 条研发账单`, 'success')
+    } catch (error) {
+      console.error(error)
+      showToast('读取账单完整明细失败，未生成文件，请稍后重试', 'error')
+    } finally {
+      setIsExporting(false)
+    }
   }
 
   const handleImportFile = async (event) => {
@@ -211,7 +229,9 @@ function CoreReconciliationPage() {
           </div>
           <div className="core-recon-actions">
             <button type="button" onClick={() => fileRef.current?.click()}>导入 Excel</button>
-            <button type="button" onClick={exportSelected}>导出</button>
+            <button type="button" onClick={exportSelected} disabled={isExporting}>
+              {isExporting ? '正在读取…' : '导出'}
+            </button>
             <button
               type="button"
               className="primary"
