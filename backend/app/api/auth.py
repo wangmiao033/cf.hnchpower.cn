@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from secrets import compare_digest
 from datetime import datetime, timezone
 from uuid import uuid4
 
@@ -53,7 +54,7 @@ def _normalize_account(value: str | None) -> str:
 
 
 def _get_or_create_builtin_user(db: Session) -> AuthUser:
-    user = db.get(AuthUser, "auth-user-adam") or get_user_by_email(db, BUILTIN_ACCOUNT)
+    user = get_user_by_email(db, BUILTIN_ACCOUNT) or db.get(AuthUser, "auth-user-adam")
 
     if user is None:
         if not BUILTIN_PASSWORDS:
@@ -64,7 +65,7 @@ def _get_or_create_builtin_user(db: Session) -> AuthUser:
         user = AuthUser(
             id="auth-user-adam",
             email=BUILTIN_ACCOUNT,
-            display_name="adam",
+            display_name=BUILTIN_ACCOUNT,
             role="admin",
             password_hash=hash_password(BUILTIN_PASSWORDS[0]),
             is_active=True,
@@ -74,14 +75,19 @@ def _get_or_create_builtin_user(db: Session) -> AuthUser:
             db.flush()
         except IntegrityError:
             db.rollback()
-            user = db.get(AuthUser, "auth-user-adam") or get_user_by_email(db, BUILTIN_ACCOUNT)
+            user = get_user_by_email(db, BUILTIN_ACCOUNT) or db.get(AuthUser, "auth-user-adam")
             if user is None:
                 raise
 
-    user.display_name = user.display_name or "adam"
+    user.email = BUILTIN_ACCOUNT
+    user.display_name = BUILTIN_ACCOUNT
     user.role = "admin"
     user.is_active = True
     return user
+
+
+def _matches_configured_builtin_password(password: str) -> bool:
+    return any(compare_digest(password, candidate) for candidate in BUILTIN_PASSWORDS)
 
 
 @router.post("/login-password", response_model=AuthMeResponse)
@@ -95,9 +101,17 @@ def login_password(payload: PasswordLoginRequest, db: Session = Depends(get_db))
     user = _get_or_create_builtin_user(db) if account == BUILTIN_ACCOUNT else get_user_by_email(db, account)
     if user is None or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="账号或密码错误")
-    if is_locked(user):
+    configured_builtin_login = (
+        account == BUILTIN_ACCOUNT and _matches_configured_builtin_password(payload.password)
+    )
+    if is_locked(user) and not configured_builtin_login:
         raise HTTPException(status_code=423, detail="登录已锁定，请稍后再试")
-    if not verify_password(payload.password, user.password_hash):
+    password_matches = verify_password(payload.password, user.password_hash)
+    if not password_matches and configured_builtin_login:
+        user.password_hash = hash_password(payload.password)
+        password_matches = True
+
+    if not password_matches:
         register_login_fail(user)
         db.commit()
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="账号或密码错误")
