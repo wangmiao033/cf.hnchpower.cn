@@ -282,6 +282,12 @@ export function getReconciliationRecordId(
   return String(v)
 }
 
+function finiteNumber(value: unknown, fallback = 0): number {
+  if (value === null || value === undefined || String(value).trim() === '') return fallback
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : fallback
+}
+
 function apiLineToFrontend(line: ApiReconciliationLineItemRow, parentSettlementMonth?: string | null) {
   return {
     id: line.id,
@@ -384,14 +390,14 @@ export function frontendRecordToApiPayload(
             line.gameName != null && String(line.gameName).trim() !== ''
               ? String(line.gameName).trim()
               : null,
-          revenue: parseFloat(String(line.revenue ?? 0)),
-          discount_rate: parseFloat(String(line.discountRate ?? 1)),
-          coupon_amount: parseFloat(String(line.couponAmount ?? 0)),
-          test_fee: parseFloat(String(line.testFee ?? 0)),
-          extra_fee: parseFloat(String(line.extraFee ?? 0)),
-          share_ratio: parseFloat(String(line.shareRatio ?? 0)),
-          tax_rate: parseFloat(String(line.taxRate ?? 0)),
-          sort_order: Number(line.sortOrder ?? idx)
+          revenue: finiteNumber(line.revenue),
+          discount_rate: finiteNumber(line.discountRate, 1),
+          coupon_amount: finiteNumber(line.couponAmount),
+          test_fee: finiteNumber(line.testFee),
+          extra_fee: finiteNumber(line.extraFee),
+          share_ratio: finiteNumber(line.shareRatio),
+          tax_rate: finiteNumber(line.taxRate),
+          sort_order: finiteNumber(line.sortOrder, idx)
         }))
       : undefined
   return {
@@ -400,15 +406,15 @@ export function frontendRecordToApiPayload(
     partner_id: (record.partnerId as string) || null,
     partner_name: (record.partner as string) || null,
     game_name: (record.game as string) || null,
-    game_flow: parseFloat(String(record.gameFlow ?? 0)),
-    test_cost: parseFloat(String(record.testingFee ?? 0)),
-    voucher_cost: parseFloat(String(record.voucher ?? 0)),
-    channel_fee_rate: parseFloat(String(record.channelFeeRate ?? 0)),
-    tax_rate: parseFloat(String(record.taxPoint ?? 0)),
-    revenue_share_rate: parseFloat(String(record.revenueShareRatio ?? 0)),
-    discount_value: parseFloat(String(record.discount ?? 1)),
-    refund_amount: parseFloat(String(record.refund ?? 0)),
-    settlement_amount: parseFloat(String(record.settlementAmount ?? 0)),
+    game_flow: finiteNumber(record.gameFlow),
+    test_cost: finiteNumber(record.testingFee),
+    voucher_cost: finiteNumber(record.voucher),
+    channel_fee_rate: finiteNumber(record.channelFeeRate),
+    tax_rate: finiteNumber(record.taxPoint),
+    revenue_share_rate: finiteNumber(record.revenueShareRatio),
+    discount_value: finiteNumber(record.discount, 1),
+    refund_amount: finiteNumber(record.refund),
+    settlement_amount: finiteNumber(record.settlementAmount),
     status: (record.status as string) || 'pending',
     remark: record.memo != null && record.memo !== '' ? String(record.memo) : null,
     ...(items !== undefined ? { items } : {})
