@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react'
-import * as XLSX from 'xlsx'
+import * as XLSX from 'xlsx-js-style'
 import dayjs from 'dayjs'
 import {
   buildSettlementSheetAoa,
@@ -62,12 +62,25 @@ function BillExport({
 
     try {
       const wb = XLSX.utils.book_new()
-      const wsData = buildSettlementSheetAoa(records)
+      const wsData = buildSettlementSheetAoa(records, {
+        invoice: {
+          companyName: partyA?.invoiceTitle,
+          taxRegistrationNo: partyA?.taxRegistrationNo,
+          addressPhone: [partyA?.invoiceAddress, partyA?.phone].filter(Boolean).join(' '),
+          bankName: partyA?.bankName,
+          bankAccount: partyA?.bankAccount
+        },
+        payment: {
+          companyName: partyB?.companyName,
+          bankName: partyB?.bankName,
+          bankAccount: partyB?.bankAccount
+        }
+      })
       const ws = XLSX.utils.aoa_to_sheet(wsData)
       applySettlementSheetLayout(ws)
       XLSX.utils.book_append_sheet(wb, ws, '结算确认单')
       const fileName = `结算确认单_${dayjs().format('YYYYMMDD_HHmmss')}.xlsx`
-      XLSX.writeFile(wb, fileName)
+      XLSX.writeFile(wb, fileName, { cellStyles: true, bookType: 'xlsx' })
 
       setShowMenu(false)
       onExportSuccess?.('Excel格式账单导出成功！')

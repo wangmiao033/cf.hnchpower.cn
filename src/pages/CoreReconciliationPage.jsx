@@ -170,7 +170,9 @@ function CoreReconciliationPage() {
       showToast('没有可导出的研发账单', 'error')
       return
     }
-    const { wb, fileName } = buildSettlementWorkbookFromSelected(target)
+    const { wb, fileName } = buildSettlementWorkbookFromSelected(target, {
+      partners: settings.partners
+    })
     writeSettlementWorkbookToFile(wb, fileName)
     showToast(`已导出 ${target.length} 条研发账单`, 'success')
   }
