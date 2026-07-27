@@ -326,6 +326,48 @@
   table-layout: fixed;
 }
 
+.core-channel-recon-table {
+  min-width: 1240px;
+  table-layout: fixed;
+}
+
+.core-channel-recon-table .core-channel-col-month {
+  width: 128px;
+}
+
+.core-channel-recon-table .core-channel-col-channel {
+  width: 210px;
+}
+
+.core-channel-recon-table .core-channel-col-partner {
+  width: 190px;
+}
+
+.core-channel-recon-table .core-channel-col-game {
+  width: 180px;
+}
+
+.core-channel-recon-table .core-channel-col-flow {
+  width: 120px;
+}
+
+.core-channel-recon-table .core-channel-col-share,
+.core-channel-recon-table .core-channel-col-settlement {
+  width: 112px;
+}
+
+.core-channel-recon-table .core-channel-col-received {
+  width: 100px;
+}
+
+.core-channel-recon-table .core-channel-col-status {
+  width: 82px;
+}
+
+.core-channel-recon-table .core-channel-col-actions {
+  width: 108px;
+}
+
 .core-rd-recon-table .core-rd-col-number {
   width: 145px;
 }
@@ -366,12 +408,14 @@
   width: 108px;
 }
 
-.core-rd-recon-table tbody td {
+.core-rd-recon-table tbody td,
+.core-channel-recon-table tbody td {
   height: 42px;
   vertical-align: middle;
 }
 
-.core-rd-recon-table tbody tr.is-selected {
+.core-rd-recon-table tbody tr.is-selected,
+.core-channel-recon-table tbody tr.is-selected {
   background: #eff6ff;
 }
 
@@ -381,7 +425,8 @@
   gap: 8px;
 }
 
-.core-rd-recon-table input[type='checkbox'] {
+.core-rd-recon-table input[type='checkbox'],
+.core-channel-recon-table input[type='checkbox'] {
   flex: 0 0 auto;
   width: 14px;
   height: 14px;

@@ -23,24 +23,58 @@ function text(value, fallback = '-') {
   return raw || fallback
 }
 
+function monthKey(value) {
+  const raw = String(value || '').trim()
+  const match = raw.match(/^(\d{4})(?:-|年)\s*(\d{1,2})(?:月)?$/)
+  if (!match) return raw
+  return `${match[1]}-${String(Number(match[2])).padStart(2, '0')}`
+}
+
+function monthLabel(value) {
+  const normalized = monthKey(value)
+  const match = normalized.match(/^(\d{4})-(\d{2})$/)
+  return match ? `${match[1]}年${Number(match[2])}月` : normalized
+}
+
 function CoreChannelReconciliationPage() {
   const { recon, showToast, setActiveView, openChannelReconciliationEdit } = useAppState()
   const fileRef = useRef(null)
   const [month, setMonth] = useState('')
+  const [channel, setChannel] = useState('')
+  const [channelDraft, setChannelDraft] = useState('')
+  const [status, setStatus] = useState('')
   const [query, setQuery] = useState('')
   const [selectedIds, setSelectedIds] = useState([])
 
+  const monthOptions = useMemo(
+    () =>
+      [...new Set((recon.channelRecords || []).map((row) => monthKey(row.settlementMonth)).filter(Boolean))]
+        .sort((a, b) => b.localeCompare(a, 'zh-CN')),
+    [recon.channelRecords]
+  )
+
+  const channelOptions = useMemo(
+    () =>
+      [...new Set((recon.channelRecords || []).map((row) => text(row.channelName, '')).filter(Boolean))]
+        .sort((a, b) => a.localeCompare(b, 'zh-CN')),
+    [recon.channelRecords]
+  )
+
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase()
+    const channelQuery = channel.trim().toLowerCase()
     return (recon.channelRecords || []).filter((row) => {
-      const matchesMonth = !month || text(row.settlementMonth, '') === month
+      const matchesMonth = !month || monthKey(row.settlementMonth) === month
+      const matchesChannel =
+        !channelQuery || text(row.channelName, '').toLowerCase().includes(channelQuery)
+      const matchesStatus = !status || String(row.status || 'pending') === status
       const haystack = [row.channelName, row.partnerName, row.gameName, row.remark]
         .filter(Boolean)
         .join(' ')
         .toLowerCase()
-      return matchesMonth && (!q || haystack.includes(q))
+      return matchesMonth && matchesChannel && matchesStatus && (!q || haystack.includes(q))
     })
-  }, [recon.channelRecords, month, query])
+  }, [recon.channelRecords, month, channel, status, query])
 
   const selectedRows = useMemo(
     () => rows.filter((row) => selectedIds.includes(String(row.id))),
@@ -116,33 +150,102 @@ function CoreChannelReconciliationPage() {
 
   return (
     <PageContainer hideHeader className="core-recon-page">
-      <section className="core-recon-head">
-        <div>
-          <p>核心对账</p>
-          <h1>渠道账单</h1>
-          <span>沿用现有渠道核算公式和服务端接口，重做渠道账单列表、统计、导入导出。</span>
+      <section className="core-recon-workbar">
+        <div className="core-recon-head">
+          <div className="core-recon-title">
+            <span className="core-recon-title-mark" aria-hidden="true">渠</span>
+            <div>
+              <h1>渠道账单</h1>
+              <span>{rows.length} 笔账单</span>
+            </div>
+          </div>
+          <div className="core-recon-actions">
+            <button type="button" onClick={() => fileRef.current?.click()}>导入 Excel</button>
+            <button type="button" onClick={exportRows}>导出</button>
+            <button type="button" className="primary" onClick={() => setActiveView(VIEWS.CHANNEL_RECON_CREATE)}>
+              新增账单
+            </button>
+            <input ref={fileRef} type="file" accept=".xlsx,.xls" onChange={handleImportFile} hidden />
+          </div>
         </div>
-        <div className="core-recon-actions">
-          <button type="button" onClick={() => fileRef.current?.click()}>导入 Excel</button>
-          <button type="button" onClick={exportRows}>导出</button>
-          <button type="button" className="primary" onClick={() => setActiveView(VIEWS.CHANNEL_RECON_CREATE)}>
-            新增账单
+        <div className="core-recon-filters">
+          <label className="core-recon-filter-control">
+            <span>月份</span>
+            <select
+              value={month}
+              aria-label="筛选渠道账单月份"
+              onChange={(event) => setMonth(event.target.value)}
+            >
+              <option value="">全部月份</option>
+              {monthOptions.map((value) => (
+                <option key={value} value={value}>{monthLabel(value)}</option>
+              ))}
+            </select>
+          </label>
+          <div className="core-recon-filter-control core-recon-partner-filter">
+            <span>渠道</span>
+            <input
+              type="search"
+              list="core-channel-options"
+              value={channelDraft}
+              onChange={(event) => setChannelDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault()
+                  setChannel(channelDraft.trim())
+                  setSelectedIds([])
+                }
+              }}
+              placeholder="输入渠道名称"
+              aria-label="搜索渠道"
+            />
+            <datalist id="core-channel-options">
+              {channelOptions.map((name) => <option key={name} value={name} />)}
+            </datalist>
+            <button
+              type="button"
+              className="core-recon-partner-submit"
+              onClick={() => {
+                setChannel(channelDraft.trim())
+                setSelectedIds([])
+              }}
+            >
+              搜索
+            </button>
+          </div>
+          <label className="core-recon-filter-control">
+            <span>状态</span>
+            <select
+              value={status}
+              aria-label="筛选渠道账单状态"
+              onChange={(event) => setStatus(event.target.value)}
+            >
+              <option value="">全部状态</option>
+              {Object.entries(STATUS_LABELS).map(([value, label]) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
+            </select>
+          </label>
+          <label className="core-recon-filter-control core-recon-filter-search">
+            <span>关键词</span>
+            <input
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="渠道、合作方或产品"
+            />
+          </label>
+          <button type="button" className="core-recon-reset" onClick={() => {
+            setMonth('')
+            setChannel('')
+            setChannelDraft('')
+            setStatus('')
+            setQuery('')
+            setSelectedIds([])
+          }}>
+            重置
           </button>
-          <input ref={fileRef} type="file" accept=".xlsx,.xls" onChange={handleImportFile} hidden />
         </div>
-      </section>
-
-      <section className="core-recon-filters">
-        <input type="month" value={month} onChange={(event) => setMonth(event.target.value)} />
-        <input
-          type="search"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="搜索渠道、合作方、产品"
-        />
-        <button type="button" onClick={() => { setMonth(''); setQuery(''); setSelectedIds([]) }}>
-          清空
-        </button>
       </section>
 
       <section className="core-recon-stats core-recon-stats--five">
@@ -160,18 +263,29 @@ function CoreChannelReconciliationPage() {
           <span>{selectedRows.length > 0 ? `已选 ${selectedRows.length} 条` : `${rows.length} 条`}</span>
         </div>
         <div className="core-recon-table-wrap">
-          <table className="core-recon-table">
+          <table className="core-recon-table core-channel-recon-table">
+            <colgroup>
+              <col className="core-channel-col-month" />
+              <col className="core-channel-col-channel" />
+              <col className="core-channel-col-partner" />
+              <col className="core-channel-col-game" />
+              <col className="core-channel-col-flow" />
+              <col className="core-channel-col-share" />
+              <col className="core-channel-col-settlement" />
+              <col className="core-channel-col-received" />
+              <col className="core-channel-col-status" />
+              <col className="core-channel-col-actions" />
+            </colgroup>
             <thead>
               <tr>
-                <th>选择</th>
-                <th>月份</th>
+                <th>账单月份</th>
                 <th>渠道</th>
                 <th>合作方</th>
                 <th>产品</th>
-                <th>计费流水</th>
-                <th>分成金额</th>
-                <th>结算金额</th>
-                <th>收款</th>
+                <th className="core-recon-align-right">计费流水</th>
+                <th className="core-recon-align-right">分成金额</th>
+                <th className="core-recon-align-right">结算金额</th>
+                <th className="core-recon-align-right">收款</th>
                 <th>状态</th>
                 <th>操作</th>
               </tr>
@@ -179,30 +293,56 @@ function CoreChannelReconciliationPage() {
             <tbody>
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="core-recon-empty">暂无渠道账单</td>
+                  <td colSpan={10} className="core-recon-empty">暂无渠道账单</td>
                 </tr>
               ) : (
                 rows.map((row) => (
-                  <tr key={row.id}>
-                    <td>
+                  <tr
+                    key={row.id}
+                    className={selectedIds.includes(String(row.id)) ? 'is-selected' : ''}
+                  >
+                    <td className="core-rd-month-cell">
                       <input
                         type="checkbox"
+                        aria-label={`选择渠道账单 ${text(row.channelName)} ${monthLabel(row.settlementMonth)}`}
                         checked={selectedIds.includes(String(row.id))}
                         onChange={() => toggleSelected(row.id)}
                       />
+                      <span>{monthLabel(row.settlementMonth)}</span>
                     </td>
-                    <td>{text(row.settlementMonth)}</td>
-                    <td>{text(row.channelName)}</td>
-                    <td>{text(row.partnerName)}</td>
-                    <td>{text(row.gameName)}</td>
-                    <td>{money(row.flow)}</td>
-                    <td>{money(row.shareAmount)}</td>
-                    <td>{money(row.settlementAmount)}</td>
-                    <td>{money(row.receivedAmount)}</td>
-                    <td><span className="core-recon-status">{STATUS_LABELS[row.status] || row.status || '待处理'}</span></td>
                     <td>
-                      <button type="button" onClick={() => openChannelReconciliationEdit(String(row.id))}>编辑</button>
-                      <button type="button" className="danger" onClick={() => recon.onChannelDeleteRecord(row.id)}>删除</button>
+                      <strong className="core-recon-partner-short-name" title={text(row.channelName)}>
+                        {text(row.channelName)}
+                      </strong>
+                    </td>
+                    <td>
+                      <span className="core-recon-game-text" title={text(row.partnerName)}>
+                        {text(row.partnerName)}
+                      </span>
+                    </td>
+                    <td>
+                      <span className="core-recon-game-text" title={text(row.gameName)}>
+                        {text(row.gameName)}
+                      </span>
+                    </td>
+                    <td className="core-recon-money">{money(row.flow)}</td>
+                    <td className="core-recon-money">{money(row.shareAmount)}</td>
+                    <td className="core-recon-money core-recon-money--settlement">
+                      {money(row.settlementAmount)}
+                    </td>
+                    <td className="core-recon-money core-recon-money--received">
+                      {money(row.receivedAmount)}
+                    </td>
+                    <td>
+                      <span className={`core-recon-status core-recon-status--${row.status || 'pending'}`}>
+                        {STATUS_LABELS[row.status] || row.status || '待处理'}
+                      </span>
+                    </td>
+                    <td>
+                      <div className="core-recon-row-actions">
+                        <button type="button" onClick={() => openChannelReconciliationEdit(String(row.id))}>编辑</button>
+                        <button type="button" className="danger" onClick={() => recon.onChannelDeleteRecord(row.id)}>删除</button>
+                      </div>
                     </td>
                   </tr>
                 ))
