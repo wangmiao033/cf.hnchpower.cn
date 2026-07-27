@@ -198,42 +198,47 @@ function CoreReconciliationPage() {
 
   return (
     <PageContainer hideHeader className="core-recon-page">
-      <section className="core-recon-head">
-        <div>
-          <p>核心对账</p>
-          <h1>研发账单</h1>
-          <span>沿用现有研发结算公式和导出模板，重做筛选、统计和列表体验。</span>
+      <section className="core-recon-workbar">
+        <div className="core-recon-head">
+          <div className="core-recon-title">
+            <span className="core-recon-title-mark" aria-hidden="true">研</span>
+            <div>
+              <h1>研发账单</h1>
+              <span>{rows.length} 笔账单</span>
+            </div>
+          </div>
+          <div className="core-recon-actions">
+            <button type="button" onClick={() => fileRef.current?.click()}>导入 Excel</button>
+            <button type="button" onClick={exportSelected}>导出</button>
+            <button
+              type="button"
+              className="primary"
+              onClick={() => {
+                recon.setQuickFillData(null)
+                setActiveView(VIEWS.RECON_CREATE)
+              }}
+            >
+              新增账单
+            </button>
+            <input ref={fileRef} type="file" accept=".xlsx,.xls" onChange={handleImportFile} hidden />
+          </div>
         </div>
-        <div className="core-recon-actions">
-          <button type="button" onClick={() => fileRef.current?.click()}>导入 Excel</button>
-          <button type="button" onClick={exportSelected}>导出</button>
-          <button
-            type="button"
-            className="primary"
-            onClick={() => {
-              recon.setQuickFillData(null)
-              setActiveView(VIEWS.RECON_CREATE)
-            }}
-          >
-            新增账单
-          </button>
-          <input ref={fileRef} type="file" accept=".xlsx,.xls" onChange={handleImportFile} hidden />
-        </div>
-      </section>
-
-      <section className="core-recon-filters">
-        <label>
-          <span>月份</span>
-          <select value={month} onChange={(event) => setMonth(event.target.value)}>
-            <option value="">全部月份</option>
-            {monthOptions.map((value) => (
-              <option key={value} value={value}>{monthLabel(value)}</option>
-            ))}
-          </select>
-        </label>
-        <div className="core-recon-filter-field core-recon-partner-filter">
-          <span>合作方</span>
-          <div className="core-recon-partner-search">
+        <div className="core-recon-filters">
+          <label className="core-recon-filter-control">
+            <span>月份</span>
+            <select
+              value={month}
+              aria-label="筛选账单月份"
+              onChange={(event) => setMonth(event.target.value)}
+            >
+              <option value="">全部月份</option>
+              {monthOptions.map((value) => (
+                <option key={value} value={value}>{monthLabel(value)}</option>
+              ))}
+            </select>
+          </label>
+          <div className="core-recon-filter-control core-recon-partner-filter">
+            <span>客户</span>
             <input
               type="search"
               list="core-recon-partner-options"
@@ -254,6 +259,7 @@ function CoreReconciliationPage() {
             </datalist>
             <button
               type="button"
+              className="core-recon-partner-submit"
               onClick={() => {
                 setPartner(partnerDraft.trim())
                 setSelectedIds([])
@@ -262,35 +268,39 @@ function CoreReconciliationPage() {
               搜索
             </button>
           </div>
+          <label className="core-recon-filter-control">
+            <span>状态</span>
+            <select
+              value={status}
+              aria-label="筛选账单状态"
+              onChange={(event) => setStatus(event.target.value)}
+            >
+              <option value="">全部状态</option>
+              {Object.entries(STATUS_LABELS).map(([value, label]) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
+            </select>
+          </label>
+          <label className="core-recon-filter-control core-recon-filter-search">
+            <span>关键词</span>
+            <input
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="编号、客户或产品"
+            />
+          </label>
+          <button type="button" className="core-recon-reset" onClick={() => {
+            setMonth('')
+            setPartner('')
+            setPartnerDraft('')
+            setStatus('')
+            setQuery('')
+            setSelectedIds([])
+          }}>
+            重置
+          </button>
         </div>
-        <label>
-          <span>状态</span>
-          <select value={status} onChange={(event) => setStatus(event.target.value)}>
-            <option value="">全部状态</option>
-            {Object.entries(STATUS_LABELS).map(([value, label]) => (
-              <option key={value} value={value}>{label}</option>
-            ))}
-          </select>
-        </label>
-        <label className="core-recon-filter-search">
-          <span>搜索</span>
-          <input
-            type="search"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="搜索编号、合作方、游戏"
-          />
-        </label>
-        <button type="button" onClick={() => {
-          setMonth('')
-          setPartner('')
-          setPartnerDraft('')
-          setStatus('')
-          setQuery('')
-          setSelectedIds([])
-        }}>
-          清空
-        </button>
       </section>
 
       <section className="core-recon-stats">

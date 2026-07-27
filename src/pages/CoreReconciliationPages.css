@@ -4,8 +4,7 @@
   gap: 10px;
 }
 
-.core-recon-head,
-.core-recon-filters,
+.core-recon-workbar,
 .core-recon-stats > div,
 .core-recon-panel {
   background: #ffffff;
@@ -13,35 +12,54 @@
   border-radius: 8px;
 }
 
-.core-recon-head {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 16px 18px;
+.core-recon-workbar {
+  overflow: hidden;
 }
 
-.core-recon-head p {
-  margin: 0 0 6px;
-  color: var(--admin-primary);
-  font-size: 13px;
-  font-weight: 700;
+.core-recon-head {
+  min-height: 68px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 11px 16px;
+}
+
+.core-recon-title {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+}
+
+.core-recon-title-mark {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  margin: 0 !important;
+  border-radius: 7px;
+  background: #eaf2ff;
+  color: var(--admin-primary) !important;
+  font-size: 15px !important;
+  font-weight: 800;
 }
 
 .core-recon-head h1 {
   margin: 0;
   color: var(--admin-text-main);
-  font-size: 23px;
+  font-size: 20px;
   line-height: 1.2;
   letter-spacing: 0;
 }
 
-.core-recon-head span {
+.core-recon-title > div > span {
   display: block;
-  margin-top: 8px;
-  color: var(--admin-text-sub);
-  font-size: 13px;
-  line-height: 1.6;
+  margin-top: 3px;
+  color: var(--admin-text-tertiary);
+  font-size: 12px;
+  line-height: 1.3;
 }
 
 .core-recon-actions,
@@ -84,57 +102,127 @@
 }
 
 .core-recon-filters {
-  align-items: flex-end;
-  padding: 10px 12px;
+  min-height: 54px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--admin-border-soft);
+  background: #f8fafc;
 }
 
-.core-recon-filters label,
-.core-recon-filter-field {
-  display: grid;
-  gap: 5px;
-  min-width: 150px;
+.core-recon-filter-control {
+  min-width: 168px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid var(--admin-border);
+  border-radius: 7px;
+  background: #ffffff;
 }
 
-.core-recon-filters label > span,
-.core-recon-filter-field > span {
+.core-recon-filter-control > span {
+  flex: 0 0 auto;
+  padding-left: 11px;
   color: var(--admin-text-tertiary);
   font-size: 12px;
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .core-recon-filters input,
 .core-recon-filters select {
   height: 34px;
-  border: 1px solid var(--admin-border);
-  border-radius: 7px;
-  background: #ffffff;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
   color: var(--admin-text-main);
-  padding: 0 10px;
+  padding: 0 9px;
   font-size: 13px;
 }
 
 .core-recon-filter-search {
   flex: 1;
-  min-width: 220px;
+  min-width: 240px;
 }
 
 .core-recon-filter-search input[type='search'] {
+  flex: 1;
   width: 100%;
 }
 
 .core-recon-partner-filter {
-  min-width: 320px;
+  min-width: 330px;
 }
 
-.core-recon-partner-search {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 6px;
+.core-recon-partner-filter input {
+  flex: 1;
 }
 
-.core-recon-partner-search input {
-  width: 100%;
-  min-width: 0;
+.core-recon-filters .core-recon-partner-submit {
+  height: 28px;
+  margin-right: 3px;
+  padding: 0 10px;
+  border: 0;
+  border-left: 1px solid var(--admin-border-soft);
+  border-radius: 0;
+  background: transparent;
+  color: var(--admin-primary);
+}
+
+.core-recon-filters .core-recon-reset {
+  height: 36px;
+  color: var(--admin-text-sub);
+  background: #ffffff;
+}
+
+/* Keep the channel ledger's standalone header and filters unchanged. */
+.core-recon-page .page-container-body > .core-recon-head,
+.core-recon-page .page-container-body > .core-recon-filters {
+  background: #ffffff;
+  border: 1px solid var(--admin-border);
+  border-radius: 8px;
+}
+
+.core-recon-page .page-container-body > .core-recon-head {
+  min-height: 0;
+  align-items: flex-end;
+  padding: 16px 18px;
+}
+
+.core-recon-page .page-container-body > .core-recon-head p {
+  margin: 0 0 6px;
+  color: var(--admin-primary);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.core-recon-page .page-container-body > .core-recon-head h1 {
+  font-size: 23px;
+}
+
+.core-recon-page .page-container-body > .core-recon-head span {
+  display: block;
+  margin-top: 8px;
+  color: var(--admin-text-sub);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.core-recon-page .page-container-body > .core-recon-filters {
+  min-height: 0;
+  align-items: flex-end;
+  padding: 10px 12px;
+  border-top: 1px solid var(--admin-border);
+  background: #ffffff;
+}
+
+.core-recon-page .page-container-body > .core-recon-filters input,
+.core-recon-page .page-container-body > .core-recon-filters select {
+  height: 36px;
+  border: 1px solid var(--admin-border);
+  border-radius: 7px;
+  background: #ffffff;
+  padding: 0 10px;
 }
 
 .core-recon-stats {
@@ -435,8 +523,7 @@
     grid-template-columns: 1fr;
   }
 
-  .core-recon-filters label,
-  .core-recon-filter-field,
+  .core-recon-filter-control,
   .core-recon-filter-search {
     min-width: 0;
   }
