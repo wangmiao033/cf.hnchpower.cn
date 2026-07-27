@@ -4,8 +4,15 @@ import { useAppState } from '@/app/AppStateContext.jsx'
 import PageContainer from '@/components/layout/PageContainer.jsx'
 import { VIEWS } from '@/app/routes.js'
 import { buildChannelBillFromSingleGameForm } from '@/domain/channel/channelBillingForm.js'
+import {
+  CHANNEL_PROGRESS_PREVIEW,
+  summarizeChannelProgressMatrix
+} from '@/domain/channel/channelReconciliationProgress.js'
+import ChannelReconciliationProgressPanel from '@/components/channel/ChannelReconciliationProgressPanel.jsx'
 import { getChannelBillNumber } from '@/utils/channelBillNumber.js'
 import './CoreReconciliationPages.css'
+
+const CHANNEL_PROGRESS_STORAGE_KEY = 'channel-reconciliation-progress-preview-v1'
 
 const STATUS_LABELS = {
   pending: '待处理',
@@ -37,15 +44,27 @@ function monthLabel(value) {
   return match ? `${match[1]}年${Number(match[2])}月` : normalized
 }
 
+function loadProgressPreview() {
+  try {
+    const saved = window.localStorage.getItem(CHANNEL_PROGRESS_STORAGE_KEY)
+    return saved ? JSON.parse(saved) : CHANNEL_PROGRESS_PREVIEW
+  } catch {
+    return CHANNEL_PROGRESS_PREVIEW
+  }
+}
+
 function CoreChannelReconciliationPage() {
   const { recon, showToast, setActiveView, openChannelReconciliationEdit } = useAppState()
   const fileRef = useRef(null)
+  const progressFileRef = useRef(null)
   const [month, setMonth] = useState('')
   const [channel, setChannel] = useState('')
   const [channelDraft, setChannelDraft] = useState('')
   const [status, setStatus] = useState('')
   const [query, setQuery] = useState('')
   const [selectedIds, setSelectedIds] = useState([])
+  const [progressExpanded, setProgressExpanded] = useState(true)
+  const [progressSnapshot, setProgressSnapshot] = useState(loadProgressPreview)
 
   const monthOptions = useMemo(
     () =>
@@ -150,6 +169,50 @@ function CoreChannelReconciliationPage() {
     }
   }
 
+  const handleProgressImportFile = async (event) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+
+    try {
+      const data = await file.arrayBuffer()
+      const workbook = XLSX.read(data, { type: 'array' })
+      let selectedSheet = null
+      let matrix = null
+
+      for (const sheetName of workbook.SheetNames) {
+        const candidate = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], {
+          header: 1,
+          defval: '',
+          raw: true
+        })
+        const hasProgressColumn = candidate
+          .slice(0, 8)
+          .some((row) => Array.isArray(row) && row.some((cell) => String(cell).trim() === '对账进度'))
+        if (hasProgressColumn) {
+          selectedSheet = sheetName
+          matrix = candidate
+          break
+        }
+      }
+
+      if (!selectedSheet || !matrix) {
+        throw new Error('未找到包含“对账进度”的工作表')
+      }
+
+      const summary = summarizeChannelProgressMatrix(matrix, {
+        fileName: file.name,
+        sheetName: selectedSheet
+      })
+      setProgressSnapshot(summary)
+      setProgressExpanded(true)
+      window.localStorage.setItem(CHANNEL_PROGRESS_STORAGE_KEY, JSON.stringify(summary))
+      showToast(`已更新 ${summary.totals.rows} 条渠道流水进度`, 'success')
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : '进度数据读取失败', 'error')
+    }
+  }
+
   return (
     <PageContainer hideHeader className="core-recon-page">
       <section className="core-recon-workbar">
@@ -168,6 +231,13 @@ function CoreChannelReconciliationPage() {
               新增账单
             </button>
             <input ref={fileRef} type="file" accept=".xlsx,.xls" onChange={handleImportFile} hidden />
+            <input
+              ref={progressFileRef}
+              type="file"
+              accept=".xlsx,.xls"
+              onChange={handleProgressImportFile}
+              hidden
+            />
           </div>
         </div>
         <div className="core-recon-filters">
@@ -249,6 +319,13 @@ function CoreChannelReconciliationPage() {
           </button>
         </div>
       </section>
+
+      <ChannelReconciliationProgressPanel
+        snapshot={progressSnapshot}
+        expanded={progressExpanded}
+        onToggle={() => setProgressExpanded((value) => !value)}
+        onImport={() => progressFileRef.current?.click()}
+      />
 
       <section className="core-recon-stats core-recon-stats--five">
         {stats.map((item) => (
