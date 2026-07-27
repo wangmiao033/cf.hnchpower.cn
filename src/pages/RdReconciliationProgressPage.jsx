@@ -28,20 +28,9 @@ function settlementAmount(record) {
   return Number.isFinite(stored) ? stored : totalReconciliationSettlementAmount(record)
 }
 
-function partnerName(record) {
-  return clean(record?.partnerShortName || record?.partner || record?.partyBName)
-}
-
-function productName(record) {
-  const items = Array.isArray(record?.items)
-    ? record.items.map((item) => clean(item?.gameName)).filter(Boolean)
-    : []
-  return items.join('、') || clean(record?.game)
-}
-
 function RdReconciliationProgressPage() {
   const { recon, openReconciliationEdit } = useAppState()
-  const [month, setMonth] = useState('')
+  const [month, setMonth] = useState(null)
   const [query, setQuery] = useState('')
 
   const monthOptions = useMemo(
@@ -51,30 +40,42 @@ function RdReconciliationProgressPage() {
     [recon.records]
   )
 
-  const records = useMemo(() => {
-    const keyword = clean(query).toLowerCase()
-    return (recon.records || []).filter((record) => {
-      const matchesMonth = !month || monthKey(record.settlementMonth) === month
-      const haystack = [
-        record.settlementNumber,
-        partnerName(record),
-        productName(record)
-      ]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase()
-      return matchesMonth && (!keyword || haystack.includes(keyword))
-    })
-  }, [month, query, recon.records])
+  const activeMonth = month === null ? monthOptions[0] || '' : month
 
-  const snapshot = useMemo(
+  const records = useMemo(
+    () =>
+      (recon.records || []).filter(
+        (record) => !activeMonth || monthKey(record.settlementMonth) === activeMonth
+      ),
+    [activeMonth, recon.records]
+  )
+
+  const monthSnapshot = useMemo(
     () =>
       summarizeRdReconciliationProgress(records, {
-        month,
+        month: activeMonth,
         settlementResolver: settlementAmount
       }),
-    [month, records]
+    [activeMonth, records]
   )
+
+  const snapshot = useMemo(() => {
+    const keyword = clean(query).toLowerCase()
+    if (!keyword) return monthSnapshot
+
+    return {
+      ...monthSnapshot,
+      unresolved: monthSnapshot.unresolved.filter((record) =>
+        [record.billNumber, record.partner, record.product]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase()
+          .includes(keyword)
+      )
+    }
+  }, [monthSnapshot, query])
+
+  const scopeLabel = activeMonth ? monthLabel(activeMonth) : '全部月份'
 
   return (
     <PageContainer hideHeader className="core-recon-page rd-progress-page">
@@ -88,19 +89,19 @@ function RdReconciliationProgressPage() {
             </div>
           </div>
           <div className="rd-progress-scope">
-            <strong>{records.length}</strong>
-            <span>笔范围内账单</span>
+            <strong>{scopeLabel}</strong>
+            <span>{records.length} 笔账单</span>
           </div>
         </div>
         <div className="core-recon-filters rd-progress-filters">
           <label className="core-recon-filter-control">
-            <span>账期</span>
+            <span>统计月份</span>
             <select
-              value={month}
+              value={activeMonth}
               aria-label="筛选对账进度账期"
               onChange={(event) => setMonth(event.target.value)}
             >
-              <option value="">全部账期</option>
+              <option value="">全部月份（汇总）</option>
               {monthOptions.map((value) => (
                 <option key={value} value={value}>{monthLabel(value)}</option>
               ))}
@@ -119,11 +120,11 @@ function RdReconciliationProgressPage() {
             type="button"
             className="core-recon-reset"
             onClick={() => {
-              setMonth('')
+              setMonth(monthOptions[0] || '')
               setQuery('')
             }}
           >
-            重置
+            回到最新月
           </button>
         </div>
       </section>

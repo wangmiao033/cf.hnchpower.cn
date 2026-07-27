@@ -336,14 +336,15 @@
 
 .rd-progress-scope {
   display: flex;
-  align-items: baseline;
-  gap: 7px;
+  align-items: flex-end;
+  flex-direction: column;
+  gap: 3px;
   color: var(--admin-text-tertiary);
 }
 
 .rd-progress-scope strong {
   color: var(--admin-text-main);
-  font-size: 24px;
+  font-size: 18px;
   font-variant-numeric: tabular-nums;
 }
 
@@ -372,6 +373,152 @@
 .rd-progress-page .channel-progress-head {
   padding-top: 14px;
   padding-bottom: 14px;
+}
+
+.rd-month-summary {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.82fr) minmax(660px, 2.18fr);
+  min-height: 166px;
+}
+
+.rd-month-progress {
+  padding: 22px 20px;
+  border-right: 1px solid var(--admin-border-soft);
+  background: #f7faff;
+}
+
+.rd-month-progress > span,
+.rd-month-metrics span,
+.rd-month-status span {
+  color: var(--admin-text-sub);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.rd-month-progress > strong {
+  display: block;
+  margin: 6px 0 12px;
+  color: #174ea6;
+  font-size: 34px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.rd-month-progress p {
+  margin: 11px 0 0;
+  color: #17406f;
+  font-size: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.rd-month-progress p span {
+  color: var(--admin-text-tertiary);
+  font-weight: 500;
+}
+
+.rd-month-progress small {
+  display: block;
+  margin-top: 5px;
+  color: var(--admin-text-tertiary);
+  font-size: 12px;
+}
+
+.rd-month-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.rd-month-metrics article {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  justify-content: center;
+  padding: 20px 18px;
+  border-right: 1px solid var(--admin-border-soft);
+}
+
+.rd-month-metrics article:last-child {
+  border-right: 0;
+}
+
+.rd-month-metrics article::before {
+  position: absolute;
+  top: 0;
+  right: 18px;
+  left: 18px;
+  height: 3px;
+  border-radius: 0 0 3px 3px;
+  background: #2563eb;
+  content: '';
+}
+
+.rd-month-metrics article.is-reconciled::before {
+  background: #16a34a;
+}
+
+.rd-month-metrics article.is-pending::before {
+  background: #d97706;
+}
+
+.rd-month-metrics article.is-settled::before {
+  background: #7c3aed;
+}
+
+.rd-month-metrics strong {
+  margin-top: 9px;
+  overflow: hidden;
+  color: var(--admin-text-main);
+  font-size: 18px;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.rd-month-metrics small {
+  margin-top: 7px;
+  color: var(--admin-text-tertiary);
+  font-size: 12px;
+}
+
+.rd-month-status {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-top: 1px solid var(--admin-border-soft);
+  border-bottom: 1px solid var(--admin-border-soft);
+  background: #fbfcfe;
+}
+
+.rd-month-status > div {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: auto auto;
+  align-items: center;
+  gap: 3px 14px;
+  padding: 12px 18px;
+  border-right: 1px solid var(--admin-border-soft);
+}
+
+.rd-month-status > div:last-child {
+  border-right: 0;
+}
+
+.rd-month-status strong {
+  justify-self: end;
+  color: var(--admin-text-main);
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+
+.rd-month-status small {
+  grid-column: 1 / -1;
+  overflow: hidden;
+  color: var(--admin-text-tertiary);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .channel-progress-head p {
@@ -1042,6 +1189,15 @@
     border-right: 0;
     border-bottom: 1px solid var(--admin-border-soft);
   }
+
+  .rd-month-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .rd-month-progress {
+    border-right: 0;
+    border-bottom: 1px solid var(--admin-border-soft);
+  }
 }
 
 @media (max-width: 760px) {
@@ -1086,5 +1242,50 @@
   .channel-progress-stages,
   .channel-progress-secondary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .rd-progress-scope {
+    align-items: flex-start;
+  }
+
+  .rd-month-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .rd-month-metrics article:nth-child(2) {
+    border-right: 0;
+  }
+
+  .rd-month-metrics article:nth-child(-n + 2) {
+    border-bottom: 1px solid var(--admin-border-soft);
+  }
+
+  .rd-month-status {
+    grid-template-columns: 1fr;
+  }
+
+  .rd-month-status > div {
+    border-right: 0;
+    border-bottom: 1px solid var(--admin-border-soft);
+  }
+
+  .rd-month-status > div:last-child {
+    border-bottom: 0;
+  }
+}
+
+@media (max-width: 480px) {
+  .rd-month-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .rd-month-metrics article,
+  .rd-month-metrics article:nth-child(2) {
+    border-right: 0;
+    border-bottom: 1px solid var(--admin-border-soft);
+  }
+
+  .rd-month-metrics article:last-child {
+    border-bottom: 0;
   }
 }
