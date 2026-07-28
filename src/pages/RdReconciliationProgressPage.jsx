@@ -6,6 +6,7 @@ import RdReconciliationProgressPanel from '@/components/reconciliation/RdReconci
 import ChannelReconciliationProgressPanel from '@/components/channel/ChannelReconciliationProgressPanel.jsx'
 import { VIEWS } from '@/app/routes.js'
 import {
+  applyChannelProgressMatch,
   CHANNEL_PROGRESS_PREVIEW,
   summarizeChannelProgressMatrix
 } from '@/domain/channel/channelReconciliationProgress.js'
@@ -46,7 +47,13 @@ function loadChannelProgressPreview() {
 }
 
 function RdReconciliationProgressPage() {
-  const { recon, showToast, openReconciliationEdit } = useAppState()
+  const {
+    recon,
+    showToast,
+    setActiveView,
+    openReconciliationEdit,
+    openChannelReconciliationEdit
+  } = useAppState()
   const channelProgressFileRef = useRef(null)
   const [mode, setMode] = useState('game')
   const [selectedMonth, setSelectedMonth] = useState(null)
@@ -165,6 +172,28 @@ function RdReconciliationProgressPage() {
     }
   }
 
+  const handleChannelMatch = (row, candidate) => {
+    const nextSnapshot = applyChannelProgressMatch(channelSnapshot, row.id, candidate)
+    const difference = Math.abs(
+      Number(row.sourceFlow || 0) - Number(candidate.amount || 0)
+    )
+
+    setChannelSnapshot(nextSnapshot)
+    window.localStorage.setItem(
+      CHANNEL_PROGRESS_STORAGE_KEY,
+      JSON.stringify(nextSnapshot)
+    )
+    showToast(
+      difference <= 0.01
+        ? `已完成 ${row.product} / ${row.channel} 的渠道流水核对`
+        : `已关联渠道账单，仍有 ¥ ${difference.toLocaleString('zh-CN', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+          })} 差异`,
+      difference <= 0.01 ? 'success' : 'info'
+    )
+  }
+
   const isGameMode = mode === 'game'
   const scopeLabel = activeMonth ? monthLabel(activeMonth) : '全部月份'
   const scopeCount = isGameMode ? gameRecords.length : channelSnapshot.totals.rows
@@ -262,7 +291,11 @@ function RdReconciliationProgressPage() {
           <ChannelReconciliationProgressPanel
             snapshot={visibleChannelSnapshot}
             expanded
+            channelRecords={recon.channelRecords || []}
             onImport={() => channelProgressFileRef.current?.click()}
+            onConfirmMatch={handleChannelMatch}
+            onEditBill={(id) => openChannelReconciliationEdit(String(id))}
+            onCreateBill={() => setActiveView(VIEWS.CHANNEL_RECON_CREATE)}
           />
         </>
       )}

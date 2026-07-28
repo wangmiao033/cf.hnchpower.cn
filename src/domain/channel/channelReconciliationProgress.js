@@ -119,6 +119,59 @@ export function summarizeChannelProgressMatrix(matrix, options = {}) {
   }
 }
 
+export function applyChannelProgressMatch(snapshot, rowId, match = {}) {
+  const source = snapshot?.unresolved?.find((row) => String(row.id) === String(rowId))
+  if (!source) return snapshot
+
+  const matchedAmount = numberValue(match.amount)
+  const difference = Math.abs(numberValue(source.sourceFlow) - matchedAmount)
+  const isExact = difference <= 0.01
+  const matchedAt = match.matchedAt || new Date().toISOString()
+  const updatedRow = {
+    ...source,
+    backendBill: matchedAmount,
+    matchedBill: matchedAmount,
+    unmatchedAmount: difference,
+    matchedRecordId: match.recordId == null ? '' : String(match.recordId),
+    matchedCandidateId: match.candidateId || '',
+    matchedBillNumber: match.billNumber || '',
+    matchedAt,
+    matchStatus: isExact ? 'matched' : 'difference',
+    isReconciled: isExact
+  }
+
+  const unresolved = isExact
+    ? snapshot.unresolved.filter((row) => String(row.id) !== String(rowId))
+    : snapshot.unresolved
+        .map((row) => (String(row.id) === String(rowId) ? updatedRow : row))
+        .sort((a, b) => numberValue(b.unmatchedAmount) - numberValue(a.unmatchedAmount))
+
+  const totals = snapshot.totals || {}
+  const rows = numberValue(totals.rows)
+  const sourceFlow = numberValue(totals.sourceFlow)
+  const reconciledRows = numberValue(totals.reconciledRows) + (isExact ? 1 : 0)
+  const reconciledFlow = numberValue(totals.reconciledFlow) + (isExact ? numberValue(source.sourceFlow) : 0)
+  const unresolvedFlow = unresolved.reduce(
+    (sum, row) => sum + numberValue(row.unmatchedAmount ?? row.sourceFlow),
+    0
+  )
+
+  return {
+    ...snapshot,
+    updatedAt: matchedAt,
+    totals: {
+      ...totals,
+      reconciledRows,
+      reconciledFlow,
+      reconciliationAmountPercent: percent(reconciledFlow, sourceFlow),
+      reconciliationRowPercent: percent(reconciledRows, rows),
+      unresolvedRows: unresolved.length,
+      unresolvedFlow
+    },
+    unresolved
+  }
+}
+
 export const CHANNEL_PROGRESS_PREVIEW = {
   version: 1,
   fileName: '【财务-渠道对账】2026年6 (1).xlsx',
