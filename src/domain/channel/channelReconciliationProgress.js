@@ -58,6 +58,7 @@ export function summarizeChannelProgressMatrix(matrix, options = {}) {
     .slice(headerRowIndex + 1)
     .map((cells, index) => {
       const sourceFlow = numberValue(cells?.[flowIndex])
+      const matchedBill = numberValue(cells?.[backendBillIndex])
       const reconciliationStatus = cleanText(cells?.[reconcileIndex])
       const receivableStatus = cleanText(cells?.[receivableIndex])
       return {
@@ -66,7 +67,9 @@ export function summarizeChannelProgressMatrix(matrix, options = {}) {
         product: cleanText(cells?.[productIndex]) || '未命名产品',
         channel: cleanText(cells?.[channelIndex]) || '未命名渠道',
         sourceFlow,
-        backendBill: numberValue(cells?.[backendBillIndex]),
+        backendBill: matchedBill,
+        matchedBill,
+        unmatchedAmount: Math.max(sourceFlow - matchedBill, 0),
         variance: numberValue(cells?.[varianceIndex]),
         reconciliationStatus,
         receivableStatus,
@@ -144,6 +147,8 @@ export const CHANNEL_PROGRESS_PREVIEW = {
       channel: '果盘66(XX助手)',
       sourceFlow: 44612,
       backendBill: 0,
+      matchedBill: 0,
+      unmatchedAmount: 44612,
       variance: -63.57
     },
     {
@@ -153,6 +158,8 @@ export const CHANNEL_PROGRESS_PREVIEW = {
       channel: '大熊游戏',
       sourceFlow: 3246,
       backendBill: 0,
+      matchedBill: 0,
+      unmatchedAmount: 3246,
       variance: -1541.85
     },
     {
@@ -162,6 +169,8 @@ export const CHANNEL_PROGRESS_PREVIEW = {
       channel: 'OPPO',
       sourceFlow: 1344,
       backendBill: 0,
+      matchedBill: 0,
+      unmatchedAmount: 1344,
       variance: -638.4
     },
     {
@@ -171,6 +180,8 @@ export const CHANNEL_PROGRESS_PREVIEW = {
       channel: 'OPPO',
       sourceFlow: 354,
       backendBill: 0,
+      matchedBill: 0,
+      unmatchedAmount: 354,
       variance: -168.15
     },
     {
@@ -180,6 +191,8 @@ export const CHANNEL_PROGRESS_PREVIEW = {
       channel: '果盘（XX助手）',
       sourceFlow: 96,
       backendBill: 0,
+      matchedBill: 0,
+      unmatchedAmount: 96,
       variance: -45.6
     },
     {
@@ -189,6 +202,8 @@ export const CHANNEL_PROGRESS_PREVIEW = {
       channel: '大熊游戏',
       sourceFlow: 84,
       backendBill: 0,
+      matchedBill: 0,
+      unmatchedAmount: 84,
       variance: 0
     },
     {
@@ -198,6 +213,8 @@ export const CHANNEL_PROGRESS_PREVIEW = {
       channel: '3011游戏',
       sourceFlow: 6,
       backendBill: 0,
+      matchedBill: 0,
+      unmatchedAmount: 6,
       variance: 0
     }
   ]

@@ -8,7 +8,7 @@ import {
   VIEWS
 } from './routes.js'
 
-describe('研发对账进度路由', () => {
+describe('统一对账进度路由', () => {
   it('作为核心对账中的独立页面展示', () => {
     const group = getGroupForView(VIEWS.RECON_PROGRESS)
 
@@ -22,12 +22,29 @@ describe('研发对账进度路由', () => {
   })
 
   it('提供独立页面文案', () => {
-    expect(getPageTitle(VIEWS.RECON_PROGRESS)).toBe('研发对账进度')
-    expect(getPageDescription(VIEWS.RECON_PROGRESS)).toContain('付款覆盖率')
+    expect(getPageTitle(VIEWS.RECON_PROGRESS)).toBe('对账进度')
+    expect(getPageDescription(VIEWS.RECON_PROGRESS)).toContain('游戏账单与渠道流水')
     expect(
       SIDEBAR_GROUPS
         .flatMap((group) => group.items)
         .find((item) => item.view === VIEWS.RECON_PROGRESS)?.label
     ).toBe('对账进度')
+  })
+})
+
+describe('QuickSDK 数据源路由', () => {
+  it('作为数据中心中的独立原始台账展示', () => {
+    const group = getGroupForView(VIEWS.PRODUCT_SOURCES)
+
+    expect(group.id).toBe('data')
+    expect(group.items.map((item) => item.view)).toEqual([
+      VIEWS.QUICKSDK_LIBRARY,
+      VIEWS.PRODUCT_SOURCES,
+      VIEWS.QUICKSDK_GAMES,
+      VIEWS.QUICKSDK_CHANNELS,
+      VIEWS.PARTNER_CONTACTS
+    ])
+    expect(getPageTitle(VIEWS.PRODUCT_SOURCES)).toBe('数据源')
+    expect(getPageDescription(VIEWS.PRODUCT_SOURCES)).toContain('ProductCode')
   })
 })

@@ -13,6 +13,7 @@ export const VIEWS = {
   CHANNEL_RECON_EDIT: 'channel-recon-edit',
   CONTRACTS: 'contracts',
   QUICKSDK_LIBRARY: 'quicksdk-library',
+  PRODUCT_SOURCES: 'product-sources',
   QUICKSDK_GAMES: 'quicksdk-games',
   QUICKSDK_CHANNELS: 'quicksdk-channels',
   PARTNER_CONTACTS: 'partner-contacts',
@@ -44,6 +45,7 @@ export const SIDEBAR_GROUPS = [
     label: '数据中心',
     items: [
       { view: VIEWS.QUICKSDK_LIBRARY, label: '数据库' },
+      { view: VIEWS.PRODUCT_SOURCES, label: '数据源' },
       { view: VIEWS.QUICKSDK_GAMES, label: '游戏数据' },
       { view: VIEWS.QUICKSDK_CHANNELS, label: '渠道数据' },
       { view: VIEWS.PARTNER_CONTACTS, label: '客户库' }
@@ -54,7 +56,7 @@ export const SIDEBAR_GROUPS = [
 const VIEW_TITLES = {
   [VIEWS.DASHBOARD]: '核心工作台',
   [VIEWS.RECON_RD]: '研发账单',
-  [VIEWS.RECON_PROGRESS]: '研发对账进度',
+  [VIEWS.RECON_PROGRESS]: '对账进度',
   [VIEWS.RECON_CREATE]: '新增研发账单',
   [VIEWS.RECON_EDIT]: '编辑研发账单',
   [VIEWS.RECON_CHANNEL]: '渠道账单',
@@ -62,6 +64,7 @@ const VIEW_TITLES = {
   [VIEWS.CHANNEL_RECON_EDIT]: '编辑渠道账单',
   [VIEWS.CONTRACTS]: '合同台账',
   [VIEWS.QUICKSDK_LIBRARY]: '数据库',
+  [VIEWS.PRODUCT_SOURCES]: '数据源',
   [VIEWS.QUICKSDK_GAMES]: '游戏数据',
   [VIEWS.QUICKSDK_CHANNELS]: '渠道数据',
   [VIEWS.PARTNER_CONTACTS]: '客户库',
@@ -71,7 +74,7 @@ const VIEW_TITLES = {
 const VIEW_DESCRIPTIONS = {
   [VIEWS.DASHBOARD]: '研发对账、渠道对账、合同、数据库和客户资料统一管理。',
   [VIEWS.RECON_RD]: '保留现有研发账单计算、录入、筛选、导入和导出逻辑。',
-  [VIEWS.RECON_PROGRESS]: '集中查看研发账单核对、结算、付款覆盖率和待处理明细。',
+  [VIEWS.RECON_PROGRESS]: '集中查看游戏账单与渠道流水的核对、结算和待处理明细。',
   [VIEWS.RECON_CREATE]: '使用现有研发账单录入逻辑新增记录。',
   [VIEWS.RECON_EDIT]: '使用现有研发账单编辑逻辑维护记录。',
   [VIEWS.RECON_CHANNEL]: '保留现有渠道账单计算、导入、编辑和导出逻辑。',
@@ -79,6 +82,7 @@ const VIEW_DESCRIPTIONS = {
   [VIEWS.CHANNEL_RECON_EDIT]: '使用现有渠道账单编辑逻辑维护记录。',
   [VIEWS.CONTRACTS]: '统一维护 WPS 合同台账、履约状态、到期提醒和客户关联。',
   [VIEWS.QUICKSDK_LIBRARY]: '查看已导入月份、批次、产品、渠道和流水明细。',
+  [VIEWS.PRODUCT_SOURCES]: '维护 QuickSDK 游戏名称与 ProductCode 原始数据。',
   [VIEWS.QUICKSDK_GAMES]: '按月份和游戏名称汇总数据库中的流水数据。',
   [VIEWS.QUICKSDK_CHANNELS]: '按月份和渠道名称汇总数据库中的流水数据。',
   [VIEWS.PARTNER_CONTACTS]: '维护合作方/客户资料，供对账单复用。',
@@ -96,6 +100,7 @@ export const VIEW_ICONS = {
   [VIEWS.CHANNEL_RECON_EDIT]: '编',
   [VIEWS.CONTRACTS]: '合',
   [VIEWS.QUICKSDK_LIBRARY]: '流',
+  [VIEWS.PRODUCT_SOURCES]: '源',
   [VIEWS.QUICKSDK_GAMES]: '游',
   [VIEWS.QUICKSDK_CHANNELS]: '渠',
   [VIEWS.PARTNER_CONTACTS]: '客',

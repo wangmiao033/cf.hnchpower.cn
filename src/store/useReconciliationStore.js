@@ -777,14 +777,51 @@ export function useReconciliationStore(settings, showToast, options = {}) {
         } catch (e) {
           console.error(e)
           showToast('从服务器删除渠道记录失败', 'error')
-          return
+          return false
         }
       } else {
         setChannelRecords((prev) => prev.filter((r) => String(r.id) !== sid))
       }
       showToast('渠道记录已删除', 'success')
+      return true
     },
     [showToast, channelApiEnabled, refetchChannelFromApi]
+  )
+
+  const onChannelDeleteRecordsBatch = useCallback(
+    async (rawIds) => {
+      const ids = [...new Set((rawIds || []).map((id) => String(id)).filter(Boolean))]
+      if (ids.length === 0) {
+        showToast('请先选择要删除的渠道账单', 'error')
+        return { deleted: 0, failed: 0, deletedIds: [] }
+      }
+
+      if (!channelApiEnabled) {
+        const idSet = new Set(ids)
+        setChannelRecords((prev) => prev.filter((record) => !idSet.has(String(record.id))))
+        showToast(`已删除 ${ids.length} 条渠道账单`, 'success')
+        return { deleted: ids.length, failed: 0, deletedIds: ids }
+      }
+
+      const results = await Promise.allSettled(ids.map((id) => deleteChannelRecord(id)))
+      const deletedIds = ids.filter((_, index) => results[index].status === 'fulfilled')
+      const failed = ids.length - deletedIds.length
+
+      try {
+        await refetchChannelFromApi()
+      } catch (error) {
+        console.error(error)
+      }
+
+      if (failed > 0) {
+        showToast(`已删除 ${deletedIds.length} 条，${failed} 条删除失败`, 'error')
+      } else {
+        showToast(`已删除 ${deletedIds.length} 条渠道账单`, 'success')
+      }
+
+      return { deleted: deletedIds.length, failed, deletedIds }
+    },
+    [channelApiEnabled, refetchChannelFromApi, showToast]
   )
 
   const onChannelRegisterReceipt = useCallback(
@@ -888,6 +925,7 @@ export function useReconciliationStore(settings, showToast, options = {}) {
     onChannelAddRecordsBatch,
     onChannelUpdateRecord,
     onChannelDeleteRecord,
+    onChannelDeleteRecordsBatch,
     onChannelRegisterReceipt,
     onChannelDeleteReceipt,
     refetchChannelFromApi,

@@ -22,6 +22,7 @@ from app.api.bank_transaction import router as bank_transaction_router
 from app.api.reconciliation import router as reconciliation_router
 from app.api.contract import router as contract_router
 from app.api.quicksdk import router as quicksdk_router
+from app.api.product_source import router as product_source_router
 from app.core.migrations import run_schema_migrations
 from app.core.runtime_paths import ensure_upload_root
 from app.core.security import require_current_user
@@ -137,6 +138,12 @@ app.include_router(
     quicksdk_router,
     prefix="/api/quicksdk",
     tags=["quicksdk"],
+    dependencies=[Depends(require_current_user)],
+)
+app.include_router(
+    product_source_router,
+    prefix="/api/product-sources",
+    tags=["product-sources"],
     dependencies=[Depends(require_current_user)],
 )
 

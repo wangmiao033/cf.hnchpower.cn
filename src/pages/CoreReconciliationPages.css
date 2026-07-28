@@ -257,6 +257,17 @@
   line-height: 1.2;
 }
 
+.core-recon-stats small {
+  margin-top: 5px;
+  color: var(--admin-text-tertiary);
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.core-channel-recon-page .core-recon-table-wrap {
+  max-height: calc(100vh - 430px);
+}
+
 .channel-progress-panel {
   overflow: hidden;
   border: 1px solid var(--admin-border);
@@ -354,6 +365,36 @@
 
 .rd-progress-filters .core-recon-filter-control:first-child {
   min-width: 210px;
+}
+
+.rd-progress-mode-switch {
+  display: inline-flex;
+  height: 36px;
+  overflow: hidden;
+  flex: 0 0 auto;
+  padding: 3px;
+  border: 1px solid var(--admin-border);
+  border-radius: 7px;
+  background: #ffffff;
+}
+
+.core-recon-filters .rd-progress-mode-switch button {
+  height: 28px;
+  padding: 0 13px;
+  border: 0;
+  border-radius: 5px;
+  color: var(--admin-text-sub);
+  background: transparent;
+}
+
+.core-recon-filters .rd-progress-mode-switch button:hover {
+  color: var(--admin-primary);
+}
+
+.core-recon-filters .rd-progress-mode-switch button.is-active {
+  background: #eaf2ff;
+  color: var(--admin-primary);
+  box-shadow: inset 0 0 0 1px #cfe0ff;
 }
 
 .rd-progress-page .channel-progress-panel {
@@ -885,6 +926,44 @@
   font-size: 15px;
 }
 
+.core-recon-panel-tools,
+.core-recon-selection-actions {
+  display: flex;
+  align-items: center;
+}
+
+.core-recon-panel-tools {
+  min-height: 34px;
+  gap: 12px;
+}
+
+.core-recon-selection-actions {
+  gap: 8px;
+}
+
+.core-recon-selection-actions button {
+  height: 30px;
+  padding: 0 11px;
+  border: 1px solid #dbe5f1;
+  border-radius: 6px;
+  background: #ffffff;
+  color: var(--admin-text-main);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.core-recon-selection-actions button.danger {
+  border-color: #fecdd3;
+  background: #fff1f2;
+  color: #be123c;
+}
+
+.core-recon-selection-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.56;
+}
+
 .core-recon-table-wrap {
   max-height: calc(100vh - 490px);
   overflow: auto;
@@ -1044,6 +1123,13 @@
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.core-recon-select-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
 }
 
 .core-rd-recon-table input[type='checkbox'],

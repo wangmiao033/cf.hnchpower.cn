@@ -4,15 +4,8 @@ import { useAppState } from '@/app/AppStateContext.jsx'
 import PageContainer from '@/components/layout/PageContainer.jsx'
 import { VIEWS } from '@/app/routes.js'
 import { buildChannelBillFromSingleGameForm } from '@/domain/channel/channelBillingForm.js'
-import {
-  CHANNEL_PROGRESS_PREVIEW,
-  summarizeChannelProgressMatrix
-} from '@/domain/channel/channelReconciliationProgress.js'
-import ChannelReconciliationProgressPanel from '@/components/channel/ChannelReconciliationProgressPanel.jsx'
 import { getChannelBillNumber } from '@/utils/channelBillNumber.js'
 import './CoreReconciliationPages.css'
-
-const CHANNEL_PROGRESS_STORAGE_KEY = 'channel-reconciliation-progress-preview-v1'
 
 const STATUS_LABELS = {
   pending: '待处理',
@@ -44,27 +37,16 @@ function monthLabel(value) {
   return match ? `${match[1]}年${Number(match[2])}月` : normalized
 }
 
-function loadProgressPreview() {
-  try {
-    const saved = window.localStorage.getItem(CHANNEL_PROGRESS_STORAGE_KEY)
-    return saved ? JSON.parse(saved) : CHANNEL_PROGRESS_PREVIEW
-  } catch {
-    return CHANNEL_PROGRESS_PREVIEW
-  }
-}
-
 function CoreChannelReconciliationPage() {
   const { recon, showToast, setActiveView, openChannelReconciliationEdit } = useAppState()
   const fileRef = useRef(null)
-  const progressFileRef = useRef(null)
   const [month, setMonth] = useState('')
   const [channel, setChannel] = useState('')
   const [channelDraft, setChannelDraft] = useState('')
   const [status, setStatus] = useState('')
   const [query, setQuery] = useState('')
   const [selectedIds, setSelectedIds] = useState([])
-  const [progressExpanded, setProgressExpanded] = useState(true)
-  const [progressSnapshot, setProgressSnapshot] = useState(loadProgressPreview)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   const monthOptions = useMemo(
     () =>
@@ -100,6 +82,8 @@ function CoreChannelReconciliationPage() {
     () => rows.filter((row) => selectedIds.includes(String(row.id))),
     [rows, selectedIds]
   )
+  const allVisibleSelected = rows.length > 0 && selectedRows.length === rows.length
+  const partiallyVisibleSelected = selectedRows.length > 0 && !allVisibleSelected
 
   const stats = useMemo(() => {
     const flow = rows.reduce((sum, row) => sum + Number(row.flow || 0), 0)
@@ -110,14 +94,60 @@ function CoreChannelReconciliationPage() {
       { label: '账单数量', value: rows.length },
       { label: '渠道', value: channels.size },
       { label: '产品', value: games.size },
-      { label: '结算金额', value: money(settlement) },
-      { label: '计费流水', value: money(flow) }
+      { label: '结算金额', value: money(settlement), note: `计费流水 ${money(flow)}` }
     ]
   }, [rows])
 
   const toggleSelected = (id) => {
     const sid = String(id)
     setSelectedIds((prev) => (prev.includes(sid) ? prev.filter((item) => item !== sid) : [...prev, sid]))
+  }
+
+  const toggleSelectAll = () => {
+    const visibleIds = rows.map((row) => String(row.id))
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (allVisibleSelected) {
+        visibleIds.forEach((id) => next.delete(id))
+      } else {
+        visibleIds.forEach((id) => next.add(id))
+      }
+      return [...next]
+    })
+  }
+
+  const handleBulkDelete = async () => {
+    if (selectedRows.length === 0 || isDeleting) return
+    const count = selectedRows.length
+    const confirmed = window.confirm(`确定永久删除选中的 ${count} 条渠道账单吗？此操作不可恢复。`)
+    if (!confirmed) return
+
+    setIsDeleting(true)
+    try {
+      const result = await recon.onChannelDeleteRecordsBatch(selectedRows.map((row) => row.id))
+      const deletedIds = new Set(result?.deletedIds || [])
+      setSelectedIds((prev) => prev.filter((id) => !deletedIds.has(String(id))))
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
+  const handleSingleDelete = async (row) => {
+    if (isDeleting) return
+    const confirmed = window.confirm(
+      `确定删除渠道账单“${getChannelBillNumber(row)}”吗？此操作不可恢复。`
+    )
+    if (!confirmed) return
+
+    setIsDeleting(true)
+    try {
+      const deleted = await recon.onChannelDeleteRecord(row.id)
+      if (deleted) {
+        setSelectedIds((prev) => prev.filter((id) => id !== String(row.id)))
+      }
+    } finally {
+      setIsDeleting(false)
+    }
   }
 
   const exportRows = () => {
@@ -169,52 +199,8 @@ function CoreChannelReconciliationPage() {
     }
   }
 
-  const handleProgressImportFile = async (event) => {
-    const file = event.target.files?.[0]
-    event.target.value = ''
-    if (!file) return
-
-    try {
-      const data = await file.arrayBuffer()
-      const workbook = XLSX.read(data, { type: 'array' })
-      let selectedSheet = null
-      let matrix = null
-
-      for (const sheetName of workbook.SheetNames) {
-        const candidate = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], {
-          header: 1,
-          defval: '',
-          raw: true
-        })
-        const hasProgressColumn = candidate
-          .slice(0, 8)
-          .some((row) => Array.isArray(row) && row.some((cell) => String(cell).trim() === '对账进度'))
-        if (hasProgressColumn) {
-          selectedSheet = sheetName
-          matrix = candidate
-          break
-        }
-      }
-
-      if (!selectedSheet || !matrix) {
-        throw new Error('未找到包含“对账进度”的工作表')
-      }
-
-      const summary = summarizeChannelProgressMatrix(matrix, {
-        fileName: file.name,
-        sheetName: selectedSheet
-      })
-      setProgressSnapshot(summary)
-      setProgressExpanded(true)
-      window.localStorage.setItem(CHANNEL_PROGRESS_STORAGE_KEY, JSON.stringify(summary))
-      showToast(`已更新 ${summary.totals.rows} 条渠道流水进度`, 'success')
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : '进度数据读取失败', 'error')
-    }
-  }
-
   return (
-    <PageContainer hideHeader className="core-recon-page">
+    <PageContainer hideHeader className="core-recon-page core-channel-recon-page">
       <section className="core-recon-workbar">
         <div className="core-recon-head">
           <div className="core-recon-title">
@@ -231,13 +217,6 @@ function CoreChannelReconciliationPage() {
               新增账单
             </button>
             <input ref={fileRef} type="file" accept=".xlsx,.xls" onChange={handleImportFile} hidden />
-            <input
-              ref={progressFileRef}
-              type="file"
-              accept=".xlsx,.xls"
-              onChange={handleProgressImportFile}
-              hidden
-            />
           </div>
         </div>
         <div className="core-recon-filters">
@@ -320,18 +299,12 @@ function CoreChannelReconciliationPage() {
         </div>
       </section>
 
-      <ChannelReconciliationProgressPanel
-        snapshot={progressSnapshot}
-        expanded={progressExpanded}
-        onToggle={() => setProgressExpanded((value) => !value)}
-        onImport={() => progressFileRef.current?.click()}
-      />
-
-      <section className="core-recon-stats core-recon-stats--five">
+      <section className="core-recon-stats">
         {stats.map((item) => (
           <div key={item.label}>
             <span>{item.label}</span>
             <strong>{item.value}</strong>
+            {item.note && <small>{item.note}</small>}
           </div>
         ))}
       </section>
@@ -339,7 +312,24 @@ function CoreChannelReconciliationPage() {
       <section className="core-recon-panel">
         <div className="core-recon-panel-head">
           <h2>账单列表</h2>
-          <span>{selectedRows.length > 0 ? `已选 ${selectedRows.length} 条` : `${rows.length} 条`}</span>
+          <div className="core-recon-panel-tools">
+            <span>{selectedRows.length > 0 ? `已选 ${selectedRows.length} 条` : `${rows.length} 条`}</span>
+            {selectedRows.length > 0 && (
+              <div className="core-recon-selection-actions">
+                <button type="button" onClick={() => setSelectedIds([])} disabled={isDeleting}>
+                  取消选择
+                </button>
+                <button
+                  type="button"
+                  className="danger"
+                  onClick={handleBulkDelete}
+                  disabled={isDeleting}
+                >
+                  {isDeleting ? '删除中…' : `删除所选（${selectedRows.length}）`}
+                </button>
+              </div>
+            )}
+          </div>
         </div>
         <div className="core-recon-table-wrap">
           <table className="core-recon-table core-channel-recon-table">
@@ -358,7 +348,21 @@ function CoreChannelReconciliationPage() {
             </colgroup>
             <thead>
               <tr>
-                <th>账单月份</th>
+                <th>
+                  <label className="core-recon-select-all">
+                    <input
+                      ref={(node) => {
+                        if (node) node.indeterminate = partiallyVisibleSelected
+                      }}
+                      type="checkbox"
+                      aria-label="全选当前筛选结果"
+                      checked={allVisibleSelected}
+                      disabled={rows.length === 0 || isDeleting}
+                      onChange={toggleSelectAll}
+                    />
+                    <span>账单月份</span>
+                  </label>
+                </th>
                 <th>编号</th>
                 <th>渠道</th>
                 <th>合作方</th>
@@ -387,6 +391,7 @@ function CoreChannelReconciliationPage() {
                         type="checkbox"
                         aria-label={`选择渠道账单 ${text(row.channelName)} ${monthLabel(row.settlementMonth)}`}
                         checked={selectedIds.includes(String(row.id))}
+                        disabled={isDeleting}
                         onChange={() => toggleSelected(row.id)}
                       />
                       <span>{monthLabel(row.settlementMonth)}</span>
@@ -423,7 +428,14 @@ function CoreChannelReconciliationPage() {
                     <td>
                       <div className="core-recon-row-actions">
                         <button type="button" onClick={() => openChannelReconciliationEdit(String(row.id))}>编辑</button>
-                        <button type="button" className="danger" onClick={() => recon.onChannelDeleteRecord(row.id)}>删除</button>
+                        <button
+                          type="button"
+                          className="danger"
+                          disabled={isDeleting}
+                          onClick={() => handleSingleDelete(row)}
+                        >
+                          删除
+                        </button>
                       </div>
                     </td>
                   </tr>

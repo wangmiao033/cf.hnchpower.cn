@@ -12,6 +12,15 @@ function percent(value) {
   return `${Number(value || 0).toFixed(1)}%`
 }
 
+function matchedBill(row) {
+  return Number(row.matchedBill ?? row.backendBill ?? 0)
+}
+
+function unmatchedAmount(row) {
+  if (row.unmatchedAmount != null) return Number(row.unmatchedAmount || 0)
+  return Math.max(Number(row.sourceFlow || 0) - matchedBill(row), 0)
+}
+
 function monthLabel(value) {
   const match = String(value || '').match(/^(\d{4})-(\d{2})$/)
   return match ? `${match[1]}年${Number(match[2])}月` : value || '当前账期'
@@ -83,7 +92,7 @@ function ChannelReconciliationProgressPanel({
                 <small>{money(totals.reconciledFlow)}</small>
               </div>
               <div className="is-receivable">
-                <span>已登应收</span>
+                <span>已登记应收</span>
                 <strong>{totals.receivableRows} 条</strong>
                 <small>{money(totals.receivableFlow)}</small>
               </div>
@@ -134,9 +143,9 @@ function ChannelReconciliationProgressPanel({
                     <th>产品</th>
                     <th>渠道</th>
                     <th>源流水</th>
-                    <th>后台账单</th>
-                    <th>核对差异</th>
-                    <th>进度</th>
+                    <th>已匹配账单</th>
+                    <th>未匹配金额</th>
+                    <th>状态</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -150,9 +159,9 @@ function ChannelReconciliationProgressPanel({
                         <td><strong>{row.product}</strong></td>
                         <td>{row.channel}</td>
                         <td className="is-number">{money(row.sourceFlow)}</td>
-                        <td className="is-number">{money(row.backendBill)}</td>
-                        <td className="is-number is-difference">{money(row.variance)}</td>
-                        <td><span className="channel-progress-pending">待核对</span></td>
+                        <td className="is-number">{money(matchedBill(row))}</td>
+                        <td className="is-number is-difference">{money(unmatchedAmount(row))}</td>
+                        <td><span className="channel-progress-pending">待匹配</span></td>
                       </tr>
                     ))
                   )}

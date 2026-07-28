@@ -53,6 +53,21 @@ describe('channel reconciliation progress', () => {
     expect(summary.totals.reconciliationRowPercent).toBe(50)
     expect(summary.totals.unresolvedFlow).toBe(100)
     expect(summary.unresolved[0].product).toBe('游戏B')
+    expect(summary.unresolved[0].matchedBill).toBe(0)
+    expect(summary.unresolved[0].unmatchedAmount).toBe(100)
+  })
+
+  it('shows the remaining unmatched amount instead of the spreadsheet variance', () => {
+    const matrix = [
+      ['产品', '渠道', '流水', '后台账单', '核对', '对账进度', '登应收出账单'],
+      ['游戏A', '渠道A', 100, 35, -7.5, '', '']
+    ]
+
+    const summary = summarizeChannelProgressMatrix(matrix)
+
+    expect(summary.unresolved[0].matchedBill).toBe(35)
+    expect(summary.unresolved[0].unmatchedAmount).toBe(65)
+    expect(summary.unresolved[0].variance).toBe(-7.5)
   })
 
   it('extracts month from the source filename', () => {

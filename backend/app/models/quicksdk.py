@@ -51,3 +51,23 @@ class QuickSdkFlow(Base):
     batch: Mapped["QuickSdkImportBatch"] = relationship(
         "QuickSdkImportBatch", back_populates="flows"
     )
+
+
+class QuickSdkProductSource(Base):
+    """Standalone QuickSDK game/ProductCode registry."""
+
+    __tablename__ = "quicksdk_product_sources"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    game_name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    product_code: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
+    source_file: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
