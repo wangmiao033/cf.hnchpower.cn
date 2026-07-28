@@ -148,7 +148,7 @@ export async function listQuickSdkFlows(params: {
   }
 }
 
-export function getQuickSdkAnalytics(params: { settlement_month?: string } = {}) {
+export function getQuickSdkAnalytics(params: { settlement_month?: string; limit?: number } = {}) {
   return apiGet<QuickSdkAnalyticsResponse>(`${PATH}/analytics${queryString(params)}`, READ_OPTIONS)
     .then(normalizeAnalytics)
     .catch(async (error) => {

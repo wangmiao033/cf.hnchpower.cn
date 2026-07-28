@@ -323,7 +323,7 @@ def list_quicksdk_flows(
 def get_quicksdk_analytics(
     db: Session = Depends(get_db),
     settlement_month: str | None = Query(None),
-    limit: int = Query(10, ge=1, le=100),
+    limit: int = Query(10, ge=1, le=500),
 ) -> QuickSdkAnalyticsResponse:
     month = _normalize_month(settlement_month)
     total_stmt = select(func.coalesce(func.sum(QuickSdkFlow.gross_flow), 0))

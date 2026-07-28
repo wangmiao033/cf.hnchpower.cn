@@ -2343,7 +2343,7 @@ async def quicksdk_flows(
 async def quicksdk_analytics(
     request: Request,
     settlement_month: str | None = Query(None),
-    limit: int = Query(10, ge=1, le=100),
+    limit: int = Query(10, ge=1, le=500),
 ) -> dict:
     await _require_authenticated(request)
     clause, params = _month_filter(settlement_month)

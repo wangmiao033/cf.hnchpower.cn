@@ -22,6 +22,7 @@ const ChannelReconciliationCreatePage = lazy(() => import('./pages/ChannelReconc
 const ChannelReconciliationEditPage = lazy(() => import('./pages/ChannelReconciliationEditPage.jsx'))
 const ContractManagementPage = lazy(() => import('./pages/ContractManagementPage.jsx'))
 const QuickSdkLibraryPage = lazy(() => import('./pages/QuickSdkLibraryPage.jsx'))
+const QuickSdkGroupedDataPage = lazy(() => import('./pages/QuickSdkGroupedDataPage.jsx'))
 const PartnerPage = lazy(() => import('./pages/PartnerPage.jsx'))
 const UserCenterPage = lazy(() => import('./pages/UserCenterPage.jsx'))
 const LoginPage = lazy(() => import('./pages/LoginPage.jsx'))
@@ -164,6 +165,10 @@ function App() {
         return <ContractManagementPage />
       case VIEWS.QUICKSDK_LIBRARY:
         return <QuickSdkLibraryPage />
+      case VIEWS.QUICKSDK_GAMES:
+        return <QuickSdkGroupedDataPage dimension="game" />
+      case VIEWS.QUICKSDK_CHANNELS:
+        return <QuickSdkGroupedDataPage dimension="channel" />
       case VIEWS.PARTNER_CONTACTS:
         return <PartnerPage section={VIEWS.PARTNER_CONTACTS} />
       case VIEWS.USER_CENTER:

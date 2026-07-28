@@ -13,6 +13,8 @@ export const VIEWS = {
   CHANNEL_RECON_EDIT: 'channel-recon-edit',
   CONTRACTS: 'contracts',
   QUICKSDK_LIBRARY: 'quicksdk-library',
+  QUICKSDK_GAMES: 'quicksdk-games',
+  QUICKSDK_CHANNELS: 'quicksdk-channels',
   PARTNER_CONTACTS: 'partner-contacts',
   USER_CENTER: 'user-center'
 }
@@ -42,6 +44,8 @@ export const SIDEBAR_GROUPS = [
     label: '数据中心',
     items: [
       { view: VIEWS.QUICKSDK_LIBRARY, label: '数据库' },
+      { view: VIEWS.QUICKSDK_GAMES, label: '游戏数据' },
+      { view: VIEWS.QUICKSDK_CHANNELS, label: '渠道数据' },
       { view: VIEWS.PARTNER_CONTACTS, label: '客户库' }
     ]
   }
@@ -58,6 +62,8 @@ const VIEW_TITLES = {
   [VIEWS.CHANNEL_RECON_EDIT]: '编辑渠道账单',
   [VIEWS.CONTRACTS]: '合同台账',
   [VIEWS.QUICKSDK_LIBRARY]: '数据库',
+  [VIEWS.QUICKSDK_GAMES]: '游戏数据',
+  [VIEWS.QUICKSDK_CHANNELS]: '渠道数据',
   [VIEWS.PARTNER_CONTACTS]: '客户库',
   [VIEWS.USER_CENTER]: '用户中心'
 }
@@ -73,6 +79,8 @@ const VIEW_DESCRIPTIONS = {
   [VIEWS.CHANNEL_RECON_EDIT]: '使用现有渠道账单编辑逻辑维护记录。',
   [VIEWS.CONTRACTS]: '统一维护 WPS 合同台账、履约状态、到期提醒和客户关联。',
   [VIEWS.QUICKSDK_LIBRARY]: '查看已导入月份、批次、产品、渠道和流水明细。',
+  [VIEWS.QUICKSDK_GAMES]: '按月份和游戏名称汇总数据库中的流水数据。',
+  [VIEWS.QUICKSDK_CHANNELS]: '按月份和渠道名称汇总数据库中的流水数据。',
   [VIEWS.PARTNER_CONTACTS]: '维护合作方/客户资料，供对账单复用。',
   [VIEWS.USER_CENTER]: '管理当前账号、登录密码和设备会话。'
 }
@@ -88,6 +96,8 @@ export const VIEW_ICONS = {
   [VIEWS.CHANNEL_RECON_EDIT]: '编',
   [VIEWS.CONTRACTS]: '合',
   [VIEWS.QUICKSDK_LIBRARY]: '流',
+  [VIEWS.QUICKSDK_GAMES]: '游',
+  [VIEWS.QUICKSDK_CHANNELS]: '渠',
   [VIEWS.PARTNER_CONTACTS]: '客',
   [VIEWS.USER_CENTER]: '户'
 }
