@@ -4,6 +4,7 @@ import { useAppState } from '@/app/AppStateContext.jsx'
 import PageContainer from '@/components/layout/PageContainer.jsx'
 import { VIEWS } from '@/app/routes.js'
 import { buildChannelBillFromSingleGameForm } from '@/domain/channel/channelBillingForm.js'
+import { parseChannelStatementWorkbook } from '@/domain/channel/channelStatementImport.js'
 import { getChannelBillNumber } from '@/utils/channelBillNumber.js'
 import './CoreReconciliationPages.css'
 
@@ -185,6 +186,13 @@ function CoreChannelReconciliationPage() {
     try {
       const data = await file.arrayBuffer()
       const workbook = XLSX.read(data, { type: 'array' })
+      const structured = parseChannelStatementWorkbook(workbook, file.name)
+      if (structured.detected) {
+        await recon.onChannelAddRecordsBatch(structured.records)
+        const detailCount = structured.records.reduce((sum, record) => sum + (record.items?.length || 0), 0)
+        showToast(`已导入 ${structured.records.length} 个月度渠道账单，共 ${detailCount} 条游戏明细`, 'success')
+        return
+      }
       const sheet = workbook.Sheets[workbook.SheetNames[0]]
       const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' })
       const records = rows.map(mapChannelImportRow).filter(Boolean)

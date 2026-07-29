@@ -32,9 +32,12 @@ export function initialLineItem() {
     refundCost: '',
     testCost: '',
     welfareCost: '',
+    coinCost: '',
     shareRate: '30',
     taxRate: '5',
+    channelFeeRate: '',
     gatewayCost: '',
+    calculationMode: '',
     settlementAmount: ''
   }
 }
@@ -68,7 +71,8 @@ export function calculateBillingAmount(data) {
   const refund = parseFloat(data.refundCost || 0)
   const test = parseFloat(data.testCost || 0)
   const welfare = parseFloat(data.welfareCost || 0)
-  return flow - voucher - noWorry - refund - test - welfare
+  const coin = parseFloat(data.coinCost || 0)
+  return flow - voucher - noWorry - refund - test - welfare - coin
 }
 
 export function calculateShareAmount(data) {
@@ -79,6 +83,12 @@ export function calculateShareAmount(data) {
 
 export function calculateSettlement(data) {
   const shareAmount = calculateShareAmount(data)
+  if (data.calculationMode === 'channel_statement') {
+    const channelFeeRate = parseFloat(data.channelFeeRate || 0) / 100
+    const coin = parseFloat(data.coinCost || 0)
+    const taxRate = parseFloat(data.taxRate || 0) / 100
+    return (shareAmount * (1 - channelFeeRate) + coin * 0.2) * (1 - taxRate)
+  }
   const gatewayCost = parseFloat(data.gatewayCost || 0)
   const taxRate = parseFloat(data.taxRate || 0) / 100
   const taxAmount = shareAmount * taxRate
@@ -112,11 +122,14 @@ export function buildLineRecordFromForm(fd) {
     refundCost: parseFloat(fd.refundCost || 0),
     testCost: parseFloat(fd.testCost || 0),
     welfareCost: parseFloat(fd.welfareCost || 0),
+    coinCost: parseFloat(fd.coinCost || 0),
     billingAmount: Math.round(billingAmount * 100) / 100,
     shareRate: parseFloat(fd.shareRate || 0),
     shareAmount: Math.round(shareAmount * 100) / 100,
     taxRate: parseFloat(fd.taxRate || 0),
+    channelFeeRate: parseFloat(fd.channelFeeRate || 0),
     gatewayCost: parseFloat(fd.gatewayCost || 0),
+    calculationMode: fd.calculationMode || '',
     settlementAmount
   }
 }
@@ -155,6 +168,7 @@ export function buildFullChannelRecord(headerForm, lineFormList) {
     refundCost: sum((i) => i.refundCost),
     testCost: sum((i) => i.testCost),
     welfareCost: sum((i) => i.welfareCost),
+    coinCost: sum((i) => i.coinCost),
     billingAmount: sum((i) => i.billingAmount),
     shareAmount: sum((i) => i.shareAmount),
     taxRate: items.length ? items[0].taxRate : 0,
@@ -234,9 +248,12 @@ export function recordToLineForms(record) {
     refundCost: String(line.refundCost ?? ''),
     testCost: String(line.testCost ?? ''),
     welfareCost: String(line.welfareCost ?? ''),
+    coinCost: String(line.coinCost ?? ''),
     shareRate: String(line.shareRate ?? '30'),
     taxRate: String(line.taxRate ?? '5'),
+    channelFeeRate: String(line.channelFeeRate ?? ''),
     gatewayCost: String(line.gatewayCost ?? ''),
+    calculationMode: line.calculationMode || '',
     settlementAmount: String(line.settlementAmount ?? '')
   }))
 }
