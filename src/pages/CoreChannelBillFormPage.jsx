@@ -16,7 +16,7 @@ function money(value) {
 }
 
 function CoreChannelBillFormPage({ mode }) {
-  const { recon, showToast, setActiveView, channelEditRecordId } = useAppState()
+  const { recon, settings, showToast, setActiveView, channelEditRecordId } = useAppState()
   const isEdit = mode === 'edit'
   const submitIntentRef = useRef('back')
   const [previewAmount, setPreviewAmount] = useState(0)
@@ -92,7 +92,8 @@ function CoreChannelBillFormPage({ mode }) {
       </section>
 
       <section className="core-bill-card core-bill-card--embedded">
-        <ChannelBillingForm
+      <ChannelBillingForm
+        partners={settings?.partners || []}
           formId={FORM_ID}
           mode={isEdit ? 'edit' : 'add'}
           recordId={stableRecord?.id}

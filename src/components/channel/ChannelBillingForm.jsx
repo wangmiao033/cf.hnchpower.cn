@@ -98,6 +98,122 @@ function updateLineField(lines, index, field, value) {
 /**
  * 渠道对账：公共信息 + 多行游戏明细（每行沿用 domain内单游戏计算公式）
  */
+function normalizePartnerSearch(value) {
+  return String(value || '')
+    .trim()
+    .toLocaleLowerCase('zh-CN')
+    .replace(/[（(]/g, '(')
+    .replace(/[）)]/g, ')')
+    .replace(/\s+/g, '')
+}
+
+function ChannelPartnerPicker({ value, partners, onChange }) {
+  const [open, setOpen] = useState(false)
+  const availablePartners = useMemo(
+    () => (Array.isArray(partners) ? partners : []).filter((partner) => partner?.name),
+    [partners]
+  )
+  const normalizedValue = normalizePartnerSearch(value)
+  const matches = useMemo(() => {
+    const filtered = normalizedValue
+      ? availablePartners.filter((partner) =>
+          [partner.shortName, partner.name, partner.taxRegistrationNo, partner.recipient].some(
+            (item) => normalizePartnerSearch(item).includes(normalizedValue)
+          )
+        )
+      : availablePartners
+    return filtered.slice(0, 30)
+  }, [availablePartners, normalizedValue])
+  const linkedPartner = availablePartners.find((partner) =>
+    [partner.shortName, partner.name].some(
+      (item) => normalizePartnerSearch(item) === normalizedValue
+    )
+  )
+
+  const selectPartner = (partner) => {
+    const channelName = String(partner.shortName || partner.name || '').trim()
+    onChange(channelName, String(partner.name || channelName).trim())
+    setOpen(false)
+  }
+
+  return (
+    <div className="rd-partner-picker channel-partner-picker">
+      <div className="rd-partner-picker__control channel-partner-picker__control">
+        <input
+          type="search"
+          role="combobox"
+          aria-label="搜索客户库渠道简称"
+          aria-expanded={open}
+          aria-autocomplete="list"
+          className="admin-input"
+          value={value}
+          onFocus={() => setOpen(true)}
+          onBlur={() => window.setTimeout(() => setOpen(false), 120)}
+          onChange={(event) => {
+            const nextValue = event.target.value
+            const exact = availablePartners.find((partner) =>
+              [partner.shortName, partner.name].some(
+                (item) => normalizePartnerSearch(item) === normalizePartnerSearch(nextValue)
+              )
+            )
+            onChange(nextValue, exact ? String(exact.name || '').trim() : '')
+            setOpen(true)
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') setOpen(false)
+            if (event.key === 'Enter' && open && matches.length === 1) {
+              event.preventDefault()
+              selectPartner(matches[0])
+            }
+          }}
+          placeholder="搜索客户库中的渠道简称或公司名称"
+          required
+        />
+      </div>
+      <div
+        className={`rd-partner-picker__link-state ${
+          linkedPartner ? 'rd-partner-picker__link-state--linked' : ''
+        }`}
+      >
+        {linkedPartner
+          ? `已关联客户库：${linkedPartner.name}`
+          : '请从客户库结果中选择渠道'}
+      </div>
+      {open ? (
+        <div
+          className="rd-partner-picker__menu channel-partner-picker__menu"
+          role="listbox"
+          aria-label="客户库渠道"
+        >
+          <div className="rd-partner-picker__menu-head">
+            <strong>客户库</strong>
+            <span>{availablePartners.length} 个合作方</span>
+          </div>
+          {matches.map((partner) => (
+            <button
+              key={partner.id || partner.name}
+              type="button"
+              role="option"
+              aria-selected={linkedPartner?.id === partner.id}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => selectPartner(partner)}
+            >
+              <span>
+                <strong>{partner.shortName || partner.name}</strong>
+                <small>{partner.shortName ? partner.name : partner.category || '未分类'}</small>
+              </span>
+              <em>{partner.category || partner.taxRegistrationNo || ''}</em>
+            </button>
+          ))}
+          {matches.length === 0 ? (
+            <div className="rd-partner-picker__empty">客户库中没有匹配的渠道</div>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 function ChannelBillingForm({
   formId,
   mode = 'add',
@@ -109,6 +225,7 @@ function ChannelBillingForm({
   onAfterSubmit,
   onPreviewChange,
   onError,
+  partners = [],
   className = ''
 }) {
   const [header, setHeader] = useState(initialHeaderForm)
@@ -240,38 +357,23 @@ function ChannelBillingForm({
     if (submitIntentRef) submitIntentRef.current = 'back'
   }
 
-  const datalistId = `${formId}-channel-list`
-
   return (
     <form id={formId} onSubmit={handleSubmit} className={`channel-form channel-form--page ${className}`}>
       <div className="channel-form-section channel-bill-meta-section">
       <div className="form-section-title">1）账单信息</div>
       <div className="channel-bill-meta-grid">
-        <div className="form-group">
-          <label>渠道/公司简称 *</label>
-          <input
-            type="text"
-            list={datalistId}
+        <div className="form-group channel-bill-meta-grid__channel">
+          <label>渠道简称 *</label>
+          <ChannelPartnerPicker
             value={header.channelName}
-            onChange={(e) => handleHeaderChange('channelName', e.target.value)}
-            placeholder="如：广州触点互联网科技有限公司"
-            required
-            className="admin-input"
-          />
-          <datalist id={datalistId}>
-            {COMMON_CHANNELS.map((ch) => (
-              <option key={ch} value={ch} />
-            ))}
-          </datalist>
-        </div>
-        <div className="form-group">
-          <label>合作方</label>
-          <input
-            type="text"
-            value={header.partnerName}
-            onChange={(e) => handleHeaderChange('partnerName', e.target.value)}
-            placeholder="可选"
-            className="admin-input"
+            partners={partners}
+            onChange={(channelName, partnerName) => {
+              setHeader((prev) => ({
+                ...prev,
+                channelName,
+                partnerName
+              }))
+            }}
           />
         </div>
         <div className="form-group">
