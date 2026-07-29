@@ -37,14 +37,26 @@ function formatCycleFromMonth(rawMonth) {
   return `${m[1]}年${Number(m[2])}月`
 }
 
-function normalizeCycleLabel(raw) {
+function monthFromCycle(raw) {
   const text = String(raw || '').trim()
   if (!text) return ''
-  let m = text.match(/^(\d{4})年(\d{1,2})月$/)
-  if (m) return `${m[1]}年${Math.min(Math.max(Number(m[2]), 1), 12)}月`
+  let m = text.match(/^(\d{4})年(\d{1,2})月?$/)
+  if (m) return `${m[1]}-${String(Math.min(Math.max(Number(m[2]), 1), 12)).padStart(2, '0')}`
   m = text.match(/^(\d{4})-(\d{1,2})$/)
-  if (m) return `${m[1]}年${Math.min(Math.max(Number(m[2]), 1), 12)}月`
-  return text
+  if (m) return `${m[1]}-${String(Math.min(Math.max(Number(m[2]), 1), 12)).padStart(2, '0')}`
+  return ''
+}
+
+function monthDateRange(rawMonth) {
+  const match = String(rawMonth || '').match(/^(\d{4})-(\d{2})$/)
+  if (!match) return { startDate: '', endDate: '' }
+  const year = Number(match[1])
+  const month = Number(match[2])
+  const lastDay = new Date(year, month, 0).getDate()
+  return {
+    startDate: `${match[1]}-${match[2]}-01`,
+    endDate: `${match[1]}-${match[2]}-${String(lastDay).padStart(2, '0')}`
+  }
 }
 
 function formatMoney(amount) {
@@ -131,25 +143,31 @@ function ChannelBillingForm({
   useEffect(() => {
     if (mode === 'edit' && sourceRecord) {
       const nextHeader = recordToHeaderForm(sourceRecord)
-      setHeader(nextHeader)
       const lf = recordToLineForms(sourceRecord)
-      const defaultCycle = formatCycleFromMonth(nextHeader.settlementMonth)
+      const settlementMonth = nextHeader.settlementMonth || monthFromCycle(lf[0]?.settlementCycle)
+      const dateRange = monthDateRange(settlementMonth)
+      const defaultCycle = formatCycleFromMonth(settlementMonth)
+      setHeader({ ...nextHeader, settlementMonth, ...dateRange })
       setLines(
         lf.length
-          ? lf.map((line) => ({
-              ...line,
-              settlementCycle: line.settlementCycle || defaultCycle
-            }))
+          ? lf.map((line) => ({ ...line, settlementCycle: defaultCycle }))
           : [{ ...initialLineItem(), settlementCycle: defaultCycle }]
       )
     }
     if (mode === 'add') {
-      setHeader(initialHeaderForm)
-      setLines([{ ...initialLineItem(), settlementCycle: formatCycleFromMonth(initialHeaderForm.settlementMonth) }])
+      setHeader({ ...initialHeaderForm })
+      setLines([{ ...initialLineItem() }])
     }
   }, [mode, sourceRecord?.id])
 
   const handleHeaderChange = (field, value) => {
+    if (field === 'settlementMonth') {
+      const dateRange = monthDateRange(value)
+      const settlementCycle = formatCycleFromMonth(value)
+      setHeader((h) => ({ ...h, settlementMonth: value, ...dateRange }))
+      setLines((prev) => prev.map((line) => ({ ...line, settlementCycle })))
+      return
+    }
     setHeader((h) => ({ ...h, [field]: value }))
   }
 
@@ -178,6 +196,12 @@ function ChannelBillingForm({
       return
     }
 
+    if (!header.settlementMonth) {
+      const msg = '请选择账单月份'
+      onError?.(msg) ?? window.alert(msg)
+      return
+    }
+
     for (let i = 0; i < lines.length; i += 1) {
       const row = lines[i]
       if (!row.gameName?.trim()) {
@@ -187,7 +211,12 @@ function ChannelBillingForm({
       }
     }
 
-    const record = buildFullChannelRecord(header, lines)
+    const dateRange = monthDateRange(header.settlementMonth)
+    const settlementCycle = formatCycleFromMonth(header.settlementMonth)
+    const record = buildFullChannelRecord(
+      { ...header, ...dateRange },
+      lines.map((line) => ({ ...line, settlementCycle }))
+    )
     const intent = submitIntentRef?.current ?? 'back'
 
     try {
@@ -199,8 +228,8 @@ function ChannelBillingForm({
         const res = onAddRecord?.(record)
         if (res && typeof res.then === 'function') await res
         if (intent === 'continue') {
-          setHeader(initialHeaderForm)
-          setLines([initialLineItem()])
+          setHeader({ ...initialHeaderForm })
+          setLines([{ ...initialLineItem() }])
         }
         onAfterSubmit?.(intent)
       }
@@ -215,10 +244,10 @@ function ChannelBillingForm({
 
   return (
     <form id={formId} onSubmit={handleSubmit} className={`channel-form channel-form--page ${className}`}>
-      <div className="channel-form-section">
-      <div className="form-section-title">1）公共信息</div>
-      <div className="form-row">
-        <div className="form-group full-width">
+      <div className="channel-form-section channel-bill-meta-section">
+      <div className="form-section-title">1）账单信息</div>
+      <div className="channel-bill-meta-grid">
+        <div className="form-group">
           <label>渠道/公司简称 *</label>
           <input
             type="text"
@@ -235,9 +264,7 @@ function ChannelBillingForm({
             ))}
           </datalist>
         </div>
-      </div>
-      <div className="form-row">
-        <div className="form-group full-width">
+        <div className="form-group">
           <label>合作方</label>
           <input
             type="text"
@@ -247,40 +274,41 @@ function ChannelBillingForm({
             className="admin-input"
           />
         </div>
-      </div>
-      <div className="form-row three-col">
         <div className="form-group">
-          <label>结算周期（月份）</label>
+          <label>账单月份 *</label>
           <input
             type="month"
             value={header.settlementMonth}
             onChange={(e) => handleHeaderChange('settlementMonth', e.target.value)}
             className="admin-input"
+            required
           />
+          <div className="channel-bill-period-help">
+            {header.startDate && header.endDate
+              ? `账期 ${header.startDate} 至 ${header.endDate}`
+              : '选择月份后自动生成整月账期'}
+          </div>
         </div>
-        <div className="form-group">
-          <label>账期开始</label>
+        <div className="form-group channel-bill-meta-grid__remark">
+          <label>备注</label>
           <input
-            type="date"
-            value={header.startDate}
-            onChange={(e) => handleHeaderChange('startDate', e.target.value)}
+            type="text"
+            value={header.remark}
+            onChange={(e) => handleHeaderChange('remark', e.target.value)}
             className="admin-input"
-          />
-        </div>
-        <div className="form-group">
-          <label>账期结束</label>
-          <input
-            type="date"
-            value={header.endDate}
-            onChange={(e) => handleHeaderChange('endDate', e.target.value)}
-            className="admin-input"
+            placeholder="选填，记录发票、回款或本期特殊说明"
           />
         </div>
       </div>
       </div>
 
       <div className="channel-form-section">
-      <div className="form-section-title">2）游戏明细（每行独立按原公式计算结算金额）</div>
+      <div className="form-section-title channel-bill-detail-title">
+        <span>2）游戏明细</span>
+        <span className="channel-bill-period-badge">
+          {header.settlementMonth ? formatCycleFromMonth(header.settlementMonth) : '请先选择账单月份'}
+        </span>
+      </div>
       <LineItemsTable
         onAddRow={addLine}
         showAddButton={false}
@@ -289,7 +317,6 @@ function ChannelBillingForm({
         <table className="channel-line-items-table">
           <thead>
             <tr>
-              <th>结算周期</th>
               <th>游戏名称</th>
               <th>后台流水</th>
               <th>折扣系数</th>
@@ -311,16 +338,6 @@ function ChannelBillingForm({
           <tbody>
             {lines.map((row, index) => (
               <tr key={row.id || `line-${index}`}>
-                <td>
-                  <input
-                    type="text"
-                    className="admin-input"
-                    value={row.settlementCycle || formatCycleFromMonth(header.settlementMonth)}
-                    onChange={(e) => handleLineChange(index, 'settlementCycle', e.target.value)}
-                    onBlur={(e) => handleLineChange(index, 'settlementCycle', normalizeCycleLabel(e.target.value))}
-                    placeholder="如：2026年4月"
-                  />
-                </td>
                 <td>
                   <input
                     type="text"
@@ -465,53 +482,26 @@ function ChannelBillingForm({
 
       <div className="channel-form-section">
       <div className="form-section-title">3）汇总</div>
-      <div className="form-row four-col channel-totals-row">
-        <div className="form-group">
-          <label>原始后台流水合计</label>
-          <input type="text" readOnly className="admin-input readonly-input" value={totals.rawFlow.toFixed(2)} />
+      <div className="channel-line-items-summary channel-line-items-summary--channel">
+        <div className="summary-item summary-item--accent">
+          <div className="label">原始后台流水</div>
+          <div className="value">{formatMoney(totals.rawFlow)}</div>
         </div>
-        <div className="form-group">
-          <label>折算后总流水（结算用）</label>
-          <input
-            type="text"
-            readOnly
-            className="admin-input readonly-input"
-            value={totals.effectiveFlow.toFixed(2)}
-          />
+        <div className="summary-item summary-item--accent">
+          <div className="label">折算后总流水</div>
+          <div className="value">{formatMoney(totals.effectiveFlow)}</div>
         </div>
-        <div className="form-group">
-          <label>总代金券</label>
-          <input type="text" readOnly className="admin-input readonly-input" value={totals.voucher.toFixed(2)} />
+        <div className="summary-item">
+          <div className="label">总代金券</div>
+          <div className="value">{formatMoney(totals.voucher)}</div>
         </div>
-        <div className="form-group">
-          <label>总退款</label>
-          <input type="text" readOnly className="admin-input readonly-input" value={totals.refund.toFixed(2)} />
+        <div className="summary-item">
+          <div className="label">总退款</div>
+          <div className="value">{formatMoney(totals.refund)}</div>
         </div>
-      </div>
-      <div className="form-row four-col channel-totals-row">
-        <div className="form-group">
-          <label>总结算金额</label>
-          <input
-            type="text"
-            readOnly
-            className="admin-input readonly-input settlement-input"
-            value={totals.settlement.toFixed(2)}
-          />
-        </div>
-      </div>
-      </div>
-
-      <div className="channel-form-section">
-      <div className="form-section-title">备注与其它</div>
-      <div className="form-row">
-        <div className="form-group full-width">
-          <label>备注</label>
-          <input
-            type="text"
-            value={header.remark}
-            onChange={(e) => handleHeaderChange('remark', e.target.value)}
-            className="admin-input"
-          />
+        <div className="summary-item summary-item--hero">
+          <div className="label">总结算金额</div>
+          <div className="value">{formatMoney(totals.settlement)}</div>
         </div>
       </div>
       </div>
