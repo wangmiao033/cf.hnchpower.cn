@@ -27,6 +27,7 @@ function PartnerPicker({
   partners,
   onChange,
   onAddPartner,
+  required = false,
   linkedText = '已关联客户库，客户资料更新后账单仍保持关联',
   unlinkedText = '请从客户库结果中选择合作方'
 }) {
@@ -82,6 +83,7 @@ function PartnerPicker({
           aria-autocomplete="list"
           className="admin-input"
           value={value}
+          required={required}
           onFocus={() => setOpen(true)}
           onBlur={() => window.setTimeout(() => setOpen(false), 120)}
           onChange={(event) => {

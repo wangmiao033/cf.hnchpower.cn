@@ -1308,9 +1308,13 @@
 
 .channel-bill-meta-grid {
   display: grid;
-  grid-template-columns: minmax(280px, 1.5fr) minmax(220px, 1fr) minmax(220px, 0.75fr);
+  grid-template-columns: minmax(420px, 2fr) minmax(220px, 0.75fr);
   gap: 12px;
   align-items: start;
+}
+
+.channel-bill-meta-grid__partner {
+  min-width: 0;
 }
 
 .channel-bill-meta-grid__remark {

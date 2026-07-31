@@ -14,23 +14,6 @@ import '@/components/ChannelBilling.css'
 import LineItemsTable from '@/components/shared/LineItemsTable.jsx'
 import PartnerPicker, { findExactPartner } from '@/components/shared/PartnerPicker.jsx'
 
-const COMMON_CHANNELS = [
-  '广州触点互联网科技有限公司',
-  '广州能动科技有限公司',
-  '深圳龙魂网络科技有限公司',
-  '华为应用市场',
-  'vivo应用商店',
-  'OPPO应用商店',
-  '小米应用商店',
-  '百度移动游戏',
-  '九游游戏中心',
-  '爱趣聚合',
-  '233乐园',
-  '277游戏',
-  '3733游戏',
-  '3387游戏'
-]
-
 function formatCycleFromMonth(rawMonth) {
   const text = String(rawMonth || '').trim()
   const m = text.match(/^(\d{4})-(\d{1,2})$/)
@@ -139,6 +122,15 @@ function ChannelBillingForm({
   }, [lines])
 
   const previewSettlement = useMemo(() => totals.settlement, [totals.settlement])
+  const selectedPartner = useMemo(() => {
+    if (partnerId) {
+      const byId = (partners || []).find(
+        (partner) => String(partner?.id || '') === String(partnerId)
+      )
+      if (byId) return byId
+    }
+    return findExactPartner(partners, header.partnerName || header.channelName)
+  }, [partners, partnerId, header.partnerName, header.channelName])
 
   useEffect(() => {
     onPreviewChange?.(previewSettlement)
@@ -197,7 +189,7 @@ function ChannelBillingForm({
       channelName:
         selectedPartner && nextPartnerId
           ? selectedPartner.shortName || selectedPartner.name
-          : current.channelName
+          : partnerName
     }))
   }
 
@@ -220,8 +212,8 @@ function ChannelBillingForm({
   const handleSubmit = async (e) => {
     e.preventDefault()
 
-    if (!header.channelName?.trim()) {
-      const msg = '请填写渠道/公司简称'
+    if (!(header.partnerName || header.channelName)?.trim()) {
+      const msg = '请填写合作方'
       onError?.(msg) ?? window.alert(msg)
       return
     }
@@ -271,39 +263,26 @@ function ChannelBillingForm({
     if (submitIntentRef) submitIntentRef.current = 'back'
   }
 
-  const datalistId = `${formId}-channel-list`
-
   return (
     <form id={formId} onSubmit={handleSubmit} className={`channel-form channel-form--page ${className}`}>
       <div className="channel-form-section channel-bill-meta-section">
       <div className="form-section-title">1）账单信息</div>
       <div className="channel-bill-meta-grid">
-        <div className="form-group">
-          <label>渠道/公司简称 *</label>
-          <input
-            type="text"
-            list={datalistId}
-            value={header.channelName}
-            onChange={(e) => handleHeaderChange('channelName', e.target.value)}
-            placeholder="如：触点互娱"
-            required
-            className="admin-input"
-          />
-          <datalist id={datalistId}>
-            {COMMON_CHANNELS.map((ch) => (
-              <option key={ch} value={ch} />
-            ))}
-          </datalist>
-        </div>
-        <div className="form-group">
-          <label>合作方</label>
+        <div className="form-group channel-bill-meta-grid__partner">
+          <label>合作方 *</label>
           <PartnerPicker
-            value={header.partnerName}
+            value={header.partnerName || header.channelName}
             partnerId={partnerId}
             partners={partners}
             onChange={handlePartnerChange}
             onAddPartner={onAddPartner}
-            linkedText="已从客户库选择，渠道简称已自动带入"
+            required
+            linkedText={
+              selectedPartner
+                ? `已关联客户库 · 简称：${selectedPartner.shortName || selectedPartner.name}`
+                : '已关联客户库'
+            }
+            unlinkedText="输入简称或公司全称，并从客户库结果中选择"
           />
         </div>
         <div className="form-group">
