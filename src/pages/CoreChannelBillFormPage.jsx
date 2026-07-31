@@ -16,7 +16,7 @@ function money(value) {
 }
 
 function CoreChannelBillFormPage({ mode }) {
-  const { recon, showToast, setActiveView, channelEditRecordId } = useAppState()
+  const { recon, settings, showToast, setActiveView, channelEditRecordId } = useAppState()
   const isEdit = mode === 'edit'
   const submitIntentRef = useRef('back')
   const [previewAmount, setPreviewAmount] = useState(0)
@@ -103,6 +103,19 @@ function CoreChannelBillFormPage({ mode }) {
           onAfterSubmit={handleAfterSubmit}
           onPreviewChange={setPreviewAmount}
           onError={(msg) => showToast(msg, 'error')}
+          partners={settings.partners || []}
+          onAddPartner={async (name) => {
+            const newPartner = {
+              name,
+              category: '渠道',
+              tag2: '',
+              createdAt: new Date().toISOString()
+            }
+            const ok = await settings.persistPartner(newPartner)
+            if (ok) {
+              showToast(`客户「${name}」已加入服务器客户库`, 'success')
+            }
+          }}
         />
       </section>
 

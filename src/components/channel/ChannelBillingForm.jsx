@@ -12,6 +12,7 @@ import {
 } from '@/domain/channel/channelBillingForm.js'
 import '@/components/ChannelBilling.css'
 import LineItemsTable from '@/components/shared/LineItemsTable.jsx'
+import PartnerPicker, { findExactPartner } from '@/components/shared/PartnerPicker.jsx'
 
 const COMMON_CHANNELS = [
   '广州触点互联网科技有限公司',
@@ -109,10 +110,13 @@ function ChannelBillingForm({
   onAfterSubmit,
   onPreviewChange,
   onError,
+  partners = [],
+  onAddPartner,
   className = ''
 }) {
   const [header, setHeader] = useState(initialHeaderForm)
   const [lines, setLines] = useState([initialLineItem()])
+  const [partnerId, setPartnerId] = useState('')
 
   const totals = useMemo(() => {
     return lines.reduce(
@@ -143,6 +147,7 @@ function ChannelBillingForm({
   useEffect(() => {
     if (mode === 'edit' && sourceRecord) {
       const nextHeader = recordToHeaderForm(sourceRecord)
+      setPartnerId('')
       const lf = recordToLineForms(sourceRecord)
       const settlementMonth = nextHeader.settlementMonth || monthFromCycle(lf[0]?.settlementCycle)
       const dateRange = monthDateRange(settlementMonth)
@@ -156,9 +161,22 @@ function ChannelBillingForm({
     }
     if (mode === 'add') {
       setHeader({ ...initialHeaderForm })
+      setPartnerId('')
       setLines([{ ...initialLineItem() }])
     }
   }, [mode, sourceRecord?.id])
+
+  useEffect(() => {
+    if (partnerId) return
+    const matched = findExactPartner(partners, header.partnerName || header.channelName)
+    if (!matched) return
+    setPartnerId(String(matched.id || ''))
+    setHeader((current) => ({
+      ...current,
+      partnerName: current.partnerName || matched.name,
+      channelName: current.channelName || matched.shortName || matched.name
+    }))
+  }, [partners, header.partnerName, header.channelName, partnerId])
 
   const handleHeaderChange = (field, value) => {
     if (field === 'settlementMonth') {
@@ -169,6 +187,18 @@ function ChannelBillingForm({
       return
     }
     setHeader((h) => ({ ...h, [field]: value }))
+  }
+
+  const handlePartnerChange = (partnerName, nextPartnerId = '', selectedPartner = null) => {
+    setPartnerId(nextPartnerId)
+    setHeader((current) => ({
+      ...current,
+      partnerName,
+      channelName:
+        selectedPartner && nextPartnerId
+          ? selectedPartner.shortName || selectedPartner.name
+          : current.channelName
+    }))
   }
 
   const handleLineChange = (index, field, value) => {
@@ -229,6 +259,7 @@ function ChannelBillingForm({
         if (res && typeof res.then === 'function') await res
         if (intent === 'continue') {
           setHeader({ ...initialHeaderForm })
+          setPartnerId('')
           setLines([{ ...initialLineItem() }])
         }
         onAfterSubmit?.(intent)
@@ -254,7 +285,7 @@ function ChannelBillingForm({
             list={datalistId}
             value={header.channelName}
             onChange={(e) => handleHeaderChange('channelName', e.target.value)}
-            placeholder="如：广州触点互联网科技有限公司"
+            placeholder="如：触点互娱"
             required
             className="admin-input"
           />
@@ -266,12 +297,13 @@ function ChannelBillingForm({
         </div>
         <div className="form-group">
           <label>合作方</label>
-          <input
-            type="text"
+          <PartnerPicker
             value={header.partnerName}
-            onChange={(e) => handleHeaderChange('partnerName', e.target.value)}
-            placeholder="可选"
-            className="admin-input"
+            partnerId={partnerId}
+            partners={partners}
+            onChange={handlePartnerChange}
+            onAddPartner={onAddPartner}
+            linkedText="已从客户库选择，渠道简称已自动带入"
           />
         </div>
         <div className="form-group">

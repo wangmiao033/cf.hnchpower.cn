@@ -2267,11 +2267,16 @@
 
 .rd-recon-billing-form .channel-form-section:has(.rd-partner-picker),
 .rd-recon-billing-form .form-row:has(.rd-partner-picker),
-.rd-recon-billing-form .form-group:has(.rd-partner-picker) {
+.rd-recon-billing-form .form-group:has(.rd-partner-picker),
+.channel-form--page:has(.rd-partner-picker),
+.channel-form--page .channel-form-section:has(.rd-partner-picker),
+.channel-form--page .channel-bill-meta-grid:has(.rd-partner-picker),
+.channel-form--page .form-group:has(.rd-partner-picker) {
   overflow: visible;
 }
 
-.rd-recon-billing-form .channel-form-section:has(.rd-partner-picker) {
+.rd-recon-billing-form .channel-form-section:has(.rd-partner-picker),
+.channel-form--page .channel-form-section:has(.rd-partner-picker) {
   position: relative;
   z-index: 5;
 }
