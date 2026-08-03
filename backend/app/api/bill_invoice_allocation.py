@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 import re
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -17,15 +17,21 @@ from app.models.channel import ChannelRecord
 from app.models.invoice import InvoiceRecord
 from app.models.reconciliation import ReconciliationRecord
 from app.schemas.bill_invoice_allocation import (
+    AllocationBillBrief,
     AllocationInvoiceBrief,
     BillInvoiceAllocationCreate,
     BillInvoiceAllocationRead,
     BillInvoiceCandidate,
     BillInvoiceSummary,
+    InvoiceAllocationOverview,
+    InvoiceBillAllocationRead,
+    InvoiceBillCandidate,
+    InvoiceBillSummary,
 )
 
 router = APIRouter()
 ACTIVE_STATUSES = ("suggested", "confirmed")
+ALLOCATABLE_BILL_STATUSES = ("confirmed", "completed", "settled", "reconciled", "verified")
 
 
 def _bill(db: Session, bill_type: str, bill_id: str):
@@ -81,6 +87,57 @@ def _allocation_read(row: BillInvoiceAllocation, invoice: InvoiceRecord) -> Bill
         confirmed_at=row.confirmed_at,
         created_at=row.created_at,
         invoice=_invoice_brief(invoice),
+    )
+
+
+def _bill_brief(bill_type: str, bill) -> AllocationBillBrief:
+    partner_name = str(
+        getattr(bill, "partner_name", None)
+        or getattr(bill, "channel_name", None)
+        or "未填写往来单位"
+    )
+    return AllocationBillBrief(
+        bill_type=bill_type,
+        bill_id=str(bill.id),
+        number=str(getattr(bill, "statement_no", None) or bill.id),
+        partner_name=partner_name,
+        game_name=getattr(bill, "game_name", None),
+        settlement_month=getattr(bill, "settlement_month", None),
+        gross_amount=round(abs(float(getattr(bill, "settlement_amount", 0) or 0)), 2),
+        status=str(getattr(bill, "status", None) or "pending"),
+    )
+
+
+def _invoice_allocation_read(row: BillInvoiceAllocation, bill) -> InvoiceBillAllocationRead:
+    return InvoiceBillAllocationRead(
+        id=row.id,
+        bill_type=row.bill_type,
+        bill_id=row.bill_id,
+        invoice_id=row.invoice_id,
+        allocated_gross_amount=float(row.allocated_gross_amount or 0),
+        status=row.status,
+        match_type=row.match_type,
+        match_score=float(row.match_score or 0),
+        match_reasons=list(row.match_reasons or []),
+        confirmed_at=row.confirmed_at,
+        created_at=row.created_at,
+        bill=_bill_brief(row.bill_type, bill),
+    )
+
+
+def _overview(invoice: InvoiceRecord, allocated: float, allocation_count: int) -> InvoiceAllocationOverview:
+    invoice_amount = round(abs(_invoice_gross(invoice)), 2)
+    allocated_amount = round(float(allocated or 0), 2)
+    remaining = round(max(0, invoice_amount - allocated_amount), 2)
+    coverage_percent = allocated_amount / invoice_amount * 100 if invoice_amount > 0 else 0
+    return InvoiceAllocationOverview(
+        invoice_id=invoice.id,
+        invoice_amount=invoice_amount,
+        allocated_amount=allocated_amount,
+        remaining_amount=remaining,
+        coverage_percent=round(min(999.9, coverage_percent), 1),
+        coverage_status=_coverage_status(allocated_amount, invoice_amount),
+        allocation_count=int(allocation_count or 0),
     )
 
 
@@ -227,6 +284,158 @@ def get_bill_invoice_summary(
         remaining_amount=remaining,
         coverage_percent=round(coverage_percent, 1),
         coverage_status=_coverage_status(allocated, bill_amount),
+        allocations=allocations,
+        candidates=candidates[:50],
+    )
+
+
+@router.get("/invoices/overview", response_model=list[InvoiceAllocationOverview])
+def get_invoice_allocation_overviews(
+    invoice_ids: str = Query("", max_length=20000),
+    db: Session = Depends(get_db),
+) -> list[InvoiceAllocationOverview]:
+    ids = list(dict.fromkeys(part.strip() for part in invoice_ids.split(",") if part.strip()))[:500]
+    if not ids:
+        return []
+    invoices = {
+        invoice.id: invoice
+        for invoice in db.execute(
+            select(InvoiceRecord).where(InvoiceRecord.id.in_(ids))
+        ).scalars().all()
+    }
+    allocation_totals = {
+        invoice_id: (float(total or 0), int(count or 0))
+        for invoice_id, total, count in db.execute(
+            select(
+                BillInvoiceAllocation.invoice_id,
+                func.coalesce(func.sum(BillInvoiceAllocation.allocated_gross_amount), 0),
+                func.count(BillInvoiceAllocation.id),
+            ).where(
+                BillInvoiceAllocation.invoice_id.in_(ids),
+                BillInvoiceAllocation.status.in_(ACTIVE_STATUSES),
+            ).group_by(BillInvoiceAllocation.invoice_id)
+        ).all()
+    }
+    return [
+        _overview(invoices[invoice_id], *allocation_totals.get(invoice_id, (0, 0)))
+        for invoice_id in ids
+        if invoice_id in invoices
+    ]
+
+
+@router.get("/invoice/{invoice_id}", response_model=InvoiceBillSummary)
+def get_invoice_bill_summary(
+    invoice_id: str,
+    db: Session = Depends(get_db),
+) -> InvoiceBillSummary:
+    invoice = db.get(InvoiceRecord, invoice_id)
+    if invoice is None:
+        raise HTTPException(status_code=404, detail={"error": "invoice_not_found"})
+
+    allocation_rows = db.execute(
+        select(BillInvoiceAllocation).where(
+            BillInvoiceAllocation.invoice_id == invoice_id,
+            BillInvoiceAllocation.status.in_(ACTIVE_STATUSES),
+        ).order_by(BillInvoiceAllocation.created_at.desc())
+    ).scalars().all()
+
+    rd_ids = [row.bill_id for row in allocation_rows if row.bill_type == "rd"]
+    channel_ids = [row.bill_id for row in allocation_rows if row.bill_type == "channel"]
+    bills = {}
+    if rd_ids:
+        bills.update({
+            ("rd", row.id): row
+            for row in db.execute(
+                select(ReconciliationRecord).where(ReconciliationRecord.id.in_(rd_ids))
+            ).scalars().all()
+        })
+    if channel_ids:
+        bills.update({
+            ("channel", row.id): row
+            for row in db.execute(
+                select(ChannelRecord).where(ChannelRecord.id.in_(channel_ids))
+            ).scalars().all()
+        })
+    allocations = [
+        _invoice_allocation_read(row, bills[(row.bill_type, row.bill_id)])
+        for row in allocation_rows
+        if (row.bill_type, row.bill_id) in bills
+    ]
+    allocated = round(sum(item.allocated_gross_amount for item in allocations), 2)
+    overview = _overview(invoice, allocated, len(allocations))
+
+    expected_bill_type = "rd" if (invoice.invoice_direction or "output") == "input" else "channel"
+    bill_model = ReconciliationRecord if expected_bill_type == "rd" else ChannelRecord
+    candidate_bills = db.execute(
+        select(bill_model)
+        .where(bill_model.status.in_(ALLOCATABLE_BILL_STATUSES))
+        .order_by(bill_model.updated_at.desc())
+        .limit(300)
+    ).scalars().all()
+    candidate_bill_ids = [str(bill.id) for bill in candidate_bills]
+    bill_used = {
+        str(bill_id): float(total or 0)
+        for bill_id, total in db.execute(
+            select(
+                BillInvoiceAllocation.bill_id,
+                func.coalesce(func.sum(BillInvoiceAllocation.allocated_gross_amount), 0),
+            ).where(
+                BillInvoiceAllocation.bill_type == expected_bill_type,
+                BillInvoiceAllocation.bill_id.in_(candidate_bill_ids),
+                BillInvoiceAllocation.status.in_(ACTIVE_STATUSES),
+            ).group_by(BillInvoiceAllocation.bill_id)
+        ).all()
+    } if candidate_bill_ids else {}
+
+    counterparty = _invoice_brief(invoice).counterparty_name
+    linked_bill_ids = {row.bill_id for row in allocation_rows if row.bill_type == expected_bill_type}
+    candidates: list[InvoiceBillCandidate] = []
+    for bill in candidate_bills:
+        bill_id = str(bill.id)
+        if bill_id in linked_bill_ids:
+            continue
+        brief = _bill_brief(expected_bill_type, bill)
+        bill_available = round(max(0, brief.gross_amount - bill_used.get(bill_id, 0)), 2)
+        if bill_available <= 0.01 or overview.remaining_amount <= 0.01:
+            continue
+        score = 0.0
+        reasons: list[str] = []
+        bill_partner = brief.partner_name.strip()
+        if bill_partner and counterparty and (
+            bill_partner in counterparty or counterparty in bill_partner
+        ):
+            score += 0.4
+            reasons.append("往来单位匹配")
+        if abs(bill_available - overview.remaining_amount) <= 0.01:
+            score += 0.4
+            reasons.append("剩余金额一致")
+        elif overview.remaining_amount > 0 and (
+            abs(bill_available - overview.remaining_amount) / overview.remaining_amount <= 0.05
+        ):
+            score += 0.25
+            reasons.append("金额接近")
+        if _month_key(brief.settlement_month) and (
+            _month_key(brief.settlement_month) == _month_key(invoice.invoice_date)
+        ):
+            score += 0.2
+            reasons.append("账期接近")
+        candidates.append(InvoiceBillCandidate(
+            bill=brief,
+            available_amount=bill_available,
+            suggested_amount=round(min(bill_available, overview.remaining_amount), 2),
+            match_score=round(score, 4),
+            match_reasons=reasons,
+        ))
+    candidates.sort(
+        key=lambda item: (
+            item.match_score,
+            item.bill.settlement_month or "",
+            item.bill.number,
+        ),
+        reverse=True,
+    )
+    return InvoiceBillSummary(
+        **overview.model_dump(),
         allocations=allocations,
         candidates=candidates[:50],
     )

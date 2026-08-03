@@ -64,3 +64,52 @@ class BillInvoiceSummary(BaseModel):
     coverage_status: str
     allocations: list[BillInvoiceAllocationRead]
     candidates: list[BillInvoiceCandidate]
+
+
+class AllocationBillBrief(BaseModel):
+    bill_type: str
+    bill_id: str
+    number: str
+    partner_name: str
+    game_name: str | None = None
+    settlement_month: str | None = None
+    gross_amount: float
+    status: str
+
+
+class InvoiceBillAllocationRead(BaseModel):
+    id: str
+    bill_type: str
+    bill_id: str
+    invoice_id: str
+    allocated_gross_amount: float
+    status: str
+    match_type: str
+    match_score: float
+    match_reasons: list[str]
+    confirmed_at: datetime | None
+    created_at: datetime
+    bill: AllocationBillBrief
+
+
+class InvoiceBillCandidate(BaseModel):
+    bill: AllocationBillBrief
+    available_amount: float
+    suggested_amount: float
+    match_score: float
+    match_reasons: list[str]
+
+
+class InvoiceAllocationOverview(BaseModel):
+    invoice_id: str
+    invoice_amount: float
+    allocated_amount: float
+    remaining_amount: float
+    coverage_percent: float
+    coverage_status: str
+    allocation_count: int
+
+
+class InvoiceBillSummary(InvoiceAllocationOverview):
+    allocations: list[InvoiceBillAllocationRead]
+    candidates: list[InvoiceBillCandidate]
