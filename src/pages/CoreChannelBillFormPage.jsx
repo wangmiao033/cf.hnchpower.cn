@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { useAppState } from '@/app/AppStateContext.jsx'
 import PageContainer from '@/components/layout/PageContainer.jsx'
+import BillScanAttachments from '@/components/billing/BillScanAttachments.jsx'
 import ChannelBillingForm from '@/components/channel/ChannelBillingForm.jsx'
 import { CoreBillLoadingState } from '@/pages/CoreBillLoadingState.jsx'
 import { VIEWS } from '@/app/routes.js'
@@ -106,6 +107,11 @@ function CoreChannelBillFormPage({ mode }) {
           onError={(msg) => showToast(msg, 'error')}
         />
       </section>
+
+      <BillScanAttachments
+        billType="channel"
+        billId={isEdit ? String(stableRecord?.id || channelEditRecordId || '') : ''}
+      />
 
       <section className="core-bill-footer">
         <button type="button" onClick={goList}>返回列表</button>

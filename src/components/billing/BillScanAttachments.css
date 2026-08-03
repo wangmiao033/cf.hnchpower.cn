@@ -1,0 +1,112 @@
+.bill-scan-attachments {
+  margin: 10px 0;
+  border: 1px solid #d9e3f1;
+  border-radius: 6px;
+  background: #fff;
+}
+
+.bill-scan-attachments__head {
+  min-height: 56px;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid #e6edf6;
+}
+
+.bill-scan-attachments__head h3 {
+  margin: 0 0 3px;
+  font-size: 14px;
+}
+
+.bill-scan-attachments__head p {
+  margin: 0;
+  color: #66758c;
+  font-size: 12px;
+}
+
+.bill-scan-attachments__upload {
+  flex: 0 0 auto;
+  min-height: 34px;
+  padding: 0 14px;
+  border: 1px solid #1769ff;
+  border-radius: 5px;
+  background: #1769ff;
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.bill-scan-attachments__upload:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
+
+.bill-scan-attachments__empty,
+.bill-scan-attachments__error,
+.bill-scan-attachments__success {
+  padding: 12px 14px;
+  font-size: 12px;
+}
+
+.bill-scan-attachments__empty { color: #78879c; }
+.bill-scan-attachments__error { color: #d92d20; background: #fff5f4; }
+.bill-scan-attachments__success { color: #07883f; background: #f0fff6; }
+
+.bill-scan-attachments__list {
+  display: grid;
+}
+
+.bill-scan-attachments__item {
+  min-height: 50px;
+  padding: 8px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-top: 1px solid #edf1f6;
+}
+
+.bill-scan-attachments__item:first-child { border-top: 0; }
+
+.bill-scan-attachments__meta {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.bill-scan-attachments__meta strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.bill-scan-attachments__meta span {
+  color: #7a889c;
+  font-size: 11px;
+}
+
+.bill-scan-attachments__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.bill-scan-attachments__actions a { color: #1769ff; text-decoration: none; }
+.bill-scan-attachments__actions button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #d92d20;
+  cursor: pointer;
+}
+
+@media (max-width: 720px) {
+  .bill-scan-attachments__head,
+  .bill-scan-attachments__item { align-items: flex-start; }
+  .bill-scan-attachments__item { flex-direction: column; gap: 8px; }
+}
