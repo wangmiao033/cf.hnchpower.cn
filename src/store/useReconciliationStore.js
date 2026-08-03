@@ -754,15 +754,16 @@ export function useReconciliationStore(settings, showToast, options = {}) {
           await updateChannelRecord(sid, frontendChannelRecordToPayload(merged))
           await refetchChannelFromApi()
           showToast('渠道记录更新成功', 'success')
-          return
+          return true
         } catch (e) {
           console.error(e)
           showToast('渠道记录更新服务器失败', 'error')
-          return
+          return false
         }
       }
       setChannelRecords((prev) => prev.map((r) => (String(r.id) === sid ? { ...merged, id: sid } : r)))
       showToast('渠道记录更新成功', 'success')
+      return true
     },
     [showToast, channelApiEnabled, refetchChannelFromApi]
   )

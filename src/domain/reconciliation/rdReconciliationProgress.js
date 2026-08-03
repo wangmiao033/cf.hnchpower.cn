@@ -95,6 +95,7 @@ export function summarizeRdReconciliationProgress(records, options = {}) {
 
     return {
       id: cleanText(record?.id) || `rd-progress-${index}`,
+      billId: cleanText(record?.id),
       month: cleanText(record?.settlementMonth) || '-',
       billNumber: cleanText(record?.settlementNumber) || '-',
       partner,
@@ -121,6 +122,7 @@ export function summarizeRdReconciliationProgress(records, options = {}) {
   const unresolved = normalized
     .filter((row) => !row.reconciled || !row.hasFlow || row.partner === '未关联客户')
     .sort((a, b) => b.settlementWeight - a.settlementWeight)
+  const rows = [...normalized].sort((a, b) => b.settlementWeight - a.settlementWeight)
 
   const settlementWeight = sum(normalized, 'settlementWeight')
   const reconciledWeight = sum(reconciled, 'settlementWeight')
@@ -152,6 +154,7 @@ export function summarizeRdReconciliationProgress(records, options = {}) {
       unresolvedAmount: sum(unresolved, 'settlementAmount'),
       cancelledRows: (Array.isArray(records) ? records : []).length - normalized.length
     },
+    rows,
     unresolved
   }
 }

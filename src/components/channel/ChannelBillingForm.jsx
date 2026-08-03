@@ -7,6 +7,7 @@ import {
   calculateSettlement,
   effectiveLineFlowFromFormData,
   buildFullChannelRecord,
+  channelStatusForSubmit,
   recordToHeaderForm,
   recordToLineForms
 } from '@/domain/channel/channelBillingForm.js'
@@ -330,17 +331,24 @@ function ChannelBillingForm({
 
     const dateRange = monthDateRange(header.settlementMonth)
     const settlementCycle = formatCycleFromMonth(header.settlementMonth)
+    const intent = submitIntentRef?.current ?? 'back'
     const record = buildFullChannelRecord(
-      { ...header, ...dateRange },
+      {
+        ...header,
+        ...dateRange,
+        status: channelStatusForSubmit(header.status, intent)
+      },
       lines.map((line) => ({ ...line, settlementCycle }))
     )
-    const intent = submitIntentRef?.current ?? 'back'
 
     try {
       if (mode === 'edit' && recordId != null) {
-        const res = onUpdateRecord?.(recordId, { ...record, id: recordId })
-        if (res && typeof res.then === 'function') await res
-        onAfterSubmit?.('back')
+        const pendingResult = onUpdateRecord?.(recordId, { ...record, id: recordId })
+        const result = pendingResult && typeof pendingResult.then === 'function'
+          ? await pendingResult
+          : pendingResult
+        if (result === false) return
+        onAfterSubmit?.(intent)
       } else {
         const res = onAddRecord?.(record)
         if (res && typeof res.then === 'function') await res

@@ -36,7 +36,9 @@ describe('rd reconciliation progress', () => {
     expect(summary.totals.reconciliationRowPercent).toBe(50)
     expect(summary.totals.paymentAmountPercent).toBe(90)
     expect(summary.totals.unresolvedRows).toBe(1)
+    expect(summary.rows).toHaveLength(2)
     expect(summary.unresolved[0].billNumber).toBe('JS-002')
+    expect(summary.unresolved[0].billId).toBe('2')
   })
 
   it('excludes cancelled records and reports missing source data', () => {
@@ -60,5 +62,14 @@ describe('rd reconciliation progress', () => {
     expect(summary.totals.unresolvedRows).toBe(1)
     expect(summary.unresolved[0].reason).toContain('缺少流水')
     expect(summary.unresolved[0].reason).toContain('未关联客户')
+  })
+
+  it('keeps generated row ids separate from database bill ids', () => {
+    const summary = summarizeRdReconciliationProgress([
+      { settlementNumber: 'JS-TEMP', settlementAmount: 100, status: 'pending' }
+    ])
+
+    expect(summary.unresolved[0].id).toBe('rd-progress-0')
+    expect(summary.unresolved[0].billId).toBe('')
   })
 })

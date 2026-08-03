@@ -11,6 +11,7 @@ export type ApiInvoiceRow = {
   digital_invoice_no: string | null
   invoice_code: string | null
   invoice_no: string | null
+  invoice_identity_key: string | null
   buyer_name: string | null
   buyer_tax_no: string | null
   seller_name: string | null
@@ -22,6 +23,9 @@ export type ApiInvoiceRow = {
   amount_with_tax: number
   invoice_date: string | null
   issuer: string | null
+  invoice_source: string | null
+  tax_status: string
+  original_invoice_id: string | null
   status: string | null
   remark: string | null
   verified: boolean
@@ -42,6 +46,7 @@ export type InvoiceRecordPayload = {
   digital_invoice_no?: string | null
   invoice_code?: string | null
   invoice_no?: string | null
+  invoice_identity_key?: string | null
   buyer_name?: string | null
   buyer_tax_no?: string | null
   seller_name?: string | null
@@ -53,6 +58,9 @@ export type InvoiceRecordPayload = {
   amount_with_tax?: number
   invoice_date?: string | null
   issuer?: string | null
+  invoice_source?: string | null
+  tax_status?: string | null
+  original_invoice_id?: string | null
   status?: string | null
   remark?: string | null
   verified: boolean
@@ -110,6 +118,7 @@ export function apiInvoiceRowToFrontend(row: ApiInvoiceRow): Record<string, unkn
     digitalInvoiceNo: row.digital_invoice_no ?? '',
     invoiceCode: row.invoice_code ?? '',
     invoiceNo: row.invoice_no ?? '',
+    invoiceIdentityKey: row.invoice_identity_key ?? '',
     buyerName: row.buyer_name ?? row.title ?? '',
     buyerTaxNo: row.buyer_tax_no ?? row.tax_no ?? '',
     sellerName: row.seller_name ?? '',
@@ -121,6 +130,9 @@ export function apiInvoiceRowToFrontend(row: ApiInvoiceRow): Record<string, unkn
     amountWithTax: Number.isFinite(withTax) ? withTax.toFixed(2) : '0.00',
     issueDate: row.invoice_date ?? '',
     issuer: row.issuer ?? '',
+    invoiceSource: row.invoice_source ?? '',
+    taxStatus: row.tax_status || 'normal',
+    originalInvoiceId: row.original_invoice_id ?? '',
     status: row.status || '未开',
     remark: row.remark != null ? String(row.remark) : '',
     verified: Boolean(row.verified),
@@ -138,6 +150,12 @@ export function frontendInvoiceRecordToPayload(record: Record<string, unknown>):
   const va = record.verifiedAmount ?? record.verified_amount
   const verifiedAmt =
     typeof va === 'number' && Number.isFinite(va) ? va : parseFloat(String(va ?? 0)) || 0
+  const displayStatus = (record.status as string) || '未开'
+  const derivedTaxStatus = displayStatus === '作废'
+    ? 'void'
+    : displayStatus.includes('红')
+      ? 'red'
+      : 'normal'
   return {
     invoice_direction:
       String(record.invoiceDirection || record.invoice_direction || 'output') === 'input'
@@ -147,6 +165,7 @@ export function frontendInvoiceRecordToPayload(record: Record<string, unknown>):
     digital_invoice_no: (record.digitalInvoiceNo as string) || null,
     invoice_code: (record.invoiceCode as string) || null,
     invoice_no: (record.invoiceNo as string) || null,
+    invoice_identity_key: (record.invoiceIdentityKey as string) || null,
     buyer_name: (record.buyerName as string) || (record.title as string) || null,
     buyer_tax_no: (record.buyerTaxNo as string) || (record.taxNo as string) || null,
     seller_name: (record.sellerName as string) || null,
@@ -160,7 +179,10 @@ export function frontendInvoiceRecordToPayload(record: Record<string, unknown>):
       parseFloat(String(record.amount ?? 0)) + parseFloat(String(record.taxAmount ?? 0)),
     invoice_date: (record.issueDate as string) || null,
     issuer: (record.issuer as string) || null,
-    status: (record.status as string) || '未开',
+    invoice_source: (record.invoiceSource as string) || null,
+    tax_status: (record.taxStatus as string) || derivedTaxStatus,
+    original_invoice_id: (record.originalInvoiceId as string) || null,
+    status: displayStatus,
     remark:
       record.remark != null && String(record.remark).trim() !== '' ? String(record.remark) : null,
     verified: Boolean(record.verified),

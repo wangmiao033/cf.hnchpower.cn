@@ -48,3 +48,17 @@ describe('QuickSDK 数据源路由', () => {
     expect(getPageDescription(VIEWS.PRODUCT_SOURCES)).toContain('ProductCode')
   })
 })
+
+describe('发票中心路由', () => {
+  it('销项和进项发票均在发票中心，并让新增/编辑复用销项标签页', () => {
+    const group = getGroupForView(VIEWS.INVOICE_INPUT)
+
+    expect(group.id).toBe('invoices')
+    expect(group.items.map((item) => item.view)).toEqual([
+      VIEWS.INVOICE_MANAGE,
+      VIEWS.INVOICE_INPUT
+    ])
+    expect(getTabView(VIEWS.INVOICE_CREATE)).toBe(VIEWS.INVOICE_MANAGE)
+    expect(getTabView(VIEWS.INVOICE_EDIT)).toBe(VIEWS.INVOICE_MANAGE)
+  })
+})

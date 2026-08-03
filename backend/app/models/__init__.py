@@ -2,6 +2,7 @@
 
 from app.models.channel import ChannelRecord
 from app.models.bill_attachment import BillAttachment
+from app.models.bill_invoice_allocation import BillInvoiceAllocation
 from app.models.contract import ContractRecord
 from app.models.invoice import InvoiceRecord
 from app.models.invoice_payment_link import InvoicePaymentLink
@@ -12,6 +13,7 @@ from app.models.user import AuthSession, AuthUser
 
 __all__ = [
     "BillAttachment",
+    "BillInvoiceAllocation",
     "ReconciliationRecord",
     "ChannelRecord",
     "ContractRecord",

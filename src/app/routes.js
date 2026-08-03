@@ -12,6 +12,10 @@ export const VIEWS = {
   CHANNEL_RECON_CREATE: 'channel-recon-create',
   CHANNEL_RECON_EDIT: 'channel-recon-edit',
   CONTRACTS: 'contracts',
+  INVOICE_MANAGE: 'invoice-manage',
+  INVOICE_INPUT: 'invoice-input',
+  INVOICE_CREATE: 'invoice-create',
+  INVOICE_EDIT: 'invoice-edit',
   QUICKSDK_LIBRARY: 'quicksdk-library',
   PRODUCT_SOURCES: 'product-sources',
   QUICKSDK_GAMES: 'quicksdk-games',
@@ -41,6 +45,14 @@ export const SIDEBAR_GROUPS = [
     items: [{ view: VIEWS.CONTRACTS, label: '合同台账' }]
   },
   {
+    id: 'invoices',
+    label: '发票中心',
+    items: [
+      { view: VIEWS.INVOICE_MANAGE, label: '销项发票' },
+      { view: VIEWS.INVOICE_INPUT, label: '进项发票' }
+    ]
+  },
+  {
     id: 'data',
     label: '数据中心',
     items: [
@@ -63,6 +75,10 @@ const VIEW_TITLES = {
   [VIEWS.CHANNEL_RECON_CREATE]: '新增渠道账单',
   [VIEWS.CHANNEL_RECON_EDIT]: '编辑渠道账单',
   [VIEWS.CONTRACTS]: '合同台账',
+  [VIEWS.INVOICE_MANAGE]: '销项发票',
+  [VIEWS.INVOICE_INPUT]: '进项发票',
+  [VIEWS.INVOICE_CREATE]: '新增发票',
+  [VIEWS.INVOICE_EDIT]: '编辑发票',
   [VIEWS.QUICKSDK_LIBRARY]: '数据库',
   [VIEWS.PRODUCT_SOURCES]: '数据源',
   [VIEWS.QUICKSDK_GAMES]: '游戏数据',
@@ -81,6 +97,10 @@ const VIEW_DESCRIPTIONS = {
   [VIEWS.CHANNEL_RECON_CREATE]: '使用现有渠道账单录入逻辑新增记录。',
   [VIEWS.CHANNEL_RECON_EDIT]: '使用现有渠道账单编辑逻辑维护记录。',
   [VIEWS.CONTRACTS]: '统一维护 WPS 合同台账、履约状态、到期提醒和客户关联。',
+  [VIEWS.INVOICE_MANAGE]: '管理销项发票、账单覆盖与税务状态。',
+  [VIEWS.INVOICE_INPUT]: '管理进项发票、账单覆盖与税务状态。',
+  [VIEWS.INVOICE_CREATE]: '录入或识别发票信息。',
+  [VIEWS.INVOICE_EDIT]: '维护发票信息与税务状态。',
   [VIEWS.QUICKSDK_LIBRARY]: '查看已导入月份、批次、产品、渠道和流水明细。',
   [VIEWS.PRODUCT_SOURCES]: '维护 QuickSDK 游戏名称与 ProductCode 原始数据。',
   [VIEWS.QUICKSDK_GAMES]: '按月份和游戏名称汇总数据库中的流水数据。',
@@ -99,6 +119,10 @@ export const VIEW_ICONS = {
   [VIEWS.CHANNEL_RECON_CREATE]: '增',
   [VIEWS.CHANNEL_RECON_EDIT]: '编',
   [VIEWS.CONTRACTS]: '合',
+  [VIEWS.INVOICE_MANAGE]: '销',
+  [VIEWS.INVOICE_INPUT]: '进',
+  [VIEWS.INVOICE_CREATE]: '增',
+  [VIEWS.INVOICE_EDIT]: '编',
   [VIEWS.QUICKSDK_LIBRARY]: '流',
   [VIEWS.PRODUCT_SOURCES]: '源',
   [VIEWS.QUICKSDK_GAMES]: '游',
@@ -131,6 +155,10 @@ export function getGroupForView(view) {
     return SIDEBAR_GROUPS.find((group) => group.id === 'reconciliation')
   }
 
+  if (view === VIEWS.INVOICE_CREATE || view === VIEWS.INVOICE_EDIT) {
+    return SIDEBAR_GROUPS.find((group) => group.id === 'invoices')
+  }
+
   return SIDEBAR_GROUPS.find((group) => group.items.some((item) => item.view === view)) || SIDEBAR_GROUPS[0]
 }
 
@@ -145,6 +173,10 @@ export function getTabView(view) {
 
   if (view === VIEWS.CHANNEL_RECON_CREATE || view === VIEWS.CHANNEL_RECON_EDIT) {
     return VIEWS.RECON_CHANNEL
+  }
+
+  if (view === VIEWS.INVOICE_CREATE || view === VIEWS.INVOICE_EDIT) {
+    return VIEWS.INVOICE_MANAGE
   }
 
   return view
@@ -176,6 +208,15 @@ export function getBreadcrumb(view) {
       { label: '核心工作台', view: VIEWS.DASHBOARD },
       { label: '核心对账' },
       { label: getPageTitle(VIEWS.RECON_CHANNEL), view: VIEWS.RECON_CHANNEL },
+      { label: getPageTitle(view), current: true }
+    ]
+  }
+
+  if (view === VIEWS.INVOICE_CREATE || view === VIEWS.INVOICE_EDIT) {
+    return [
+      { label: '核心工作台', view: VIEWS.DASHBOARD },
+      { label: '发票中心' },
+      { label: getPageTitle(VIEWS.INVOICE_MANAGE), view: VIEWS.INVOICE_MANAGE },
       { label: getPageTitle(view), current: true }
     ]
   }

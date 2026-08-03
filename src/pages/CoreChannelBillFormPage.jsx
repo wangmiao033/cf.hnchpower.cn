@@ -10,6 +10,7 @@ import './CoreBillFormPages.css'
 import '@/components/reconciliation/reconciliation-admin.css'
 
 const FORM_ID = 'core-channel-bill-form'
+const RECONCILED_STATUSES = new Set(['confirmed', 'completed', 'settled', 'reconciled', 'verified'])
 
 function money(value) {
   const n = Number(value || 0)
@@ -17,7 +18,14 @@ function money(value) {
 }
 
 function CoreChannelBillFormPage({ mode }) {
-  const { recon, settings, showToast, setActiveView, channelEditRecordId } = useAppState()
+  const {
+    recon,
+    settings,
+    showToast,
+    setActiveView,
+    channelEditRecordId,
+    channelReturnView
+  } = useAppState()
   const isEdit = mode === 'edit'
   const submitIntentRef = useRef('back')
   const [previewAmount, setPreviewAmount] = useState(0)
@@ -55,13 +63,17 @@ function CoreChannelBillFormPage({ mode }) {
     editRecord && (!editRecord.id || editRecord.id === '')
       ? { ...editRecord, id: String(channelEditRecordId) }
       : editRecord
+  const isReconciled = RECONCILED_STATUSES.has(String(stableRecord?.status || '').toLowerCase())
 
-  const goList = () => setActiveView(VIEWS.RECON_CHANNEL)
+  const goList = () => setActiveView(channelReturnView || VIEWS.RECON_CHANNEL)
 
   const handleAfterSubmit = (intent) => {
     if (intent === 'continue') {
       showToast('已保存，可继续新增下一张渠道账单', 'success')
       return
+    }
+    if (intent === 'confirm') {
+      showToast('渠道账单已完成核对', 'success')
     }
     goList()
   }
@@ -84,7 +96,13 @@ function CoreChannelBillFormPage({ mode }) {
         <div>
           <p>渠道账单</p>
           <h1>{isEdit ? '编辑渠道账单' : '新增渠道账单'}</h1>
-          <span>保留你确认的渠道明细录入表格，外层只做新版整理。</span>
+          <span>
+            {isEdit
+              ? isReconciled
+                ? '该账单已核对，可继续修改并保存。'
+                : '核对账单明细和附件后，点击“完成核对”。'
+              : '录入渠道账单明细并保存。'}
+          </span>
         </div>
         <div className="core-bill-form-total">
           <span>预估结算金额</span>
@@ -126,16 +144,40 @@ function CoreChannelBillFormPage({ mode }) {
             保存并继续
           </button>
         ) : null}
-        <button
-          type="button"
-          className="primary"
-          onClick={() => {
-            submitIntentRef.current = 'back'
-            document.getElementById(FORM_ID)?.requestSubmit()
-          }}
-        >
-          保存
-        </button>
+        {isEdit && !isReconciled ? (
+          <>
+            <button
+              type="button"
+              onClick={() => {
+                submitIntentRef.current = 'back'
+                document.getElementById(FORM_ID)?.requestSubmit()
+              }}
+            >
+              仅保存
+            </button>
+            <button
+              type="button"
+              className="primary"
+              onClick={() => {
+                submitIntentRef.current = 'confirm'
+                document.getElementById(FORM_ID)?.requestSubmit()
+              }}
+            >
+              完成核对
+            </button>
+          </>
+        ) : (
+          <button
+            type="button"
+            className="primary"
+            onClick={() => {
+              submitIntentRef.current = 'back'
+              document.getElementById(FORM_ID)?.requestSubmit()
+            }}
+          >
+            {isEdit ? '保存修改' : '保存'}
+          </button>
+        )}
       </section>
     </PageContainer>
   )

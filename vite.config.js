@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs'
 import { loadEnv } from 'vite'
 import { HttpsProxyAgent } from 'https-proxy-agent'
 
-const VERCEL_APP_HOST = 'cf-hnchpower-cn.vercel.app'
+const VERCEL_APP_HOST = 'cf.hnchpower.cn'
 const PRODUCT_SOURCE_SQL = resolve(
   __dirname,
   'backend/sql/022_create_quicksdk_product_sources.sql'
@@ -174,7 +174,7 @@ export default defineConfig(({ mode }) => {
         '/api/partners': vercelProxy,
         '/api/quicksdk': vercelProxy,
         '/api': {
-          target: 'https://caiwuapi.hnchpower.cn',
+          target: `https://${VERCEL_APP_HOST}`,
           changeOrigin: true,
           secure: true,
           cookieDomainRewrite: '',

@@ -141,6 +141,7 @@ export function summarizeChannelBillProgress(records = [], options = '') {
       rowPercent,
       receiptPercent,
     },
+    rows,
     unresolved,
   }
 }

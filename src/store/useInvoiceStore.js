@@ -28,6 +28,7 @@ const defaultInvoiceForm = {
   taxAmount: '',
   amountWithTax: '',
   status: '未开',
+  taxStatus: 'normal',
   issueDate: '',
   issuer: '',
   remark: ''
@@ -64,6 +65,7 @@ function normalizeLocalInvoiceRecords(saved) {
             (parseFloat(String(r.amount ?? 0)) || 0) + (parseFloat(String(r.taxAmount ?? 0)) || 0)
           ).toFixed(2),
     issuer: r.issuer != null ? String(r.issuer) : '',
+    taxStatus: r.taxStatus || r.tax_status || 'normal',
     verifiedRecordIds: Array.isArray(r.verifiedRecordIds) ? r.verifiedRecordIds.map(String) : [],
     verified: Boolean(r.verified),
     verifiedAmount:
@@ -73,7 +75,7 @@ function normalizeLocalInvoiceRecords(saved) {
   }))
 }
 
-export function useInvoiceStore({ showToast }) {
+export function useInvoiceStore({ showToast, enabled = true }) {
   const [invoiceForm, setInvoiceForm] = useState(defaultInvoiceForm)
   const [invoiceApiEnabled, setInvoiceApiEnabled] = useState(false)
   const [invoiceRecords, setInvoiceRecords] = useState([])
@@ -104,6 +106,7 @@ export function useInvoiceStore({ showToast }) {
   }, [])
 
   useEffect(() => {
+    if (!enabled) return undefined
     let cancelled = false
     ;(async () => {
       try {
@@ -123,11 +126,12 @@ export function useInvoiceStore({ showToast }) {
     return () => {
       cancelled = true
     }
-  }, [refetchInvoiceFromApi])
+  }, [enabled, refetchInvoiceFromApi])
 
   useEffect(() => {
+    if (!enabled) return
     storageSet(STORAGE_KEYS.INVOICE_RECORDS, invoiceRecords)
-  }, [invoiceRecords])
+  }, [enabled, invoiceRecords])
 
   const filteredInvoices = filterInvoiceRecords(invoiceRecords, invoiceFilter)
 

@@ -18,6 +18,7 @@ const defaultInvoiceForm = {
   taxAmount: '',
   amountWithTax: '',
   status: '未开',
+  taxStatus: 'normal',
   issueDate: '',
   issuer: '',
   invoiceSource: '',
@@ -46,6 +47,7 @@ function recordToForm(inv) {
             (parseFloat(String(inv.amount ?? 0)) || 0) + (parseFloat(String(inv.taxAmount ?? 0)) || 0)
           ).toFixed(2),
     status: inv.status || '未开',
+    taxStatus: inv.taxStatus || inv.tax_status || 'normal',
     issueDate: inv.issueDate || '',
     issuer: inv.issuer || '',
     invoiceSource: inv.invoiceSource || '',
@@ -109,6 +111,7 @@ function InvoiceForm({
                 (parseFloat(String(invoiceForm.taxAmount || 0)) || 0)
               ).toFixed(2),
         status: invoiceForm.status || '未开',
+        taxStatus: invoiceForm.taxStatus || 'normal',
         issueDate: invoiceForm.issueDate || '',
         issuer: invoiceForm.issuer || '',
         invoiceSource: invoiceForm.invoiceSource || '',
@@ -376,15 +379,16 @@ function InvoiceForm({
       <div className="form-section-title">状态与备注</div>
       <div className="invoice-form__row invoice-form__row--two">
         <div>
-          <label>状态</label>
+          <label>税务状态</label>
           <select
             className="admin-input"
-            value={formData.status}
-            onChange={(e) => setField('status', e.target.value)}
+            value={formData.taxStatus}
+            onChange={(e) => setField('taxStatus', e.target.value)}
           >
-            <option value="未开">未开</option>
-            <option value="已开">已开</option>
-            <option value="作废">作废</option>
+            <option value="normal">正常</option>
+            <option value="red">红冲</option>
+            <option value="void">作废</option>
+            <option value="unknown">待确认</option>
           </select>
         </div>
         <div>

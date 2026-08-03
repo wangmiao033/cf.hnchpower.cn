@@ -21,6 +21,7 @@ describe('channel bill progress', () => {
     expect(summary.totals.rows).toBe(1)
     expect(summary.totals.reconciledRows).toBe(0)
     expect(summary.totals.unresolvedRows).toBe(1)
+    expect(summary.rows).toHaveLength(1)
     expect(summary.totals.sourceFlow).toBe(0)
     expect(summary.unresolved[0].channel).toBe('三七三三')
   })

@@ -7,7 +7,7 @@ from collections.abc import AsyncIterator
 from urllib.parse import quote
 
 from fastapi import HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from vercel.blob import AsyncBlobClient
 
 MAX_SERVER_UPLOAD_BYTES = 4 * 1024 * 1024
@@ -61,28 +61,46 @@ async def private_blob_response(
     file_name: str,
     content_type: str | None = None,
     inline: bool = True,
-) -> StreamingResponse:
+) -> Response:
     client = AsyncBlobClient(token=_token())
-    result = await client.get(url_or_path, access="private")
-    if result is None or result.status_code != 200 or result.stream is None:
+    try:
+        result = await client.get(url_or_path, access="private")
+    except Exception:
+        await client.aclose()
+        raise
+
+    if result is None or result.status_code != 200:
         await client.aclose()
         raise HTTPException(status_code=404, detail={"error": "file_missing"})
 
-    async def stream() -> AsyncIterator[bytes]:
-        try:
-            async for chunk in result.stream:
-                yield chunk
-        finally:
-            await client.aclose()
-
+    blob = getattr(result, "blob", None)
+    result_content_type = getattr(result, "content_type", None) or getattr(
+        blob, "content_type", None
+    )
+    response_content_type = content_type or result_content_type or "application/octet-stream"
     disposition = "inline" if inline else "attachment"
     encoded_name = quote(file_name, safe="")
-    return StreamingResponse(
-        stream(),
-        media_type=content_type or result.blob.content_type or "application/octet-stream",
-        headers={
-            "Content-Disposition": f"{disposition}; filename*=UTF-8''{encoded_name}",
-            "Cache-Control": "private, no-store",
-            "X-Content-Type-Options": "nosniff",
-        },
-    )
+    headers = {
+        "Content-Disposition": f"{disposition}; filename*=UTF-8''{encoded_name}",
+        "Cache-Control": "private, no-store",
+        "X-Content-Type-Options": "nosniff",
+    }
+
+    result_stream = getattr(result, "stream", None)
+    if result_stream is not None:
+
+        async def stream() -> AsyncIterator[bytes]:
+            try:
+                async for chunk in result_stream:
+                    yield chunk
+            finally:
+                await client.aclose()
+
+        return StreamingResponse(stream(), media_type=response_content_type, headers=headers)
+
+    result_content = getattr(result, "content", None)
+    await client.aclose()
+    if result_content is None:
+        raise HTTPException(status_code=404, detail={"error": "file_missing"})
+
+    return Response(content=result_content, media_type=response_content_type, headers=headers)

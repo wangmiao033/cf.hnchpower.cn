@@ -13,6 +13,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.api.channel import router as channel_router
 from app.api.bill_attachment import router as bill_attachment_router
+from app.api.bill_invoice_allocation import router as bill_invoice_allocation_router
 from app.api.health import router as health_router
 from app.api.auth import router as auth_router
 from app.api.invoice import router as invoice_router
@@ -145,6 +146,12 @@ app.include_router(
     bill_attachment_router,
     prefix="/api/bill-attachments",
     tags=["bill-attachments"],
+    dependencies=[Depends(require_current_user)],
+)
+app.include_router(
+    bill_invoice_allocation_router,
+    prefix="/api/bill-invoice-allocations",
+    tags=["bill-invoice-allocations"],
     dependencies=[Depends(require_current_user)],
 )
 app.include_router(

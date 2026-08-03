@@ -36,10 +36,14 @@ function RdReconciliationProgressPanel({
   snapshot,
   expanded = true,
   onToggle,
-  onEdit
+  onEdit,
+  onViewAttachments,
+  onViewInvoices,
+  invoiceSummaries = {}
 }) {
   const totals = snapshot.totals
   const period = monthLabel(snapshot.month)
+  const rows = snapshot.rows || snapshot.unresolved
   const visibleUnresolvedAmount = snapshot.unresolved.reduce(
     (sum, record) => sum + Number(record.settlementAmount || 0),
     0
@@ -123,8 +127,8 @@ function RdReconciliationProgressPanel({
           <div className="channel-progress-issues">
             <div className="channel-progress-issues-head">
               <div>
-                <h3>{period}待核对账单</h3>
-                <span>{snapshot.unresolved.length} 笔显示 · 按结算金额从高到低排列</span>
+                <h3>{period}账单明细</h3>
+                <span>{rows.length} 笔显示 · 已完成和待处理账单均可查看附件</span>
               </div>
               <strong>{money(visibleUnresolvedAmount)}</strong>
             </div>
@@ -142,19 +146,23 @@ function RdReconciliationProgressPanel({
                   </tr>
                 </thead>
                 <tbody>
-                  {snapshot.unresolved.length === 0 ? (
+                  {rows.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="channel-progress-empty">当前范围内账单已全部核对</td>
+                      <td colSpan={7} className="channel-progress-empty">当前范围内没有研发账单</td>
                     </tr>
                   ) : (
-                    snapshot.unresolved.map((row) => (
+                    rows.map((row) => (
                       <tr key={row.id}>
                         <td>{monthLabel(row.month)}</td>
                         <td>{row.billNumber}</td>
                         <td title={row.partner}><strong>{row.partner}</strong></td>
                         <td title={row.product}>{row.product}</td>
                         <td className="is-number">{money(row.settlementAmount)}</td>
-                        <td><span className="channel-progress-pending">{row.reason}</span></td>
+                        <td>
+                          <span className={row.reconciled ? 'channel-progress-complete' : 'channel-progress-pending'}>
+                            {row.reconciled ? '已核对' : row.reason}
+                          </span>
+                        </td>
                         <td>
                           <button
                             type="button"
@@ -163,6 +171,24 @@ function RdReconciliationProgressPanel({
                           >
                             编辑
                           </button>
+                          {row.billId && (
+                            <>
+                              <button
+                                type="button"
+                                className="rd-progress-edit rd-progress-attachment"
+                                onClick={() => onViewAttachments?.(row)}
+                              >
+                                附件
+                              </button>
+                              <button
+                                type="button"
+                                className="rd-progress-edit rd-progress-attachment"
+                                onClick={() => onViewInvoices?.(row)}
+                              >
+                                发票 {Number(invoiceSummaries[`rd:${row.billId}`]?.coverage_percent || 0).toFixed(0)}%
+                              </button>
+                            </>
+                          )}
                         </td>
                       </tr>
                     ))

@@ -42,6 +42,11 @@ export function initialLineItem() {
   }
 }
 
+export function channelStatusForSubmit(currentStatus, intent) {
+  if (intent === 'confirm') return 'confirmed'
+  return currentStatus || 'pending'
+}
+
 /** Excel 单游戏行映射仍使用扁平 initialForm */
 export const initialForm = {
   ...initialHeaderForm,

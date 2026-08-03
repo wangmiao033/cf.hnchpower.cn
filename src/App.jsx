@@ -6,6 +6,7 @@ import Toast from './components/Toast.jsx'
 import { showNotification } from './components/NotificationCenter.jsx'
 import { useSettingsStore } from './store/useSettingsStore.js'
 import { useReconciliationStore } from './store/useReconciliationStore.js'
+import { useInvoiceStore } from './store/useInvoiceStore.js'
 import AppShell from './app/AppShell.jsx'
 import { AppStateProvider } from './app/AppStateContext.jsx'
 import { getGroupForView, getTabView, SIDEBAR_GROUPS, VIEWS } from './app/routes.js'
@@ -21,6 +22,9 @@ const CoreChannelReconciliationPage = lazy(() => import('./pages/CoreChannelReco
 const ChannelReconciliationCreatePage = lazy(() => import('./pages/ChannelReconciliationCreatePage.jsx'))
 const ChannelReconciliationEditPage = lazy(() => import('./pages/ChannelReconciliationEditPage.jsx'))
 const ContractManagementPage = lazy(() => import('./pages/ContractManagementPage.jsx'))
+const InvoicePage = lazy(() => import('./pages/InvoicePage.jsx'))
+const InvoiceCreatePage = lazy(() => import('./pages/InvoiceCreatePage.jsx'))
+const InvoiceEditPage = lazy(() => import('./pages/InvoiceEditPage.jsx'))
 const QuickSdkLibraryPage = lazy(() => import('./pages/QuickSdkLibraryPage.jsx'))
 const ProductSourcePage = lazy(() => import('./pages/ProductSourcePage.jsx'))
 const QuickSdkGroupedDataPage = lazy(() => import('./pages/QuickSdkGroupedDataPage.jsx'))
@@ -47,6 +51,8 @@ function App() {
   const [reconEditRecordId, setReconEditRecordId] = useState(null)
   const [reconReturnView, setReconReturnView] = useState(VIEWS.RECON_RD)
   const [channelEditRecordId, setChannelEditRecordId] = useState(null)
+  const [channelReturnView, setChannelReturnView] = useState(VIEWS.RECON_CHANNEL)
+  const [invoiceEditId, setInvoiceEditId] = useState(null)
   const prevActiveViewRef = useRef(activeView)
   const [toast, setToast] = useState({ isVisible: false, message: '', type: 'success' })
 
@@ -62,6 +68,7 @@ function App() {
   const recon = useReconciliationStore(settings, showToast, {
     enabled: isAuthenticated && !loading
   })
+  const invoice = useInvoiceStore({ showToast, enabled: isAuthenticated && !loading })
 
   const navigate = useCallback((view) => {
     const nextView = view || VIEWS.DASHBOARD
@@ -106,6 +113,9 @@ function App() {
     if (prevActiveViewRef.current === VIEWS.CHANNEL_RECON_EDIT && activeView !== VIEWS.CHANNEL_RECON_EDIT) {
       setChannelEditRecordId(null)
     }
+    if (prevActiveViewRef.current === VIEWS.INVOICE_EDIT && activeView !== VIEWS.INVOICE_EDIT) {
+      setInvoiceEditId(null)
+    }
     prevActiveViewRef.current = activeView
   }, [activeView])
 
@@ -115,10 +125,16 @@ function App() {
     setActiveViewRaw(VIEWS.RECON_EDIT)
   }, [])
 
-  const openChannelReconciliationEdit = useCallback((id) => {
+  const openChannelReconciliationEdit = useCallback((id, returnView = VIEWS.RECON_CHANNEL) => {
     setChannelEditRecordId(id)
-    setActiveViewRaw(VIEWS.CHANNEL_RECON_EDIT)
-  }, [])
+    setChannelReturnView(returnView)
+    navigate(VIEWS.CHANNEL_RECON_EDIT)
+  }, [navigate])
+
+  const openInvoiceEdit = useCallback((id) => {
+    setInvoiceEditId(String(id))
+    navigate(VIEWS.INVOICE_EDIT)
+  }, [navigate])
 
   const navigateBankPaymentForReconciliation = useCallback(() => {
     showToast('新版第一阶段仅保留核心对账、流水库和客户库，银行付款入口已暂时收起。', 'info')
@@ -127,7 +143,7 @@ function App() {
   const appCtx = {
     settings,
     recon,
-    invoice: {},
+    invoice,
     showToast,
     setActiveView: navigate,
     setActiveViewRaw,
@@ -136,7 +152,10 @@ function App() {
     reconReturnView,
     openReconciliationEdit,
     channelEditRecordId,
+    channelReturnView,
     openChannelReconciliationEdit,
+    invoiceEditId,
+    openInvoiceEdit,
     navigateBankPaymentForReconciliation
   }
 
@@ -164,6 +183,13 @@ function App() {
         return <ChannelReconciliationEditPage />
       case VIEWS.CONTRACTS:
         return <ContractManagementPage />
+      case VIEWS.INVOICE_MANAGE:
+      case VIEWS.INVOICE_INPUT:
+        return <InvoicePage section={activeView} />
+      case VIEWS.INVOICE_CREATE:
+        return <InvoiceCreatePage />
+      case VIEWS.INVOICE_EDIT:
+        return <InvoiceEditPage />
       case VIEWS.QUICKSDK_LIBRARY:
         return <QuickSdkLibraryPage />
       case VIEWS.PRODUCT_SOURCES:

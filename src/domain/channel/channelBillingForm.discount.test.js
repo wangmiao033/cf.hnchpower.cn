@@ -3,8 +3,20 @@ import {
   effectiveLineFlowFromFormData,
   calculateBillingAmount,
   calculateSettlement,
-  buildLineRecordFromForm
+  buildLineRecordFromForm,
+  channelStatusForSubmit
 } from './channelBillingForm.js'
+
+describe('渠道账单核对状态', () => {
+  it('完成核对时将状态更新为 confirmed', () => {
+    expect(channelStatusForSubmit('pending', 'confirm')).toBe('confirmed')
+  })
+
+  it('普通保存保留现有状态', () => {
+    expect(channelStatusForSubmit('confirmed', 'back')).toBe('confirmed')
+    expect(channelStatusForSubmit('', 'back')).toBe('pending')
+  })
+})
 
 describe('discount factor / 总流水', () => {
   it('2512058 × 0.005 = 12560.29', () => {

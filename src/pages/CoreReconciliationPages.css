@@ -849,7 +849,10 @@
 }
 
 .channel-progress-table td:nth-child(1),
-.channel-progress-table td:nth-child(2) {
+.channel-progress-table td:nth-child(2),
+.channel-progress-table td:nth-child(3),
+.channel-progress-table td:nth-child(4),
+.channel-progress-table td:nth-child(5) {
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -902,6 +905,38 @@
   background: #eff6ff;
 }
 
+.rd-progress-attachment {
+  margin-left: 6px;
+}
+
+.channel-progress-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.channel-progress-row-actions button {
+  height: 26px;
+  padding: 0 9px;
+  border: 1px solid var(--admin-border);
+  border-radius: 6px;
+  background: #ffffff;
+  color: var(--admin-primary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.channel-progress-row-actions button:hover {
+  border-color: var(--admin-primary);
+  background: #eff6ff;
+}
+
+.rd-progress-page .rec-drawer__body .bill-scan-attachments {
+  margin: 0;
+}
+
 .channel-progress-table .is-number {
   text-align: right;
   font-variant-numeric: tabular-nums;
@@ -926,6 +961,18 @@
 .channel-progress-pending.has-difference {
   background: #fff1f2;
   color: #be123c;
+}
+
+.channel-progress-complete {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: #ecfdf5;
+  color: #047857;
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .channel-progress-match {
