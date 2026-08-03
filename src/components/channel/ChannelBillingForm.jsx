@@ -13,23 +13,7 @@ import {
 } from '@/domain/channel/channelBillingForm.js'
 import '@/components/ChannelBilling.css'
 import LineItemsTable from '@/components/shared/LineItemsTable.jsx'
-
-const COMMON_CHANNELS = [
-  '广州触点互联网科技有限公司',
-  '广州能动科技有限公司',
-  '深圳龙魂网络科技有限公司',
-  '华为应用市场',
-  'vivo应用商店',
-  'OPPO应用商店',
-  '小米应用商店',
-  '百度移动游戏',
-  '九游游戏中心',
-  '爱趣聚合',
-  '233乐园',
-  '277游戏',
-  '3733游戏',
-  '3387游戏'
-]
+import PartnerPicker, { findExactPartner } from '@/components/shared/PartnerPicker.jsx'
 
 function formatCycleFromMonth(rawMonth) {
   const text = String(rawMonth || '').trim()
@@ -96,125 +80,6 @@ function updateLineField(lines, index, field, value) {
   return next
 }
 
-/**
- * 渠道对账：公共信息 + 多行游戏明细（每行沿用 domain内单游戏计算公式）
- */
-function normalizePartnerSearch(value) {
-  return String(value || '')
-    .trim()
-    .toLocaleLowerCase('zh-CN')
-    .replace(/[（(]/g, '(')
-    .replace(/[）)]/g, ')')
-    .replace(/\s+/g, '')
-}
-
-function ChannelPartnerPicker({ value, partners, onChange }) {
-  const [open, setOpen] = useState(false)
-  const availablePartners = useMemo(
-    () => (Array.isArray(partners) ? partners : []).filter((partner) => partner?.name),
-    [partners]
-  )
-  const normalizedValue = normalizePartnerSearch(value)
-  const matches = useMemo(() => {
-    const filtered = normalizedValue
-      ? availablePartners.filter((partner) =>
-          [partner.shortName, partner.name, partner.taxRegistrationNo, partner.recipient].some(
-            (item) => normalizePartnerSearch(item).includes(normalizedValue)
-          )
-        )
-      : availablePartners
-    return filtered.slice(0, 30)
-  }, [availablePartners, normalizedValue])
-  const linkedPartner = availablePartners.find((partner) =>
-    [partner.shortName, partner.name].some(
-      (item) => normalizePartnerSearch(item) === normalizedValue
-    )
-  )
-
-  const selectPartner = (partner) => {
-    const channelName = String(partner.shortName || partner.name || '').trim()
-    onChange(channelName, String(partner.name || channelName).trim())
-    setOpen(false)
-  }
-
-  return (
-    <div className="rd-partner-picker channel-partner-picker">
-      <div className="rd-partner-picker__control channel-partner-picker__control">
-        <input
-          type="search"
-          role="combobox"
-          aria-label="搜索客户库渠道简称"
-          aria-expanded={open}
-          aria-autocomplete="list"
-          className="admin-input"
-          value={value}
-          onFocus={() => setOpen(true)}
-          onBlur={() => window.setTimeout(() => setOpen(false), 120)}
-          onChange={(event) => {
-            const nextValue = event.target.value
-            const exact = availablePartners.find((partner) =>
-              [partner.shortName, partner.name].some(
-                (item) => normalizePartnerSearch(item) === normalizePartnerSearch(nextValue)
-              )
-            )
-            onChange(nextValue, exact ? String(exact.name || '').trim() : '')
-            setOpen(true)
-          }}
-          onKeyDown={(event) => {
-            if (event.key === 'Escape') setOpen(false)
-            if (event.key === 'Enter' && open && matches.length === 1) {
-              event.preventDefault()
-              selectPartner(matches[0])
-            }
-          }}
-          placeholder="搜索客户库中的渠道简称或公司名称"
-          required
-        />
-      </div>
-      <div
-        className={`rd-partner-picker__link-state ${
-          linkedPartner ? 'rd-partner-picker__link-state--linked' : ''
-        }`}
-      >
-        {linkedPartner
-          ? `已关联客户库：${linkedPartner.name}`
-          : '请从客户库结果中选择渠道'}
-      </div>
-      {open ? (
-        <div
-          className="rd-partner-picker__menu channel-partner-picker__menu"
-          role="listbox"
-          aria-label="客户库渠道"
-        >
-          <div className="rd-partner-picker__menu-head">
-            <strong>客户库</strong>
-            <span>{availablePartners.length} 个合作方</span>
-          </div>
-          {matches.map((partner) => (
-            <button
-              key={partner.id || partner.name}
-              type="button"
-              role="option"
-              aria-selected={linkedPartner?.id === partner.id}
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => selectPartner(partner)}
-            >
-              <span>
-                <strong>{partner.shortName || partner.name}</strong>
-                <small>{partner.shortName ? partner.name : partner.category || '未分类'}</small>
-              </span>
-              <em>{partner.category || partner.taxRegistrationNo || ''}</em>
-            </button>
-          ))}
-          {matches.length === 0 ? (
-            <div className="rd-partner-picker__empty">客户库中没有匹配的渠道</div>
-          ) : null}
-        </div>
-      ) : null}
-    </div>
-  )
-}
-
 function ChannelBillingForm({
   formId,
   mode = 'add',
@@ -227,10 +92,12 @@ function ChannelBillingForm({
   onPreviewChange,
   onError,
   partners = [],
+  onAddPartner,
   className = ''
 }) {
   const [header, setHeader] = useState(initialHeaderForm)
   const [lines, setLines] = useState([initialLineItem()])
+  const [partnerId, setPartnerId] = useState('')
 
   const totals = useMemo(() => {
     return lines.reduce(
@@ -253,6 +120,15 @@ function ChannelBillingForm({
   }, [lines])
 
   const previewSettlement = useMemo(() => totals.settlement, [totals.settlement])
+  const selectedPartner = useMemo(() => {
+    if (partnerId) {
+      const byId = (partners || []).find(
+        (partner) => String(partner?.id || '') === String(partnerId)
+      )
+      if (byId) return byId
+    }
+    return findExactPartner(partners, header.partnerName || header.channelName)
+  }, [partners, partnerId, header.partnerName, header.channelName])
 
   useEffect(() => {
     onPreviewChange?.(previewSettlement)
@@ -261,6 +137,7 @@ function ChannelBillingForm({
   useEffect(() => {
     if (mode === 'edit' && sourceRecord) {
       const nextHeader = recordToHeaderForm(sourceRecord)
+      setPartnerId('')
       const lf = recordToLineForms(sourceRecord)
       const settlementMonth = nextHeader.settlementMonth || monthFromCycle(lf[0]?.settlementCycle)
       const dateRange = monthDateRange(settlementMonth)
@@ -274,9 +151,22 @@ function ChannelBillingForm({
     }
     if (mode === 'add') {
       setHeader({ ...initialHeaderForm })
+      setPartnerId('')
       setLines([{ ...initialLineItem() }])
     }
   }, [mode, sourceRecord?.id])
+
+  useEffect(() => {
+    if (partnerId) return
+    const matched = findExactPartner(partners, header.partnerName || header.channelName)
+    if (!matched) return
+    setPartnerId(String(matched.id || ''))
+    setHeader((current) => ({
+      ...current,
+      partnerName: current.partnerName || matched.name,
+      channelName: current.channelName || matched.shortName || matched.name
+    }))
+  }, [partners, header.partnerName, header.channelName, partnerId])
 
   const handleHeaderChange = (field, value) => {
     if (field === 'settlementMonth') {
@@ -287,6 +177,18 @@ function ChannelBillingForm({
       return
     }
     setHeader((h) => ({ ...h, [field]: value }))
+  }
+
+  const handlePartnerChange = (partnerName, nextPartnerId = '', selectedPartner = null) => {
+    setPartnerId(nextPartnerId)
+    setHeader((current) => ({
+      ...current,
+      partnerName,
+      channelName:
+        selectedPartner && nextPartnerId
+          ? selectedPartner.shortName || selectedPartner.name
+          : partnerName
+    }))
   }
 
   const handleLineChange = (index, field, value) => {
@@ -308,8 +210,8 @@ function ChannelBillingForm({
   const handleSubmit = async (e) => {
     e.preventDefault()
 
-    if (!header.channelName?.trim()) {
-      const msg = '请填写渠道/公司简称'
+    if (!(header.partnerName || header.channelName)?.trim()) {
+      const msg = '请填写合作方'
       onError?.(msg) ?? window.alert(msg)
       return
     }
@@ -354,6 +256,7 @@ function ChannelBillingForm({
         if (res && typeof res.then === 'function') await res
         if (intent === 'continue') {
           setHeader({ ...initialHeaderForm })
+          setPartnerId('')
           setLines([{ ...initialLineItem() }])
         }
         onAfterSubmit?.(intent)
@@ -370,18 +273,21 @@ function ChannelBillingForm({
       <div className="channel-form-section channel-bill-meta-section">
       <div className="form-section-title">1）账单信息</div>
       <div className="channel-bill-meta-grid">
-        <div className="form-group channel-bill-meta-grid__channel">
-          <label>渠道简称 *</label>
-          <ChannelPartnerPicker
-            value={header.channelName}
+        <div className="form-group channel-bill-meta-grid__partner">
+          <label>合作方 *</label>
+          <PartnerPicker
+            value={header.partnerName || header.channelName}
+            partnerId={partnerId}
             partners={partners}
-            onChange={(channelName, partnerName) => {
-              setHeader((prev) => ({
-                ...prev,
-                channelName,
-                partnerName
-              }))
-            }}
+            onChange={handlePartnerChange}
+            onAddPartner={onAddPartner}
+            required
+            linkedText={
+              selectedPartner
+                ? `已关联客户库 · 简称：${selectedPartner.shortName || selectedPartner.name}`
+                : '已关联客户库'
+            }
+            unlinkedText="输入简称或公司全称，并从客户库结果中选择"
           />
         </div>
         <div className="form-group">

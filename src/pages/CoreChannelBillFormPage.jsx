@@ -112,7 +112,6 @@ function CoreChannelBillFormPage({ mode }) {
 
       <section className="core-bill-card core-bill-card--embedded">
       <ChannelBillingForm
-        partners={settings?.partners || []}
           formId={FORM_ID}
           mode={isEdit ? 'edit' : 'add'}
           recordId={stableRecord?.id}
@@ -123,6 +122,19 @@ function CoreChannelBillFormPage({ mode }) {
           onAfterSubmit={handleAfterSubmit}
           onPreviewChange={setPreviewAmount}
           onError={(msg) => showToast(msg, 'error')}
+          partners={settings?.partners || []}
+          onAddPartner={async (name) => {
+            const newPartner = {
+              name,
+              category: '渠道',
+              tag2: '',
+              createdAt: new Date().toISOString()
+            }
+            const ok = await settings.persistPartner(newPartner)
+            if (ok) {
+              showToast(`客户「${name}」已加入服务器客户库`, 'success')
+            }
+          }}
         />
       </section>
 
