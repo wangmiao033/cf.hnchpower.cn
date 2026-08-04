@@ -1,0 +1,480 @@
+/*
+ * Contract ledger refinement.
+ * Keeps the existing contract logic intact while turning the page into a
+ * compact risk-oriented finance workspace.
+ */
+
+.contract-page .page-container-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 10px 0;
+  max-width: 1700px;
+  min-height: 0;
+}
+
+/* The shell already displays the page title; use the first row for work only. */
+.contract-page .contract-hero {
+  grid-column: 2;
+  grid-row: 1;
+  min-height: 82px;
+  display: flex;
+  align-items: stretch;
+  justify-content: flex-end;
+  padding: 8px;
+  border-left: 0;
+  border-radius: 0 10px 10px 0;
+  background: #ffffff;
+  box-shadow: 0 2px 10px rgb(30 64 175 / 5%);
+}
+
+.contract-page .contract-hero__copy,
+.contract-page .contract-hero__status {
+  display: none;
+}
+
+.contract-page .contract-toolbar__actions {
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+  gap: 6px;
+  align-self: center;
+}
+
+.contract-page .contract-toolbar__actions .btn-primary,
+.contract-page .contract-toolbar__actions .btn-secondary {
+  min-height: 32px;
+  height: 32px;
+  padding: 0 11px;
+  border-radius: 7px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.contract-page .contract-toolbar__actions .btn-primary {
+  box-shadow: 0 3px 8px rgb(37 99 235 / 15%);
+}
+
+.contract-page .contract-filter-card {
+  grid-column: 1;
+  grid-row: 1;
+  min-width: 0;
+  min-height: 82px;
+  padding: 8px;
+  border-right: 0;
+  border-radius: 10px 0 0 10px;
+  box-shadow: 0 2px 10px rgb(30 64 175 / 5%);
+}
+
+.contract-page .contract-filter-main {
+  grid-template-columns: minmax(260px, 1fr) minmax(150px, 185px) minmax(130px, 155px) auto;
+  gap: 6px;
+}
+
+.contract-page .contract-filter-main input,
+.contract-page .contract-filter-main select {
+  height: 34px;
+  border-color: #d8e3f1;
+  border-radius: 8px;
+  background: #f8fbff;
+}
+
+.contract-page .contract-filter-main input:focus,
+.contract-page .contract-filter-main select:focus {
+  background: #ffffff;
+}
+
+.contract-page .contract-search > span {
+  font-size: 18px;
+}
+
+.contract-page .contract-filter-main .btn-reset {
+  min-height: 34px;
+  height: 34px;
+  padding: 0 10px;
+  border-color: #d8e3f1;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #52627a;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.contract-page .contract-quick-tabs {
+  flex-wrap: nowrap;
+  gap: 5px;
+  margin-top: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.contract-page .contract-quick-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.contract-page .contract-quick-tabs button {
+  min-height: 27px;
+  padding: 0 10px;
+  border-radius: 7px;
+  white-space: nowrap;
+}
+
+.contract-page .contract-quick-tabs button:nth-child(3) {
+  background: #fff8e8;
+  color: #9a5a05;
+}
+
+.contract-page .contract-quick-tabs button:nth-child(4),
+.contract-page .contract-quick-tabs button:nth-child(6) {
+  background: #fff1f2;
+  color: #b42318;
+}
+
+.contract-page .contract-quick-tabs button:nth-child(5) {
+  background: #eef5ff;
+  color: #1d5fd1;
+}
+
+.contract-page .contract-quick-tabs button.active {
+  border-color: #a9c7f8;
+  background: #e8f1ff;
+  color: #174ea6;
+  box-shadow: inset 0 0 0 1px rgb(37 99 235 / 5%);
+}
+
+/* One connected summary strip instead of five floating cards. */
+.contract-page .contract-stats {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid #dbe3ef;
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgb(15 23 42 / 4%);
+}
+
+.contract-page .contract-stats article {
+  min-height: 66px;
+  padding: 9px 14px;
+  border: 0;
+  border-right: 1px solid #e7edf5;
+  border-radius: 0;
+  background: #ffffff;
+}
+
+.contract-page .contract-stats article:last-child {
+  border-right: 0;
+}
+
+.contract-page .contract-stats article::before {
+  inset: 0 14px auto;
+  width: auto;
+  height: 2px;
+  border-radius: 0 0 2px 2px;
+}
+
+.contract-page .contract-stats span {
+  font-size: 11px;
+}
+
+.contract-page .contract-stats strong {
+  font-size: 19px;
+  letter-spacing: -0.01em;
+}
+
+.contract-page .contract-stats small {
+  font-size: 10px;
+}
+
+/* The ledger is the primary surface. */
+.contract-page .contract-table-card {
+  grid-column: 1 / -1;
+  grid-row: 3;
+  min-height: 0;
+  overflow: hidden;
+  border-color: #dbe3ef;
+  box-shadow: 0 1px 3px rgb(15 23 42 / 4%);
+}
+
+.contract-page .contract-table-head {
+  min-height: 44px;
+  padding: 7px 12px;
+  background: #ffffff;
+}
+
+.contract-page .contract-table-head h2 {
+  font-size: 15px;
+}
+
+.contract-page .contract-table-head > div {
+  gap: 8px;
+}
+
+.contract-page .contract-table-head > div > span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 7px;
+  border: 1px solid #e1e9f4;
+  border-radius: 999px;
+  background: #f5f8fc;
+}
+
+.contract-page .contract-table-head p {
+  overflow: hidden;
+  max-width: 420px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.contract-page .contract-table-wrap {
+  max-height: calc(100vh - 305px);
+  overflow: auto;
+  scrollbar-gutter: auto;
+}
+
+.contract-page .contract-table {
+  width: 100%;
+  min-width: 1270px;
+  table-layout: fixed;
+}
+
+.contract-page .contract-table thead th {
+  height: 38px;
+  padding: 0 9px;
+  background: #f7f9fc;
+  font-size: 11px;
+}
+
+.contract-page .contract-table tbody td {
+  min-height: 0;
+  height: 52px;
+  padding: 7px 9px;
+  font-size: 11.5px;
+}
+
+.contract-page .contract-table tbody tr:nth-child(even) {
+  background: #fcfdff;
+}
+
+.contract-page .contract-table tbody tr:hover {
+  background: #f5f8fd;
+}
+
+.contract-page .contract-table th:nth-child(1),
+.contract-page .contract-table td:nth-child(1) {
+  width: 50px;
+}
+
+.contract-page .contract-table th:nth-child(2),
+.contract-page .contract-table td:nth-child(2) {
+  width: 220px;
+}
+
+.contract-page .contract-table th:nth-child(3),
+.contract-page .contract-table td:nth-child(3) {
+  width: 200px;
+}
+
+.contract-page .contract-table th:nth-child(4),
+.contract-page .contract-table td:nth-child(4) {
+  width: 120px;
+}
+
+.contract-page .contract-table th:nth-child(5),
+.contract-page .contract-table td:nth-child(5) {
+  width: 105px;
+}
+
+.contract-page .contract-table th:nth-child(6),
+.contract-page .contract-table td:nth-child(6) {
+  width: 120px;
+}
+
+.contract-page .contract-table th:nth-child(7),
+.contract-page .contract-table td:nth-child(7) {
+  width: 115px;
+}
+
+.contract-page .contract-table th:nth-child(8),
+.contract-page .contract-table td:nth-child(8) {
+  width: 78px;
+}
+
+.contract-page .contract-table th:nth-child(9),
+.contract-page .contract-table td:nth-child(9) {
+  width: 75px;
+}
+
+.contract-page .contract-table th:nth-child(10),
+.contract-page .contract-table td:nth-child(10) {
+  width: 82px;
+}
+
+.contract-page .contract-table th:nth-child(11),
+.contract-page .contract-table td:nth-child(11) {
+  width: 105px;
+}
+
+.contract-page .contract-name-cell,
+.contract-page .contract-party-cell {
+  max-width: none;
+}
+
+.contract-page .contract-party-avatar {
+  width: 27px;
+  height: 27px;
+  border-radius: 8px;
+  font-size: 11px;
+}
+
+.contract-page .contract-name-cell > strong,
+.contract-page .contract-party-cell strong,
+.contract-page .contract-date-cell > strong {
+  font-size: 11.5px;
+}
+
+.contract-page .contract-name-cell > span,
+.contract-page .contract-party-cell small,
+.contract-page .contract-date-cell > span,
+.contract-page .contract-status-cell small {
+  margin-top: 2px;
+  font-size: 9.5px;
+}
+
+.contract-page .contract-name-cell > em {
+  margin-top: 3px;
+  padding: 1px 6px;
+  font-size: 9px;
+}
+
+.contract-page .contract-type-badge,
+.contract-page .contract-payment-tag,
+.contract-page .contract-attachment-count,
+.contract-page .contract-status-tag {
+  min-height: 21px;
+  padding: 1px 7px;
+  font-size: 9.5px;
+}
+
+.contract-page .contract-row-actions {
+  flex-wrap: nowrap;
+  justify-content: center;
+  gap: 7px;
+  white-space: nowrap;
+}
+
+.contract-page .contract-row-actions button {
+  font-size: 10.5px;
+}
+
+.contract-page .contract-table .col-sticky-right {
+  width: 105px;
+  box-shadow: -10px 0 14px -14px rgb(15 23 42 / 30%);
+}
+
+.contract-page .contract-pagination {
+  min-height: 44px;
+  padding: 6px 10px;
+  background: #fbfcfe;
+}
+
+.contract-page .contract-pagination select,
+.contract-page .contract-pagination button {
+  height: 30px;
+}
+
+@media (max-width: 1280px) {
+  .contract-page .page-container-body {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto auto minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .contract-page .contract-filter-card {
+    grid-column: 1;
+    grid-row: 1;
+    border-right: 1px solid var(--admin-border);
+    border-radius: 10px;
+  }
+
+  .contract-page .contract-hero {
+    grid-column: 1;
+    grid-row: 2;
+    min-height: 48px;
+    border-left: 1px solid var(--admin-border);
+    border-radius: 10px;
+  }
+
+  .contract-page .contract-stats {
+    grid-row: 3;
+  }
+
+  .contract-page .contract-table-card {
+    grid-row: 4;
+  }
+}
+
+@media (max-width: 980px) {
+  .contract-page .contract-filter-main {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .contract-page .contract-search {
+    grid-column: 1 / -1;
+  }
+
+  .contract-page .contract-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .contract-page .contract-stats article:nth-child(2),
+  .contract-page .contract-stats article:nth-child(4) {
+    border-right: 0;
+  }
+
+  .contract-page .contract-stats article:nth-child(-n + 4) {
+    border-bottom: 1px solid #e7edf5;
+  }
+
+  .contract-page .contract-stats article:last-child {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 640px) {
+  .contract-page .contract-filter-main {
+    grid-template-columns: 1fr;
+  }
+
+  .contract-page .contract-search {
+    grid-column: auto;
+  }
+
+  .contract-page .contract-toolbar__actions {
+    width: 100%;
+    overflow-x: auto;
+    justify-content: flex-start;
+  }
+
+  .contract-page .contract-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .contract-page .contract-stats article,
+  .contract-page .contract-stats article:nth-child(2),
+  .contract-page .contract-stats article:nth-child(4) {
+    border-right: 0;
+    border-bottom: 1px solid #e7edf5;
+  }
+
+  .contract-page .contract-stats article:last-child {
+    grid-column: auto;
+    border-bottom: 0;
+  }
+
+  .contract-page .contract-table-head p {
+    display: none;
+  }
+}
