@@ -5,6 +5,7 @@
 @import './pages/ChannelLedgerPolish.css';
 @import './pages/RdLedgerPolish.css';
 @import './pages/ContractLedgerPolish.css';
+@import './pages/DataCenterPolish.css';
 
 * {
   margin: 0;
