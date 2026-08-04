@@ -70,6 +70,13 @@ export type InvoiceRecordPayload = {
 
 export type InvoiceRecordUpdatePayload = Partial<InvoiceRecordPayload>
 
+export type InvoiceImportResponse = {
+  created: number
+  updated: number
+  skipped: number
+  total: number
+}
+
 const PATH = '/api/invoices'
 
 export function listInvoiceRecords(params?: {
@@ -93,6 +100,16 @@ export function getInvoiceRecord(id: string): Promise<ApiInvoiceRow> {
 
 export function createInvoiceRecord(payload: InvoiceRecordPayload): Promise<ApiInvoiceRow> {
   return apiPost<ApiInvoiceRow>(PATH, payload)
+}
+
+export function importInvoiceRecords(
+  items: InvoiceRecordPayload[],
+  sourceFile?: string
+): Promise<InvoiceImportResponse> {
+  return apiPost<InvoiceImportResponse>(`${PATH}/import`, {
+    items,
+    source_file: sourceFile || null
+  })
 }
 
 export function updateInvoiceRecord(

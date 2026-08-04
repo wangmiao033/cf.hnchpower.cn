@@ -1,4 +1,5 @@
 import React from 'react'
+import './RdReconciliationProgressTable.css'
 
 function money(value) {
   const amount = Number(value || 0)

@@ -31,6 +31,13 @@ function billSearchText(item) {
     .toLocaleLowerCase('zh-CN')
 }
 
+function confidenceMeta(score) {
+  const value = Number(score || 0)
+  if (value >= 0.8) return { level: 'high', label: '高置信度' }
+  if (value >= 0.6) return { level: 'medium', label: '建议确认' }
+  return { level: 'low', label: '低置信度' }
+}
+
 export default function InvoiceBillAllocationPanel({ invoiceId, onChanged, onOpenBill, showToast }) {
   const [summary, setSummary] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -212,6 +219,7 @@ export default function InvoiceBillAllocationPanel({ invoiceId, onChanged, onOpe
           <div className="invoice-bill-panel__list">
             {candidates.map((item) => {
               const key = `${item.bill.bill_type}:${item.bill.bill_id}`
+              const confidence = confidenceMeta(item.match_score)
               return (
                 <article className="invoice-bill-card invoice-bill-card--candidate" key={key}>
                   <div className="invoice-bill-card__main">
@@ -220,8 +228,13 @@ export default function InvoiceBillAllocationPanel({ invoiceId, onChanged, onOpe
                         {billTypeLabel(item.bill.bill_type)}
                       </span>
                       <strong>{item.bill.number}</strong>
+                      <span className={`invoice-match-score is-${confidence.level}`}>
+                        {confidence.label} {Math.round(Number(item.match_score || 0) * 100)}%
+                      </span>
                     </div>
-                    <p>{item.bill.partner_name} · {item.bill.settlement_month || '未填账期'}</p>
+                    <p>
+                      {item.bill.partner_name} · {item.bill.settlement_month || '未填账期'} · {item.bill.status}
+                    </p>
                     <small>
                       待覆盖 {money(item.available_amount)}
                       {item.match_reasons.length ? ` · ${item.match_reasons.join(' / ')}` : ' · 手工匹配'}
@@ -255,7 +268,7 @@ export default function InvoiceBillAllocationPanel({ invoiceId, onChanged, onOpe
           </div>
         ) : (
           <div className="invoice-bill-panel__empty invoice-bill-panel__empty--compact">
-            {keyword ? '没有匹配的账单' : '暂无已完成核对且可关联的账单'}
+            {keyword ? '没有匹配的账单' : '暂无可关联账单，请先创建对应账期的账单'}
           </div>
         )}
       </section>

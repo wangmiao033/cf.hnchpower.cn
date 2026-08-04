@@ -12,6 +12,244 @@
   min-height: 0;
 }
 
+/* 发票筛选：主搜索与辅助条件分层，避免字段横向挤压 */
+.invoice-rd-workspace .admin-filter-bar {
+  padding: 0;
+  overflow: hidden;
+  background: #fff;
+  border-color: #dbe5f3;
+  box-shadow: 0 4px 14px rgba(30, 64, 175, 0.045);
+}
+
+.invoice-filter-panel {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+}
+
+.invoice-filter-panel__main,
+.invoice-filter-panel__secondary {
+  display: flex;
+  min-width: 0;
+  align-items: flex-end;
+}
+
+.invoice-filter-panel__main {
+  align-items: center;
+  gap: 10px;
+  min-height: 58px;
+  padding: 10px 14px;
+}
+
+.invoice-filter-panel__secondary {
+  gap: 12px;
+  padding: 10px 16px;
+  background: #f8fbff;
+  border-top: 1px solid #e6edf7;
+}
+
+.invoice-filter-field {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+
+.invoice-filter-field--keyword {
+  flex: 1 1 320px;
+}
+
+.invoice-filter-field--compact {
+  flex: 0 1 210px;
+}
+
+.invoice-filter-field__label {
+  color: #475569;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.invoice-filter-field__control,
+.invoice-filter-date-range .admin-input {
+  height: 36px;
+  border-color: #d7e1ef;
+  background: #fff;
+}
+
+.invoice-filter-field__control:focus,
+.invoice-filter-date-range .admin-input:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.invoice-filter-panel__actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.invoice-filter-panel__actions .rec-btn {
+  height: 36px;
+  min-width: 72px;
+  justify-content: center;
+}
+
+.invoice-filter-search {
+  gap: 6px;
+  box-shadow: 0 5px 12px rgba(37, 99, 235, 0.18);
+}
+
+.invoice-filter-search-box {
+  display: flex;
+  flex: 1 1 620px;
+  max-width: 860px;
+  height: 38px;
+  min-width: 260px;
+  align-items: center;
+  gap: 9px;
+  padding: 0 12px;
+  background: #fff;
+  border: 1px solid #d7e1ef;
+  border-radius: 8px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.invoice-filter-search-box:focus-within {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.invoice-filter-search-box svg {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: #94a3b8;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.invoice-filter-search-box input {
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  color: #0f172a;
+  background: transparent;
+  border: 0;
+  outline: 0;
+  font: inherit;
+}
+
+.invoice-filter-search-box input::placeholder {
+  color: #94a3b8;
+}
+
+.invoice-filter-search svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.invoice-filter-date-range {
+  display: flex;
+  flex: 1 1 360px;
+  min-width: 300px;
+  align-items: center;
+  gap: 8px;
+}
+
+.invoice-filter-date-range > .invoice-filter-field__label {
+  flex: 0 0 auto;
+  margin-right: 2px;
+}
+
+.invoice-filter-date-range label {
+  flex: 1 1 145px;
+  min-width: 125px;
+}
+
+.invoice-filter-date-range .admin-input {
+  width: 100%;
+}
+
+.invoice-filter-date-range__separator {
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.invoice-filter-panel__result {
+  flex: 0 0 auto;
+  margin: 0 0 0 auto;
+  padding: 3px 9px;
+  color: #64748b;
+  background: #eef4ff;
+  border-radius: 999px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.invoice-partner-link {
+  width: max-content;
+  padding: 2px 7px;
+  color: #047857;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  border-radius: 999px;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+@media (max-width: 1050px) {
+  .invoice-filter-panel__main,
+  .invoice-filter-panel__secondary {
+    flex-wrap: wrap;
+  }
+
+  .invoice-filter-panel__actions {
+    width: 100%;
+  }
+
+  .invoice-filter-panel__actions .rec-btn {
+    flex: 1 1 0;
+  }
+
+  .invoice-filter-panel__result {
+    margin-left: 0;
+  }
+}
+
+@media (max-width: 640px) {
+  .invoice-filter-panel__main,
+  .invoice-filter-panel__secondary {
+    padding: 12px;
+  }
+
+  .invoice-filter-field--keyword,
+  .invoice-filter-search-box,
+  .invoice-filter-field--compact,
+  .invoice-filter-date-range {
+    flex-basis: 100%;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .invoice-filter-date-range {
+    flex-wrap: wrap;
+  }
+
+  .invoice-filter-date-range > .invoice-filter-field__label {
+    width: 100%;
+  }
+}
+
 .invoice-rd__table-card .admin-table-card__body,
 .payment-rd__table-card .admin-table-card__body {
   display: flex;
@@ -553,6 +791,29 @@
 .invoice-bill-card__title strong {
   color: #173251;
   font-size: 13px;
+}
+
+.invoice-match-score {
+  display: inline-flex;
+  align-items: center;
+  min-height: 21px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.invoice-match-score.is-high {
+  background: #dcfce7;
+  color: #087a43;
+}
+
+.invoice-match-score.is-medium {
+  background: #fff7ed;
+  color: #c2410c;
 }
 
 .invoice-bill-card__main p,

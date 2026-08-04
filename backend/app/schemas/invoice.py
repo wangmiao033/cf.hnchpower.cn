@@ -108,3 +108,15 @@ class InvoiceRecordRead(BaseModel):
 class InvoiceRecordListResponse(BaseModel):
     items: list[InvoiceRecordRead]
     total: int
+
+
+class InvoiceRecordImportRequest(BaseModel):
+    items: list[InvoiceRecordCreate] = Field(default_factory=list, max_length=2000)
+    source_file: str | None = None
+
+
+class InvoiceRecordImportResponse(BaseModel):
+    created: int
+    updated: int
+    skipped: int
+    total: int

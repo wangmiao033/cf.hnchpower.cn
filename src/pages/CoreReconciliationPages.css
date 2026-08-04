@@ -407,7 +407,8 @@
 }
 
 .rd-progress-page .channel-progress-table-wrap {
-  min-height: 260px;
+  /* Keep only the table header and one row when the result set is short. */
+  min-height: 70px;
   max-height: calc(100vh - 535px);
 }
 

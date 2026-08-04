@@ -14,6 +14,8 @@ from app.models.bill_invoice_allocation import BillInvoiceAllocation
 from app.models.invoice import InvoiceRecord
 from app.schemas.invoice import (
     InvoiceRecordCreate,
+    InvoiceRecordImportRequest,
+    InvoiceRecordImportResponse,
     InvoiceRecordListResponse,
     InvoiceRecordRead,
     InvoiceRecordUpdate,
@@ -119,6 +121,65 @@ def list_invoice_records(
     return InvoiceRecordListResponse(
         items=[InvoiceRecordRead.model_validate(r) for r in rows],
         total=total,
+    )
+
+
+@router.post("/import", response_model=InvoiceRecordImportResponse)
+def import_invoice_records(
+    payload: InvoiceRecordImportRequest, db: Session = Depends(get_db)
+) -> InvoiceRecordImportResponse:
+    """Idempotently import invoice rows by the normalized invoice identity key."""
+    prepared: list[dict] = []
+    skipped = 0
+    for item in payload.items:
+        data = item.model_dump()
+        _normalize_invoice_amounts(data)
+        _normalize_tax_status(data)
+        identity = data.get("invoice_identity_key")
+        if not identity:
+            skipped += 1
+            continue
+        data["verified_record_ids"] = _normalize_verified_ids(data.get("verified_record_ids"))
+        prepared.append(data)
+
+    identities = list({str(item["invoice_identity_key"]) for item in prepared})
+    existing_rows = (
+        db.execute(select(InvoiceRecord).where(InvoiceRecord.invoice_identity_key.in_(identities)))
+        .scalars()
+        .all()
+        if identities
+        else []
+    )
+    existing_by_identity = {str(row.invoice_identity_key): row for row in existing_rows}
+    created = 0
+    updated = 0
+    preserved_fields = {"verified", "verified_amount", "verified_record_ids"}
+
+    for data in prepared:
+        identity = str(data["invoice_identity_key"])
+        row = existing_by_identity.get(identity)
+        if row is None:
+            row = InvoiceRecord(id=str(uuid4()), **data)
+            db.add(row)
+            existing_by_identity[identity] = row
+            created += 1
+            continue
+
+        for key, value in data.items():
+            if key in preserved_fields:
+                continue
+            if key == "original_invoice_id" and value is None:
+                continue
+            setattr(row, key, value)
+        row.updated_at = datetime.now(timezone.utc)
+        updated += 1
+
+    db.commit()
+    return InvoiceRecordImportResponse(
+        created=created,
+        updated=updated,
+        skipped=skipped,
+        total=created + updated,
     )
 
 

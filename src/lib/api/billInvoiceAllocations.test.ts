@@ -6,8 +6,9 @@ vi.mock('@/lib/api/client.ts', () => ({
   apiDelete: vi.fn()
 }))
 
-import { apiGet } from '@/lib/api/client.ts'
+import { apiGet, apiPost } from '@/lib/api/client.ts'
 import {
+  autoMatchInvoices,
   getInvoiceBillSummary,
   listInvoiceAllocationOverviews
 } from '@/lib/api/billInvoiceAllocations.ts'
@@ -38,5 +39,20 @@ describe('发票账单关联 API', () => {
     await getInvoiceBillSummary('invoice/2')
 
     expect(apiGet).toHaveBeenCalledWith('/api/bill-invoice-allocations/invoice/invoice%2F2')
+  })
+
+  it('批量智能关联先支持预览再确认', async () => {
+    vi.mocked(apiPost).mockResolvedValue({ matched: 1 })
+    const payload = {
+      invoice_direction: 'output' as const,
+      invoice_ids: ['invoice-1'],
+      threshold: 0.8,
+      unique_margin: 0.1,
+      dry_run: true
+    }
+
+    await autoMatchInvoices(payload)
+
+    expect(apiPost).toHaveBeenCalledWith('/api/bill-invoice-allocations/auto-match', payload)
   })
 })

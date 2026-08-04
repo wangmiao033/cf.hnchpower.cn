@@ -8,7 +8,10 @@ import AdminTableCard from '@/components/admin/AdminTableCard.jsx'
 import InvoiceLightDrawer from '@/components/invoice/InvoiceLightDrawer.jsx'
 import '@/components/reconciliation/reconciliation-admin.css'
 import { getInvoiceRecordId } from '@/lib/api/invoice.ts'
-import { listInvoiceAllocationOverviews } from '@/lib/api/billInvoiceAllocations.ts'
+import {
+  autoMatchInvoices,
+  listInvoiceAllocationOverviews
+} from '@/lib/api/billInvoiceAllocations.ts'
 import { VIEWS } from '@/app/routes.js'
 import { consumeInvoiceFocus } from '@/lib/exceptions/navFocus.ts'
 
@@ -35,9 +38,37 @@ function invoiceNumber(item) {
   return [item.invoiceCode, item.invoiceNo].filter(Boolean).join(' / ') || '未填写号码'
 }
 
+function normalizePartnerValue(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[\s()（）·,，.。\-_/\\]/g, '')
+}
+
+function findInvoicePartner(item, direction, partners) {
+  const counterpartyName =
+    direction === 'input' ? item.sellerName : item.buyerName || item.title
+  const counterpartyTaxNo =
+    direction === 'input' ? item.sellerTaxNo : item.buyerTaxNo || item.taxNo
+  const taxKey = normalizePartnerValue(counterpartyTaxNo)
+  const nameKey = normalizePartnerValue(counterpartyName)
+
+  if (taxKey) {
+    const taxMatched = partners.find(
+      (partner) => normalizePartnerValue(partner.taxRegistrationNo) === taxKey
+    )
+    if (taxMatched) return taxMatched
+  }
+  if (!nameKey) return null
+  return (
+    partners.find((partner) => normalizePartnerValue(partner.name) === nameKey) || null
+  )
+}
+
 function InvoiceManageWorkspace({ variant = 'manage', direction = 'output' }) {
   const {
     invoice,
+    settings,
     setActiveView,
     setActiveViewRaw,
     openInvoiceEdit,
@@ -55,7 +86,7 @@ function InvoiceManageWorkspace({ variant = 'manage', direction = 'output' }) {
     invoiceApiEnabled,
     handleDeleteInvoice,
     handleExportInvoiceCSV,
-    handleImportInvoiceJSON,
+    handleImportInvoiceFile,
     updateInvoiceRecord
   } = invoice
 
@@ -65,6 +96,14 @@ function InvoiceManageWorkspace({ variant = 'manage', direction = 'output' }) {
   const [allocationOverviews, setAllocationOverviews] = useState({})
   const [allocationLoading, setAllocationLoading] = useState(false)
   const [allocationRevision, setAllocationRevision] = useState(0)
+  const [autoMatchBusy, setAutoMatchBusy] = useState(false)
+  const [autoMatchPreview, setAutoMatchPreview] = useState(null)
+  const [searchKeyword, setSearchKeyword] = useState(
+    () => invoiceFilter.companyKeyword || invoiceFilter.numberKeyword || ''
+  )
+  const [appliedSearch, setAppliedSearch] = useState(
+    () => invoiceFilter.companyKeyword || invoiceFilter.numberKeyword || ''
+  )
 
   useEffect(() => {
     consumeInvoiceFocus()
@@ -75,9 +114,47 @@ function InvoiceManageWorkspace({ variant = 'manage', direction = 'output' }) {
     setInvoiceFilter((prev) => ({ ...prev, direction }))
   }, [direction, invoiceFilter.direction, setInvoiceFilter])
 
+  const partners = settings?.partners || []
+  const invoicePartnerMap = useMemo(() => {
+    const result = new Map()
+    filteredInvoices.forEach((item) => {
+      const partner = findInvoicePartner(item, direction, partners)
+      const recordId = getInvoiceRecordId(item) || item.id
+      if (partner && recordId != null) result.set(String(recordId), partner)
+    })
+    return result
+  }, [direction, filteredInvoices, partners])
+
+  const visibleInvoices = useMemo(() => {
+    const keyword = normalizePartnerValue(appliedSearch)
+    if (!keyword) return filteredInvoices
+    return filteredInvoices.filter((item) => {
+      const recordId = getInvoiceRecordId(item) || item.id
+      const partner = recordId != null ? invoicePartnerMap.get(String(recordId)) : null
+      const searchable = [
+        direction === 'input' ? item.sellerName : item.title,
+        direction === 'input' ? item.sellerTaxNo : item.taxNo,
+        invoiceNumber(item),
+        partner?.shortName,
+        partner?.name,
+        partner?.taxRegistrationNo
+      ]
+      return searchable.some((value) => normalizePartnerValue(value).includes(keyword))
+    })
+  }, [appliedSearch, direction, filteredInvoices, invoicePartnerMap])
+
+  const visiblePartnerCount = useMemo(
+    () =>
+      visibleInvoices.reduce((count, item) => {
+        const recordId = getInvoiceRecordId(item) || item.id
+        return count + (recordId != null && invoicePartnerMap.has(String(recordId)) ? 1 : 0)
+      }, 0),
+    [invoicePartnerMap, visibleInvoices]
+  )
+
   const invoiceIdsKey = useMemo(
-    () => filteredInvoices.map((item) => getInvoiceRecordId(item)).filter(Boolean).join(','),
-    [filteredInvoices]
+    () => visibleInvoices.map((item) => getInvoiceRecordId(item)).filter(Boolean).join(','),
+    [visibleInvoices]
   )
 
   useEffect(() => {
@@ -107,8 +184,12 @@ function InvoiceManageWorkspace({ variant = 'manage', direction = 'output' }) {
     }
   }, [allocationRevision, invoiceApiEnabled, invoiceIdsKey])
 
+  useEffect(() => {
+    setAutoMatchPreview(null)
+  }, [direction, invoiceIdsKey])
+
   const stats = useMemo(() => {
-    return filteredInvoices.reduce(
+    return visibleInvoices.reduce(
       (acc, i) => {
         const amount = parseFloat(i.amount || 0) || 0
         const tax = parseFloat(i.taxAmount || 0) || 0
@@ -134,17 +215,9 @@ function InvoiceManageWorkspace({ variant = 'manage', direction = 'output' }) {
         linkedCount: 0
       }
     )
-  }, [allocationOverviews, filteredInvoices])
+  }, [allocationOverviews, visibleInvoices])
 
-  const invoiceTypeOptions = useMemo(() => {
-    const set = new Set()
-    filteredInvoices.forEach((i) => {
-      if (i.invoiceType) set.add(String(i.invoiceType))
-    })
-    return Array.from(set)
-  }, [filteredInvoices])
-
-  const totalPages = Math.max(1, Math.ceil(filteredInvoices.length / pageSize))
+  const totalPages = Math.max(1, Math.ceil(visibleInvoices.length / pageSize))
   useEffect(() => {
     setPage((p) => Math.min(p, totalPages))
   }, [totalPages])
@@ -154,88 +227,118 @@ function InvoiceManageWorkspace({ variant = 'manage', direction = 'output' }) {
 
   const pagedInvoices = useMemo(() => {
     const start = (page - 1) * pageSize
-    return filteredInvoices.slice(start, start + pageSize)
-  }, [filteredInvoices, page, pageSize])
+    return visibleInvoices.slice(start, start + pageSize)
+  }, [visibleInvoices, page, pageSize])
 
   const wrapImport = (e) => {
     const file = e.target.files?.[0]
-    handleImportInvoiceJSON(e)
+    void handleImportInvoiceFile(e)
     if (file?.name?.toLowerCase().endsWith('.pdf')) {
       setActiveViewRaw?.(VIEWS.INVOICE_CREATE)
+    }
+  }
+
+  const submitFilters = (event) => {
+    event.preventDefault()
+    setAppliedSearch(searchKeyword.trim())
+    setInvoiceFilter({
+      direction,
+      dateStart: '',
+      dateEnd: '',
+      status: '全部',
+      invoiceType: '',
+      companyKeyword: '',
+      numberKeyword: ''
+    })
+  }
+
+  const resetFilters = () => {
+    const nextFilter = {
+      direction,
+      dateStart: '',
+      dateEnd: '',
+      status: '全部',
+      invoiceType: '',
+      companyKeyword: '',
+      numberKeyword: ''
+    }
+    setSearchKeyword('')
+    setAppliedSearch('')
+    setInvoiceFilter(nextFilter)
+  }
+
+  const runAutoMatch = async (dryRun) => {
+    const invoiceIds = visibleInvoices.map((item) => getInvoiceRecordId(item)).filter(Boolean)
+    if (!invoiceApiEnabled || invoiceIds.length === 0) {
+      showToast('当前筛选范围没有可智能关联的线上发票', 'info')
+      return
+    }
+    setAutoMatchBusy(true)
+    try {
+      const result = await autoMatchInvoices({
+        invoice_direction: direction,
+        invoice_ids: invoiceIds,
+        threshold: 0.8,
+        unique_margin: 0.1,
+        dry_run: dryRun
+      })
+      if (dryRun) {
+        setAutoMatchPreview(result)
+        showToast(
+          result.matched > 0
+            ? `扫描完成：可自动关联 ${result.matched} 张，需人工确认 ${result.ambiguous + result.unmatched} 张`
+            : '扫描完成：暂无达到自动关联标准的唯一匹配',
+          result.matched > 0 ? 'success' : 'info'
+        )
+      } else {
+        setAutoMatchPreview(null)
+        setAllocationRevision((value) => value + 1)
+        showToast(
+          `智能关联完成：已关联 ${result.matched} 张，金额 ¥${Number(result.matched_amount || 0).toFixed(2)}`,
+          'success'
+        )
+      }
+    } catch (error) {
+      console.error(error)
+      showToast('智能关联失败，请刷新后重试', 'error')
+    } finally {
+      setAutoMatchBusy(false)
     }
   }
 
   return (
     <AdminWorkspace className="invoice-rd-workspace">
       <AdminFilterBar>
-        <div className="channel-rd__filters">
-          <label className="channel-rd__field">
-            <span className="channel-rd__label">开票日期起</span>
-            <input
-              type="date"
-              className="admin-input channel-rd__month"
-              value={invoiceFilter.dateStart || ''}
-              onChange={(e) => setInvoiceFilter({ ...invoiceFilter, dateStart: e.target.value })}
-            />
-          </label>
-          <label className="channel-rd__field">
-            <span className="channel-rd__label">开票日期止</span>
-            <input
-              type="date"
-              className="admin-input channel-rd__month"
-              value={invoiceFilter.dateEnd || ''}
-              onChange={(e) => setInvoiceFilter({ ...invoiceFilter, dateEnd: e.target.value })}
-            />
-          </label>
-          <label className="channel-rd__field">
-            <span className="channel-rd__label">票种</span>
-            <select
-              className="admin-input channel-rd__select"
-              value={invoiceFilter.invoiceType || ''}
-              onChange={(e) => setInvoiceFilter({ ...invoiceFilter, invoiceType: e.target.value })}
-            >
-              <option value="">全部</option>
-              {invoiceTypeOptions.map((x) => (
-                <option key={x} value={x}>
-                  {x}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="channel-rd__field channel-rd__field--grow">
-            <span className="channel-rd__label">公司名/税号</span>
-            <input
-              type="search"
-              className="admin-input channel-rd__search"
-              placeholder={direction === 'output' ? '购买方名称/税号' : '销售方名称/税号'}
-              value={invoiceFilter.companyKeyword || ''}
-              onChange={(e) => setInvoiceFilter({ ...invoiceFilter, companyKeyword: e.target.value })}
-            />
-          </label>
-          <label className="channel-rd__field channel-rd__field--grow">
-            <span className="channel-rd__label">发票号码</span>
-            <input
-              type="search"
-              className="admin-input channel-rd__search"
-              placeholder="发票号码/数电发票号码"
-              value={invoiceFilter.numberKeyword || ''}
-              onChange={(e) => setInvoiceFilter({ ...invoiceFilter, numberKeyword: e.target.value })}
-            />
-          </label>
-          <label className="channel-rd__field">
-            <span className="channel-rd__label">状态</span>
-            <select
-              className="admin-input channel-rd__select"
-              value={invoiceFilter.status}
-              onChange={(e) => setInvoiceFilter({ ...invoiceFilter, status: e.target.value })}
-            >
-              <option value="全部">全部</option>
-              <option value="未开">未开</option>
-              <option value="已开">已开</option>
-              <option value="作废">作废</option>
-            </select>
-          </label>
-        </div>
+        <form className="invoice-filter-panel" onSubmit={submitFilters}>
+          <div className="invoice-filter-panel__main">
+            <label className="invoice-filter-search-box">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="m21 21-4.35-4.35m2.35-5.15a7.5 7.5 0 1 1-15 0 7.5 7.5 0 0 1 15 0Z" />
+              </svg>
+              <input
+                type="search"
+                aria-label="客户简称搜索"
+                placeholder="输入客户简称搜索，例如：三七三三"
+                value={searchKeyword}
+                onChange={(e) => setSearchKeyword(e.target.value)}
+              />
+            </label>
+            <div className="invoice-filter-panel__actions">
+              <button type="submit" className="rec-btn rec-btn--primary invoice-filter-search">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="m21 21-4.35-4.35m2.35-5.15a7.5 7.5 0 1 1-15 0 7.5 7.5 0 0 1 15 0Z" />
+                </svg>
+                搜索
+              </button>
+              <button type="button" className="rec-btn rec-btn--secondary" onClick={resetFilters}>
+                清空
+              </button>
+            </div>
+            <span className="invoice-filter-panel__result">
+              {visibleInvoices.length} 条 · 客户库识别 {visiblePartnerCount} 条
+            </span>
+          </div>
+        </form>
       </AdminFilterBar>
 
       <AdminActionBar>
@@ -261,16 +364,35 @@ function InvoiceManageWorkspace({ variant = 'manage', direction = 'output' }) {
                   className="rec-btn rec-btn--secondary"
                   onClick={() => invoiceFileInputRef.current?.click()}
                 >
-                  导入 (JSON/PDF)
+                  导入税务 Excel / JSON / PDF
                 </button>
                 <input
                   ref={invoiceFileInputRef}
                   type="file"
-                  accept=".json,.pdf"
+                  accept=".xlsx,.xls,.json,.pdf"
                   className="channel-rd__file"
                   style={{ display: 'none' }}
                   onChange={wrapImport}
                 />
+                <button
+                  type="button"
+                  className="rec-btn rec-btn--secondary"
+                  disabled={autoMatchBusy || !invoiceApiEnabled || visibleInvoices.length === 0}
+                  onClick={() => void runAutoMatch(true)}
+                >
+                  {autoMatchBusy ? '智能匹配中…' : '扫描智能匹配'}
+                </button>
+                {autoMatchPreview?.matched > 0 ? (
+                  <button
+                    type="button"
+                    className="rec-btn rec-btn--primary"
+                    disabled={autoMatchBusy}
+                    onClick={() => void runAutoMatch(false)}
+                    title={`高置信度 ${autoMatchPreview.matched} 张，模糊 ${autoMatchPreview.ambiguous} 张`}
+                  >
+                    确认关联 {autoMatchPreview.matched} 张
+                  </button>
+                ) : null}
               </>
             ) : (
               <span className="rec-toolbar__batch-label">发票台账查询</span>
@@ -322,7 +444,7 @@ function InvoiceManageWorkspace({ variant = 'manage', direction = 'output' }) {
             <span>备注</span>
             <span>操作</span>
           </div>
-          {filteredInvoices.length === 0 ? (
+          {visibleInvoices.length === 0 ? (
             <div className="invoice-table-row invoice-table-row--empty">
               <span className="invoice-table-empty-text">暂无发票数据，当前筛选无匹配记录</span>
             </div>
@@ -331,6 +453,7 @@ function InvoiceManageWorkspace({ variant = 'manage', direction = 'output' }) {
               const rid = getInvoiceRecordId(item) || item.id
               const counterpartyName = direction === 'output' ? item.buyerName || item.title : item.sellerName
               const counterpartyTaxNo = direction === 'output' ? item.buyerTaxNo || item.taxNo : item.sellerTaxNo
+              const matchedPartner = rid != null ? invoicePartnerMap.get(String(rid)) : null
               const overview = allocationOverviews[String(rid)]
               const coverageStatus = overview?.coverage_status || 'none'
               const grossAmount = invoiceGross(item)
@@ -342,8 +465,11 @@ function InvoiceManageWorkspace({ variant = 'manage', direction = 'output' }) {
                     <small>{item.invoiceType || '未填写票种'}</small>
                   </span>
                   <span className="invoice-ledger-cell" title={`${counterpartyName || ''} ${counterpartyTaxNo || ''}`}>
-                    <strong>{counterpartyName || '未填写往来单位'}</strong>
-                    <small>{counterpartyTaxNo || '未填写税号'}</small>
+                    <strong>{matchedPartner?.shortName || counterpartyName || '未填写往来单位'}</strong>
+                    <small>
+                      {matchedPartner?.shortName ? counterpartyName : counterpartyTaxNo || '未填写税号'}
+                    </small>
+                    {matchedPartner ? <em className="invoice-partner-link">已关联客户库</em> : null}
                   </span>
                   <span className="invoice-ledger-cell invoice-ledger-cell--amount">
                     <strong>¥{parseFloat(item.amount || 0).toFixed(2)}</strong>
@@ -395,7 +521,7 @@ function InvoiceManageWorkspace({ variant = 'manage', direction = 'output' }) {
         </div>
         <div className="channel-table__pagination">
           <div className="channel-table__pagination-info">
-            第 {page}/{totalPages} 页，共 {filteredInvoices.length} 条
+            第 {page}/{totalPages} 页，共 {visibleInvoices.length} 条
           </div>
           <div className="channel-table__pagination-actions">
             <label className="channel-table__pagination-size">
