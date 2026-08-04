@@ -3,6 +3,7 @@
 @import './styles/admin-layout.css';
 @import './styles/theme.css';
 @import './pages/ChannelLedgerPolish.css';
+@import './pages/RdLedgerPolish.css';
 
 * {
   margin: 0;
@@ -54,4 +55,3 @@ samp,
 pre {
   font-family: var(--font-mono);
 }
-
