@@ -1,9 +1,9 @@
 /*
- * Compact overview and dense table layout for the R&D reconciliation page.
- * All rules are page-scoped so the standalone channel ledger remains unchanged.
+ * Unified, compact workbench for both R&D and channel reconciliation.
+ * All rules are scoped to the reconciliation progress page.
  */
 
-/* Remove the duplicated hero block: the page shell already shows the title. */
+/* The page shell already contains the title, so the duplicated hero is hidden. */
 .rd-progress-page .rd-progress-workbar .core-recon-head {
   display: none;
 }
@@ -78,10 +78,18 @@
   font-size: 12px;
 }
 
-/* Compact the overview header and remove repeated explanatory copy. */
+/* Shared card treatment for both tabs. */
+.rd-progress-page .channel-progress-panel {
+  overflow: hidden;
+  border-color: #dbe3ef;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 4%);
+}
+
 .rd-progress-page .rd-progress-panel-head {
   min-height: 44px;
   padding: 0 14px;
+  border-bottom: 1px solid var(--admin-border-soft);
+  background: #ffffff;
 }
 
 .rd-progress-page .rd-progress-panel-head .channel-progress-heading-line {
@@ -100,6 +108,7 @@
   font-size: 11px;
 }
 
+/* Shared compact overview. */
 .rd-progress-page .rd-month-summary {
   min-height: 98px;
   grid-template-columns: minmax(250px, 0.84fr) minmax(640px, 2.16fr);
@@ -175,9 +184,16 @@
   font-size: 14px;
 }
 
+/* The detail bar now reads as one intentional section, not detached text. */
+.rd-progress-page .channel-progress-issues {
+  overflow: hidden;
+  background: #ffffff;
+}
+
 .rd-progress-page .channel-progress-issues-head {
   min-height: 42px;
   padding: 0 14px;
+  border-bottom: 1px solid var(--admin-border-soft);
 }
 
 .rd-progress-page .channel-progress-issues-head > div {
@@ -185,146 +201,188 @@
 }
 
 .rd-progress-page .channel-progress-issues-head > strong {
-  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 8px;
+  border-radius: 6px;
+  background: #fff7ed;
+  color: #b45309;
+  font-size: 12px;
+  font-weight: 700;
 }
 
-/* Dense, intentionally distributed table columns. */
+/* Tables fill the card edge to edge. No centred max-width gutters. */
 .rd-progress-page .channel-progress-table-wrap {
+  width: 100%;
   scrollbar-gutter: stable;
 }
 
-.rd-progress-page .rd-progress-table {
-  width: min(100%, 1320px);
-  min-width: 1180px;
-  margin-inline: auto;
+.rd-progress-page .rd-progress-table,
+.rd-progress-page .channel-progress-table--unified {
+  width: 100%;
+  margin: 0;
   table-layout: fixed;
   background: #ffffff;
 }
 
-.rd-progress-page .rd-progress-table th:nth-child(1) {
-  width: 8.2%;
+.rd-progress-page .rd-progress-table {
+  min-width: 1120px;
 }
 
-.rd-progress-page .rd-progress-table th:nth-child(2) {
-  width: 13%;
+.rd-progress-page .channel-progress-table--unified {
+  min-width: 1180px;
 }
 
-.rd-progress-page .rd-progress-table th:nth-child(3) {
-  width: 11%;
-}
-
-.rd-progress-page .rd-progress-table th:nth-child(4) {
-  width: 33.1%;
-}
-
-.rd-progress-page .rd-progress-table th:nth-child(5) {
-  width: 10.4%;
-}
-
-.rd-progress-page .rd-progress-table th:nth-child(6) {
-  width: 8%;
-}
-
-.rd-progress-page .rd-progress-table th:nth-child(7) {
-  width: 16.3%;
-}
-
-.rd-progress-page .rd-progress-table th {
-  height: 40px;
-  padding: 0 12px;
-}
-
-.rd-progress-page .rd-progress-table td {
-  height: 44px;
+.rd-progress-page .rd-progress-table th,
+.rd-progress-page .rd-progress-table td,
+.rd-progress-page .channel-progress-table--unified th,
+.rd-progress-page .channel-progress-table--unified td {
+  height: 42px;
   padding: 0 12px;
   transition: background-color 120ms ease;
 }
 
-/* Divide the table into basic, business, reconciliation and action groups. */
+.rd-progress-page .rd-progress-table th,
+.rd-progress-page .channel-progress-table--unified th {
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+/* R&D column proportions. */
+.rd-progress-page .rd-progress-table th:nth-child(1) { width: 8.5%; }
+.rd-progress-page .rd-progress-table th:nth-child(2) { width: 14%; }
+.rd-progress-page .rd-progress-table th:nth-child(3) { width: 11.5%; }
+.rd-progress-page .rd-progress-table th:nth-child(4) { width: 31%; }
+.rd-progress-page .rd-progress-table th:nth-child(5) { width: 11%; }
+.rd-progress-page .rd-progress-table th:nth-child(6) { width: 8%; }
+.rd-progress-page .rd-progress-table th:nth-child(7) { width: 16%; }
+
+/* Channel column proportions. */
+.rd-progress-page .channel-progress-table--unified th:nth-child(1) { width: 8.5%; }
+.rd-progress-page .channel-progress-table--unified th:nth-child(2) { width: 13.5%; }
+.rd-progress-page .channel-progress-table--unified th:nth-child(3) { width: 9.5%; }
+.rd-progress-page .channel-progress-table--unified th:nth-child(4) { width: 12.5%; }
+.rd-progress-page .channel-progress-table--unified th:nth-child(5) { width: 23.5%; }
+.rd-progress-page .channel-progress-table--unified th:nth-child(6) { width: 11%; }
+.rd-progress-page .channel-progress-table--unified th:nth-child(7) { width: 8%; }
+.rd-progress-page .channel-progress-table--unified th:nth-child(8) { width: 13.5%; }
+
+/* Subtle grouping, without fake blank columns. */
 .rd-progress-page .rd-progress-table th:nth-child(3),
 .rd-progress-page .rd-progress-table td:nth-child(3),
 .rd-progress-page .rd-progress-table th:nth-child(5),
 .rd-progress-page .rd-progress-table td:nth-child(5),
 .rd-progress-page .rd-progress-table th:nth-child(7),
-.rd-progress-page .rd-progress-table td:nth-child(7) {
-  padding-left: 16px;
+.rd-progress-page .rd-progress-table td:nth-child(7),
+.rd-progress-page .channel-progress-table--unified th:nth-child(3),
+.rd-progress-page .channel-progress-table--unified td:nth-child(3),
+.rd-progress-page .channel-progress-table--unified th:nth-child(6),
+.rd-progress-page .channel-progress-table--unified td:nth-child(6),
+.rd-progress-page .channel-progress-table--unified th:nth-child(8),
+.rd-progress-page .channel-progress-table--unified td:nth-child(8) {
   border-left: 1px solid #edf2f7;
 }
 
+/* Alignment. */
 .rd-progress-page .rd-progress-table th:nth-child(1),
 .rd-progress-page .rd-progress-table th:nth-child(2),
 .rd-progress-page .rd-progress-table td:nth-child(1),
-.rd-progress-page .rd-progress-table td:nth-child(2) {
+.rd-progress-page .rd-progress-table td:nth-child(2),
+.rd-progress-page .channel-progress-table--unified th:nth-child(1),
+.rd-progress-page .channel-progress-table--unified th:nth-child(2),
+.rd-progress-page .channel-progress-table--unified td:nth-child(1),
+.rd-progress-page .channel-progress-table--unified td:nth-child(2) {
   text-align: center;
   font-variant-numeric: tabular-nums;
 }
 
 .rd-progress-page .rd-progress-table th:nth-child(5),
-.rd-progress-page .rd-progress-table td:nth-child(5) {
+.rd-progress-page .rd-progress-table td:nth-child(5),
+.rd-progress-page .channel-progress-table--unified th:nth-child(6),
+.rd-progress-page .channel-progress-table--unified td:nth-child(6) {
   text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 .rd-progress-page .rd-progress-table th:nth-child(6),
 .rd-progress-page .rd-progress-table td:nth-child(6),
 .rd-progress-page .rd-progress-table th:nth-child(7),
-.rd-progress-page .rd-progress-table td:nth-child(7) {
+.rd-progress-page .rd-progress-table td:nth-child(7),
+.rd-progress-page .channel-progress-table--unified th:nth-child(7),
+.rd-progress-page .channel-progress-table--unified td:nth-child(7),
+.rd-progress-page .channel-progress-table--unified th:nth-child(8),
+.rd-progress-page .channel-progress-table--unified td:nth-child(8) {
   text-align: center;
 }
 
 .rd-progress-page .rd-progress-table td:nth-child(3),
-.rd-progress-page .rd-progress-table td:nth-child(4) {
+.rd-progress-page .rd-progress-table td:nth-child(4),
+.rd-progress-page .channel-progress-table--unified td:nth-child(2),
+.rd-progress-page .channel-progress-table--unified td:nth-child(3),
+.rd-progress-page .channel-progress-table--unified td:nth-child(4),
+.rd-progress-page .channel-progress-table--unified td:nth-child(5) {
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.rd-progress-page .rd-progress-table td:nth-child(4) {
-  padding-right: 18px;
-}
-
-.rd-progress-page .rd-progress-table td:nth-child(6) > span {
+.rd-progress-page .rd-progress-table td:nth-child(6) > span,
+.rd-progress-page .channel-progress-table--unified td:nth-child(7) > span {
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.rd-progress-page .rd-progress-table tbody tr:nth-child(even) td {
+/* Calm row rhythm. */
+.rd-progress-page .rd-progress-table tbody tr:nth-child(even) td,
+.rd-progress-page .channel-progress-table--unified tbody tr:nth-child(even) td {
   background: #fcfdff;
 }
 
-.rd-progress-page .rd-progress-table tbody tr:hover td {
+.rd-progress-page .rd-progress-table tbody tr:hover td,
+.rd-progress-page .channel-progress-table--unified tbody tr:hover td {
   background: #f4f8ff;
 }
 
-/* Keep the action buttons readable and away from the scrollbar. */
+/* Sticky actions for narrow windows. */
 .rd-progress-page .rd-progress-table th:nth-child(7),
-.rd-progress-page .rd-progress-table td:nth-child(7) {
+.rd-progress-page .rd-progress-table td:nth-child(7),
+.rd-progress-page .channel-progress-table--unified th:nth-child(8),
+.rd-progress-page .channel-progress-table--unified td:nth-child(8) {
   position: sticky;
   right: 0;
-  padding-right: 10px;
-  box-shadow: -8px 0 12px -12px rgb(15 23 42 / 28%);
+  box-shadow: -7px 0 12px -12px rgb(15 23 42 / 28%);
 }
 
-.rd-progress-page .rd-progress-table th:nth-child(7) {
+.rd-progress-page .rd-progress-table th:nth-child(7),
+.rd-progress-page .channel-progress-table--unified th:nth-child(8) {
   z-index: 4;
   background: #f8fafc;
 }
 
-.rd-progress-page .rd-progress-table td:nth-child(7) {
+.rd-progress-page .rd-progress-table td:nth-child(7),
+.rd-progress-page .channel-progress-table--unified td:nth-child(8) {
   z-index: 2;
   background: #ffffff;
   white-space: nowrap;
 }
 
-.rd-progress-page .rd-progress-table tbody tr:nth-child(even) td:nth-child(7) {
+.rd-progress-page .rd-progress-table tbody tr:nth-child(even) td:nth-child(7),
+.rd-progress-page .channel-progress-table--unified tbody tr:nth-child(even) td:nth-child(8) {
   background: #fcfdff;
 }
 
-.rd-progress-page .rd-progress-table tbody tr:hover td:nth-child(7) {
+.rd-progress-page .rd-progress-table tbody tr:hover td:nth-child(7),
+.rd-progress-page .channel-progress-table--unified tbody tr:hover td:nth-child(8) {
   background: #f4f8ff;
 }
 
-.rd-progress-page .rd-progress-table td:nth-child(7) .rd-progress-edit {
+/* Consistent action buttons. */
+.rd-progress-page .rd-progress-table td:nth-child(7) .rd-progress-edit,
+.rd-progress-page .channel-progress-table--unified .channel-progress-row-actions button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -338,8 +396,17 @@
   margin-left: 5px;
 }
 
+.rd-progress-page .channel-progress-table--unified .channel-progress-row-actions {
+  justify-content: center;
+  gap: 5px;
+}
+
 @media (max-width: 1280px) {
   .rd-progress-page .rd-progress-table {
-    min-width: 1120px;
+    min-width: 1080px;
+  }
+
+  .rd-progress-page .channel-progress-table--unified {
+    min-width: 1140px;
   }
 }
