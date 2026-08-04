@@ -1,18 +1,19 @@
 /*
- * Invoice ledger header: keep search and common actions in one deliberate row.
- * This file only overrides the invoice workspace and leaves other admin pages unchanged.
+ * Refined invoice ledger workspace.
+ * Search and common actions stay in one deliberate row on desktop, while the
+ * overview cards and ledger use a denser, calmer visual hierarchy.
  */
 
 .invoice-rd-workspace.admin-workspace {
   display: grid;
-  grid-template-columns: minmax(520px, 1fr) max-content;
+  grid-template-columns: minmax(0, 1fr) max-content;
   grid-template-rows: auto auto minmax(0, 1fr);
   column-gap: 0;
-  row-gap: 12px;
+  row-gap: 10px;
   align-items: stretch;
 }
 
-/* Remove the two wrapper boxes so their actual contents can share one grid row. */
+/* Let the filter and action contents share one visual toolbar. */
 .invoice-rd-workspace > .admin-filter-bar,
 .invoice-rd-workspace > .admin-action-bar {
   display: contents;
@@ -27,23 +28,23 @@
   border-right: 0;
   border-radius: 10px 0 0 10px;
   background: #ffffff;
-  box-shadow: 0 3px 12px rgb(30 64 175 / 5%);
+  box-shadow: 0 2px 10px rgb(30 64 175 / 5%);
 }
 
 .invoice-rd-workspace > .admin-action-bar > .rec-toolbar {
   grid-column: 2;
   grid-row: 1;
   min-width: 0;
-  min-height: 54px;
-  padding: 8px 10px;
+  min-height: 50px;
+  padding: 6px 8px;
   overflow-x: auto;
   flex-wrap: nowrap;
   justify-content: flex-end;
   border: 1px solid #d8e3f1;
-  border-left: 1px solid #e6edf7;
+  border-left-color: #edf2f7;
   border-radius: 0 10px 10px 0;
-  background: linear-gradient(180deg, #f8fbff 0%, #f2f7ff 100%);
-  box-shadow: 0 3px 12px rgb(30 64 175 / 5%);
+  background: #ffffff;
+  box-shadow: 0 2px 10px rgb(30 64 175 / 5%);
   scrollbar-width: none;
 }
 
@@ -62,35 +63,38 @@
 }
 
 .invoice-rd-workspace .invoice-filter-panel__main {
-  min-height: 54px;
-  padding: 8px 10px;
-  gap: 8px;
+  min-height: 50px;
+  padding: 6px 8px;
+  gap: 7px;
   flex-wrap: nowrap;
   align-items: center;
 }
 
 .invoice-rd-workspace .invoice-filter-search-box {
-  height: 36px;
-  min-width: 220px;
-  max-width: none;
-  flex: 1 1 320px;
+  height: 34px;
+  min-width: 260px;
+  max-width: 560px;
+  flex: 1 1 420px;
   border-color: #d8e3f1;
-  background: #fbfdff;
+  border-radius: 8px;
+  background: #f8fbff;
 }
 
 .invoice-rd-workspace .invoice-filter-search-box:focus-within {
+  border-color: #7aa7ef;
   background: #ffffff;
+  box-shadow: 0 0 0 3px rgb(37 99 235 / 9%);
 }
 
 .invoice-rd-workspace .invoice-filter-panel__actions {
-  gap: 6px;
+  gap: 5px;
 }
 
 .invoice-rd-workspace .invoice-filter-panel__actions .rec-btn,
 .invoice-rd-workspace .rec-toolbar .rec-btn {
-  height: 34px;
-  min-height: 34px;
-  padding: 0 11px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0 10px;
   border-radius: 7px;
   justify-content: center;
   white-space: nowrap;
@@ -98,30 +102,34 @@
 }
 
 .invoice-rd-workspace .invoice-filter-panel__actions .rec-btn {
-  min-width: 58px;
+  min-width: 56px;
 }
 
 .invoice-rd-workspace .invoice-filter-panel__result {
-  max-width: 176px;
+  max-width: 154px;
   overflow: hidden;
   margin-left: 2px;
   padding: 4px 8px;
+  color: #607089;
+  background: #f1f5fb;
+  border: 1px solid #e1e9f4;
   text-overflow: ellipsis;
-  font-size: 11px;
+  font-size: 10.5px;
 }
 
 .invoice-rd-workspace .rec-toolbar__primary {
   flex-wrap: nowrap;
   justify-content: flex-end;
-  gap: 7px;
+  gap: 6px;
 }
 
 .invoice-rd-workspace .rec-toolbar__primary > .rec-btn--primary {
-  box-shadow: 0 4px 10px rgb(37 99 235 / 16%);
+  box-shadow: 0 3px 8px rgb(37 99 235 / 14%);
 }
 
-/* The original label is useful to assistive technology but visually too long. */
-.invoice-rd-workspace .rec-toolbar__primary > button:nth-of-type(3) {
+/* Keep the full accessible labels while shortening the visual copy. */
+.invoice-rd-workspace .rec-toolbar__primary > button:nth-of-type(3),
+.invoice-rd-workspace .rec-toolbar__primary > button:nth-of-type(4) {
   font-size: 0;
 }
 
@@ -130,9 +138,14 @@
   font-size: 12px;
 }
 
+.invoice-rd-workspace .rec-toolbar__primary > button:nth-of-type(4)::after {
+  content: '智能匹配';
+  font-size: 12px;
+}
+
 .invoice-rd-workspace .rec-toolbar__primary > button:nth-of-type(4) {
   border-color: #c7d8f4;
-  background: #ffffff;
+  background: #f8fbff;
   color: #2457a6;
 }
 
@@ -145,21 +158,269 @@
   opacity: 0.55;
 }
 
-@media (max-width: 1280px) {
-  .invoice-rd-workspace.admin-workspace {
-    grid-template-columns: minmax(420px, 1fr) max-content;
-  }
+/* Compact, intentionally weighted overview cards. */
+.invoice-rd-workspace .rec-stats-cards--compact {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
 
+.invoice-rd-workspace .rec-stat-card {
+  min-height: 72px;
+  padding: 10px 14px;
+  border-color: #dce5f1;
+  border-top-width: 2px;
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgb(15 23 42 / 4%);
+}
+
+.invoice-rd-workspace .rec-stat-card:nth-child(1) {
+  border-top-color: #60a5fa;
+}
+
+.invoice-rd-workspace .rec-stat-card:nth-child(2) {
+  border-top-color: #3b82f6;
+}
+
+.invoice-rd-workspace .rec-stat-card:nth-child(3) {
+  border-top-color: #22c55e;
+}
+
+.invoice-rd-workspace .rec-stat-card:nth-child(4) {
+  border-top-color: #f59e0b;
+}
+
+.invoice-rd-workspace .rec-stat-card__label {
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.invoice-rd-workspace .rec-stat-card__value {
+  margin-top: 4px;
+  color: #102a4c;
+  font-size: 19px;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+}
+
+.invoice-rd-workspace .invoice-stat-card__note {
+  margin-top: 3px;
+  color: #8a98ab;
+  font-size: 10.5px;
+}
+
+/* Refined ledger: less vertical waste, clearer grouping and a stable action rail. */
+.invoice-rd-workspace .invoice-rd__table-card {
+  overflow: hidden;
+  border-color: #dbe3ef;
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgb(15 23 42 / 4%);
+}
+
+.invoice-rd-workspace .invoice-table--workspace {
+  scrollbar-gutter: stable;
+}
+
+.invoice-rd-workspace .invoice-table--ledger {
+  min-width: 1180px;
+  gap: 0;
+}
+
+.invoice-rd-workspace .invoice-table--ledger .invoice-table-head,
+.invoice-rd-workspace .invoice-table--ledger .invoice-table-row {
+  grid-template-columns:
+    44px minmax(160px, 1.32fr) minmax(165px, 1.38fr) minmax(92px, 0.74fr)
+    minmax(92px, 0.74fr) minmax(106px, 0.84fr) 78px minmax(145px, 1.14fr)
+    minmax(92px, 0.74fr) 176px;
+  gap: 10px;
+  align-items: center;
+}
+
+.invoice-rd-workspace .invoice-table--ledger .invoice-table-head {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  min-height: 38px;
+  padding: 8px 10px;
+  color: #52627a;
+  border-bottom: 1px solid #dfe7f1;
+  background: #f7f9fc;
+  font-size: 11px;
+}
+
+.invoice-rd-workspace .invoice-table--ledger .invoice-table-row {
+  min-height: 64px;
+  padding: 9px 10px;
+  border-width: 0 0 1px;
+  border-color: #e7edf5;
+  border-radius: 0;
+  background: #ffffff;
+  box-shadow: none;
+  transition: background-color 120ms ease;
+}
+
+.invoice-rd-workspace .invoice-table--ledger .invoice-table-row:nth-child(even) {
+  background: #fcfdff;
+}
+
+.invoice-rd-workspace .invoice-table--ledger .invoice-table-row:hover {
+  background: #f5f8fd;
+}
+
+.invoice-rd-workspace .invoice-table--ledger .invoice-table-row:last-child {
+  border-bottom: 0;
+}
+
+.invoice-rd-workspace .invoice-ledger-cell {
+  gap: 2px;
+}
+
+.invoice-rd-workspace .invoice-ledger-cell strong {
+  color: #173250;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.invoice-rd-workspace .invoice-ledger-cell small {
+  color: #8a98aa;
+  font-size: 10px;
+}
+
+.invoice-rd-workspace .invoice-ledger-cell--invoice strong {
+  color: #1d5fd1;
+  font-variant-numeric: tabular-nums;
+}
+
+.invoice-rd-workspace .invoice-ledger-cell--amount,
+.invoice-rd-workspace .invoice-table__gross {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.invoice-rd-workspace .invoice-table__gross {
+  color: #173250;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.invoice-rd-workspace .invoice-partner-link {
+  width: max-content;
+  padding: 1px 6px;
+  font-size: 9.5px;
+}
+
+.invoice-rd-workspace .invoice-table--ledger .tag {
+  display: inline-flex;
+  min-width: 62px;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  justify-self: center;
+  padding: 0 9px;
+  border-radius: 999px;
+  font-size: 11px;
+}
+
+.invoice-rd-workspace .invoice-allocation-cell {
+  gap: 3px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  box-shadow: none;
+}
+
+.invoice-rd-workspace .invoice-allocation-cell strong {
+  font-size: 11px;
+}
+
+.invoice-rd-workspace .invoice-allocation-cell span {
+  font-size: 9.5px;
+}
+
+.invoice-rd-workspace .invoice-allocation-cell i {
+  height: 3px;
+}
+
+.invoice-rd-workspace .invoice-table__remark {
+  overflow: hidden;
+  color: #516174;
+  font-size: 10.5px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.invoice-rd-workspace .invoice-table-row__actions {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 4px;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.invoice-rd-workspace .invoice-table-row__actions .edit-btn,
+.invoice-rd-workspace .invoice-table-row__actions .delete-btn {
+  height: 28px;
+  min-height: 28px;
+  padding: 0 8px;
+  border-radius: 7px;
+  font-size: 11px;
+  line-height: 26px;
+  white-space: nowrap;
+}
+
+.invoice-rd-workspace .invoice-table-row__actions .invoice-link-btn {
+  border-color: #a9c8fb !important;
+  background: #f0f6ff !important;
+  color: #1c5ec8 !important;
+}
+
+/* Keep the action column visible when a narrow viewport requires horizontal scroll. */
+.invoice-rd-workspace .invoice-table--ledger .invoice-table-head > span:last-child,
+.invoice-rd-workspace .invoice-table--ledger .invoice-table-row > span:last-child {
+  position: sticky;
+  right: 0;
+  z-index: 3;
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  padding-left: 8px;
+  border-left: 1px solid #e7edf5;
+  background: inherit;
+  box-shadow: -10px 0 14px -14px rgb(15 23 42 / 32%);
+}
+
+.invoice-rd-workspace .invoice-table--ledger .invoice-table-head > span:last-child {
+  z-index: 6;
+  background: #f7f9fc;
+}
+
+.invoice-rd-workspace .channel-table__pagination {
+  min-height: 46px;
+  padding: 7px 10px;
+  border-top-color: #e2e8f0;
+  background: #fbfcfe;
+}
+
+.invoice-rd-workspace .channel-table__pagination-actions .rec-btn,
+.invoice-rd-workspace .channel-table__pagination-size .admin-input {
+  height: 32px;
+  min-height: 32px;
+}
+
+@media (max-width: 1280px) {
   .invoice-rd-workspace .invoice-filter-panel__result {
     display: none;
   }
 
   .invoice-rd-workspace .invoice-filter-search-box {
-    min-width: 180px;
+    min-width: 210px;
+    max-width: 480px;
   }
 }
 
-@media (max-width: 1080px) {
+@media (max-width: 1120px) {
   .invoice-rd-workspace.admin-workspace {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: auto auto auto minmax(0, 1fr);
@@ -194,6 +455,12 @@
   }
 }
 
+@media (max-width: 900px) {
+  .invoice-rd-workspace .rec-stats-cards--compact {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 720px) {
   .invoice-rd-workspace .invoice-filter-panel__main {
     flex-wrap: wrap;
@@ -202,9 +469,14 @@
   .invoice-rd-workspace .invoice-filter-search-box {
     flex-basis: 100%;
     width: 100%;
+    max-width: none;
   }
 
   .invoice-rd-workspace .invoice-filter-panel__actions {
     flex: 1 1 auto;
+  }
+
+  .invoice-rd-workspace .rec-stats-cards--compact {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
