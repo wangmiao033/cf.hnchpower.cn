@@ -55,7 +55,7 @@ function InvoiceManageWorkspace({ variant = 'manage', direction = 'output' }) {
     invoiceApiEnabled,
     handleDeleteInvoice,
     handleExportInvoiceCSV,
-    handleImportInvoiceJSON,
+    handleImportInvoiceFile,
     updateInvoiceRecord
   } = invoice
 
@@ -159,7 +159,7 @@ function InvoiceManageWorkspace({ variant = 'manage', direction = 'output' }) {
 
   const wrapImport = (e) => {
     const file = e.target.files?.[0]
-    handleImportInvoiceJSON(e)
+    void handleImportInvoiceFile(e)
     if (file?.name?.toLowerCase().endsWith('.pdf')) {
       setActiveViewRaw?.(VIEWS.INVOICE_CREATE)
     }
@@ -261,12 +261,12 @@ function InvoiceManageWorkspace({ variant = 'manage', direction = 'output' }) {
                   className="rec-btn rec-btn--secondary"
                   onClick={() => invoiceFileInputRef.current?.click()}
                 >
-                  导入 (JSON/PDF)
+                  导入税务 Excel / JSON / PDF
                 </button>
                 <input
                   ref={invoiceFileInputRef}
                   type="file"
-                  accept=".json,.pdf"
+                  accept=".xlsx,.xls,.json,.pdf"
                   className="channel-rd__file"
                   style={{ display: 'none' }}
                   onChange={wrapImport}

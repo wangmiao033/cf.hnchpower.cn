@@ -1,11 +1,14 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
+import * as XLSX from 'xlsx'
 import { STORAGE_KEYS, storageGet, storageSet } from '@/store/useAppStorage.js'
 import { parseInvoiceFromFilename } from '@/domain/invoice/invoiceParsers.js'
+import { parseTaxInvoiceWorkbook } from '@/domain/invoice/taxInvoiceExcelImport.js'
 import { filterInvoiceRecords } from '@/domain/invoice/invoiceFilters.js'
 import { buildInvoiceCsvContent } from '@/domain/export/exportAdapters.js'
 import {
   listInvoiceRecords,
   createInvoiceRecord,
+  importInvoiceRecords,
   updateInvoiceRecord as apiUpdateInvoiceRecord,
   deleteInvoiceRecord as apiDeleteInvoiceRecord,
   apiInvoiceRowToFrontend,
@@ -73,6 +76,100 @@ function normalizeLocalInvoiceRecords(saved) {
         ? parseFloat(String(r.verifiedAmount)) || 0
         : 0
   }))
+}
+
+function importedIdentityKey(record) {
+  const explicit = String(record.invoiceIdentityKey || record.invoice_identity_key || '').trim()
+  if (explicit) return explicit
+  const digital = String(record.digitalInvoiceNo || record.digital_invoice_no || '').trim()
+  if (digital) return `digital:${digital}`
+  const code = String(record.invoiceCode || record.invoice_code || '').trim()
+  const number = String(record.invoiceNo || record.invoice_no || '').trim()
+  return code && number ? `legacy:${code}:${number}` : ''
+}
+
+function normalizeJsonInvoiceRecords(data) {
+  return data.map((item, index) => ({
+    ...item,
+    invoiceDirection: inferInvoiceDirection(item),
+    invoiceType: item.invoiceType || item.invoice_type || '',
+    digitalInvoiceNo: item.digitalInvoiceNo || item.digital_invoice_no || '',
+    invoiceCode: item.invoiceCode || item.invoice_code || '',
+    invoiceNo: item.invoiceNo || item.invoice_no || '',
+    invoiceIdentityKey: importedIdentityKey(item),
+    buyerName: item.buyerName || item.buyer_name || item.title || '',
+    buyerTaxNo: item.buyerTaxNo || item.buyer_tax_no || item.taxNo || '',
+    sellerName: item.sellerName || item.seller_name || '',
+    sellerTaxNo: item.sellerTaxNo || item.seller_tax_no || '',
+    id: item.id != null ? String(item.id) : `import-${Date.now()}-${index}`,
+    amount: parseFloat(item.amount || item.invoice_amount || 0).toFixed(2),
+    taxAmount: parseFloat(item.taxAmount || item.tax_amount || 0).toFixed(2),
+    amountWithTax: parseFloat(
+      item.amountWithTax ||
+        item.amount_with_tax ||
+        parseFloat(item.amount || item.invoice_amount || 0) +
+          parseFloat(item.taxAmount || item.tax_amount || 0)
+    ).toFixed(2),
+    issuer: item.issuer != null ? String(item.issuer) : '',
+    invoiceSource: item.invoiceSource || item.invoice_source || '',
+    taxStatus: item.taxStatus || item.tax_status || 'normal',
+    status: item.status || '未开',
+    verified: Boolean(item.verified),
+    verifiedRecordIds: Array.isArray(item.verifiedRecordIds)
+      ? item.verifiedRecordIds.map(String)
+      : [],
+    verifiedAmount: parseFloat(item.verifiedAmount ?? item.verified_amount ?? 0) || 0
+  }))
+}
+
+function upsertLocalInvoiceRecords(current, incoming) {
+  const next = [...current]
+  const createdRecords = []
+  const byIdentity = new Map()
+  next.forEach((record, index) => {
+    const key = importedIdentityKey(record)
+    if (key) byIdentity.set(key, index)
+  })
+  let created = 0
+  let updated = 0
+  let skipped = 0
+
+  incoming.forEach((record, index) => {
+    const key = importedIdentityKey(record)
+    if (!key) {
+      skipped += 1
+      return
+    }
+    const existingIndex = byIdentity.get(key)
+    if (existingIndex == null) {
+      const createdRecord = { ...record, id: `import-${Date.now()}-${index}` }
+      createdRecords.push(createdRecord)
+      byIdentity.set(key, { createdIndex: createdRecords.length - 1 })
+      created += 1
+      return
+    }
+    if (typeof existingIndex === 'object') {
+      const existing = createdRecords[existingIndex.createdIndex]
+      createdRecords[existingIndex.createdIndex] = {
+        ...existing,
+        ...record,
+        id: existing.id
+      }
+      updated += 1
+      return
+    }
+    const existing = next[existingIndex]
+    next[existingIndex] = {
+      ...existing,
+      ...record,
+      id: existing.id,
+      verified: existing.verified,
+      verifiedAmount: existing.verifiedAmount,
+      verifiedRecordIds: existing.verifiedRecordIds
+    }
+    updated += 1
+  })
+  return { records: [...createdRecords.reverse(), ...next], created, updated, skipped }
 }
 
 export function useInvoiceStore({ showToast, enabled = true }) {
@@ -383,83 +480,73 @@ export function useInvoiceStore({ showToast, enabled = true }) {
     showToast('发票记录已导出 (CSV)', 'success')
   }
 
-  const handleImportInvoiceJSON = (e) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-
-    if (file.name.toLowerCase().endsWith('.pdf')) {
-      const parsedInfo = parseInvoiceFromFilename(file.name)
-      if (parsedInfo) {
-        setInvoiceForm({
-          ...invoiceForm,
-          ...parsedInfo
-        })
-        showToast('已从文件名解析发票信息，请确认并补充税号后保存', 'success')
-        e.target.value = ''
-        return
-      }
-      showToast('无法从文件名解析信息，请手动录入', 'info')
-      e.target.value = ''
+  const syncImportedInvoiceRecords = async (records, { label, sourceFile, skipped = 0 }) => {
+    if (invoiceApiEnabled) {
+      const result = await importInvoiceRecords(
+        records.map((row) => frontendInvoiceRecordToPayload(row)),
+        sourceFile
+      )
+      await refetchInvoiceFromApi()
+      showToast(
+        `${label}导入完成：新增 ${result.created}，更新 ${result.updated}，跳过 ${result.skipped + skipped}`,
+        'success'
+      )
       return
     }
 
-    const reader = new FileReader()
-    reader.onload = (ev) => {
-      void (async () => {
-        try {
-          const data = JSON.parse(ev.target.result)
-          if (!Array.isArray(data)) {
-            showToast('文件格式不正确', 'error')
-            return
-          }
-          const normalized = data.map((item) => ({
-            ...item,
-            invoiceDirection: inferInvoiceDirection(item),
-            invoiceType: item.invoiceType || item.invoice_type || '',
-            digitalInvoiceNo: item.digitalInvoiceNo || item.digital_invoice_no || '',
-            invoiceCode: item.invoiceCode || item.invoice_code || '',
-            invoiceNo: item.invoiceNo || item.invoice_no || '',
-            buyerName: item.buyerName || item.buyer_name || item.title || '',
-            buyerTaxNo: item.buyerTaxNo || item.buyer_tax_no || item.taxNo || '',
-            sellerName: item.sellerName || item.seller_name || '',
-            sellerTaxNo: item.sellerTaxNo || item.seller_tax_no || '',
-            id: item.id != null ? String(item.id) : String(Date.now() + Math.random()),
-            amount: parseFloat(item.amount || 0).toFixed(2),
-            taxAmount: parseFloat(item.taxAmount || 0).toFixed(2),
-            amountWithTax: parseFloat(item.amountWithTax || parseFloat(item.amount || 0) + parseFloat(item.taxAmount || 0)).toFixed(2),
-            issuer: item.issuer != null ? String(item.issuer) : '',
-            status: item.status || '未开',
-            verified: Boolean(item.verified),
-            verifiedRecordIds: Array.isArray(item.verifiedRecordIds)
-              ? item.verifiedRecordIds.map(String)
-              : [],
-            verifiedAmount: parseFloat(item.verifiedAmount ?? item.verified_amount ?? 0) || 0
-          }))
+    const result = upsertLocalInvoiceRecords(invoiceRecords, records)
+    setInvoiceRecords(result.records)
+    showToast(
+      `${label}已导入本地：新增 ${result.created}，更新 ${result.updated}，跳过 ${result.skipped + skipped}`,
+      'success'
+    )
+  }
 
-          if (invoiceApiEnabled) {
-            try {
-              for (const row of normalized) {
-                await createInvoiceRecord(frontendInvoiceRecordToPayload(row))
-              }
-              await refetchInvoiceFromApi()
-              showToast('发票记录已导入', 'success')
-            } catch (err) {
-              console.error(err)
-              showToast('导入同步服务器失败', 'error')
-            }
-            return
-          }
+  const handleImportInvoiceFile = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const lowerName = file.name.toLowerCase()
 
-          setInvoiceRecords(normalized)
-          showToast('发票记录已导入', 'success')
-        } catch (err) {
-          console.error(err)
-          showToast('导入失败，文件格式错误', 'error')
+    try {
+      if (lowerName.endsWith('.pdf')) {
+        const parsedInfo = parseInvoiceFromFilename(file.name)
+        if (parsedInfo) {
+          setInvoiceForm({ ...invoiceForm, ...parsedInfo })
+          showToast('已从文件名解析发票信息，请确认并补充税号后保存', 'success')
+          return
         }
-      })()
+        showToast('无法从文件名解析信息，请手动录入', 'info')
+        return
+      }
+
+      if (lowerName.endsWith('.xlsx') || lowerName.endsWith('.xls')) {
+        const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array' })
+        const parsed = parseTaxInvoiceWorkbook(workbook, file.name)
+        if (!parsed.detected) {
+          throw new Error('未识别到“抵扣勾选”或“全量发票查询”导出表')
+        }
+        if (parsed.records.length === 0) throw new Error('表格中没有可导入的发票记录')
+        await syncImportedInvoiceRecords(parsed.records, {
+          label: parsed.label,
+          sourceFile: file.name,
+          skipped: parsed.skipped
+        })
+        return
+      }
+
+      const data = JSON.parse(await file.text())
+      if (!Array.isArray(data)) throw new Error('JSON 根节点必须是数组')
+      const normalized = normalizeJsonInvoiceRecords(data)
+      await syncImportedInvoiceRecords(normalized, {
+        label: 'JSON 发票',
+        sourceFile: file.name
+      })
+    } catch (err) {
+      console.error(err)
+      showToast(`导入失败：${err instanceof Error ? err.message : '文件格式错误'}`, 'error')
+    } finally {
+      e.target.value = ''
     }
-    reader.readAsText(file)
-    e.target.value = ''
   }
 
   return {
@@ -487,7 +574,7 @@ export function useInvoiceStore({ showToast, enabled = true }) {
     handleCancelVerification,
     handleExportInvoiceJSON,
     handleExportInvoiceCSV,
-    handleImportInvoiceJSON,
+    handleImportInvoiceFile,
     parseInvoiceFromFilename,
     refetchInvoiceFromApi
   }
