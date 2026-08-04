@@ -98,7 +98,6 @@ function InvoiceManageWorkspace({ variant = 'manage', direction = 'output' }) {
   const [allocationRevision, setAllocationRevision] = useState(0)
   const [autoMatchBusy, setAutoMatchBusy] = useState(false)
   const [autoMatchPreview, setAutoMatchPreview] = useState(null)
-  const [filterDraft, setFilterDraft] = useState(() => ({ ...invoiceFilter, direction }))
   const [searchKeyword, setSearchKeyword] = useState(
     () => invoiceFilter.companyKeyword || invoiceFilter.numberKeyword || ''
   )
@@ -111,7 +110,6 @@ function InvoiceManageWorkspace({ variant = 'manage', direction = 'output' }) {
   }, [])
 
   useEffect(() => {
-    setFilterDraft((prev) => ({ ...prev, direction }))
     if (invoiceFilter.direction === direction) return
     setInvoiceFilter((prev) => ({ ...prev, direction }))
   }, [direction, invoiceFilter.direction, setInvoiceFilter])
@@ -219,14 +217,6 @@ function InvoiceManageWorkspace({ variant = 'manage', direction = 'output' }) {
     )
   }, [allocationOverviews, visibleInvoices])
 
-  const invoiceTypeOptions = useMemo(() => {
-    const set = new Set()
-    filteredInvoices.forEach((i) => {
-      if (i.invoiceType) set.add(String(i.invoiceType))
-    })
-    return Array.from(set)
-  }, [filteredInvoices])
-
   const totalPages = Math.max(1, Math.ceil(visibleInvoices.length / pageSize))
   useEffect(() => {
     setPage((p) => Math.min(p, totalPages))
@@ -252,8 +242,11 @@ function InvoiceManageWorkspace({ variant = 'manage', direction = 'output' }) {
     event.preventDefault()
     setAppliedSearch(searchKeyword.trim())
     setInvoiceFilter({
-      ...filterDraft,
       direction,
+      dateStart: '',
+      dateEnd: '',
+      status: '全部',
+      invoiceType: '',
       companyKeyword: '',
       numberKeyword: ''
     })
@@ -271,7 +264,6 @@ function InvoiceManageWorkspace({ variant = 'manage', direction = 'output' }) {
     }
     setSearchKeyword('')
     setAppliedSearch('')
-    setFilterDraft(nextFilter)
     setInvoiceFilter(nextFilter)
   }
 
@@ -319,12 +311,14 @@ function InvoiceManageWorkspace({ variant = 'manage', direction = 'output' }) {
       <AdminFilterBar>
         <form className="invoice-filter-panel" onSubmit={submitFilters}>
           <div className="invoice-filter-panel__main">
-            <label className="invoice-filter-field invoice-filter-field--smart">
-              <span className="invoice-filter-field__label">客户快速搜索</span>
+            <label className="invoice-filter-search-box">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="m21 21-4.35-4.35m2.35-5.15a7.5 7.5 0 1 1-15 0 7.5 7.5 0 0 1 15 0Z" />
+              </svg>
               <input
                 type="search"
-                className="admin-input invoice-filter-field__control"
-                placeholder="输入客户简称，例如：三七三三"
+                aria-label="客户简称搜索"
+                placeholder="输入客户简称搜索，例如：三七三三"
                 value={searchKeyword}
                 onChange={(e) => setSearchKeyword(e.target.value)}
               />
@@ -337,77 +331,13 @@ function InvoiceManageWorkspace({ variant = 'manage', direction = 'output' }) {
                 搜索
               </button>
               <button type="button" className="rec-btn rec-btn--secondary" onClick={resetFilters}>
-                重置
+                清空
               </button>
             </div>
             <span className="invoice-filter-panel__result">
               {visibleInvoices.length} 条 · 客户库识别 {visiblePartnerCount} 条
             </span>
           </div>
-
-          <details className="invoice-filter-more">
-            <summary>更多筛选</summary>
-            <div className="invoice-filter-panel__secondary">
-              <div className="invoice-filter-date-range">
-                <span className="invoice-filter-field__label">开票日期</span>
-                <label>
-                  <input
-                    type="date"
-                    aria-label="开票日期起"
-                    className="admin-input"
-                    value={filterDraft.dateStart || ''}
-                    onChange={(e) =>
-                      setFilterDraft((prev) => ({ ...prev, dateStart: e.target.value }))
-                    }
-                  />
-                </label>
-                <span className="invoice-filter-date-range__separator">至</span>
-                <label>
-                  <input
-                    type="date"
-                    aria-label="开票日期止"
-                    className="admin-input"
-                    value={filterDraft.dateEnd || ''}
-                    onChange={(e) =>
-                      setFilterDraft((prev) => ({ ...prev, dateEnd: e.target.value }))
-                    }
-                  />
-                </label>
-              </div>
-              <label className="invoice-filter-field invoice-filter-field--compact">
-                <span className="invoice-filter-field__label">票种</span>
-                <select
-                  className="admin-input invoice-filter-field__control"
-                  value={filterDraft.invoiceType || ''}
-                  onChange={(e) =>
-                    setFilterDraft((prev) => ({ ...prev, invoiceType: e.target.value }))
-                  }
-                >
-                  <option value="">全部票种</option>
-                  {invoiceTypeOptions.map((x) => (
-                    <option key={x} value={x}>
-                      {x}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="invoice-filter-field invoice-filter-field--compact">
-                <span className="invoice-filter-field__label">票面状态</span>
-                <select
-                  className="admin-input invoice-filter-field__control"
-                  value={filterDraft.status || '全部'}
-                  onChange={(e) =>
-                    setFilterDraft((prev) => ({ ...prev, status: e.target.value }))
-                  }
-                >
-                  <option value="全部">全部状态</option>
-                  <option value="未开">未开</option>
-                  <option value="已开">已开</option>
-                  <option value="作废">作废</option>
-                </select>
-              </label>
-            </div>
-          </details>
         </form>
       </AdminFilterBar>
 
