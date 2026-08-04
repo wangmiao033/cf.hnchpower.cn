@@ -64,6 +64,7 @@ function CoreChannelBillFormPage({ mode }) {
       ? { ...editRecord, id: String(channelEditRecordId) }
       : editRecord
   const isReconciled = RECONCILED_STATUSES.has(String(stableRecord?.status || '').toLowerCase())
+  const stateLabel = !isEdit ? '新建账单' : isReconciled ? '已核对' : '待核对'
 
   const goList = () => setActiveView(channelReturnView || VIEWS.RECON_CHANNEL)
 
@@ -91,27 +92,37 @@ function CoreChannelBillFormPage({ mode }) {
   }
 
   return (
-    <PageContainer hideHeader className="core-bill-form-page">
+    <PageContainer
+      hideHeader
+      className={`core-bill-form-page core-bill-form-page--channel ${isEdit ? 'is-edit' : 'is-create'}`}
+    >
       <section className="core-bill-form-head">
-        <div>
-          <p>渠道账单</p>
-          <h1>{isEdit ? '编辑渠道账单' : '新增渠道账单'}</h1>
-          <span>
+        <div className="core-bill-form-head__context">
+          <div className="core-bill-form-title-row">
+            <span className="core-bill-form-kind">渠道账单</span>
+            <h1>{isEdit ? '编辑渠道账单' : '新增渠道账单'}</h1>
+            <span
+              className={`core-bill-state-tag ${isEdit ? (isReconciled ? 'is-complete' : 'is-pending') : ''}`}
+            >
+              {stateLabel}
+            </span>
+          </div>
+          <span className="core-bill-form-tip">
             {isEdit
               ? isReconciled
-                ? '该账单已核对，可继续修改并保存。'
-                : '核对账单明细和附件后，点击“完成核对”。'
-              : '录入渠道账单明细并保存。'}
+                ? '该账单已核对，修改后保存即可同步。'
+                : '确认明细和附件后，可直接完成核对。'
+              : '先选择合作方和账期，再录入游戏明细。'}
           </span>
         </div>
-        <div className="core-bill-form-total">
-          <span>预估结算金额</span>
+        <div className="core-bill-form-total" aria-live="polite">
+          <span>预估结算</span>
           <strong>{money(previewAmount)}</strong>
         </div>
       </section>
 
       <section className="core-bill-card core-bill-card--embedded">
-      <ChannelBillingForm
+        <ChannelBillingForm
           formId={FORM_ID}
           mode={isEdit ? 'edit' : 'add'}
           recordId={stableRecord?.id}
@@ -144,52 +155,58 @@ function CoreChannelBillFormPage({ mode }) {
       />
 
       <section className="core-bill-footer">
-        <button type="button" onClick={goList}>返回列表</button>
-        {!isEdit ? (
-          <button
-            type="button"
-            onClick={() => {
-              submitIntentRef.current = 'continue'
-              document.getElementById(FORM_ID)?.requestSubmit()
-            }}
-          >
-            保存并继续
-          </button>
-        ) : null}
-        {isEdit && !isReconciled ? (
-          <>
+        <div className="core-bill-footer-summary">
+          <span>当前结算</span>
+          <strong>{money(previewAmount)}</strong>
+        </div>
+        <div className="core-bill-footer-actions">
+          <button type="button" onClick={goList}>返回列表</button>
+          {!isEdit ? (
             <button
               type="button"
+              onClick={() => {
+                submitIntentRef.current = 'continue'
+                document.getElementById(FORM_ID)?.requestSubmit()
+              }}
+            >
+              保存并继续
+            </button>
+          ) : null}
+          {isEdit && !isReconciled ? (
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  submitIntentRef.current = 'back'
+                  document.getElementById(FORM_ID)?.requestSubmit()
+                }}
+              >
+                仅保存
+              </button>
+              <button
+                type="button"
+                className="primary"
+                onClick={() => {
+                  submitIntentRef.current = 'confirm'
+                  document.getElementById(FORM_ID)?.requestSubmit()
+                }}
+              >
+                完成核对
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              className="primary"
               onClick={() => {
                 submitIntentRef.current = 'back'
                 document.getElementById(FORM_ID)?.requestSubmit()
               }}
             >
-              仅保存
+              {isEdit ? '保存修改' : '保存账单'}
             </button>
-            <button
-              type="button"
-              className="primary"
-              onClick={() => {
-                submitIntentRef.current = 'confirm'
-                document.getElementById(FORM_ID)?.requestSubmit()
-              }}
-            >
-              完成核对
-            </button>
-          </>
-        ) : (
-          <button
-            type="button"
-            className="primary"
-            onClick={() => {
-              submitIntentRef.current = 'back'
-              document.getElementById(FORM_ID)?.requestSubmit()
-            }}
-          >
-            {isEdit ? '保存修改' : '保存'}
-          </button>
-        )}
+          )}
+        </div>
       </section>
     </PageContainer>
   )
@@ -197,7 +214,7 @@ function CoreChannelBillFormPage({ mode }) {
 
 function EmptyState({ title, onBack }) {
   return (
-    <PageContainer hideHeader className="core-bill-form-page">
+    <PageContainer hideHeader className="core-bill-form-page core-bill-form-page--channel">
       <section className="core-bill-card core-bill-empty">
         <h1>{title}</h1>
         <button type="button" onClick={onBack}>返回列表</button>

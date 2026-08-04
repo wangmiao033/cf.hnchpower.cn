@@ -94,15 +94,23 @@ function CoreRdBillFormPage({ mode }) {
   }
 
   return (
-    <PageContainer hideHeader className="core-bill-form-page">
+    <PageContainer
+      hideHeader
+      className={`core-bill-form-page core-bill-form-page--rd ${isEdit ? 'is-edit' : 'is-create'}`}
+    >
       <section className="core-bill-form-head">
-        <div>
-          <p>研发账单</p>
-          <h1>{isEdit ? '编辑研发账单' : '新增研发账单'}</h1>
-          <span>保留你确认的明细录入表格，外层只做新版整理。</span>
+        <div className="core-bill-form-head__context">
+          <div className="core-bill-form-title-row">
+            <span className="core-bill-form-kind">研发账单</span>
+            <h1>{isEdit ? '编辑研发账单' : '新增研发账单'}</h1>
+            <span className="core-bill-state-tag">{isEdit ? '编辑模式' : '新建账单'}</span>
+          </div>
+          <span className="core-bill-form-tip">
+            {isEdit ? '修改基础信息或游戏明细后保存。' : '先确认合作方和账期，再录入游戏流水。'}
+          </span>
         </div>
-        <div className="core-bill-form-total">
-          <span>预估结算金额</span>
+        <div className="core-bill-form-total" aria-live="polite">
+          <span>预估结算</span>
           <strong>{money(previewAmount)}</strong>
         </div>
       </section>
@@ -145,28 +153,34 @@ function CoreRdBillFormPage({ mode }) {
       />
 
       <section className="core-bill-footer">
-        <button type="button" onClick={goList}>返回列表</button>
-        {!isEdit ? (
+        <div className="core-bill-footer-summary">
+          <span>当前结算</span>
+          <strong>{money(previewAmount)}</strong>
+        </div>
+        <div className="core-bill-footer-actions">
+          <button type="button" onClick={goList}>返回列表</button>
+          {!isEdit ? (
+            <button
+              type="button"
+              onClick={() => {
+                submitIntentRef.current = 'continue'
+                document.getElementById(FORM_ID)?.requestSubmit()
+              }}
+            >
+              保存并继续
+            </button>
+          ) : null}
           <button
             type="button"
+            className="primary"
             onClick={() => {
-              submitIntentRef.current = 'continue'
+              submitIntentRef.current = 'back'
               document.getElementById(FORM_ID)?.requestSubmit()
             }}
           >
-            保存并继续
+            {isEdit ? '保存修改' : '保存账单'}
           </button>
-        ) : null}
-        <button
-          type="button"
-          className="primary"
-          onClick={() => {
-            submitIntentRef.current = 'back'
-            document.getElementById(FORM_ID)?.requestSubmit()
-          }}
-        >
-          保存
-        </button>
+        </div>
       </section>
     </PageContainer>
   )
@@ -174,7 +188,7 @@ function CoreRdBillFormPage({ mode }) {
 
 function EmptyState({ title, onBack }) {
   return (
-    <PageContainer hideHeader className="core-bill-form-page">
+    <PageContainer hideHeader className="core-bill-form-page core-bill-form-page--rd">
       <section className="core-bill-card core-bill-empty">
         <h1>{title}</h1>
         <button type="button" onClick={onBack}>返回列表</button>
