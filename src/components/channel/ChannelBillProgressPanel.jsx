@@ -1,34 +1,13 @@
 import React from 'react'
 
 const T = {
-  allPeriods: '\u5168\u90e8\u8d26\u671f',
-  title: '\u6e20\u9053\u5bf9\u8d26\u8fdb\u5ea6',
-  scope: '\u8d26\u5355\u53e3\u5f84',
-  note: '\u4ec5\u7edf\u8ba1\u6e20\u9053\u8d26\u5355\uff0c\u4e0d\u8bfb\u53d6\u65e7\u6e20\u9053\u6d41\u6c34\u9884\u89c8',
-  reconciledBills: '\u8d26\u5355\u5df2\u6838\u5bf9',
-  channelBills: '\u6e20\u9053\u8d26\u5355',
-  billUnit: '\u7b14',
-  reconciled: '\u5df2\u6838\u5bf9',
-  receivable: '\u5df2\u767b\u8bb0\u5e94\u6536',
-  pending: '\u5f85\u5904\u7406',
-  amountRate: '\u91d1\u989d\u6838\u5bf9\u7387',
-  billRate: '\u8d26\u5355\u5b8c\u6210\u7387',
-  receiptRate: '\u6536\u6b3e\u8986\u76d6\u7387',
-  pendingBills: '\u8d26\u5355\u660e\u7ec6',
-  pendingNote: '\u5df2\u5b8c\u6210\u548c\u5f85\u5904\u7406\u8d26\u5355\u5747\u53ef\u67e5\u770b\u9644\u4ef6',
-  period: '\u8d26\u671f',
-  number: '\u7f16\u53f7',
-  channel: '\u6e20\u9053',
-  partner: '\u5408\u4f5c\u65b9',
-  product: '\u4ea7\u54c1',
-  settlement: '\u7ed3\u7b97\u91d1\u989d',
-  status: '\u72b6\u6001',
-  action: '\u64cd\u4f5c',
-  pendingReconcile: '\u5f85\u6838\u5bf9',
-  completed: '\u5df2\u6838\u5bf9',
-  start: '\u5f00\u59cb\u6838\u5bf9',
-  view: '\u67e5\u770b\u8d26\u5355',
-  empty: '\u5f53\u524d\u8d26\u671f\u6ca1\u6709\u6e20\u9053\u8d26\u5355',
+  allPeriods: '全部账期',
+  billUnit: '笔',
+  completed: '已核对',
+  pendingReconcile: '待核对',
+  start: '开始核对',
+  view: '查看账单',
+  empty: '当前账期没有渠道账单'
 }
 
 function numberValue(value) {
@@ -37,7 +16,10 @@ function numberValue(value) {
 }
 
 function money(value) {
-  return `\u00a5 ${numberValue(value).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  return `¥ ${numberValue(value).toLocaleString('zh-CN', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  })}`
 }
 
 function percent(value) {
@@ -47,80 +29,129 @@ function percent(value) {
 function monthLabel(value) {
   if (!value) return T.allPeriods
   const match = String(value).match(/^(\d{4})-(\d{2})$/)
-  return match ? `${match[1]}\u5e74${Number(match[2])}\u6708` : value
+  return match ? `${match[1]}年${Number(match[2])}月` : value
 }
 
-function ProgressMetric({ label, value, tone = '' }) {
+function ProgressBar({ value }) {
+  const width = Math.max(0, Math.min(100, numberValue(value)))
   return (
-    <div>
-      <div><span>{label}</span><strong>{percent(value)}</strong></div>
-      <div className={`channel-progress-bar ${tone}`.trim()}>
-        <span style={{ width: `${Math.max(0, Math.min(100, numberValue(value)))}%` }} />
-      </div>
+    <div
+      className="channel-progress-bar"
+      role="progressbar"
+      aria-valuemin="0"
+      aria-valuemax="100"
+      aria-valuenow={Math.round(width)}
+    >
+      <span style={{ width: `${width}%` }} />
     </div>
   )
 }
 
-export default function ChannelBillProgressPanel({ snapshot, onEditBill, onViewAttachments, onViewInvoices, invoiceSummaries = {} }) {
+export default function ChannelBillProgressPanel({
+  snapshot,
+  onEditBill,
+  onViewAttachments,
+  onViewInvoices,
+  invoiceSummaries = {}
+}) {
   const totals = snapshot?.totals || {}
   const rows = snapshot?.rows || snapshot?.unresolved || []
+  const period = monthLabel(snapshot?.month)
 
   return (
-    <section className="channel-progress-panel">
-      <div className="channel-progress-head">
-        <div>
-          <div className="channel-progress-heading-line">
-            <span className="channel-progress-period">{monthLabel(snapshot?.month)}</span>
-            <h2>{T.title}</h2>
-            <span className="channel-progress-local-state">{T.scope}</span>
-          </div>
-          <p>{T.note}</p>
+    <section className="channel-progress-panel rd-progress-panel channel-progress-panel--unified">
+      <div className="channel-progress-head rd-progress-panel-head">
+        <div className="channel-progress-heading-line">
+          <h2>对账概览</h2>
+          <span className="channel-progress-period">{period}</span>
+          <span className="channel-progress-local-state">渠道账单</span>
         </div>
       </div>
 
       <div className="channel-progress-body">
-        <div className="channel-progress-overview">
-          <div className="channel-progress-primary">
-            <span>{T.reconciledBills}</span>
-            <strong>{percent(totals.amountPercent)}</strong>
-            <div className="channel-progress-bar">
-              <span style={{ width: `${Math.max(0, Math.min(100, numberValue(totals.amountPercent)))}%` }} />
+        <div className="rd-month-summary channel-month-summary">
+          <div className="rd-month-progress">
+            <div className="rd-month-progress-label">
+              <span>账单核对</span>
+              <small>{totals.reconciledRows || 0} / {totals.rows || 0} {T.billUnit}</small>
             </div>
-            <p>{money(totals.reconciledAmount)} <span>/ {money(totals.settlementAmount)}</span></p>
+            <strong>{percent(totals.amountPercent)}</strong>
+            <ProgressBar value={totals.amountPercent} />
+            <p>
+              {money(totals.reconciledAmount)}
+              <span> / {money(totals.settlementAmount)}</span>
+            </p>
           </div>
-          <div className="channel-progress-stages">
-            <div><span>{T.channelBills}</span><strong>{totals.rows || 0} {T.billUnit}</strong><small>{money(totals.settlementAmount)}</small></div>
-            <div className="is-complete"><span>{T.reconciled}</span><strong>{totals.reconciledRows || 0} {T.billUnit}</strong><small>{money(totals.reconciledAmount)}</small></div>
-            <div className="is-receivable"><span>{T.receivable}</span><strong>{totals.receivableRows || 0} {T.billUnit}</strong><small>{money(totals.receivedAmount)}</small></div>
-            <div className="is-warning"><span>{T.pending}</span><strong>{totals.unresolvedRows || 0} {T.billUnit}</strong><small>{money(totals.unresolvedAmount)}</small></div>
+
+          <div className="rd-month-metrics">
+            <article className="is-total">
+              <span>对账金额</span>
+              <strong>{money(totals.settlementAmount)}</strong>
+            </article>
+            <article className="is-reconciled">
+              <span>已核对</span>
+              <strong>{money(totals.reconciledAmount)}</strong>
+            </article>
+            <article className="is-settled">
+              <span>已登记应收</span>
+              <strong>{money(totals.receivedAmount)}</strong>
+            </article>
+            <article className="is-pending">
+              <span>待处理</span>
+              <strong>{money(totals.unresolvedAmount)}</strong>
+            </article>
           </div>
         </div>
 
-        <div className="channel-progress-secondary">
-          <ProgressMetric label={T.amountRate} value={totals.amountPercent} tone="channel-progress-bar--green" />
-          <ProgressMetric label={T.billRate} value={totals.rowPercent} tone="channel-progress-bar--slate" />
-          <ProgressMetric label={T.receiptRate} value={totals.receiptPercent} tone="channel-progress-bar--violet" />
+        <div className="rd-month-status">
+          <div title="按结算金额计算">
+            <span>金额核对</span>
+            <strong>{percent(totals.amountPercent)}</strong>
+          </div>
+          <div title="按账单数量计算">
+            <span>账单完成</span>
+            <strong>{percent(totals.rowPercent)}</strong>
+          </div>
+          <div title="按收款登记金额计算">
+            <span>收款覆盖</span>
+            <strong>{percent(totals.receiptPercent)}</strong>
+          </div>
         </div>
 
         <div className="channel-progress-issues">
           <div className="channel-progress-issues-head">
-            <div><h3>{T.pendingBills}</h3><span>{T.pendingNote}</span></div>
-            <strong>{money(totals.unresolvedAmount)}</strong>
+            <div>
+              <h3>账单明细</h3>
+              <span>{rows.length} 笔</span>
+            </div>
+            <strong>待处理 {money(totals.unresolvedAmount)}</strong>
           </div>
+
           <div className="channel-progress-table-wrap">
-            <table className="channel-progress-table">
-              <thead><tr><th>{T.period}</th><th>{T.number}</th><th>{T.channel}</th><th>{T.partner}</th><th>{T.product}</th><th>{T.settlement}</th><th>{T.status}</th><th>{T.action}</th></tr></thead>
+            <table className="channel-progress-table channel-progress-table--unified">
+              <thead>
+                <tr>
+                  <th>账期</th>
+                  <th>编号</th>
+                  <th>渠道</th>
+                  <th>合作方</th>
+                  <th>产品</th>
+                  <th>结算金额</th>
+                  <th>状态</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
               <tbody>
                 {rows.map((row) => (
                   <tr key={row.id || row.billNumber}>
                     <td>{monthLabel(row.month)}</td>
                     <td title={row.billNumber}>{row.billNumber}</td>
                     <td title={row.channel}>{row.channel}</td>
-                    <td title={row.partner}>{row.partner}</td>
+                    <td title={row.partner}><strong>{row.partner}</strong></td>
                     <td title={row.product}>{row.product}</td>
-                    <td>{money(row.settlementAmount)}</td>
+                    <td className="is-number">{money(row.settlementAmount)}</td>
                     <td>
-                      <span className={row.reconciled ? 'channel-progress-complete' : 'channel-progress-status'}>
+                      <span className={row.reconciled ? 'channel-progress-complete' : 'channel-progress-pending'}>
                         {row.reconciled ? T.completed : T.pendingReconcile}
                       </span>
                     </td>
@@ -141,7 +172,11 @@ export default function ChannelBillProgressPanel({ snapshot, onEditBill, onViewA
                     </td>
                   </tr>
                 ))}
-                {!rows.length && <tr><td colSpan="8" className="channel-progress-empty">{T.empty}</td></tr>}
+                {!rows.length && (
+                  <tr>
+                    <td colSpan="8" className="channel-progress-empty">{T.empty}</td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
