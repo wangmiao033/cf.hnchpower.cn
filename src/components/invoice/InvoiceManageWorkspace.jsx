@@ -70,12 +70,14 @@ function InvoiceManageWorkspace({ variant = 'manage', direction = 'output' }) {
   const [allocationRevision, setAllocationRevision] = useState(0)
   const [autoMatchBusy, setAutoMatchBusy] = useState(false)
   const [autoMatchPreview, setAutoMatchPreview] = useState(null)
+  const [filterDraft, setFilterDraft] = useState(() => ({ ...invoiceFilter, direction }))
 
   useEffect(() => {
     consumeInvoiceFocus()
   }, [])
 
   useEffect(() => {
+    setFilterDraft((prev) => ({ ...prev, direction }))
     if (invoiceFilter.direction === direction) return
     setInvoiceFilter((prev) => ({ ...prev, direction }))
   }, [direction, invoiceFilter.direction, setInvoiceFilter])
@@ -174,6 +176,25 @@ function InvoiceManageWorkspace({ variant = 'manage', direction = 'output' }) {
     }
   }
 
+  const submitFilters = (event) => {
+    event.preventDefault()
+    setInvoiceFilter({ ...filterDraft, direction })
+  }
+
+  const resetFilters = () => {
+    const nextFilter = {
+      direction,
+      dateStart: '',
+      dateEnd: '',
+      status: '全部',
+      invoiceType: '',
+      companyKeyword: '',
+      numberKeyword: ''
+    }
+    setFilterDraft(nextFilter)
+    setInvoiceFilter(nextFilter)
+  }
+
   const runAutoMatch = async (dryRun) => {
     const invoiceIds = filteredInvoices.map((item) => getInvoiceRecordId(item)).filter(Boolean)
     if (!invoiceApiEnabled || invoiceIds.length === 0) {
@@ -216,74 +237,109 @@ function InvoiceManageWorkspace({ variant = 'manage', direction = 'output' }) {
   return (
     <AdminWorkspace className="invoice-rd-workspace">
       <AdminFilterBar>
-        <div className="channel-rd__filters">
-          <label className="channel-rd__field">
-            <span className="channel-rd__label">开票日期起</span>
-            <input
-              type="date"
-              className="admin-input channel-rd__month"
-              value={invoiceFilter.dateStart || ''}
-              onChange={(e) => setInvoiceFilter({ ...invoiceFilter, dateStart: e.target.value })}
-            />
-          </label>
-          <label className="channel-rd__field">
-            <span className="channel-rd__label">开票日期止</span>
-            <input
-              type="date"
-              className="admin-input channel-rd__month"
-              value={invoiceFilter.dateEnd || ''}
-              onChange={(e) => setInvoiceFilter({ ...invoiceFilter, dateEnd: e.target.value })}
-            />
-          </label>
-          <label className="channel-rd__field">
-            <span className="channel-rd__label">票种</span>
-            <select
-              className="admin-input channel-rd__select"
-              value={invoiceFilter.invoiceType || ''}
-              onChange={(e) => setInvoiceFilter({ ...invoiceFilter, invoiceType: e.target.value })}
-            >
-              <option value="">全部</option>
-              {invoiceTypeOptions.map((x) => (
-                <option key={x} value={x}>
-                  {x}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="channel-rd__field channel-rd__field--grow">
-            <span className="channel-rd__label">公司名/税号</span>
-            <input
-              type="search"
-              className="admin-input channel-rd__search"
-              placeholder={direction === 'output' ? '购买方名称/税号' : '销售方名称/税号'}
-              value={invoiceFilter.companyKeyword || ''}
-              onChange={(e) => setInvoiceFilter({ ...invoiceFilter, companyKeyword: e.target.value })}
-            />
-          </label>
-          <label className="channel-rd__field channel-rd__field--grow">
-            <span className="channel-rd__label">发票号码</span>
-            <input
-              type="search"
-              className="admin-input channel-rd__search"
-              placeholder="发票号码/数电发票号码"
-              value={invoiceFilter.numberKeyword || ''}
-              onChange={(e) => setInvoiceFilter({ ...invoiceFilter, numberKeyword: e.target.value })}
-            />
-          </label>
-          <label className="channel-rd__field">
-            <span className="channel-rd__label">状态</span>
-            <select
-              className="admin-input channel-rd__select"
-              value={invoiceFilter.status}
-              onChange={(e) => setInvoiceFilter({ ...invoiceFilter, status: e.target.value })}
-            >
-              <option value="全部">全部</option>
-              <option value="未开">未开</option>
-              <option value="已开">已开</option>
-              <option value="作废">作废</option>
-            </select>
-          </label>
-        </div>
+        <form className="invoice-filter-panel" onSubmit={submitFilters}>
+          <div className="invoice-filter-panel__main">
+            <label className="invoice-filter-field invoice-filter-field--keyword">
+              <span className="invoice-filter-field__label">
+                {direction === 'output' ? '购买方' : '销售方'}
+              </span>
+              <input
+                type="search"
+                className="admin-input invoice-filter-field__control"
+                placeholder={`输入${direction === 'output' ? '购买方' : '销售方'}名称或税号`}
+                value={filterDraft.companyKeyword || ''}
+                onChange={(e) =>
+                  setFilterDraft((prev) => ({ ...prev, companyKeyword: e.target.value }))
+                }
+              />
+            </label>
+            <label className="invoice-filter-field invoice-filter-field--keyword">
+              <span className="invoice-filter-field__label">发票号码</span>
+              <input
+                type="search"
+                className="admin-input invoice-filter-field__control"
+                placeholder="输入发票号码或数电发票号码"
+                value={filterDraft.numberKeyword || ''}
+                onChange={(e) =>
+                  setFilterDraft((prev) => ({ ...prev, numberKeyword: e.target.value }))
+                }
+              />
+            </label>
+            <div className="invoice-filter-panel__actions">
+              <button type="submit" className="rec-btn rec-btn--primary invoice-filter-search">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="m21 21-4.35-4.35m2.35-5.15a7.5 7.5 0 1 1-15 0 7.5 7.5 0 0 1 15 0Z" />
+                </svg>
+                搜索
+              </button>
+              <button type="button" className="rec-btn rec-btn--secondary" onClick={resetFilters}>
+                重置
+              </button>
+            </div>
+          </div>
+
+          <div className="invoice-filter-panel__secondary">
+            <div className="invoice-filter-date-range">
+              <span className="invoice-filter-field__label">开票日期</span>
+              <label>
+                <input
+                  type="date"
+                  aria-label="开票日期起"
+                  className="admin-input"
+                  value={filterDraft.dateStart || ''}
+                  onChange={(e) =>
+                    setFilterDraft((prev) => ({ ...prev, dateStart: e.target.value }))
+                  }
+                />
+              </label>
+              <span className="invoice-filter-date-range__separator">至</span>
+              <label>
+                <input
+                  type="date"
+                  aria-label="开票日期止"
+                  className="admin-input"
+                  value={filterDraft.dateEnd || ''}
+                  onChange={(e) =>
+                    setFilterDraft((prev) => ({ ...prev, dateEnd: e.target.value }))
+                  }
+                />
+              </label>
+            </div>
+            <label className="invoice-filter-field invoice-filter-field--compact">
+              <span className="invoice-filter-field__label">票种</span>
+              <select
+                className="admin-input invoice-filter-field__control"
+                value={filterDraft.invoiceType || ''}
+                onChange={(e) =>
+                  setFilterDraft((prev) => ({ ...prev, invoiceType: e.target.value }))
+                }
+              >
+                <option value="">全部票种</option>
+                {invoiceTypeOptions.map((x) => (
+                  <option key={x} value={x}>
+                    {x}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="invoice-filter-field invoice-filter-field--compact">
+              <span className="invoice-filter-field__label">票面状态</span>
+              <select
+                className="admin-input invoice-filter-field__control"
+                value={filterDraft.status || '全部'}
+                onChange={(e) =>
+                  setFilterDraft((prev) => ({ ...prev, status: e.target.value }))
+                }
+              >
+                <option value="全部">全部状态</option>
+                <option value="未开">未开</option>
+                <option value="已开">已开</option>
+                <option value="作废">作废</option>
+              </select>
+            </label>
+            <span className="invoice-filter-panel__result">当前结果 {filteredInvoices.length} 条</span>
+          </div>
+        </form>
       </AdminFilterBar>
 
       <AdminActionBar>
