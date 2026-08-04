@@ -52,14 +52,11 @@ function RdReconciliationProgressPanel({
 
   return (
     <section className="channel-progress-panel rd-progress-panel">
-      <div className="channel-progress-head">
-        <div>
-          <div className="channel-progress-heading-line">
-            <span className="channel-progress-period">{period}</span>
-            <h2>{period}对账概览</h2>
-            <span className="channel-progress-local-state rd-progress-live-state">实时数据</span>
-          </div>
-          <p>金额和百分比固定按所选月份统计，搜索仅筛选下方待处理明细</p>
+      <div className="channel-progress-head rd-progress-panel-head">
+        <div className="channel-progress-heading-line">
+          <h2>对账概览</h2>
+          <span className="channel-progress-period">{period}</span>
+          <span className="channel-progress-local-state rd-progress-live-state">实时</span>
         </div>
         {typeof onToggle === 'function' && (
           <div className="channel-progress-actions">
@@ -74,64 +71,59 @@ function RdReconciliationProgressPanel({
         <div className="channel-progress-body">
           <div className="rd-month-summary">
             <div className="rd-month-progress">
-              <span>{period}对账进度</span>
+              <div className="rd-month-progress-label">
+                <span>对账进度</span>
+                <small>{totals.reconciledRows} / {totals.rows} 笔</small>
+              </div>
               <strong>{percent(totals.reconciliationAmountPercent)}</strong>
               <ProgressBar value={totals.reconciliationAmountPercent} />
               <p>
                 {money(totals.reconciledAmount)}
                 <span> / {money(totals.settlementAmount)}</span>
               </p>
-              <small>{totals.reconciledRows} / {totals.rows} 笔账单已核对</small>
             </div>
             <div className="rd-month-metrics">
               <article className="is-total">
-                <span>{period}对账金额</span>
+                <span>对账金额</span>
                 <strong>{money(totals.settlementAmount)}</strong>
-                <small>{totals.rows} 笔账单</small>
               </article>
               <article className="is-reconciled">
-                <span>已核对金额</span>
+                <span>已核对</span>
                 <strong>{money(totals.reconciledAmount)}</strong>
-                <small>{totals.reconciledRows} 笔已核对</small>
               </article>
               <article className="is-pending">
-                <span>待核对金额</span>
+                <span>待核对</span>
                 <strong>{money(totals.unresolvedAmount)}</strong>
-                <small>{totals.unresolvedRows} 笔待处理</small>
               </article>
               <article className="is-settled">
-                <span>已结算金额</span>
+                <span>已结算</span>
                 <strong>{money(totals.settledAmount)}</strong>
-                <small>{totals.settledRows} 笔已结算</small>
               </article>
             </div>
           </div>
 
           <div className="rd-month-status">
-            <div>
+            <div title={`${money(totals.flowAmount)} 流水金额`}>
               <span>流水覆盖</span>
-              <strong>{totals.flowRows} / {totals.rows} 笔</strong>
-              <small>{money(totals.flowAmount)}</small>
+              <strong>{totals.flowRows} / {totals.rows}</strong>
             </div>
-            <div>
-              <span>账单完成率</span>
+            <div title="按账单数量计算">
+              <span>账单完成</span>
               <strong>{percent(totals.reconciliationRowPercent)}</strong>
-              <small>按账单数量计算</small>
             </div>
-            <div>
-              <span>付款覆盖率</span>
+            <div title={`${money(totals.paidAmount)} 已登记`}>
+              <span>付款覆盖</span>
               <strong>{percent(totals.paymentAmountPercent)}</strong>
-              <small>{money(totals.paidAmount)} 已登记</small>
             </div>
           </div>
 
           <div className="channel-progress-issues">
             <div className="channel-progress-issues-head">
               <div>
-                <h3>{period}账单明细</h3>
-                <span>{rows.length} 笔显示 · 已完成和待处理账单均可查看附件</span>
+                <h3>账单明细</h3>
+                <span>{rows.length} 笔</span>
               </div>
-              <strong>{money(visibleUnresolvedAmount)}</strong>
+              <strong>待核对 {money(visibleUnresolvedAmount)}</strong>
             </div>
             <div className="channel-progress-table-wrap">
               <table className="channel-progress-table rd-progress-table">
