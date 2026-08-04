@@ -1,8 +1,194 @@
 /*
- * Dense, grouped layout for the R&D reconciliation progress table.
- * The rules are scoped to the progress page so channel tables remain unchanged.
+ * Compact overview and dense table layout for the R&D reconciliation page.
+ * All rules are page-scoped so the standalone channel ledger remains unchanged.
  */
 
+/* Remove the duplicated hero block: the page shell already shows the title. */
+.rd-progress-page .rd-progress-workbar .core-recon-head {
+  display: none;
+}
+
+.rd-progress-page .rd-progress-workbar {
+  overflow: hidden;
+}
+
+.rd-progress-page .rd-progress-workbar .rd-progress-filters {
+  min-height: 48px;
+  padding: 6px 10px;
+  border-top: 0;
+  background: #ffffff;
+}
+
+.rd-progress-page .rd-progress-filters .rd-progress-mode-switch {
+  height: 34px;
+  padding: 3px;
+}
+
+.rd-progress-page .rd-progress-filters .rd-progress-mode-switch button {
+  height: 26px;
+  padding: 0 12px;
+}
+
+.rd-progress-page .rd-progress-filters .core-recon-filter-control {
+  min-width: 150px;
+  height: 34px;
+}
+
+.rd-progress-page .rd-progress-filters .core-recon-filter-control > span {
+  padding-left: 10px;
+  font-size: 0;
+}
+
+.rd-progress-page .rd-progress-filters .core-recon-filter-control > span::after {
+  content: '月份';
+  font-size: 12px;
+}
+
+.rd-progress-page .rd-progress-filters .core-recon-filter-search {
+  display: flex;
+  height: 34px;
+  min-width: 220px;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid var(--admin-border);
+  border-radius: 7px;
+  background: #ffffff;
+}
+
+.rd-progress-page .rd-progress-filters .core-recon-filter-search > span {
+  display: none;
+}
+
+.rd-progress-page .rd-progress-filters .core-recon-filter-search input {
+  width: 100%;
+  height: 32px;
+  padding: 0 10px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+}
+
+.rd-progress-page .rd-progress-filters .core-recon-reset {
+  height: 34px;
+  font-size: 0;
+}
+
+.rd-progress-page .rd-progress-filters .core-recon-reset::after {
+  content: '最新月';
+  font-size: 12px;
+}
+
+/* Compact the overview header and remove repeated explanatory copy. */
+.rd-progress-page .rd-progress-panel-head {
+  min-height: 44px;
+  padding: 0 14px;
+}
+
+.rd-progress-page .rd-progress-panel-head .channel-progress-heading-line {
+  gap: 8px;
+}
+
+.rd-progress-page .rd-progress-panel-head .channel-progress-heading-line h2 {
+  font-size: 15px;
+}
+
+.rd-progress-page .rd-progress-panel-head .channel-progress-period,
+.rd-progress-page .rd-progress-panel-head .channel-progress-local-state {
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 5px;
+  font-size: 11px;
+}
+
+.rd-progress-page .rd-month-summary {
+  min-height: 98px;
+  grid-template-columns: minmax(250px, 0.84fr) minmax(640px, 2.16fr);
+}
+
+.rd-progress-page .rd-month-progress {
+  padding: 10px 16px;
+}
+
+.rd-progress-page .rd-month-progress-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.rd-progress-page .rd-month-progress-label span {
+  color: var(--admin-text-sub);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.rd-progress-page .rd-month-progress-label small {
+  color: var(--admin-text-tertiary);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.rd-progress-page .rd-month-progress > strong {
+  margin: 2px 0 6px;
+  font-size: 28px;
+}
+
+.rd-progress-page .rd-month-progress .channel-progress-bar {
+  height: 6px;
+}
+
+.rd-progress-page .rd-month-progress p {
+  margin: 6px 0 0;
+  font-size: 12px;
+}
+
+.rd-progress-page .rd-month-metrics article {
+  justify-content: center;
+  padding: 10px 15px;
+}
+
+.rd-progress-page .rd-month-metrics article::before {
+  right: 15px;
+  left: 15px;
+}
+
+.rd-progress-page .rd-month-metrics strong {
+  margin-top: 5px;
+  font-size: 16px;
+}
+
+.rd-progress-page .rd-month-status {
+  min-height: 42px;
+}
+
+.rd-progress-page .rd-month-status > div {
+  display: flex;
+  min-height: 42px;
+  grid-template-columns: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 16px;
+}
+
+.rd-progress-page .rd-month-status strong {
+  font-size: 14px;
+}
+
+.rd-progress-page .channel-progress-issues-head {
+  min-height: 42px;
+  padding: 0 14px;
+}
+
+.rd-progress-page .channel-progress-issues-head > div {
+  gap: 7px;
+}
+
+.rd-progress-page .channel-progress-issues-head > strong {
+  font-size: 13px;
+}
+
+/* Dense, intentionally distributed table columns. */
 .rd-progress-page .channel-progress-table-wrap {
   scrollbar-gutter: stable;
 }
@@ -15,10 +201,6 @@
   background: #ffffff;
 }
 
-/*
- * Limit the content width on wide screens so spare space sits at both sides of
- * the ledger instead of being stretched into several irregular empty columns.
- */
 .rd-progress-page .rd-progress-table th:nth-child(1) {
   width: 8.2%;
 }
@@ -114,7 +296,7 @@
   background: #f4f8ff;
 }
 
-/* Keep the three action buttons readable and away from the scrollbar. */
+/* Keep the action buttons readable and away from the scrollbar. */
 .rd-progress-page .rd-progress-table th:nth-child(7),
 .rd-progress-page .rd-progress-table td:nth-child(7) {
   position: sticky;
