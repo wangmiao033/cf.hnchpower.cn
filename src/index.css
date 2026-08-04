@@ -2,6 +2,7 @@
 @import './styles/admin-tokens.css';
 @import './styles/admin-layout.css';
 @import './styles/theme.css';
+@import './pages/ChannelLedgerPolish.css';
 
 * {
   margin: 0;
