@@ -33,6 +33,7 @@ function PartnerPage() {
   const [editingId, setEditingId] = useState(null)
   const [form, setForm] = useState(EMPTY_PARTNER)
   const [saving, setSaving] = useState(false)
+  const [isFormOpen, setIsFormOpen] = useState(false)
 
   const filteredPartners = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -68,9 +69,30 @@ function PartnerPage() {
       })
   }, [partners, query, category])
 
+  const summary = useMemo(() => {
+    const items = partners || []
+    return {
+      total: items.length,
+      filtered: filteredPartners.length,
+      invoiceReady: items.filter(
+        (partner) => partner.taxRegistrationNo && (partner.bankAccount || partner.bankName)
+      ).length,
+      recipientReady: items.filter(
+        (partner) => partner.recipient || partner.recipientPhone || partner.mailingAddress
+      ).length
+    }
+  }, [filteredPartners.length, partners])
+
   const resetForm = () => {
     setEditingId(null)
     setForm(EMPTY_PARTNER)
+    setIsFormOpen(false)
+  }
+
+  const openCreateForm = () => {
+    setEditingId(null)
+    setForm(EMPTY_PARTNER)
+    setIsFormOpen(true)
   }
 
   const savePartner = async () => {
@@ -105,6 +127,7 @@ function PartnerPage() {
   const editPartner = (partner) => {
     setEditingId(partner.id)
     setForm({ ...EMPTY_PARTNER, ...partner })
+    setIsFormOpen(true)
   }
 
   const deletePartner = async (partner) => {
@@ -115,19 +138,11 @@ function PartnerPage() {
   }
 
   return (
-    <PageContainer hideHeader className="customer-library-page">
+    <PageContainer
+      hideHeader
+      className={`customer-library-page ${isFormOpen ? 'has-open-form' : ''}`}
+    >
       <section className="customer-head">
-        <div>
-          <p>基础资料</p>
-          <h1>客户库</h1>
-          <span>
-            {partnerLoading
-              ? '正在从服务器读取客户资料…'
-              : partnerApiEnabled
-                ? '客户资料已由服务器统一保存，可跨设备复用。'
-                : '服务器暂不可用，当前显示本机缓存。'}
-          </span>
-        </div>
         <div className="customer-filters">
           <select value={category} onChange={(event) => setCategory(event.target.value)}>
             <option value="全部">全部类型</option>
@@ -142,44 +157,90 @@ function PartnerPage() {
             placeholder="搜索名称、简称、税号、联系人"
           />
         </div>
-      </section>
-
-      <section className="customer-form-panel">
-        <div className="customer-form-head">
-          <h2>{editingId ? '编辑客户' : '新增客户'}</h2>
-          {editingId ? <button type="button" onClick={resetForm}>取消编辑</button> : null}
-        </div>
-        <div className="customer-form-grid">
-          <Field label="客户名称" required value={form.name} onChange={(name) => setForm({ ...form, name })} />
-          <Field label="客户简称" value={form.shortName} onChange={(shortName) => setForm({ ...form, shortName })} />
-          <label>
-            <span>客户类型</span>
-            <select value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })}>
-              {CATEGORIES.map((item) => (
-                <option key={item} value={item}>{item}</option>
-              ))}
-            </select>
-          </label>
-          <Field label="标签/备注" value={form.tag2} onChange={(tag2) => setForm({ ...form, tag2 })} />
-          <Field label="税务登记号" value={form.taxRegistrationNo} onChange={(taxRegistrationNo) => setForm({ ...form, taxRegistrationNo })} />
-          <Field label="开户行" value={form.bankName} onChange={(bankName) => setForm({ ...form, bankName })} />
-          <Field label="银行账号" value={form.bankAccount} onChange={(bankAccount) => setForm({ ...form, bankAccount })} />
-          <Field label="开票内容" value={form.invoiceContent} onChange={(invoiceContent) => setForm({ ...form, invoiceContent })} />
-          <Field label="收件人" value={form.recipient} onChange={(recipient) => setForm({ ...form, recipient })} />
-          <Field label="收件电话" value={form.recipientPhone} onChange={(recipientPhone) => setForm({ ...form, recipientPhone })} />
-          <Field label="邮寄地址" value={form.mailingAddress} onChange={(mailingAddress) => setForm({ ...form, mailingAddress })} wide />
-        </div>
-        <div className="customer-form-actions">
+        <div className="customer-head-actions">
+          <span className={`customer-sync-state ${partnerApiEnabled ? '' : 'is-local'}`}>
+            {partnerLoading
+              ? '正在读取客户资料'
+              : partnerApiEnabled
+                ? '服务器资料已同步'
+                : '当前使用本机缓存'}
+          </span>
           <button
             type="button"
-            className="customer-primary-btn"
-            onClick={savePartner}
-            disabled={saving || partnerLoading}
+            className="customer-add-btn"
+            onClick={() => {
+              if (isFormOpen && !editingId) resetForm()
+              else openCreateForm()
+            }}
           >
-            {saving ? '正在保存…' : editingId ? '保存修改' : '新增客户'}
+            {isFormOpen && !editingId ? '收起表单' : '新增客户'}
           </button>
         </div>
       </section>
+
+      <section className="customer-summary" aria-label="客户资料概览">
+        <div>
+          <span>客户总数</span>
+          <strong>{summary.total}</strong>
+          <small>服务器客户库</small>
+        </div>
+        <div>
+          <span>当前结果</span>
+          <strong>{summary.filtered}</strong>
+          <small>{category === '全部' ? '全部类型' : category}</small>
+        </div>
+        <div>
+          <span>开票资料完整</span>
+          <strong>{summary.invoiceReady}</strong>
+          <small>已录入税号及银行资料</small>
+        </div>
+        <div>
+          <span>收件信息完整</span>
+          <strong>{summary.recipientReady}</strong>
+          <small>已录入联系人或地址</small>
+        </div>
+      </section>
+
+      {isFormOpen ? (
+        <section className="customer-form-panel">
+          <div className="customer-form-head">
+            <h2>{editingId ? '编辑客户' : '新增客户'}</h2>
+            <button type="button" onClick={resetForm}>
+              {editingId ? '取消编辑' : '关闭'}
+            </button>
+          </div>
+          <div className="customer-form-grid">
+            <Field label="客户名称" required value={form.name} onChange={(name) => setForm({ ...form, name })} />
+            <Field label="客户简称" value={form.shortName} onChange={(shortName) => setForm({ ...form, shortName })} />
+            <label>
+              <span>客户类型</span>
+              <select value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })}>
+                {CATEGORIES.map((item) => (
+                  <option key={item} value={item}>{item}</option>
+                ))}
+              </select>
+            </label>
+            <Field label="标签/备注" value={form.tag2} onChange={(tag2) => setForm({ ...form, tag2 })} />
+            <Field label="税务登记号" value={form.taxRegistrationNo} onChange={(taxRegistrationNo) => setForm({ ...form, taxRegistrationNo })} />
+            <Field label="开户行" value={form.bankName} onChange={(bankName) => setForm({ ...form, bankName })} />
+            <Field label="银行账号" value={form.bankAccount} onChange={(bankAccount) => setForm({ ...form, bankAccount })} />
+            <Field label="开票内容" value={form.invoiceContent} onChange={(invoiceContent) => setForm({ ...form, invoiceContent })} />
+            <Field label="收件人" value={form.recipient} onChange={(recipient) => setForm({ ...form, recipient })} />
+            <Field label="收件电话" value={form.recipientPhone} onChange={(recipientPhone) => setForm({ ...form, recipientPhone })} />
+            <Field label="邮寄地址" value={form.mailingAddress} onChange={(mailingAddress) => setForm({ ...form, mailingAddress })} wide />
+          </div>
+          <div className="customer-form-actions">
+            <button
+              type="button"
+              className="customer-primary-btn"
+              onClick={savePartner}
+              disabled={saving || partnerLoading}
+            >
+              {saving ? '正在保存…' : editingId ? '保存修改' : '新增客户'}
+            </button>
+          </div>
+        </section>
+      ) : null}
 
       <section className="customer-list-panel">
         <div className="customer-list-head">
@@ -193,7 +254,7 @@ function PartnerPage() {
                 <th>客户简称</th>
                 <th>客户名称</th>
                 <th>类型</th>
-                <th>编辑/删除</th>
+                <th>操作</th>
               </tr>
             </thead>
             <tbody>
@@ -206,7 +267,7 @@ function PartnerPage() {
                   <tr key={partner.id || partner.name}>
                     <td><strong>{partner.shortName || '-'}</strong></td>
                     <td>{partner.name}</td>
-                    <td>{partner.category || '-'}</td>
+                    <td><span className="customer-category-tag">{partner.category || '-'}</span></td>
                     <td>
                       <button type="button" onClick={() => editPartner(partner)}>编辑</button>
                       <button type="button" className="danger" onClick={() => deletePartner(partner)}>删除</button>
