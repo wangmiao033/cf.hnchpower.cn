@@ -1,0 +1,420 @@
+/*
+ * R&D ledger visual refinement.
+ * Scoped with :has(.core-rd-recon-table) so form pages, progress pages and the
+ * channel ledger keep their own layouts.
+ */
+
+.core-recon-page:has(.core-rd-recon-table) .page-container-body {
+  gap: 10px;
+}
+
+/* One compact workbar: filters on the left, common actions on the right. */
+.core-recon-page:has(.core-rd-recon-table) .core-recon-workbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  grid-template-rows: auto;
+  min-height: 50px;
+  align-items: center;
+  overflow: visible;
+  border-color: #dbe3ef;
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 2px 10px rgb(30 64 175 / 5%);
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-recon-workbar > .core-recon-head {
+  display: contents;
+}
+
+/* The application shell already shows the current page title. */
+.core-recon-page:has(.core-rd-recon-table) .core-recon-workbar .core-recon-title {
+  display: none;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-recon-workbar .core-recon-actions {
+  grid-column: 2;
+  grid-row: 1;
+  align-self: stretch;
+  flex-wrap: nowrap;
+  gap: 6px;
+  padding: 7px 8px;
+  border-left: 1px solid #edf2f7;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-recon-workbar .core-recon-actions button {
+  height: 32px;
+  min-height: 32px;
+  padding: 0 11px;
+  border-radius: 7px;
+  font-size: 12px;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-recon-workbar .core-recon-actions .primary {
+  box-shadow: 0 3px 8px rgb(37 99 235 / 15%);
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-recon-workbar .core-recon-filters {
+  grid-column: 1;
+  grid-row: 1;
+  min-height: 50px;
+  flex-wrap: nowrap;
+  gap: 6px;
+  padding: 7px 8px;
+  overflow: hidden;
+  border-top: 0;
+  background: #ffffff;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-recon-filter-control {
+  height: 34px;
+  min-width: 0;
+  border-color: #d8e3f1;
+  border-radius: 8px;
+  background: #f8fbff;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-recon-filter-control:focus-within {
+  border-color: #7aa7ef;
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgb(37 99 235 / 8%);
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-recon-filter-control > span {
+  padding-left: 10px;
+  color: #6b7a90;
+  font-size: 11px;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-recon-filters input,
+.core-recon-page:has(.core-rd-recon-table) .core-recon-filters select {
+  height: 32px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-recon-filters > .core-recon-filter-control:nth-child(1) {
+  flex: 0 0 148px;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-recon-partner-filter {
+  flex: 0 1 280px;
+  min-width: 225px;
+  max-width: 310px;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-recon-filters > .core-recon-filter-control:nth-child(3) {
+  flex: 0 0 150px;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-recon-filter-search {
+  flex: 1 1 260px;
+  min-width: 210px;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-recon-filters .core-recon-partner-submit {
+  height: 26px;
+  padding: 0 9px;
+  font-size: 11px;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-recon-filters .core-recon-reset {
+  height: 34px;
+  min-width: 54px;
+  padding: 0 10px;
+  border-color: #d8e3f1;
+  border-radius: 8px;
+  color: #607089;
+  font-size: 12px;
+}
+
+/* Convert four separate cards into one connected summary strip. */
+.core-recon-page:has(.core-rd-recon-table) .core-recon-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid #dbe3ef;
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgb(15 23 42 / 4%);
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-recon-stats > div {
+  position: relative;
+  min-height: 66px;
+  justify-content: center;
+  padding: 9px 14px;
+  border: 0;
+  border-right: 1px solid #e7edf5;
+  border-radius: 0;
+  background: #ffffff;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-recon-stats > div:last-child {
+  border-right: 0;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-recon-stats > div::before {
+  position: absolute;
+  top: 0;
+  right: 14px;
+  left: 14px;
+  height: 2px;
+  border-radius: 0 0 2px 2px;
+  background: #60a5fa;
+  content: '';
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-recon-stats > div:nth-child(2)::before {
+  background: #8b5cf6;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-recon-stats > div:nth-child(3)::before {
+  background: #f59e0b;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-recon-stats > div:nth-child(4)::before {
+  background: #22c55e;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-recon-stats span {
+  color: #6b7a90;
+  font-size: 11px;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-recon-stats strong {
+  margin-top: 4px;
+  color: #102a4c;
+  font-size: 19px;
+  letter-spacing: -0.01em;
+}
+
+/* Refined ledger card. */
+.core-recon-page:has(.core-rd-recon-table) .core-recon-panel {
+  overflow: hidden;
+  border-color: #dbe3ef;
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgb(15 23 42 / 4%);
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-recon-panel-head {
+  min-height: 44px;
+  padding: 0 12px;
+  border-bottom: 1px solid #e3eaf3;
+  background: #ffffff;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-recon-panel-head h2 {
+  font-size: 15px;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-recon-panel-head > span {
+  padding: 3px 8px;
+  border: 1px solid #e1e9f4;
+  border-radius: 999px;
+  background: #f5f8fc;
+  color: #64748b;
+  font-size: 11px;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-recon-table-wrap {
+  max-height: calc(100vh - 350px);
+  overflow: auto;
+  scrollbar-gutter: auto;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-rd-recon-table {
+  width: 100%;
+  min-width: 1130px;
+  table-layout: fixed;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-rd-col-month {
+  width: 110px;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-rd-col-number {
+  width: 128px;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-rd-col-partner {
+  width: 120px;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-rd-col-game {
+  width: 235px;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-rd-col-flow {
+  width: 108px;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-rd-col-share {
+  width: 82px;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-rd-col-settlement {
+  width: 106px;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-rd-col-received {
+  width: 96px;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-rd-col-status {
+  width: 76px;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-rd-col-actions {
+  width: 98px;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-recon-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  height: 38px;
+  padding: 0 9px;
+  color: #52627a;
+  border-bottom: 1px solid #dfe7f1;
+  background: #f7f9fc;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-recon-table tbody td {
+  height: 52px;
+  padding: 7px 9px;
+  border-bottom-color: #e7edf5;
+  color: #263b56;
+  font-size: 12px;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-recon-table tbody tr:nth-child(even) td {
+  background: #fcfdff;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-recon-table tbody tr:hover td {
+  background: #f5f8fd;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-recon-table tbody tr.is-selected td {
+  background: #eef5ff;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-recon-table td:nth-child(1),
+.core-recon-page:has(.core-rd-recon-table) .core-recon-table td:nth-child(2),
+.core-recon-page:has(.core-rd-recon-table) .core-recon-table td:nth-child(3),
+.core-recon-page:has(.core-rd-recon-table) .core-recon-table td:nth-child(4) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-rd-month-cell {
+  gap: 7px;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-recon-partner-short-name {
+  color: #173250;
+  font-size: 12px;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-recon-game-text {
+  color: #44556c;
+  font-size: 12px;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-recon-status {
+  min-width: 56px;
+  height: 26px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 11px;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-recon-row-actions {
+  display: flex;
+  flex-wrap: nowrap;
+  justify-content: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-recon-row-actions button {
+  height: 28px;
+  min-height: 28px;
+  padding: 0 8px;
+  border-radius: 7px;
+  font-size: 11px;
+}
+
+/* Keep the action rail reachable if a narrow window needs horizontal scroll. */
+.core-recon-page:has(.core-rd-recon-table) .core-recon-table th:last-child,
+.core-recon-page:has(.core-rd-recon-table) .core-recon-table td:last-child {
+  position: sticky;
+  right: 0;
+  z-index: 3;
+  border-left: 1px solid #e7edf5;
+  background: #ffffff;
+  box-shadow: -10px 0 14px -14px rgb(15 23 42 / 30%);
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-recon-table th:last-child {
+  z-index: 5;
+  background: #f7f9fc;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-recon-table tbody tr:nth-child(even) td:last-child {
+  background: #fcfdff;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-recon-table tbody tr:hover td:last-child {
+  background: #f5f8fd;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-recon-table tbody tr.is-selected td:last-child {
+  background: #eef5ff;
+}
+
+@media (max-width: 1180px) {
+  .core-recon-page:has(.core-rd-recon-table) .core-recon-workbar {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto;
+  }
+
+  .core-recon-page:has(.core-rd-recon-table) .core-recon-workbar .core-recon-filters {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .core-recon-page:has(.core-rd-recon-table) .core-recon-workbar .core-recon-actions {
+    grid-column: 1;
+    grid-row: 2;
+    justify-content: flex-start;
+    border-top: 1px solid #edf2f7;
+    border-left: 0;
+  }
+}
+
+@media (max-width: 900px) {
+  .core-recon-page:has(.core-rd-recon-table) .core-recon-workbar .core-recon-filters {
+    flex-wrap: wrap;
+  }
+
+  .core-recon-page:has(.core-rd-recon-table) .core-recon-filter-search {
+    flex-basis: 100%;
+  }
+
+  .core-recon-page:has(.core-rd-recon-table) .core-recon-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .core-recon-page:has(.core-rd-recon-table) .core-recon-stats > div:nth-child(2) {
+    border-right: 0;
+  }
+
+  .core-recon-page:has(.core-rd-recon-table) .core-recon-stats > div:nth-child(-n + 2) {
+    border-bottom: 1px solid #e7edf5;
+  }
+}
