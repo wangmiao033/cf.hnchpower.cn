@@ -1,0 +1,210 @@
+/*
+ * Invoice ledger header: keep search and common actions in one deliberate row.
+ * This file only overrides the invoice workspace and leaves other admin pages unchanged.
+ */
+
+.invoice-rd-workspace.admin-workspace {
+  display: grid;
+  grid-template-columns: minmax(520px, 1fr) max-content;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  column-gap: 0;
+  row-gap: 12px;
+  align-items: stretch;
+}
+
+/* Remove the two wrapper boxes so their actual contents can share one grid row. */
+.invoice-rd-workspace > .admin-filter-bar,
+.invoice-rd-workspace > .admin-action-bar {
+  display: contents;
+}
+
+.invoice-rd-workspace > .admin-filter-bar > .invoice-filter-panel {
+  grid-column: 1;
+  grid-row: 1;
+  min-width: 0;
+  overflow: visible;
+  border: 1px solid #d8e3f1;
+  border-right: 0;
+  border-radius: 10px 0 0 10px;
+  background: #ffffff;
+  box-shadow: 0 3px 12px rgb(30 64 175 / 5%);
+}
+
+.invoice-rd-workspace > .admin-action-bar > .rec-toolbar {
+  grid-column: 2;
+  grid-row: 1;
+  min-width: 0;
+  min-height: 54px;
+  padding: 8px 10px;
+  overflow-x: auto;
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+  border: 1px solid #d8e3f1;
+  border-left: 1px solid #e6edf7;
+  border-radius: 0 10px 10px 0;
+  background: linear-gradient(180deg, #f8fbff 0%, #f2f7ff 100%);
+  box-shadow: 0 3px 12px rgb(30 64 175 / 5%);
+  scrollbar-width: none;
+}
+
+.invoice-rd-workspace > .admin-action-bar > .rec-toolbar::-webkit-scrollbar {
+  display: none;
+}
+
+.invoice-rd-workspace > .admin-stats-row {
+  grid-column: 1 / -1;
+  grid-row: 2;
+}
+
+.invoice-rd-workspace > .admin-table-card {
+  grid-column: 1 / -1;
+  grid-row: 3;
+}
+
+.invoice-rd-workspace .invoice-filter-panel__main {
+  min-height: 54px;
+  padding: 8px 10px;
+  gap: 8px;
+  flex-wrap: nowrap;
+  align-items: center;
+}
+
+.invoice-rd-workspace .invoice-filter-search-box {
+  height: 36px;
+  min-width: 220px;
+  max-width: none;
+  flex: 1 1 320px;
+  border-color: #d8e3f1;
+  background: #fbfdff;
+}
+
+.invoice-rd-workspace .invoice-filter-search-box:focus-within {
+  background: #ffffff;
+}
+
+.invoice-rd-workspace .invoice-filter-panel__actions {
+  gap: 6px;
+}
+
+.invoice-rd-workspace .invoice-filter-panel__actions .rec-btn,
+.invoice-rd-workspace .rec-toolbar .rec-btn {
+  height: 34px;
+  min-height: 34px;
+  padding: 0 11px;
+  border-radius: 7px;
+  justify-content: center;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.invoice-rd-workspace .invoice-filter-panel__actions .rec-btn {
+  min-width: 58px;
+}
+
+.invoice-rd-workspace .invoice-filter-panel__result {
+  max-width: 176px;
+  overflow: hidden;
+  margin-left: 2px;
+  padding: 4px 8px;
+  text-overflow: ellipsis;
+  font-size: 11px;
+}
+
+.invoice-rd-workspace .rec-toolbar__primary {
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.invoice-rd-workspace .rec-toolbar__primary > .rec-btn--primary {
+  box-shadow: 0 4px 10px rgb(37 99 235 / 16%);
+}
+
+/* The original label is useful to assistive technology but visually too long. */
+.invoice-rd-workspace .rec-toolbar__primary > button:nth-of-type(3) {
+  font-size: 0;
+}
+
+.invoice-rd-workspace .rec-toolbar__primary > button:nth-of-type(3)::after {
+  content: '导入发票';
+  font-size: 12px;
+}
+
+.invoice-rd-workspace .rec-toolbar__primary > button:nth-of-type(4) {
+  border-color: #c7d8f4;
+  background: #ffffff;
+  color: #2457a6;
+}
+
+.invoice-rd-workspace .rec-toolbar__primary > button:nth-of-type(4):not(:disabled):hover {
+  border-color: #82aef2;
+  background: #edf5ff;
+}
+
+.invoice-rd-workspace .rec-toolbar__primary > button:disabled {
+  opacity: 0.55;
+}
+
+@media (max-width: 1280px) {
+  .invoice-rd-workspace.admin-workspace {
+    grid-template-columns: minmax(420px, 1fr) max-content;
+  }
+
+  .invoice-rd-workspace .invoice-filter-panel__result {
+    display: none;
+  }
+
+  .invoice-rd-workspace .invoice-filter-search-box {
+    min-width: 180px;
+  }
+}
+
+@media (max-width: 1080px) {
+  .invoice-rd-workspace.admin-workspace {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto auto minmax(0, 1fr);
+    row-gap: 8px;
+  }
+
+  .invoice-rd-workspace > .admin-filter-bar > .invoice-filter-panel {
+    grid-column: 1;
+    grid-row: 1;
+    border-right: 1px solid #d8e3f1;
+    border-radius: 10px;
+  }
+
+  .invoice-rd-workspace > .admin-action-bar > .rec-toolbar {
+    grid-column: 1;
+    grid-row: 2;
+    justify-content: flex-start;
+    border-left: 1px solid #d8e3f1;
+    border-radius: 10px;
+  }
+
+  .invoice-rd-workspace > .admin-stats-row {
+    grid-row: 3;
+  }
+
+  .invoice-rd-workspace > .admin-table-card {
+    grid-row: 4;
+  }
+
+  .invoice-rd-workspace .rec-toolbar__primary {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 720px) {
+  .invoice-rd-workspace .invoice-filter-panel__main {
+    flex-wrap: wrap;
+  }
+
+  .invoice-rd-workspace .invoice-filter-search-box {
+    flex-basis: 100%;
+    width: 100%;
+  }
+
+  .invoice-rd-workspace .invoice-filter-panel__actions {
+    flex: 1 1 auto;
+  }
+}
