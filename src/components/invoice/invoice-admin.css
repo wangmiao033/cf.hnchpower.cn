@@ -555,6 +555,29 @@
   font-size: 13px;
 }
 
+.invoice-match-score {
+  display: inline-flex;
+  align-items: center;
+  min-height: 21px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.invoice-match-score.is-high {
+  background: #dcfce7;
+  color: #087a43;
+}
+
+.invoice-match-score.is-medium {
+  background: #fff7ed;
+  color: #c2410c;
+}
+
 .invoice-bill-card__main p,
 .invoice-bill-card__main small {
   color: #78889d;

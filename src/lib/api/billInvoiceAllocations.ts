@@ -90,6 +90,27 @@ export type InvoiceBillSummary = InvoiceAllocationOverview & {
   candidates: InvoiceBillCandidate[]
 }
 
+export type InvoiceAutoMatchItem = {
+  invoice_id: string
+  invoice_number: string
+  bill_type: 'rd' | 'channel'
+  bill_id: string
+  bill_number: string
+  allocated_gross_amount: number
+  match_score: number
+  match_reasons: string[]
+}
+
+export type InvoiceAutoMatchResponse = {
+  dry_run: boolean
+  matched: number
+  matched_amount: number
+  ambiguous: number
+  unmatched: number
+  skipped: number
+  items: InvoiceAutoMatchItem[]
+}
+
 const PATH = '/api/bill-invoice-allocations'
 
 export function getBillInvoiceSummary(
@@ -126,4 +147,14 @@ export function createBillInvoiceAllocation(payload: {
 
 export function reverseBillInvoiceAllocation(id: string): Promise<void> {
   return apiDelete(`${PATH}/${encodeURIComponent(id)}`)
+}
+
+export function autoMatchInvoices(payload: {
+  invoice_direction?: 'input' | 'output'
+  invoice_ids?: string[]
+  threshold?: number
+  unique_margin?: number
+  dry_run: boolean
+}): Promise<InvoiceAutoMatchResponse> {
+  return apiPost(`${PATH}/auto-match`, payload)
 }

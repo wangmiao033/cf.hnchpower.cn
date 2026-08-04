@@ -8,7 +8,10 @@ import AdminTableCard from '@/components/admin/AdminTableCard.jsx'
 import InvoiceLightDrawer from '@/components/invoice/InvoiceLightDrawer.jsx'
 import '@/components/reconciliation/reconciliation-admin.css'
 import { getInvoiceRecordId } from '@/lib/api/invoice.ts'
-import { listInvoiceAllocationOverviews } from '@/lib/api/billInvoiceAllocations.ts'
+import {
+  autoMatchInvoices,
+  listInvoiceAllocationOverviews
+} from '@/lib/api/billInvoiceAllocations.ts'
 import { VIEWS } from '@/app/routes.js'
 import { consumeInvoiceFocus } from '@/lib/exceptions/navFocus.ts'
 
@@ -65,6 +68,8 @@ function InvoiceManageWorkspace({ variant = 'manage', direction = 'output' }) {
   const [allocationOverviews, setAllocationOverviews] = useState({})
   const [allocationLoading, setAllocationLoading] = useState(false)
   const [allocationRevision, setAllocationRevision] = useState(0)
+  const [autoMatchBusy, setAutoMatchBusy] = useState(false)
+  const [autoMatchPreview, setAutoMatchPreview] = useState(null)
 
   useEffect(() => {
     consumeInvoiceFocus()
@@ -106,6 +111,10 @@ function InvoiceManageWorkspace({ variant = 'manage', direction = 'output' }) {
       cancelled = true
     }
   }, [allocationRevision, invoiceApiEnabled, invoiceIdsKey])
+
+  useEffect(() => {
+    setAutoMatchPreview(null)
+  }, [direction, invoiceIdsKey])
 
   const stats = useMemo(() => {
     return filteredInvoices.reduce(
@@ -162,6 +171,45 @@ function InvoiceManageWorkspace({ variant = 'manage', direction = 'output' }) {
     void handleImportInvoiceFile(e)
     if (file?.name?.toLowerCase().endsWith('.pdf')) {
       setActiveViewRaw?.(VIEWS.INVOICE_CREATE)
+    }
+  }
+
+  const runAutoMatch = async (dryRun) => {
+    const invoiceIds = filteredInvoices.map((item) => getInvoiceRecordId(item)).filter(Boolean)
+    if (!invoiceApiEnabled || invoiceIds.length === 0) {
+      showToast('当前筛选范围没有可智能关联的线上发票', 'info')
+      return
+    }
+    setAutoMatchBusy(true)
+    try {
+      const result = await autoMatchInvoices({
+        invoice_direction: direction,
+        invoice_ids: invoiceIds,
+        threshold: 0.8,
+        unique_margin: 0.1,
+        dry_run: dryRun
+      })
+      if (dryRun) {
+        setAutoMatchPreview(result)
+        showToast(
+          result.matched > 0
+            ? `扫描完成：可自动关联 ${result.matched} 张，需人工确认 ${result.ambiguous + result.unmatched} 张`
+            : '扫描完成：暂无达到自动关联标准的唯一匹配',
+          result.matched > 0 ? 'success' : 'info'
+        )
+      } else {
+        setAutoMatchPreview(null)
+        setAllocationRevision((value) => value + 1)
+        showToast(
+          `智能关联完成：已关联 ${result.matched} 张，金额 ¥${Number(result.matched_amount || 0).toFixed(2)}`,
+          'success'
+        )
+      }
+    } catch (error) {
+      console.error(error)
+      showToast('智能关联失败，请刷新后重试', 'error')
+    } finally {
+      setAutoMatchBusy(false)
     }
   }
 
@@ -271,6 +319,25 @@ function InvoiceManageWorkspace({ variant = 'manage', direction = 'output' }) {
                   style={{ display: 'none' }}
                   onChange={wrapImport}
                 />
+                <button
+                  type="button"
+                  className="rec-btn rec-btn--secondary"
+                  disabled={autoMatchBusy || !invoiceApiEnabled || filteredInvoices.length === 0}
+                  onClick={() => void runAutoMatch(true)}
+                >
+                  {autoMatchBusy ? '智能匹配中…' : '扫描智能匹配'}
+                </button>
+                {autoMatchPreview?.matched > 0 ? (
+                  <button
+                    type="button"
+                    className="rec-btn rec-btn--primary"
+                    disabled={autoMatchBusy}
+                    onClick={() => void runAutoMatch(false)}
+                    title={`高置信度 ${autoMatchPreview.matched} 张，模糊 ${autoMatchPreview.ambiguous} 张`}
+                  >
+                    确认关联 {autoMatchPreview.matched} 张
+                  </button>
+                ) : null}
               </>
             ) : (
               <span className="rec-toolbar__batch-label">发票台账查询</span>

@@ -113,3 +113,32 @@ class InvoiceAllocationOverview(BaseModel):
 class InvoiceBillSummary(InvoiceAllocationOverview):
     allocations: list[InvoiceBillAllocationRead]
     candidates: list[InvoiceBillCandidate]
+
+
+class InvoiceAutoMatchRequest(BaseModel):
+    invoice_direction: str | None = None
+    invoice_ids: list[str] = Field(default_factory=list, max_length=500)
+    threshold: float = Field(default=0.8, ge=0.5, le=1)
+    unique_margin: float = Field(default=0.1, ge=0, le=0.5)
+    dry_run: bool = True
+
+
+class InvoiceAutoMatchItem(BaseModel):
+    invoice_id: str
+    invoice_number: str
+    bill_type: str
+    bill_id: str
+    bill_number: str
+    allocated_gross_amount: float
+    match_score: float
+    match_reasons: list[str]
+
+
+class InvoiceAutoMatchResponse(BaseModel):
+    dry_run: bool
+    matched: int
+    matched_amount: float
+    ambiguous: int
+    unmatched: int
+    skipped: int
+    items: list[InvoiceAutoMatchItem]

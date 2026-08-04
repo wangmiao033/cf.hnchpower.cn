@@ -24,6 +24,9 @@ from app.schemas.bill_invoice_allocation import (
     BillInvoiceCandidate,
     BillInvoiceSummary,
     InvoiceAllocationOverview,
+    InvoiceAutoMatchItem,
+    InvoiceAutoMatchRequest,
+    InvoiceAutoMatchResponse,
     InvoiceBillAllocationRead,
     InvoiceBillCandidate,
     InvoiceBillSummary,
@@ -31,7 +34,10 @@ from app.schemas.bill_invoice_allocation import (
 
 router = APIRouter()
 ACTIVE_STATUSES = ("suggested", "confirmed")
-ALLOCATABLE_BILL_STATUSES = ("confirmed", "completed", "settled", "reconciled", "verified")
+BLOCKED_BILL_STATUSES = {
+    "deleted", "cancelled", "canceled", "void", "archived",
+    "作废", "已删除", "已取消", "已归档",
+}
 
 
 def _bill(db: Session, bill_type: str, bill_id: str):
@@ -126,7 +132,7 @@ def _invoice_allocation_read(row: BillInvoiceAllocation, bill) -> InvoiceBillAll
 
 
 def _overview(invoice: InvoiceRecord, allocated: float, allocation_count: int) -> InvoiceAllocationOverview:
-    invoice_amount = round(abs(_invoice_gross(invoice)), 2)
+    invoice_amount = round(abs(_invoice_gross(invoice)), 2) if _is_invoice_allocatable(invoice) else 0
     allocated_amount = round(float(allocated or 0), 2)
     remaining = round(max(0, invoice_amount - allocated_amount), 2)
     coverage_percent = allocated_amount / invoice_amount * 100 if invoice_amount > 0 else 0
@@ -168,6 +174,71 @@ def _month_key(value: str | None) -> str:
     if not match:
         return ""
     return f"{match.group(1)}-{int(match.group(2)):02d}"
+
+
+def _month_index(value: str | None) -> int | None:
+    key = _month_key(value)
+    if not key:
+        return None
+    year, month = key.split("-", 1)
+    return int(year) * 12 + int(month)
+
+
+def _normalized_company_name(value: str | None) -> str:
+    normalized = re.sub(r"[\s\W_]+", "", str(value or "").lower())
+    for suffix in ("有限责任公司", "股份有限公司", "有限公司"):
+        if normalized.endswith(suffix):
+            normalized = normalized[: -len(suffix)]
+            break
+    return normalized
+
+
+def _is_bill_allocatable(bill) -> bool:
+    status_value = str(getattr(bill, "status", None) or "pending").strip().lower()
+    return status_value not in BLOCKED_BILL_STATUSES and abs(
+        float(getattr(bill, "settlement_amount", 0) or 0)
+    ) > 0.01
+
+
+def _score_invoice_bill(
+    invoice: InvoiceRecord, bill, bill_available: float, invoice_remaining: float
+) -> tuple[float, list[str], float]:
+    counterparty = _invoice_brief(invoice).counterparty_name
+    bill_partner = str(
+        getattr(bill, "partner_name", None)
+        or getattr(bill, "channel_name", None)
+        or ""
+    ).strip()
+    invoice_name = _normalized_company_name(counterparty)
+    bill_name = _normalized_company_name(bill_partner)
+    score = 0.0
+    reasons: list[str] = []
+    if invoice_name and bill_name and invoice_name == bill_name:
+        score += 0.45
+        reasons.append("往来单位精确匹配")
+    elif invoice_name and bill_name and (invoice_name in bill_name or bill_name in invoice_name):
+        score += 0.35
+        reasons.append("往来单位相似")
+
+    amount_diff = abs(bill_available - invoice_remaining)
+    if amount_diff <= 0.02:
+        score += 0.35
+        reasons.append("金额一致（±0.02元）")
+    elif invoice_remaining > 0 and amount_diff <= max(1.0, invoice_remaining * 0.005):
+        score += 0.25
+        reasons.append("金额接近")
+
+    bill_month_index = _month_index(getattr(bill, "settlement_month", None))
+    invoice_month_index = _month_index(invoice.invoice_date)
+    if bill_month_index is not None and invoice_month_index is not None:
+        month_gap = invoice_month_index - bill_month_index
+        if month_gap == 0:
+            score += 0.2
+            reasons.append("账期一致")
+        elif month_gap == 1:
+            score += 0.15
+            reasons.append("次月开票")
+    return round(min(1.0, score), 4), reasons, round(amount_diff, 4)
 
 
 def _is_invoice_allocatable(invoice: InvoiceRecord) -> bool:
@@ -368,10 +439,10 @@ def get_invoice_bill_summary(
     bill_model = ReconciliationRecord if expected_bill_type == "rd" else ChannelRecord
     candidate_bills = db.execute(
         select(bill_model)
-        .where(bill_model.status.in_(ALLOCATABLE_BILL_STATUSES))
         .order_by(bill_model.updated_at.desc())
         .limit(300)
     ).scalars().all()
+    candidate_bills = [bill for bill in candidate_bills if _is_bill_allocatable(bill)]
     candidate_bill_ids = [str(bill.id) for bill in candidate_bills]
     bill_used = {
         str(bill_id): float(total or 0)
@@ -387,7 +458,6 @@ def get_invoice_bill_summary(
         ).all()
     } if candidate_bill_ids else {}
 
-    counterparty = _invoice_brief(invoice).counterparty_name
     linked_bill_ids = {row.bill_id for row in allocation_rows if row.bill_type == expected_bill_type}
     candidates: list[InvoiceBillCandidate] = []
     for bill in candidate_bills:
@@ -398,27 +468,9 @@ def get_invoice_bill_summary(
         bill_available = round(max(0, brief.gross_amount - bill_used.get(bill_id, 0)), 2)
         if bill_available <= 0.01 or overview.remaining_amount <= 0.01:
             continue
-        score = 0.0
-        reasons: list[str] = []
-        bill_partner = brief.partner_name.strip()
-        if bill_partner and counterparty and (
-            bill_partner in counterparty or counterparty in bill_partner
-        ):
-            score += 0.4
-            reasons.append("往来单位匹配")
-        if abs(bill_available - overview.remaining_amount) <= 0.01:
-            score += 0.4
-            reasons.append("剩余金额一致")
-        elif overview.remaining_amount > 0 and (
-            abs(bill_available - overview.remaining_amount) / overview.remaining_amount <= 0.05
-        ):
-            score += 0.25
-            reasons.append("金额接近")
-        if _month_key(brief.settlement_month) and (
-            _month_key(brief.settlement_month) == _month_key(invoice.invoice_date)
-        ):
-            score += 0.2
-            reasons.append("账期接近")
+        score, reasons, _ = _score_invoice_bill(
+            invoice, bill, bill_available, overview.remaining_amount
+        )
         candidates.append(InvoiceBillCandidate(
             bill=brief,
             available_amount=bill_available,
@@ -438,6 +490,163 @@ def get_invoice_bill_summary(
         **overview.model_dump(),
         allocations=allocations,
         candidates=candidates[:50],
+    )
+
+
+@router.post("/auto-match", response_model=InvoiceAutoMatchResponse)
+def auto_match_invoices(
+    payload: InvoiceAutoMatchRequest, db: Session = Depends(get_db)
+) -> InvoiceAutoMatchResponse:
+    direction = str(payload.invoice_direction or "").strip().lower()
+    if direction not in {"", "input", "output"}:
+        raise HTTPException(status_code=422, detail={"error": "invalid_invoice_direction"})
+
+    invoice_stmt = select(InvoiceRecord).order_by(
+        InvoiceRecord.invoice_date.desc(), InvoiceRecord.created_at.desc()
+    )
+    invoice_ids = list(dict.fromkeys(str(value).strip() for value in payload.invoice_ids if str(value).strip()))
+    if invoice_ids:
+        invoice_stmt = invoice_stmt.where(InvoiceRecord.id.in_(invoice_ids))
+    if direction:
+        invoice_stmt = invoice_stmt.where(InvoiceRecord.invoice_direction == direction)
+    invoices = db.execute(invoice_stmt.limit(500)).scalars().all()
+    selected_invoice_ids = [invoice.id for invoice in invoices]
+
+    active_rows = db.execute(
+        select(BillInvoiceAllocation).where(
+            BillInvoiceAllocation.invoice_id.in_(selected_invoice_ids),
+            BillInvoiceAllocation.status.in_(ACTIVE_STATUSES),
+        )
+    ).scalars().all() if selected_invoice_ids else []
+    invoice_used: dict[str, float] = {}
+    bill_used: dict[tuple[str, str], float] = {}
+    existing_pairs: set[tuple[str, str, str]] = set()
+    for row in active_rows:
+        amount = float(row.allocated_gross_amount or 0)
+        invoice_used[row.invoice_id] = invoice_used.get(row.invoice_id, 0) + amount
+        bill_key = (row.bill_type, row.bill_id)
+        bill_used[bill_key] = bill_used.get(bill_key, 0) + amount
+        existing_pairs.add((row.invoice_id, row.bill_type, row.bill_id))
+
+    rd_bills = db.execute(
+        select(ReconciliationRecord).order_by(ReconciliationRecord.updated_at.desc()).limit(500)
+    ).scalars().all()
+    channel_bills = db.execute(
+        select(ChannelRecord).order_by(ChannelRecord.updated_at.desc()).limit(500)
+    ).scalars().all()
+    bills_by_type = {
+        "rd": [bill for bill in rd_bills if _is_bill_allocatable(bill)],
+        "channel": [bill for bill in channel_bills if _is_bill_allocatable(bill)],
+    }
+    if bills_by_type["rd"] or bills_by_type["channel"]:
+        persisted_bill_used = db.execute(
+            select(
+                BillInvoiceAllocation.bill_type,
+                BillInvoiceAllocation.bill_id,
+                func.coalesce(func.sum(BillInvoiceAllocation.allocated_gross_amount), 0),
+            ).where(
+                BillInvoiceAllocation.status.in_(ACTIVE_STATUSES),
+            ).group_by(
+                BillInvoiceAllocation.bill_type,
+                BillInvoiceAllocation.bill_id,
+            )
+        ).all()
+        for bill_type, bill_id, total in persisted_bill_used:
+            bill_used[(str(bill_type), str(bill_id))] = float(total or 0)
+
+    matched_items: list[InvoiceAutoMatchItem] = []
+    ambiguous = 0
+    unmatched = 0
+    skipped = 0
+    matched_amount = 0.0
+    now = datetime.now(timezone.utc)
+
+    for invoice in invoices:
+        if not _is_invoice_allocatable(invoice):
+            skipped += 1
+            continue
+        invoice_remaining = round(
+            max(0, abs(_invoice_gross(invoice)) - invoice_used.get(invoice.id, 0)), 2
+        )
+        if invoice_remaining <= 0.01:
+            skipped += 1
+            continue
+        bill_type = "rd" if (invoice.invoice_direction or "output") == "input" else "channel"
+        scored: list[tuple[float, float, object, float, list[str]]] = []
+        for bill in bills_by_type[bill_type]:
+            bill_id = str(bill.id)
+            if (invoice.id, bill_type, bill_id) in existing_pairs:
+                continue
+            bill_amount = abs(float(getattr(bill, "settlement_amount", 0) or 0))
+            bill_remaining = round(max(0, bill_amount - bill_used.get((bill_type, bill_id), 0)), 2)
+            if bill_remaining <= 0.01:
+                continue
+            score, reasons, amount_diff = _score_invoice_bill(
+                invoice, bill, bill_remaining, invoice_remaining
+            )
+            scored.append((score, amount_diff, bill, bill_remaining, reasons))
+        scored.sort(key=lambda item: (item[0], -item[1]), reverse=True)
+        eligible = [
+            item for item in scored
+            if item[0] >= payload.threshold and item[1] <= 0.02
+        ]
+        if not eligible:
+            unmatched += 1
+            continue
+        best = eligible[0]
+        if len(eligible) > 1 and best[0] - eligible[1][0] < payload.unique_margin:
+            ambiguous += 1
+            continue
+
+        score, _, bill, bill_remaining, reasons = best
+        bill_id = str(bill.id)
+        amount = round(min(invoice_remaining, bill_remaining), 2)
+        item = InvoiceAutoMatchItem(
+            invoice_id=invoice.id,
+            invoice_number=_invoice_number(invoice),
+            bill_type=bill_type,
+            bill_id=bill_id,
+            bill_number=str(getattr(bill, "statement_no", None) or bill_id),
+            allocated_gross_amount=amount,
+            match_score=score,
+            match_reasons=reasons,
+        )
+        matched_items.append(item)
+        matched_amount += amount
+        invoice_used[invoice.id] = invoice_used.get(invoice.id, 0) + amount
+        bill_key = (bill_type, bill_id)
+        bill_used[bill_key] = bill_used.get(bill_key, 0) + amount
+        existing_pairs.add((invoice.id, bill_type, bill_id))
+        if not payload.dry_run:
+            db.add(BillInvoiceAllocation(
+                id=str(uuid4()),
+                bill_type=bill_type,
+                bill_id=bill_id,
+                invoice_id=invoice.id,
+                allocated_net_amount=0,
+                allocated_tax_amount=0,
+                allocated_gross_amount=amount,
+                status="confirmed",
+                match_type="auto",
+                match_score=score,
+                match_reasons=reasons,
+                confirmed_at=now,
+            ))
+
+    if not payload.dry_run:
+        try:
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            raise HTTPException(status_code=409, detail={"error": "auto_match_conflict"})
+    return InvoiceAutoMatchResponse(
+        dry_run=payload.dry_run,
+        matched=len(matched_items),
+        matched_amount=round(matched_amount, 2),
+        ambiguous=ambiguous,
+        unmatched=unmatched,
+        skipped=skipped,
+        items=matched_items,
     )
 
 
