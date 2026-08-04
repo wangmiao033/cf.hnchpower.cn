@@ -1,0 +1,143 @@
+/*
+ * Dense, grouped layout for the R&D reconciliation progress table.
+ * The rules are scoped to the progress page so channel tables remain unchanged.
+ */
+
+.rd-progress-page .rd-progress-table {
+  width: 100%;
+  min-width: 1180px;
+  table-layout: fixed;
+}
+
+/*
+ * Use the whole available width, but distribute it intentionally instead of
+ * allowing the browser to stretch every column and create several random gaps.
+ */
+.rd-progress-page .rd-progress-table th:nth-child(1) {
+  width: 8.5%;
+}
+
+.rd-progress-page .rd-progress-table th:nth-child(2) {
+  width: 14%;
+}
+
+.rd-progress-page .rd-progress-table th:nth-child(3) {
+  width: 12%;
+}
+
+.rd-progress-page .rd-progress-table th:nth-child(4) {
+  width: 28.5%;
+}
+
+.rd-progress-page .rd-progress-table th:nth-child(5) {
+  width: 12%;
+}
+
+.rd-progress-page .rd-progress-table th:nth-child(6) {
+  width: 9%;
+}
+
+.rd-progress-page .rd-progress-table th:nth-child(7) {
+  width: 16%;
+}
+
+.rd-progress-page .rd-progress-table th {
+  height: 42px;
+  padding: 0 14px;
+}
+
+.rd-progress-page .rd-progress-table td {
+  height: 46px;
+  padding: 0 14px;
+  transition: background-color 120ms ease;
+}
+
+/* Divide the table into basic, business, reconciliation and action groups. */
+.rd-progress-page .rd-progress-table th:nth-child(3),
+.rd-progress-page .rd-progress-table td:nth-child(3),
+.rd-progress-page .rd-progress-table th:nth-child(5),
+.rd-progress-page .rd-progress-table td:nth-child(5),
+.rd-progress-page .rd-progress-table th:nth-child(7),
+.rd-progress-page .rd-progress-table td:nth-child(7) {
+  padding-left: 18px;
+  border-left: 1px solid #edf2f7;
+}
+
+.rd-progress-page .rd-progress-table th:nth-child(1),
+.rd-progress-page .rd-progress-table th:nth-child(2),
+.rd-progress-page .rd-progress-table td:nth-child(1),
+.rd-progress-page .rd-progress-table td:nth-child(2) {
+  font-variant-numeric: tabular-nums;
+}
+
+.rd-progress-page .rd-progress-table th:nth-child(5),
+.rd-progress-page .rd-progress-table td:nth-child(5) {
+  text-align: right;
+}
+
+.rd-progress-page .rd-progress-table th:nth-child(6),
+.rd-progress-page .rd-progress-table td:nth-child(6),
+.rd-progress-page .rd-progress-table th:nth-child(7),
+.rd-progress-page .rd-progress-table td:nth-child(7) {
+  text-align: center;
+}
+
+.rd-progress-page .rd-progress-table td:nth-child(3),
+.rd-progress-page .rd-progress-table td:nth-child(4) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rd-progress-page .rd-progress-table td:nth-child(6) > span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rd-progress-page .rd-progress-table tbody tr:hover td {
+  background: #f7faff;
+}
+
+/* Keep the three action buttons readable and away from the scrollbar. */
+.rd-progress-page .rd-progress-table th:nth-child(7),
+.rd-progress-page .rd-progress-table td:nth-child(7) {
+  position: sticky;
+  right: 0;
+  box-shadow: -8px 0 12px -12px rgb(15 23 42 / 28%);
+}
+
+.rd-progress-page .rd-progress-table th:nth-child(7) {
+  z-index: 4;
+  background: #f8fafc;
+}
+
+.rd-progress-page .rd-progress-table td:nth-child(7) {
+  z-index: 2;
+  background: #ffffff;
+  white-space: nowrap;
+}
+
+.rd-progress-page .rd-progress-table tbody tr:hover td:nth-child(7) {
+  background: #f7faff;
+}
+
+.rd-progress-page .rd-progress-table td:nth-child(7) .rd-progress-edit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 28px;
+  padding: 0 8px;
+  margin: 0;
+  vertical-align: middle;
+}
+
+.rd-progress-page .rd-progress-table td:nth-child(7) .rd-progress-edit + .rd-progress-edit {
+  margin-left: 6px;
+}
+
+@media (max-width: 1280px) {
+  .rd-progress-page .rd-progress-table {
+    min-width: 1120px;
+  }
+}
