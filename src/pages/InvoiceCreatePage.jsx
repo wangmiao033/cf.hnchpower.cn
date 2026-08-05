@@ -18,18 +18,13 @@ function InvoiceCreatePage() {
   const goList = () => setActiveView(VIEWS.INVOICE_MANAGE)
 
   const handleAfterSubmit = (intent) => {
-    if (intent !== 'continue') {
-      goList()
-    }
+    if (intent !== 'continue') goList()
   }
 
   return (
     <InvoiceFormPageLayout
-      toolsSlot={
-        <p className="admin-workspace__card-desc" style={{ margin: 0 }}>
-          先在下方“粘贴发票文本自动识别”中粘贴税务系统文本，再做人工校对与保存。
-        </p>
-      }
+      pageMode="新增发票"
+      toolsSlot={<span>可先粘贴发票文本自动识别，也可直接填写字段。</span>}
       previewAmount={previewAmount}
       footerActions={
         <>
@@ -44,7 +39,7 @@ function InvoiceCreatePage() {
               document.getElementById(FORM_ID)?.requestSubmit()
             }}
           >
-            保存并继续新增
+            保存并继续
           </button>
           <button
             type="button"
@@ -54,7 +49,7 @@ function InvoiceCreatePage() {
               document.getElementById(FORM_ID)?.requestSubmit()
             }}
           >
-            保存
+            保存发票
           </button>
         </>
       }
