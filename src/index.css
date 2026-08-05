@@ -9,6 +9,7 @@
 @import './pages/BillFormPolish.css';
 @import './pages/InvoiceFormPolish.css';
 @import './pages/SystemSurfacePolish.css';
+@import './pages/InvoiceNavigationPolish.css';
 
 * {
   margin: 0;
