@@ -1,0 +1,488 @@
+/* Final consistency pass for account, authentication, dialogs and drawers. */
+
+/* User center */
+.user-center-page .page-container-body {
+  gap: 8px;
+}
+
+.user-center-page .user-center-hero {
+  min-height: 72px;
+  padding: 10px 12px;
+  border-color: #dbe3ef;
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 2px 10px rgb(30 64 175 / 5%);
+}
+
+.user-center-page .user-center-hero::after {
+  display: none;
+}
+
+.user-center-page .user-center-identity {
+  gap: 10px;
+}
+
+.user-center-page .user-center-avatar {
+  width: 44px;
+  height: 44px;
+  flex-basis: 44px;
+  border-radius: 12px;
+  font-size: 18px;
+  box-shadow: 0 7px 16px rgb(37 99 235 / 18%);
+}
+
+.user-center-page .user-center-avatar i {
+  width: 9px;
+  height: 9px;
+  right: -1px;
+  bottom: 3px;
+  border-width: 2px;
+}
+
+.user-center-page .user-center-identity p {
+  display: none;
+}
+
+.user-center-page .user-center-identity h1 {
+  font-size: 17px;
+}
+
+.user-center-page .user-center-identity span {
+  margin-top: 2px;
+  font-size: 10px;
+}
+
+.user-center-page .user-center-back {
+  min-height: 32px;
+  padding: 0 11px;
+  border-radius: 7px;
+  font-size: 11px;
+}
+
+.user-center-page .user-center-layout {
+  grid-template-columns: minmax(280px, 0.78fr) minmax(460px, 1.22fr);
+  gap: 8px;
+}
+
+.user-center-page .user-center-side {
+  gap: 8px;
+}
+
+.user-center-page .user-center-card,
+.user-center-page .user-center-security {
+  padding: 12px;
+  border-color: #dbe3ef;
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgb(15 23 42 / 4%);
+}
+
+.user-center-page .user-center-card__heading {
+  gap: 8px;
+}
+
+.user-center-page .user-center-card__icon {
+  width: 32px;
+  height: 32px;
+  flex-basis: 32px;
+  border-radius: 8px;
+}
+
+.user-center-page .user-center-card__icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.user-center-page .user-center-card__heading h2,
+.user-center-page .user-center-card--danger h2 {
+  font-size: 13px;
+}
+
+.user-center-page .user-center-card__heading p,
+.user-center-page .user-center-card--danger p,
+.user-center-page .user-center-session small {
+  display: none;
+}
+
+.user-center-page .user-center-details {
+  margin-top: 8px;
+}
+
+.user-center-page .user-center-details > div {
+  grid-template-columns: 76px minmax(0, 1fr);
+  gap: 8px;
+  padding: 7px 0;
+}
+
+.user-center-page .user-center-details dt {
+  font-size: 10px;
+}
+
+.user-center-page .user-center-details dd {
+  font-size: 11px;
+}
+
+.user-center-page .user-center-status {
+  padding: 2px 7px;
+}
+
+.user-center-page .user-center-session {
+  gap: 9px;
+  margin-top: 8px;
+  padding: 9px;
+  border-radius: 8px;
+}
+
+.user-center-page .user-center-session strong {
+  font-size: 11px;
+}
+
+.user-center-page .user-center-session span {
+  font-size: 10px;
+}
+
+.user-center-page .user-center-card--danger {
+  padding: 10px 12px;
+}
+
+.user-center-page .user-center-card--danger button,
+.user-center-page .user-center-submit,
+.user-center-page .user-center-clear {
+  min-height: 32px;
+  padding: 0 11px;
+  border-radius: 7px;
+  font-size: 11px;
+}
+
+.user-center-page .user-center-security__heading {
+  padding-bottom: 10px;
+}
+
+.user-center-page .user-center-security__badge {
+  padding: 3px 7px;
+  font-size: 9px;
+}
+
+.user-center-page .user-center-password-form {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 9px;
+  margin-top: 10px;
+}
+
+.user-center-page .user-center-field {
+  gap: 4px;
+}
+
+.user-center-page .user-center-field > label {
+  font-size: 10px;
+}
+
+.user-center-page .user-center-input-wrap {
+  border-radius: 7px;
+}
+
+.user-center-page .user-center-input-wrap input {
+  min-height: 34px;
+  padding: 0 9px;
+  font-size: 11px;
+}
+
+.user-center-page .user-center-input-wrap button {
+  padding: 0 9px;
+  font-size: 10px;
+}
+
+.user-center-page .user-center-password-tips {
+  display: none;
+}
+
+.user-center-page .user-center-feedback,
+.user-center-page .user-center-form-actions {
+  grid-column: 1 / -1;
+}
+
+.user-center-page .user-center-feedback {
+  padding: 7px 9px;
+  font-size: 10px;
+}
+
+.user-center-page .user-center-form-actions {
+  gap: 7px;
+  padding-top: 0;
+}
+
+/* Login */
+.login-page {
+  padding: 20px;
+  background:
+    radial-gradient(circle at 12% 15%, rgb(96 165 250 / 12%), transparent 28%),
+    #f3f6fb;
+}
+
+.login-page .login-shell {
+  width: min(900px, 100%);
+  min-height: 500px;
+  grid-template-columns: minmax(0, 0.9fr) minmax(380px, 1.1fr);
+  border-radius: 18px;
+  box-shadow: 0 24px 60px rgb(15 23 42 / 13%);
+}
+
+.login-page .login-hero-panel {
+  padding: 30px 32px;
+}
+
+.login-page .login-brand-mark {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+}
+
+.login-page .login-brand-mark svg {
+  width: 22px;
+  height: 22px;
+}
+
+.login-page .login-hero-main {
+  margin-top: 58px;
+}
+
+.login-page .login-kicker {
+  margin-bottom: 11px;
+  font-size: 10px;
+}
+
+.login-page .login-hero-title {
+  font-size: clamp(28px, 3vw, 36px);
+  line-height: 1.25;
+}
+
+.login-page .login-hero-copy {
+  margin-top: 14px;
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.login-page .login-hero-metrics,
+.login-page .login-hero-footer {
+  display: none;
+}
+
+.login-page .login-card {
+  padding: 34px 38px;
+}
+
+.login-page .login-card-head {
+  margin-bottom: 20px;
+}
+
+.login-page .login-title {
+  margin-top: 9px;
+  font-size: 27px;
+}
+
+.login-page .login-subtitle {
+  margin-top: 6px;
+  font-size: 11px;
+}
+
+.login-page .login-form {
+  gap: 12px;
+}
+
+.login-page .login-label {
+  gap: 5px;
+  font-size: 11px;
+}
+
+.login-page .login-input-wrap {
+  height: 42px;
+  padding: 0 10px;
+  border-radius: 9px;
+}
+
+.login-page .login-input {
+  font-size: 13px;
+}
+
+.login-page .login-options {
+  gap: 8px;
+}
+
+.login-page .login-session-note {
+  min-height: 38px;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+}
+
+.login-page .login-session-icon {
+  width: 26px;
+  height: 26px;
+  flex-basis: 26px;
+  border-radius: 7px;
+}
+
+.login-page .login-session-note strong,
+.login-page .login-option {
+  font-size: 10px;
+}
+
+.login-page .login-session-note small {
+  display: none;
+}
+
+.login-page .login-submit-btn {
+  height: 44px;
+  border-radius: 9px;
+  font-size: 12px;
+  box-shadow: 0 9px 20px rgb(37 99 235 / 20%);
+}
+
+.login-page .login-footnote {
+  margin-top: 0;
+  font-size: 9px;
+}
+
+/* Confirm dialogs */
+.confirm-dialog-overlay {
+  padding: 18px;
+  background: rgb(15 23 42 / 42%);
+  backdrop-filter: blur(3px);
+}
+
+.confirm-dialog {
+  width: min(380px, 100%);
+  padding: 16px;
+  border-color: #dbe3ef;
+  border-radius: 12px;
+  box-shadow: 0 22px 60px rgb(15 23 42 / 24%);
+}
+
+.confirm-dialog.large {
+  width: min(720px, 100%);
+  max-width: 720px;
+}
+
+.confirm-dialog h3 {
+  margin-bottom: 7px;
+  font-size: 15px;
+}
+
+.confirm-dialog p,
+.confirm-dialog .dialog-message {
+  margin-bottom: 14px;
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.confirm-dialog .dialog-buttons {
+  gap: 7px;
+  padding-top: 9px;
+  border-top: 1px solid #edf1f6;
+}
+
+.confirm-dialog .dialog-buttons button {
+  min-height: 32px;
+  min-width: 72px;
+  padding: 0 11px;
+  border-radius: 7px;
+  font-size: 11px;
+}
+
+/* Drawers */
+.rec-drawer-backdrop {
+  background: rgb(15 23 42 / 36%);
+  backdrop-filter: blur(3px);
+}
+
+.rec-drawer,
+.admin-drawer-surface {
+  border-left-color: #dbe3ef;
+  background: #ffffff;
+  box-shadow: -18px 0 56px rgb(15 23 42 / 18%);
+}
+
+.rec-drawer__tools {
+  min-height: 42px;
+  gap: 7px;
+  padding: 6px 10px;
+  background: #fbfcfe;
+}
+
+.rec-drawer__body {
+  padding: 10px 12px 14px;
+}
+
+.rec-drawer__footer {
+  min-height: 50px;
+  gap: 8px;
+  padding: 7px 10px;
+  box-shadow: 0 -8px 24px rgb(15 23 42 / 8%);
+}
+
+.rec-drawer__footer-actions {
+  gap: 7px;
+}
+
+.rec-drawer__footer .rec-btn,
+.rec-drawer__tools .rec-btn {
+  min-height: 32px;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 7px;
+  font-size: 11px;
+}
+
+@media (max-width: 1000px) {
+  .user-center-page .user-center-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .user-center-page .user-center-side {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .user-center-page .user-center-side,
+  .user-center-page .user-center-password-form {
+    grid-template-columns: 1fr;
+  }
+
+  .user-center-page .user-center-feedback,
+  .user-center-page .user-center-form-actions {
+    grid-column: auto;
+  }
+
+  .login-page {
+    padding: 12px;
+  }
+
+  .login-page .login-shell {
+    grid-template-columns: 1fr;
+    width: min(460px, 100%);
+  }
+
+  .login-page .login-hero-panel {
+    display: none;
+  }
+
+  .login-page .login-card {
+    padding: 28px 22px;
+  }
+}
+
+@media (max-width: 560px) {
+  .user-center-page .user-center-hero {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .user-center-page .user-center-back {
+    width: 100%;
+  }
+
+  .user-center-page .user-center-card--danger {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
