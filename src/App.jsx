@@ -1,4 +1,12 @@
-import React, { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
+import React, {
+  lazy,
+  Suspense,
+  startTransition,
+  useCallback,
+  useEffect,
+  useRef,
+  useState
+} from 'react'
 import './App.css'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
 import ConfirmDialog from './components/ConfirmDialog.jsx'
@@ -11,38 +19,57 @@ import AppShell from './app/AppShell.jsx'
 import { AppStateProvider } from './app/AppStateContext.jsx'
 import { getGroupForView, getTabView, SIDEBAR_GROUPS, VIEWS } from './app/routes.js'
 import { useAuth } from '@/features/auth/AuthContext.jsx'
+import CoreDashboardPage from './pages/CoreDashboardPage.jsx'
+import LoginPage from './pages/LoginPage.jsx'
 import '@/styles/admin-polish.css'
 
-const CoreDashboardPage = lazy(() => import('./pages/CoreDashboardPage.jsx'))
-const CoreReconciliationPage = lazy(() => import('./pages/CoreReconciliationPage.jsx'))
-const RdReconciliationProgressPage = lazy(() => import('./pages/RdReconciliationProgressPage.jsx'))
-const ReconciliationCreatePage = lazy(() => import('./pages/ReconciliationCreatePage.jsx'))
-const ReconciliationEditPage = lazy(() => import('./pages/ReconciliationEditPage.jsx'))
-const CoreChannelReconciliationPage = lazy(() => import('./pages/CoreChannelReconciliationPage.jsx'))
-const ChannelReconciliationCreatePage = lazy(() => import('./pages/ChannelReconciliationCreatePage.jsx'))
-const ChannelReconciliationEditPage = lazy(() => import('./pages/ChannelReconciliationEditPage.jsx'))
-const ContractManagementPage = lazy(() => import('./pages/ContractManagementPage.jsx'))
-const InvoicePage = lazy(() => import('./pages/InvoicePage.jsx'))
-const InvoiceCreatePage = lazy(() => import('./pages/InvoiceCreatePage.jsx'))
-const InvoiceEditPage = lazy(() => import('./pages/InvoiceEditPage.jsx'))
-const QuickSdkLibraryPage = lazy(() => import('./pages/QuickSdkLibraryPage.jsx'))
-const ProductSourcePage = lazy(() => import('./pages/ProductSourcePage.jsx'))
-const QuickSdkGroupedDataPage = lazy(() => import('./pages/QuickSdkGroupedDataPage.jsx'))
-const PartnerPage = lazy(() => import('./pages/PartnerPage.jsx'))
-const UserCenterPage = lazy(() => import('./pages/UserCenterPage.jsx'))
-const LoginPage = lazy(() => import('./pages/LoginPage.jsx'))
+const PAGE_LOADERS = Object.freeze({
+  coreReconciliation: () => import('./pages/CoreReconciliationPage.jsx'),
+  reconciliationProgress: () => import('./pages/RdReconciliationProgressPage.jsx'),
+  reconciliationCreate: () => import('./pages/ReconciliationCreatePage.jsx'),
+  reconciliationEdit: () => import('./pages/ReconciliationEditPage.jsx'),
+  channelReconciliation: () => import('./pages/CoreChannelReconciliationPage.jsx'),
+  channelReconciliationCreate: () => import('./pages/ChannelReconciliationCreatePage.jsx'),
+  channelReconciliationEdit: () => import('./pages/ChannelReconciliationEditPage.jsx'),
+  contracts: () => import('./pages/ContractManagementPage.jsx'),
+  invoices: () => import('./pages/InvoicePage.jsx'),
+  invoiceCreate: () => import('./pages/InvoiceCreatePage.jsx'),
+  invoiceEdit: () => import('./pages/InvoiceEditPage.jsx'),
+  quickSdkLibrary: () => import('./pages/QuickSdkLibraryPage.jsx'),
+  productSources: () => import('./pages/ProductSourcePage.jsx'),
+  quickSdkGroupedData: () => import('./pages/QuickSdkGroupedDataPage.jsx'),
+  partners: () => import('./pages/PartnerPage.jsx'),
+  userCenter: () => import('./pages/UserCenterPage.jsx')
+})
 
-function PageLoading() {
-  return (
-    <div style={{ minHeight: '40vh', display: 'grid', placeItems: 'center' }}>
-      正在加载...
-    </div>
-  )
+const CoreReconciliationPage = lazy(PAGE_LOADERS.coreReconciliation)
+const RdReconciliationProgressPage = lazy(PAGE_LOADERS.reconciliationProgress)
+const ReconciliationCreatePage = lazy(PAGE_LOADERS.reconciliationCreate)
+const ReconciliationEditPage = lazy(PAGE_LOADERS.reconciliationEdit)
+const CoreChannelReconciliationPage = lazy(PAGE_LOADERS.channelReconciliation)
+const ChannelReconciliationCreatePage = lazy(PAGE_LOADERS.channelReconciliationCreate)
+const ChannelReconciliationEditPage = lazy(PAGE_LOADERS.channelReconciliationEdit)
+const ContractManagementPage = lazy(PAGE_LOADERS.contracts)
+const InvoicePage = lazy(PAGE_LOADERS.invoices)
+const InvoiceCreatePage = lazy(PAGE_LOADERS.invoiceCreate)
+const InvoiceEditPage = lazy(PAGE_LOADERS.invoiceEdit)
+const QuickSdkLibraryPage = lazy(PAGE_LOADERS.quickSdkLibrary)
+const ProductSourcePage = lazy(PAGE_LOADERS.productSources)
+const QuickSdkGroupedDataPage = lazy(PAGE_LOADERS.quickSdkGroupedData)
+const PartnerPage = lazy(PAGE_LOADERS.partners)
+const UserCenterPage = lazy(PAGE_LOADERS.userCenter)
+
+function preloadAuthenticatedPages() {
+  Object.values(PAGE_LOADERS).forEach((loadPage) => {
+    void loadPage().catch((error) => {
+      console.warn('页面预加载失败，将在打开时重试。', error)
+    })
+  })
 }
 
 function App() {
   const { isAuthenticated, loading } = useAuth()
-  const [activeView, setActiveViewRaw] = useState(VIEWS.DASHBOARD)
+  const [activeView, setActiveViewState] = useState(VIEWS.DASHBOARD)
   const [openTabs, setOpenTabs] = useState(() =>
     SIDEBAR_GROUPS
       .filter((group) => group.id !== 'workbench')
@@ -70,36 +97,54 @@ function App() {
   })
   const invoice = useInvoiceStore({ showToast, enabled: isAuthenticated && !loading })
 
+  useEffect(() => {
+    if (!isAuthenticated || loading) return undefined
+
+    const timer = window.setTimeout(preloadAuthenticatedPages, 0)
+    return () => window.clearTimeout(timer)
+  }, [isAuthenticated, loading])
+
+  const setActiveViewRaw = useCallback((view) => {
+    const nextView = view || VIEWS.DASHBOARD
+    startTransition(() => {
+      setActiveViewState(nextView)
+    })
+  }, [])
+
   const navigate = useCallback((view) => {
     const nextView = view || VIEWS.DASHBOARD
     const tabView = getTabView(nextView)
 
-    if (tabView !== VIEWS.DASHBOARD) {
-      setOpenTabs((current) => (current.includes(tabView) ? current : [...current, tabView]))
-    }
-
-    setActiveViewRaw(nextView)
+    startTransition(() => {
+      if (tabView !== VIEWS.DASHBOARD) {
+        setOpenTabs((current) => (current.includes(tabView) ? current : [...current, tabView]))
+      }
+      setActiveViewState(nextView)
+    })
   }, [])
 
   const closeTab = useCallback((view) => {
     const remainingTabs = openTabs.filter((tab) => tab !== view)
-    setOpenTabs(remainingTabs)
 
-    if (getTabView(activeView) !== view) {
-      return
-    }
+    startTransition(() => {
+      setOpenTabs(remainingTabs)
 
-    const group = getGroupForView(view)
-    const groupTabs = group.items.map((item) => item.view)
-    const closedIndex = groupTabs.indexOf(view)
-    const previousTab = [...groupTabs.slice(0, Math.max(closedIndex, 0))]
-      .reverse()
-      .find((tab) => remainingTabs.includes(tab))
-    const nextTab = groupTabs
-      .slice(Math.max(closedIndex + 1, 0))
-      .find((tab) => remainingTabs.includes(tab))
+      if (getTabView(activeView) !== view) {
+        return
+      }
 
-    setActiveViewRaw(previousTab || nextTab || VIEWS.DASHBOARD)
+      const group = getGroupForView(view)
+      const groupTabs = group.items.map((item) => item.view)
+      const closedIndex = groupTabs.indexOf(view)
+      const previousTab = [...groupTabs.slice(0, Math.max(closedIndex, 0))]
+        .reverse()
+        .find((tab) => remainingTabs.includes(tab))
+      const nextTab = groupTabs
+        .slice(Math.max(closedIndex + 1, 0))
+        .find((tab) => remainingTabs.includes(tab))
+
+      setActiveViewState(previousTab || nextTab || VIEWS.DASHBOARD)
+    })
   }, [activeView, openTabs])
 
   const hideToast = useCallback(() => {
@@ -123,7 +168,7 @@ function App() {
     setReconEditRecordId(id)
     setReconReturnView(returnView)
     setActiveViewRaw(VIEWS.RECON_EDIT)
-  }, [])
+  }, [setActiveViewRaw])
 
   const openChannelReconciliationEdit = useCallback((id, returnView = VIEWS.RECON_CHANNEL) => {
     setChannelEditRecordId(id)
@@ -213,11 +258,7 @@ function App() {
   }
 
   if (!isAuthenticated) {
-    return (
-      <Suspense fallback={<PageLoading />}>
-        <LoginPage />
-      </Suspense>
-    )
+    return <LoginPage />
   }
 
   return (
@@ -230,7 +271,7 @@ function App() {
           onCloseTab={closeTab}
           onSettingsChange={handleHeaderSettingsChange}
         >
-          <Suspense fallback={<PageLoading />}>{renderView()}</Suspense>
+          <Suspense fallback={null}>{renderView()}</Suspense>
         </AppShell>
 
         <ConfirmDialog
