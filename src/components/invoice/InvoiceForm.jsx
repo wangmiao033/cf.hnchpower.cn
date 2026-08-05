@@ -44,7 +44,8 @@ function recordToForm(inv) {
       inv.amountWithTax != null
         ? String(inv.amountWithTax)
         : (
-            (parseFloat(String(inv.amount ?? 0)) || 0) + (parseFloat(String(inv.taxAmount ?? 0)) || 0)
+            (parseFloat(String(inv.amount ?? 0)) || 0) +
+            (parseFloat(String(inv.taxAmount ?? 0)) || 0)
           ).toFixed(2),
     status: inv.status || '未开',
     taxStatus: inv.taxStatus || inv.tax_status || 'normal',
@@ -55,9 +56,6 @@ function recordToForm(inv) {
   }
 }
 
-/**
- * 发票完整表单（新增/编辑共用；校验与提交走 store.submitInvoiceFromForm）
- */
 function InvoiceForm({
   formId,
   mode = 'add',
@@ -124,7 +122,7 @@ function InvoiceForm({
     }
   }, [mode, sourceRecord?.id, seedFromStore, invoiceForm])
 
-  const setField = (k, v) => setFormData((prev) => ({ ...prev, [k]: v }))
+  const setField = (key, value) => setFormData((previous) => ({ ...previous, [key]: value }))
 
   const applyParsedInvoiceText = () => {
     const parsed = parseInvoiceText(rawInvoiceText, formData.invoiceDirection || 'output')
@@ -132,40 +130,42 @@ function InvoiceForm({
       showToast?.('未识别到有效发票文本', 'error')
       return
     }
-    setFormData((prev) => {
-      const base = {
-        ...prev,
-        invoiceType: parsed.invoice_type || prev.invoiceType,
-        digitalInvoiceNo: parsed.digital_invoice_no || prev.digitalInvoiceNo,
+    setFormData((previous) => {
+      const next = {
+        ...previous,
+        invoiceType: parsed.invoice_type || previous.invoiceType,
+        digitalInvoiceNo: parsed.digital_invoice_no || previous.digitalInvoiceNo,
         invoiceCode: parsed.invoice_code || '',
         invoiceNo: parsed.invoice_no || '',
-        amount: parsed.amount || prev.amount,
-        taxAmount: parsed.tax_amount || prev.taxAmount,
-        amountWithTax: parsed.total_amount || prev.amountWithTax,
-        issueDate: parsed.invoice_date || prev.issueDate,
-        issuer: parsed.issuer || prev.issuer,
-        invoiceSource: parsed.invoice_source || prev.invoiceSource,
-        status: parsed.invoice_status || prev.status,
-        remark: [prev.remark, parsed.remark].filter(Boolean).join(prev.remark && parsed.remark ? '；' : '')
+        amount: parsed.amount || previous.amount,
+        taxAmount: parsed.tax_amount || previous.taxAmount,
+        amountWithTax: parsed.total_amount || previous.amountWithTax,
+        issueDate: parsed.invoice_date || previous.issueDate,
+        issuer: parsed.issuer || previous.issuer,
+        invoiceSource: parsed.invoice_source || previous.invoiceSource,
+        status: parsed.invoice_status || previous.status,
+        remark: [previous.remark, parsed.remark]
+          .filter(Boolean)
+          .join(previous.remark && parsed.remark ? '；' : '')
       }
-      if ((prev.invoiceDirection || 'output') === 'input') {
-        base.sellerName = parsed.seller_name || prev.sellerName
-        base.sellerTaxNo = parsed.seller_tax_no || prev.sellerTaxNo
+      if ((previous.invoiceDirection || 'output') === 'input') {
+        next.sellerName = parsed.seller_name || previous.sellerName
+        next.sellerTaxNo = parsed.seller_tax_no || previous.sellerTaxNo
       } else {
-        const buyerName = parsed.buyer_name || prev.buyerName || prev.title
-        const buyerTaxNo = parsed.buyer_tax_no || prev.buyerTaxNo || prev.taxNo
-        base.buyerName = buyerName
-        base.buyerTaxNo = buyerTaxNo
-        base.title = buyerName
-        base.taxNo = buyerTaxNo
+        const buyerName = parsed.buyer_name || previous.buyerName || previous.title
+        const buyerTaxNo = parsed.buyer_tax_no || previous.buyerTaxNo || previous.taxNo
+        next.buyerName = buyerName
+        next.buyerTaxNo = buyerTaxNo
+        next.title = buyerName
+        next.taxNo = buyerTaxNo
       }
-      return base
+      return next
     })
     showToast?.('已识别并填充发票字段', 'success')
   }
 
-  const handleSubmit = async (e) => {
-    e.preventDefault()
+  const handleSubmit = async (event) => {
+    event.preventDefault()
     const intent = submitIntentRef?.current ?? 'back'
     const editId = mode === 'edit' && sourceRecord ? sourceRecord.id : undefined
     const resetFormAfterAdd = mode === 'add' && intent !== 'continue'
@@ -175,235 +175,264 @@ function InvoiceForm({
 
     if (mode === 'add' && intent === 'continue') {
       setFormData({ ...defaultInvoiceForm })
+      setRawInvoiceText('')
     }
     onAfterSubmit?.(intent)
     if (submitIntentRef) submitIntentRef.current = 'back'
   }
 
+  const isInput = formData.invoiceDirection === 'input'
+
   return (
     <form id={formId} className="invoice-form invoice-form--page" onSubmit={handleSubmit}>
       {mode === 'add' ? (
-        <>
-          <div className="form-section-title">粘贴发票文本自动识别</div>
+        <section className="invoice-form-section invoice-form-section--parse">
+          <div className="invoice-form-section__head">
+            <strong>发票文本识别</strong>
+            <span>可选 · 粘贴税务系统复制文本后自动填充</span>
+          </div>
           <div className="invoice-form__row">
             <textarea
               className="admin-input"
-              rows={6}
+              rows={4}
               value={rawInvoiceText}
-              onChange={(e) => setRawInvoiceText(e.target.value)}
-              placeholder="请粘贴税务系统复制的整条发票文本"
+              onChange={(event) => setRawInvoiceText(event.target.value)}
+              placeholder="粘贴整条发票文本；没有文本时可直接填写下方字段"
             />
           </div>
           <div className="invoice-form__quick">
-            <button type="button" className="rec-btn rec-btn--secondary" onClick={applyParsedInvoiceText}>
-              自动识别并填充
+            <button
+              type="button"
+              className="rec-btn rec-btn--secondary"
+              onClick={applyParsedInvoiceText}
+            >
+              识别并填充
             </button>
           </div>
-        </>
+        </section>
       ) : null}
 
-      <div className="form-section-title">基础信息</div>
-      <div className="invoice-form__row invoice-form__row--two">
-        <div>
-          <label>发票方向</label>
-          <select
-            className="admin-input"
-            value={formData.invoiceDirection}
-          onChange={(e) => {
-            const nextDirection = e.target.value
-            setFormData((prev) => {
-              const next = { ...prev, invoiceDirection: nextDirection }
-              if (nextDirection === 'output') {
-                next.title = prev.buyerName || prev.title
-                next.taxNo = prev.buyerTaxNo || prev.taxNo
-              }
-              return next
-            })
-          }}
-          >
-            <option value="output">销项发票</option>
-            <option value="input">进项发票</option>
-          </select>
+      <section className="invoice-form-section invoice-form-section--base">
+        <div className="invoice-form-section__head">
+          <strong>基础信息</strong>
+          <span>票据编号与交易方资料</span>
         </div>
-        <div>
-          <label>票种</label>
-          <input
-            type="text"
-            className="admin-input"
-            value={formData.invoiceType}
-            onChange={(e) => setField('invoiceType', e.target.value)}
-            placeholder="例如：数电发票（增值税专用发票）"
-          />
-        </div>
-      </div>
-      <div className="invoice-form__row invoice-form__row--two">
-        <div>
-          <label>数电发票号码</label>
-          <input
-            type="text"
-            className="admin-input"
-            value={formData.digitalInvoiceNo}
-            onChange={(e) => setField('digitalInvoiceNo', e.target.value)}
-            placeholder="数电发票号码"
-          />
-        </div>
-        <div>
-          <label>发票状态</label>
-          <select className="admin-input" value={formData.status} onChange={(e) => setField('status', e.target.value)}>
-            <option value="未开">未开</option>
-            <option value="已开">已开</option>
-            <option value="作废">作废</option>
-          </select>
-        </div>
-      </div>
-      <div className="invoice-form__row invoice-form__row--two">
-        <div>
-          <label>发票代码</label>
-          <input
-            type="text"
-            className="admin-input"
-            value={formData.invoiceCode}
-            onChange={(e) => setField('invoiceCode', e.target.value)}
-            placeholder="发票代码"
-          />
-        </div>
-        <div>
-          <label>发票号码</label>
-          <input
-            type="text"
-            className="admin-input"
-            value={formData.invoiceNo}
-            onChange={(e) => setField('invoiceNo', e.target.value)}
-            placeholder="发票号码"
-          />
-        </div>
-      </div>
+        <div className="invoice-form__grid">
+          <Field label="发票方向">
+            <select
+              className="admin-input"
+              value={formData.invoiceDirection}
+              onChange={(event) => {
+                const nextDirection = event.target.value
+                setFormData((previous) => {
+                  const next = { ...previous, invoiceDirection: nextDirection }
+                  if (nextDirection === 'output') {
+                    next.title = previous.buyerName || previous.title
+                    next.taxNo = previous.buyerTaxNo || previous.taxNo
+                  }
+                  return next
+                })
+              }}
+            >
+              <option value="output">销项发票</option>
+              <option value="input">进项发票</option>
+            </select>
+          </Field>
 
-      <div className="invoice-form__row">
-        <label>{formData.invoiceDirection === 'input' ? '销售方名称 *' : '购买方纳税人名称 *'}</label>
-        <input
-          type="text"
-          className="admin-input"
-          value={formData.invoiceDirection === 'input' ? formData.sellerName : formData.buyerName || formData.title}
-          onChange={(e) => {
-            const v = e.target.value
-            if (formData.invoiceDirection === 'input') setField('sellerName', v)
-            else {
-              setField('buyerName', v)
-              setField('title', v)
-            }
-          }}
-          placeholder="公司名称"
-        />
-      </div>
-      <div className="invoice-form__row">
-        <label>{formData.invoiceDirection === 'input' ? '销售方纳税人识别号 *' : '购买方纳税人识别号 *'}</label>
-        <input
-          type="text"
-          className="admin-input"
-          value={formData.invoiceDirection === 'input' ? formData.sellerTaxNo : formData.buyerTaxNo || formData.taxNo}
-          onChange={(e) => {
-            const v = e.target.value
-            if (formData.invoiceDirection === 'input') setField('sellerTaxNo', v)
-            else {
-              setField('buyerTaxNo', v)
-              setField('taxNo', v)
-            }
-          }}
-          placeholder="纳税人识别号"
-        />
-      </div>
+          <Field label="票种" className="is-span-2">
+            <input
+              type="text"
+              className="admin-input"
+              value={formData.invoiceType}
+              onChange={(event) => setField('invoiceType', event.target.value)}
+              placeholder="例如：数电发票（增值税专用发票）"
+            />
+          </Field>
 
-      <div className="form-section-title">发票信息 · 金额与日期</div>
-      <div className="invoice-form__row invoice-form__row--two">
-        <div>
-          <label>金额(元)</label>
-          <input
-            type="number"
-            step="0.01"
-            className="admin-input"
-            value={formData.amount}
-            onChange={(e) => setField('amount', e.target.value)}
-            placeholder="0.00"
-          />
-        </div>
-        <div>
-          <label>税额(元)</label>
-          <input
-            type="number"
-            step="0.01"
-            className="admin-input"
-            value={formData.taxAmount}
-            onChange={(e) => setField('taxAmount', e.target.value)}
-            placeholder="0.00"
-          />
-        </div>
-      </div>
+          <Field label="发票状态">
+            <select
+              className="admin-input"
+              value={formData.status}
+              onChange={(event) => setField('status', event.target.value)}
+            >
+              <option value="未开">未开</option>
+              <option value="已开">已开</option>
+              <option value="作废">作废</option>
+            </select>
+          </Field>
 
-      <div className="invoice-form__row invoice-form__row--two">
-        <div>
-          <label>价税合计(元)</label>
-          <input
-            type="number"
-            step="0.01"
-            className="admin-input"
-            value={formData.amountWithTax}
-            onChange={(e) => setField('amountWithTax', e.target.value)}
-            placeholder="0.00"
-          />
-        </div>
-        <div>
-          <label>开票日期</label>
-          <input
-            type="date"
-            className="admin-input"
-            value={formData.issueDate}
-            onChange={(e) => setField('issueDate', e.target.value)}
-          />
-        </div>
-      </div>
+          <Field label="数电发票号码" className="is-span-2">
+            <input
+              type="text"
+              className="admin-input"
+              value={formData.digitalInvoiceNo}
+              onChange={(event) => setField('digitalInvoiceNo', event.target.value)}
+              placeholder="数电发票号码"
+            />
+          </Field>
 
-      <div className="invoice-form__row invoice-form__row--two">
-        <div>
-          <label>开票人</label>
-          <input
-            type="text"
-            className="admin-input"
-            value={formData.issuer}
-            onChange={(e) => setField('issuer', e.target.value)}
-            placeholder="开票人"
-          />
-        </div>
-      </div>
+          <Field label="发票代码">
+            <input
+              type="text"
+              className="admin-input"
+              value={formData.invoiceCode}
+              onChange={(event) => setField('invoiceCode', event.target.value)}
+              placeholder="发票代码"
+            />
+          </Field>
 
-      <div className="form-section-title">状态与备注</div>
-      <div className="invoice-form__row invoice-form__row--two">
-        <div>
-          <label>税务状态</label>
-          <select
-            className="admin-input"
-            value={formData.taxStatus}
-            onChange={(e) => setField('taxStatus', e.target.value)}
-          >
-            <option value="normal">正常</option>
-            <option value="red">红冲</option>
-            <option value="void">作废</option>
-            <option value="unknown">待确认</option>
-          </select>
-        </div>
-        <div>
-          <label>备注</label>
-          <input
-            type="text"
-            className="admin-input"
-            value={formData.remark}
-            onChange={(e) => setField('remark', e.target.value)}
-            placeholder="可填写收件人、邮箱等"
-          />
-        </div>
-      </div>
+          <Field label="发票号码">
+            <input
+              type="text"
+              className="admin-input"
+              value={formData.invoiceNo}
+              onChange={(event) => setField('invoiceNo', event.target.value)}
+              placeholder="发票号码"
+            />
+          </Field>
 
+          <Field label={isInput ? '销售方名称 *' : '购买方名称 *'} className="is-span-2">
+            <input
+              type="text"
+              className="admin-input"
+              value={isInput ? formData.sellerName : formData.buyerName || formData.title}
+              onChange={(event) => {
+                const value = event.target.value
+                if (isInput) setField('sellerName', value)
+                else {
+                  setFormData((previous) => ({
+                    ...previous,
+                    buyerName: value,
+                    title: value
+                  }))
+                }
+              }}
+              placeholder="公司名称"
+            />
+          </Field>
+
+          <Field label={isInput ? '销售方纳税人识别号 *' : '购买方纳税人识别号 *'} className="is-span-2">
+            <input
+              type="text"
+              className="admin-input"
+              value={isInput ? formData.sellerTaxNo : formData.buyerTaxNo || formData.taxNo}
+              onChange={(event) => {
+                const value = event.target.value
+                if (isInput) setField('sellerTaxNo', value)
+                else {
+                  setFormData((previous) => ({
+                    ...previous,
+                    buyerTaxNo: value,
+                    taxNo: value
+                  }))
+                }
+              }}
+              placeholder="纳税人识别号"
+            />
+          </Field>
+        </div>
+      </section>
+
+      <section className="invoice-form-section invoice-form-section--amount">
+        <div className="invoice-form-section__head">
+          <strong>金额与日期</strong>
+          <span>金额统一按人民币元录入</span>
+        </div>
+        <div className="invoice-form__grid">
+          <Field label="不含税金额">
+            <input
+              type="number"
+              step="0.01"
+              className="admin-input"
+              value={formData.amount}
+              onChange={(event) => setField('amount', event.target.value)}
+              placeholder="0.00"
+            />
+          </Field>
+
+          <Field label="税额">
+            <input
+              type="number"
+              step="0.01"
+              className="admin-input"
+              value={formData.taxAmount}
+              onChange={(event) => setField('taxAmount', event.target.value)}
+              placeholder="0.00"
+            />
+          </Field>
+
+          <Field label="价税合计">
+            <input
+              type="number"
+              step="0.01"
+              className="admin-input"
+              value={formData.amountWithTax}
+              onChange={(event) => setField('amountWithTax', event.target.value)}
+              placeholder="0.00"
+            />
+          </Field>
+
+          <Field label="开票日期">
+            <input
+              type="date"
+              className="admin-input"
+              value={formData.issueDate}
+              onChange={(event) => setField('issueDate', event.target.value)}
+            />
+          </Field>
+
+          <Field label="开票人" className="is-span-2">
+            <input
+              type="text"
+              className="admin-input"
+              value={formData.issuer}
+              onChange={(event) => setField('issuer', event.target.value)}
+              placeholder="选填"
+            />
+          </Field>
+        </div>
+      </section>
+
+      <section className="invoice-form-section invoice-form-section--status">
+        <div className="invoice-form-section__head">
+          <strong>税务状态与备注</strong>
+          <span>仅保留后续核验需要的信息</span>
+        </div>
+        <div className="invoice-form__grid">
+          <Field label="税务状态">
+            <select
+              className="admin-input"
+              value={formData.taxStatus}
+              onChange={(event) => setField('taxStatus', event.target.value)}
+            >
+              <option value="normal">正常</option>
+              <option value="red">红冲</option>
+              <option value="void">作废</option>
+              <option value="unknown">待确认</option>
+            </select>
+          </Field>
+
+          <Field label="备注">
+            <input
+              type="text"
+              className="admin-input"
+              value={formData.remark}
+              onChange={(event) => setField('remark', event.target.value)}
+              placeholder="选填：收件人、邮箱或异常说明"
+            />
+          </Field>
+        </div>
+      </section>
     </form>
+  )
+}
+
+function Field({ label, className = '', children }) {
+  return (
+    <div className={`invoice-form__field ${className}`.trim()}>
+      <label>{label}</label>
+      {children}
+    </div>
   )
 }
 
