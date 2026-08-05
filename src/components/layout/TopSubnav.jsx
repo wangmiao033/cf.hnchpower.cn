@@ -5,8 +5,10 @@ import './TopSubnav.css'
 function TopSubnav({ activeView, onNavigate, openTabs = [], onCloseTab }) {
   const group = getGroupForView(activeView)
   const activeTab = getTabView(activeView)
-  const visibleItems = group?.items.filter((item) => openTabs.includes(item.view)) || []
   const isInvoiceGroup = group?.id === 'invoices'
+  const visibleItems = isInvoiceGroup
+    ? group?.items || []
+    : group?.items.filter((item) => openTabs.includes(item.view)) || []
   const canCloseTabs = !isInvoiceGroup && visibleItems.length > 1
 
   if (!group || group.items.length <= 1 || visibleItems.length === 0) {
