@@ -2,40 +2,53 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { getGroupForView, getTabView, SIDEBAR_GROUPS, VIEW_ICONS } from '@/app/routes.js'
 import './Sidebar.css'
 
+const EXPANDED_GROUPS_STORAGE_KEY = 'core-sidebar-expanded-groups-v2'
+const EXPANDABLE_GROUP_IDS = new Set(
+  SIDEBAR_GROUPS.filter((group) => group.items.length > 1).map((group) => group.id)
+)
+
+function readExpandedGroups() {
+  if (typeof window === 'undefined') return new Set()
+
+  try {
+    const stored = JSON.parse(window.localStorage.getItem(EXPANDED_GROUPS_STORAGE_KEY) || '[]')
+    if (!Array.isArray(stored)) return new Set()
+    return new Set(stored.filter((groupId) => EXPANDABLE_GROUP_IDS.has(groupId)))
+  } catch {
+    return new Set()
+  }
+}
+
 function Sidebar({ activeView, onNavigate, collapsed = false }) {
   const activeGroup = useMemo(() => getGroupForView(activeView), [activeView])
   const activeGroupId = activeGroup?.id
   const activeTabView = getTabView(activeView)
-  const [expandedGroups, setExpandedGroups] = useState(() => new Set(
-    SIDEBAR_GROUPS
-      .filter((group) => group.items.length > 1)
-      .map((group) => group.id)
-  ))
+  const [expandedGroups, setExpandedGroups] = useState(readExpandedGroups)
 
   useEffect(() => {
-    if (!activeGroupId || activeGroup?.items.length <= 1) {
-      return
-    }
+    if (!activeGroupId || activeGroup?.items.length <= 1) return
 
     setExpandedGroups((current) => {
-      if (current.has(activeGroupId)) {
-        return current
-      }
-
+      if (current.has(activeGroupId)) return current
       const next = new Set(current)
       next.add(activeGroupId)
       return next
     })
   }, [activeGroup, activeGroupId])
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem(
+      EXPANDED_GROUPS_STORAGE_KEY,
+      JSON.stringify([...expandedGroups])
+    )
+  }, [expandedGroups])
+
   const toggleGroup = (groupId) => {
     setExpandedGroups((current) => {
       const next = new Set(current)
-      if (next.has(groupId)) {
-        next.delete(groupId)
-      } else {
-        next.add(groupId)
-      }
+      if (next.has(groupId)) next.delete(groupId)
+      else next.add(groupId)
       return next
     })
   }
@@ -49,6 +62,7 @@ function Sidebar({ activeView, onNavigate, collapsed = false }) {
             key={item.view}
             type="button"
             className={`sidebar-item ${nested ? 'sidebar-item--nested' : ''} ${isActive ? 'active' : ''}`}
+            aria-current={isActive ? 'page' : undefined}
             onClick={() => onNavigate?.(item.view)}
           >
             <span className="sidebar-item-icon" aria-hidden>
@@ -78,10 +92,21 @@ function Sidebar({ activeView, onNavigate, collapsed = false }) {
             const isExpanded = expandedGroups.has(group.id)
 
             if (isSingleton) {
+              const isActive = firstItem.view === activeTabView
               return (
                 <div key={group.id} className="sidebar-group sidebar-group--singleton">
-                  <div className="sidebar-group-title sidebar-group-title--static">{group.label}</div>
-                  {renderItems(group)}
+                  <button
+                    type="button"
+                    className={`sidebar-item sidebar-item--direct ${isActive ? 'active' : ''}`}
+                    aria-current={isActive ? 'page' : undefined}
+                    title={group.label}
+                    onClick={() => onNavigate?.(firstItem.view)}
+                  >
+                    <span className="sidebar-item-icon" aria-hidden>
+                      {VIEW_ICONS[firstItem.view] || ''}
+                    </span>
+                    <span className="sidebar-item-label">{firstItem.label}</span>
+                  </button>
                 </div>
               )
             }

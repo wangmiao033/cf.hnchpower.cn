@@ -5,8 +5,11 @@ import './TopSubnav.css'
 function TopSubnav({ activeView, onNavigate, openTabs = [], onCloseTab }) {
   const group = getGroupForView(activeView)
   const activeTab = getTabView(activeView)
-  const visibleItems = group?.items.filter((item) => openTabs.includes(item.view)) || []
   const isInvoiceGroup = group?.id === 'invoices'
+  const visibleItems = isInvoiceGroup
+    ? group?.items || []
+    : group?.items.filter((item) => openTabs.includes(item.view)) || []
+  const canCloseTabs = !isInvoiceGroup && visibleItems.length > 1
 
   if (!group || group.items.length <= 1 || visibleItems.length === 0) {
     return null
@@ -14,20 +17,14 @@ function TopSubnav({ activeView, onNavigate, openTabs = [], onCloseTab }) {
 
   return (
     <nav
-      className={`app-top-subnav ${isInvoiceGroup ? 'app-top-subnav--invoices' : ''}`.trim()}
+      className={`app-top-subnav ${isInvoiceGroup ? 'app-top-subnav--invoices' : 'app-top-subnav--workspace'}`}
       aria-label={`${group.label}子导航`}
     >
       <div className="app-top-subnav__inner">
-        {!isInvoiceGroup ? (
-          <div className="app-top-subnav__group">
-            <span className="app-top-subnav__caption">当前模块</span>
-            <strong>{group.label}</strong>
-          </div>
-        ) : null}
         <div
           className={`app-top-subnav__tabs ${isInvoiceGroup ? 'app-top-subnav__tabs--segmented' : ''}`.trim()}
-          role={isInvoiceGroup ? 'tablist' : undefined}
-          aria-label={isInvoiceGroup ? '发票类型' : undefined}
+          role="tablist"
+          aria-label={isInvoiceGroup ? '发票类型' : `${group.label}已打开页面`}
         >
           {visibleItems.map((item) => {
             const active = item.view === activeTab
@@ -36,13 +33,12 @@ function TopSubnav({ activeView, onNavigate, openTabs = [], onCloseTab }) {
               <div
                 key={item.view}
                 className={`app-top-subnav__tab ${active ? 'active' : ''}`}
-                role={isInvoiceGroup ? 'presentation' : undefined}
+                role="presentation"
               >
                 <button
                   type="button"
-                  role={isInvoiceGroup ? 'tab' : undefined}
-                  aria-selected={isInvoiceGroup ? active : undefined}
-                  aria-current={!isInvoiceGroup && active ? 'page' : undefined}
+                  role="tab"
+                  aria-selected={active}
                   className="app-top-subnav__tab-main"
                   onClick={() => onNavigate?.(item.view)}
                 >
@@ -51,7 +47,7 @@ function TopSubnav({ activeView, onNavigate, openTabs = [], onCloseTab }) {
                   </span>
                   <span>{item.label}</span>
                 </button>
-                {!isInvoiceGroup ? (
+                {canCloseTabs ? (
                   <button
                     type="button"
                     className="app-top-subnav__close"
