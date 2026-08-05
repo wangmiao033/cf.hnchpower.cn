@@ -7,6 +7,7 @@
 @import './pages/ContractLedgerPolish.css';
 @import './pages/DataCenterPolish.css';
 @import './pages/BillFormPolish.css';
+@import './pages/InvoiceFormPolish.css';
 
 * {
   margin: 0;
