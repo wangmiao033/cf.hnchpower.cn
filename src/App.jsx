@@ -59,6 +59,25 @@ const QuickSdkGroupedDataPage = lazy(PAGE_LOADERS.quickSdkGroupedData)
 const PartnerPage = lazy(PAGE_LOADERS.partners)
 const UserCenterPage = lazy(PAGE_LOADERS.userCenter)
 
+const OPEN_TABS_STORAGE_KEY = 'core-open-workspace-tabs-v2'
+const VALID_TAB_VIEWS = new Set(
+  SIDEBAR_GROUPS
+    .flatMap((group) => group.items.map((item) => item.view))
+    .filter((view) => view !== VIEWS.DASHBOARD)
+)
+
+function readOpenTabs() {
+  if (typeof window === 'undefined') return []
+
+  try {
+    const stored = JSON.parse(window.localStorage.getItem(OPEN_TABS_STORAGE_KEY) || '[]')
+    if (!Array.isArray(stored)) return []
+    return stored.filter((view) => VALID_TAB_VIEWS.has(view))
+  } catch {
+    return []
+  }
+}
+
 function preloadAuthenticatedPages() {
   Object.values(PAGE_LOADERS).forEach((loadPage) => {
     void loadPage().catch((error) => {
@@ -70,11 +89,7 @@ function preloadAuthenticatedPages() {
 function App() {
   const { isAuthenticated, loading } = useAuth()
   const [activeView, setActiveViewState] = useState(VIEWS.DASHBOARD)
-  const [openTabs, setOpenTabs] = useState(() =>
-    SIDEBAR_GROUPS
-      .filter((group) => group.id !== 'workbench')
-      .flatMap((group) => group.items.map((item) => item.view))
-  )
+  const [openTabs, setOpenTabs] = useState(readOpenTabs)
   const [reconEditRecordId, setReconEditRecordId] = useState(null)
   const [reconReturnView, setReconReturnView] = useState(VIEWS.RECON_RD)
   const [channelEditRecordId, setChannelEditRecordId] = useState(null)
@@ -104,24 +119,25 @@ function App() {
     return () => window.clearTimeout(timer)
   }, [isAuthenticated, loading])
 
-  const setActiveViewRaw = useCallback((view) => {
-    const nextView = view || VIEWS.DASHBOARD
-    startTransition(() => {
-      setActiveViewState(nextView)
-    })
-  }, [])
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem(OPEN_TABS_STORAGE_KEY, JSON.stringify(openTabs))
+  }, [openTabs])
 
-  const navigate = useCallback((view) => {
+  const openView = useCallback((view) => {
     const nextView = view || VIEWS.DASHBOARD
     const tabView = getTabView(nextView)
 
     startTransition(() => {
-      if (tabView !== VIEWS.DASHBOARD) {
+      if (tabView !== VIEWS.DASHBOARD && VALID_TAB_VIEWS.has(tabView)) {
         setOpenTabs((current) => (current.includes(tabView) ? current : [...current, tabView]))
       }
       setActiveViewState(nextView)
     })
   }, [])
+
+  const setActiveViewRaw = openView
+  const navigate = openView
 
   const closeTab = useCallback((view) => {
     const remainingTabs = openTabs.filter((tab) => tab !== view)
@@ -129,9 +145,7 @@ function App() {
     startTransition(() => {
       setOpenTabs(remainingTabs)
 
-      if (getTabView(activeView) !== view) {
-        return
-      }
+      if (getTabView(activeView) !== view) return
 
       const group = getGroupForView(view)
       const groupTabs = group.items.map((item) => item.view)
