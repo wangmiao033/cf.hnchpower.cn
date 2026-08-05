@@ -20,7 +20,7 @@ function InvoiceEditPage() {
 
   const recordFromList = useMemo(() => {
     if (invoiceEditId == null || invoiceEditId === '') return null
-    return invoiceRecords.find((r) => String(r.id) === String(invoiceEditId)) ?? null
+    return invoiceRecords.find((record) => String(record.id) === String(invoiceEditId)) ?? null
   }, [invoiceRecords, invoiceEditId])
 
   useEffect(() => {
@@ -34,18 +34,18 @@ function InvoiceEditPage() {
       setRemoteLoadState('idle')
       return
     }
-    const sid = String(invoiceEditId)
+    const id = String(invoiceEditId)
     let cancelled = false
     setRemoteLoadState('loading')
     setRemoteRecord(null)
     ;(async () => {
       try {
-        const row = await getInvoiceRecord(sid)
+        const row = await getInvoiceRecord(id)
         if (cancelled) return
         setRemoteRecord(apiInvoiceRowToFrontend(row))
         setRemoteLoadState('idle')
-      } catch (e) {
-        console.error(e)
+      } catch (error) {
+        console.error(error)
         if (!cancelled) {
           setRemoteRecord(null)
           setRemoteLoadState('error')
@@ -58,27 +58,26 @@ function InvoiceEditPage() {
   }, [invoiceEditId, recordFromList])
 
   const editRecord = recordFromList ?? remoteRecord
-
   const goList = () => setActiveView(VIEWS.INVOICE_MANAGE)
-
-  const handleAfterSubmit = () => {
-    goList()
-  }
+  const handleAfterSubmit = () => goList()
 
   if (invoiceEditId == null) {
     return (
       <InvoiceFormPageLayout
-        toolsSlot={null}
+        pageMode="编辑发票"
+        isEdit
         previewAmount={0}
+        toolsSlot={<span>请从发票管理列表选择记录后进入编辑。</span>}
         footerActions={
           <button type="button" className="rec-btn rec-btn--primary" onClick={goList}>
             返回列表
           </button>
         }
       >
-        <div className="admin-workspace__card">
-          <p className="admin-workspace__card-desc">请从发票管理列表选择记录并点击「编辑」进入本页。</p>
-        </div>
+        <EmptyState
+          title="尚未选择发票"
+          description="返回发票管理列表，点击目标记录右侧的“编辑”。"
+        />
       </InvoiceFormPageLayout>
     )
   }
@@ -86,17 +85,17 @@ function InvoiceEditPage() {
   if (remoteLoadState === 'loading' && !editRecord) {
     return (
       <InvoiceFormPageLayout
-        toolsSlot={null}
+        pageMode="编辑发票"
+        isEdit
         previewAmount={0}
+        toolsSlot={<span>正在从服务器读取发票记录。</span>}
         footerActions={
           <button type="button" className="rec-btn rec-btn--primary" onClick={goList}>
             返回列表
           </button>
         }
       >
-        <div className="admin-workspace__card">
-          <p className="admin-workspace__card-desc">正在加载发票…</p>
-        </div>
+        <EmptyState title="正在加载发票" description="请稍候，数据读取完成后会自动显示表单。" />
       </InvoiceFormPageLayout>
     )
   }
@@ -104,33 +103,33 @@ function InvoiceEditPage() {
   if (!editRecord) {
     return (
       <InvoiceFormPageLayout
-        toolsSlot={null}
+        pageMode="编辑发票"
+        isEdit
         previewAmount={0}
+        toolsSlot={<span>该记录可能已删除或当前网络不可用。</span>}
         footerActions={
           <button type="button" className="rec-btn rec-btn--primary" onClick={goList}>
             返回列表
           </button>
         }
       >
-        <div className="admin-workspace__card">
-          <h3 className="admin-workspace__card-title">未找到发票</h3>
-          <p className="admin-workspace__card-desc">
-            {remoteLoadState === 'error'
-              ? '无法从服务器加载该记录，请检查网络或列表是否仍包含此发票。'
-              : `数据可能已删除（id: ${invoiceEditId}）。`}
-          </p>
-        </div>
+        <EmptyState
+          title="未找到发票"
+          description={
+            remoteLoadState === 'error'
+              ? '无法从服务器加载该记录，请检查网络后返回列表重试。'
+              : `当前记录可能已删除（ID：${invoiceEditId}）。`
+          }
+        />
       </InvoiceFormPageLayout>
     )
   }
 
   return (
     <InvoiceFormPageLayout
-      toolsSlot={
-        <p className="admin-workspace__card-desc" style={{ margin: 0 }}>
-          核销请在列表中操作；编辑保存后返回发票管理。
-        </p>
-      }
+      pageMode="编辑发票"
+      isEdit
+      toolsSlot={<span>修改保存后返回发票管理；核销仍在列表中处理。</span>}
       previewAmount={previewAmount}
       footerActions={
         <>
@@ -145,7 +144,7 @@ function InvoiceEditPage() {
               document.getElementById(FORM_ID)?.requestSubmit()
             }}
           >
-            保存
+            保存修改
           </button>
         </>
       }
@@ -161,6 +160,15 @@ function InvoiceEditPage() {
         showToast={showToast}
       />
     </InvoiceFormPageLayout>
+  )
+}
+
+function EmptyState({ title, description }) {
+  return (
+    <div className="invoice-form-empty-state">
+      <strong>{title}</strong>
+      <span>{description}</span>
+    </div>
   )
 }
 
