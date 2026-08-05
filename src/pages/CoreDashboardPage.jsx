@@ -10,6 +10,68 @@ function currency(value) {
   return `¥ ${n.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
+function percent(value) {
+  return `${Math.max(0, Math.min(100, Math.round(Number(value || 0))))}%`
+}
+
+function parsePeriod(value) {
+  const raw = String(value || '').trim()
+  if (!raw || raw === '未设置') return null
+
+  const match = raw.match(/(20\d{2})\D{0,3}(1[0-2]|0?[1-9])(?:\D|$)/)
+  if (match) {
+    const year = Number(match[1])
+    const month = Number(match[2])
+    return {
+      key: year * 100 + month,
+      label: `${year}年${month}月`
+    }
+  }
+
+  const compact = raw.match(/^(20\d{2})(1[0-2]|0[1-9])$/)
+  if (compact) {
+    const year = Number(compact[1])
+    const month = Number(compact[2])
+    return {
+      key: year * 100 + month,
+      label: `${year}年${month}月`
+    }
+  }
+
+  return null
+}
+
+function resolveSettlementPeriod(configuredPeriod, rows) {
+  const configured = parsePeriod(configuredPeriod)
+  if (configured) {
+    return { ...configured, source: '系统账期' }
+  }
+
+  const recordPeriods = rows
+    .flatMap((row) => [
+      row?.settlementMonth,
+      row?.billMonth,
+      row?.accountMonth,
+      row?.month,
+      row?.period,
+      row?.date
+    ])
+    .map(parsePeriod)
+    .filter(Boolean)
+    .sort((left, right) => right.key - left.key)
+
+  if (recordPeriods[0]) {
+    return { ...recordPeriods[0], source: '最新账单月份' }
+  }
+
+  const now = new Date()
+  return {
+    key: now.getFullYear() * 100 + now.getMonth() + 1,
+    label: `${now.getFullYear()}年${now.getMonth() + 1}月`,
+    source: '当前月份'
+  }
+}
+
 function CoreDashboardPage() {
   const { recon, settings, setActiveView } = useAppState()
   const rdRecords = recon.records || []
@@ -67,13 +129,23 @@ function CoreDashboardPage() {
   const contractExpiring = Number(contractSummary.expiring_30 || 0)
   const contractExpired = Number(contractSummary.expired || 0)
   const contractRiskCount = contractExpiring + contractExpired
-  const settlementMonth = settings.settlementMonth || '未设置'
+  const allRecords = [...rdRecords, ...channelRecords]
+  const settlementPeriod = resolveSettlementPeriod(settings.settlementMonth, allRecords)
+  const billCount = allRecords.length
+  const completedBillCount = Math.max(0, billCount - totalPendingCount)
+  const billCompletionRate = billCount > 0 ? (completedBillCount / billCount) * 100 : 100
+  const settlementTotal = rdTotal + channelTotal
+  const rdShare = settlementTotal > 0 ? (rdTotal / settlementTotal) * 100 : 0
+  const channelShare = settlementTotal > 0 ? (channelTotal / settlementTotal) * 100 : 0
+  const contractTotal = Number(contractSummary.total || 0)
+  const contractLinked = Number(contractSummary.linked || 0)
+  const contractLinkRate = contractTotal > 0 ? (contractLinked / contractTotal) * 100 : 0
 
   const metrics = [
     {
       label: '对账总额',
-      value: currency(rdTotal + channelTotal),
-      note: `${rdRecords.length + channelRecords.length} 笔账单`,
+      value: currency(settlementTotal),
+      note: `${billCount} 笔账单`,
       view: VIEWS.RECON_PROGRESS,
       tone: 'total'
     },
@@ -128,6 +200,42 @@ function CoreDashboardPage() {
       clear: contractRiskCount === 0
     }
   ]
+  const activeAttentionItems = attentionItems.filter((item) => !item.clear)
+
+  const operationProgress = [
+    {
+      label: '账单完成度',
+      value: percent(billCompletionRate),
+      note: `${completedBillCount} / ${billCount} 笔已完成`,
+      progress: billCompletionRate,
+      tone: 'blue',
+      view: VIEWS.RECON_PROGRESS
+    },
+    {
+      label: '研发金额占比',
+      value: percent(rdShare),
+      note: currency(rdTotal),
+      progress: rdShare,
+      tone: 'indigo',
+      view: VIEWS.RECON_RD
+    },
+    {
+      label: '渠道金额占比',
+      value: percent(channelShare),
+      note: currency(channelTotal),
+      progress: channelShare,
+      tone: 'green',
+      view: VIEWS.RECON_CHANNEL
+    },
+    {
+      label: '合同关联率',
+      value: contractTotal > 0 ? percent(contractLinkRate) : '暂无合同',
+      note: contractTotal > 0 ? `${contractLinked} / ${contractTotal} 份已关联` : '录入合同后自动统计',
+      progress: contractLinkRate,
+      tone: 'violet',
+      view: VIEWS.CONTRACTS
+    }
+  ]
 
   const modules = [
     {
@@ -148,11 +256,19 @@ function CoreDashboardPage() {
     },
     {
       name: '合同台账',
-      count: `${contractSummary.total || 0} 份`,
+      count: `${contractTotal} 份`,
       meta: currency(contractSummary.amount_total),
       view: VIEWS.CONTRACTS,
       tone: 'violet',
       mark: '合'
+    },
+    {
+      name: '发票中心',
+      count: '销项 / 进项',
+      meta: '开票与账单关联',
+      view: VIEWS.INVOICE_MANAGE,
+      tone: 'cyan',
+      mark: '票'
     },
     {
       name: '数据库',
@@ -161,6 +277,14 @@ function CoreDashboardPage() {
       view: VIEWS.QUICKSDK_LIBRARY,
       tone: 'amber',
       mark: '流'
+    },
+    {
+      name: '数据源',
+      count: '产品映射',
+      meta: '游戏与 ProductCode',
+      view: VIEWS.PRODUCT_SOURCES,
+      tone: 'sky',
+      mark: '源'
     },
     {
       name: '客户库',
@@ -178,8 +302,8 @@ function CoreDashboardPage() {
         <div className="core-dashboard-overview__head">
           <div className="core-dashboard-period">
             <span>当前账期</span>
-            <strong>{settlementMonth}</strong>
-            <small>研发与渠道结算统一汇总</small>
+            <strong>{settlementPeriod.label}</strong>
+            <small>依据：{settlementPeriod.source} · 研发与渠道统一汇总</small>
           </div>
           <div className="core-dashboard-primary-actions" aria-label="快捷新增">
             <button
@@ -222,23 +346,66 @@ function CoreDashboardPage() {
             <strong>需要关注</strong>
             <span>优先处理会影响核对、结算和合同履约的事项</span>
           </div>
-          <em>{totalPendingCount + contractRiskCount} 项</em>
+          <em className={activeAttentionItems.length === 0 ? 'is-clear' : ''}>
+            {activeAttentionItems.length} 项
+          </em>
         </div>
-        <div className="core-dashboard-attention-grid">
-          {attentionItems.map((item) => (
+        {activeAttentionItems.length > 0 ? (
+          <div className="core-dashboard-attention-grid">
+            {activeAttentionItems.map((item) => (
+              <button
+                type="button"
+                key={item.label}
+                className={`core-dashboard-attention-card core-dashboard-attention-card--${item.tone}`}
+                onClick={() => setActiveView(item.view)}
+              >
+                <span className="core-dashboard-attention-card__mark" aria-hidden="true" />
+                <span className="core-dashboard-attention-card__copy">
+                  <span>{item.label}</span>
+                  <strong>{item.value}</strong>
+                  <small>{item.note}</small>
+                </span>
+                <i aria-hidden="true">›</i>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <button
+            type="button"
+            className="core-dashboard-clear-state"
+            onClick={() => setActiveView(VIEWS.RECON_PROGRESS)}
+          >
+            <span aria-hidden="true">✓</span>
+            <strong>当前无待处理事项</strong>
+            <small>研发与渠道账单没有待核对记录，合同暂无到期风险</small>
+            <i aria-hidden="true">查看对账进度 ›</i>
+          </button>
+        )}
+      </section>
+
+      <section className="core-dashboard-progress" aria-label="本期运营概览">
+        <div className="core-dashboard-section-title">
+          <div>
+            <strong>本期运营概览</strong>
+            <span>快速判断账单处理效率与结算结构</span>
+          </div>
+        </div>
+        <div className="core-dashboard-progress-grid">
+          {operationProgress.map((item) => (
             <button
               type="button"
               key={item.label}
-              className={`core-dashboard-attention-card core-dashboard-attention-card--${item.tone} ${item.clear ? 'is-clear' : ''}`}
+              className={`core-dashboard-progress-card core-dashboard-progress-card--${item.tone}`}
               onClick={() => setActiveView(item.view)}
             >
-              <span className="core-dashboard-attention-card__mark" aria-hidden="true" />
-              <span className="core-dashboard-attention-card__copy">
+              <span className="core-dashboard-progress-card__head">
                 <span>{item.label}</span>
                 <strong>{item.value}</strong>
-                <small>{item.note}</small>
               </span>
-              <i aria-hidden="true">›</i>
+              <span className="core-dashboard-progress-card__track" aria-hidden="true">
+                <i style={{ width: `${Math.max(0, Math.min(100, item.progress))}%` }} />
+              </span>
+              <small>{item.note}</small>
             </button>
           ))}
         </div>
@@ -248,7 +415,7 @@ function CoreDashboardPage() {
         <div className="core-dashboard-section-title">
           <div>
             <strong>业务入口</strong>
-            <span>进入台账、数据和客户资料</span>
+            <span>进入台账、发票、数据和客户资料</span>
           </div>
         </div>
         <div className="core-dashboard-module-grid">
