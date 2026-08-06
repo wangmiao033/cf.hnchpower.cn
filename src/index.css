@@ -16,6 +16,7 @@
 @import './pages/RdMultiPeriodPolish.css';
 @import './pages/RdDateInputsPolish.css';
 
+/* Production retry: research bill date and month input release. */
 * {
   margin: 0;
   padding: 0;
