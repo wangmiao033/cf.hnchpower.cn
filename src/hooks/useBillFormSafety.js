@@ -7,10 +7,6 @@ import {
   writeBillDraft
 } from '@/domain/drafts/billDrafts.js'
 
-function versionOf(record) {
-  return String(record?.updatedAt || record?.updated_at || '')
-}
-
 function formatTime(timestamp) {
   if (!timestamp) return ''
   try {
@@ -41,15 +37,18 @@ export function useBillFormSafety({
     () => billDraftKey(type, mode, recordId),
     [type, mode, recordId]
   )
-  const baseVersion = versionOf(initialRecord)
+  const baseVersion = useMemo(
+    () => (initialRecord ? JSON.stringify(normalize(initialRecord)) : ''),
+    [initialRecord, normalize]
+  )
+  const initialDraft = useMemo(
+    () => (mode === 'add' ? readBillDraft(draftKey) : null),
+    [mode, draftKey]
+  )
   const [currentRecord, setCurrentRecord] = useState(null)
-  const [draftRecord, setDraftRecord] = useState(() =>
-    mode === 'add' ? readBillDraft(draftKey)?.record || null : null
-  )
-  const [savedAt, setSavedAt] = useState(() =>
-    mode === 'add' ? readBillDraft(draftKey)?.savedAt || 0 : 0
-  )
-  const [restored, setRestored] = useState(() => Boolean(draftRecord))
+  const [draftRecord, setDraftRecord] = useState(initialDraft?.record || null)
+  const [savedAt, setSavedAt] = useState(initialDraft?.savedAt || 0)
+  const [restored, setRestored] = useState(Boolean(initialDraft?.record))
   const [resetVersion, setResetVersion] = useState(0)
   const suppressAutosaveRef = useRef(false)
 
