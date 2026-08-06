@@ -153,6 +153,7 @@ function ReconciliationLineItemsForm({
   layout = 'default',
   mode = 'add',
   editRecord = null,
+  draftRecord = null,
   showSubmitButton = true,
   onAddRecord,
   onUpdateRecord,
@@ -164,6 +165,7 @@ function ReconciliationLineItemsForm({
   onAddPartner,
   onSubmitted,
   onPreviewChange,
+  onFormStateChange,
   submitIntentRef
 }) {
   const cycleListId = `${formId || 'rd'}-cycle-list`
@@ -202,18 +204,19 @@ function ReconciliationLineItemsForm({
   }, [settlementCycles, lines, header.settlementMonth])
 
   useEffect(() => {
-    if (mode === 'edit' && editRecord) {
+    const stateRecord = draftRecord || (mode === 'edit' ? editRecord : null)
+    if (stateRecord) {
       setHeader({
-        settlementMonth: editRecord.settlementMonth ?? initialCycle,
-        issueDate: formatIssueDateLabel(editRecord.createdAt ?? editRecord.created_at),
-        settlementNumber: editRecord.settlementNumber != null ? String(editRecord.settlementNumber) : '',
-        partnerId: editRecord.partnerId != null ? String(editRecord.partnerId) : '',
-        partner: editRecord.partner != null ? String(editRecord.partner) : '',
-        channelFeeRate: editRecord.channelFeeRate != null ? String(editRecord.channelFeeRate) : '0',
-        memo: editRecord.memo != null ? String(editRecord.memo) : '',
-        status: editRecord.status || 'pending'
+        settlementMonth: stateRecord.settlementMonth ?? initialCycle,
+        issueDate: formatIssueDateLabel(stateRecord.createdAt ?? stateRecord.created_at),
+        settlementNumber: stateRecord.settlementNumber != null ? String(stateRecord.settlementNumber) : '',
+        partnerId: stateRecord.partnerId != null ? String(stateRecord.partnerId) : '',
+        partner: stateRecord.partner != null ? String(stateRecord.partner) : '',
+        channelFeeRate: stateRecord.channelFeeRate != null ? String(stateRecord.channelFeeRate) : '0',
+        memo: stateRecord.memo != null ? String(stateRecord.memo) : '',
+        status: stateRecord.status || 'pending'
       })
-      setLines(cloneItemsFromRecord(editRecord))
+      setLines(cloneItemsFromRecord(stateRecord))
       return
     }
     setHeader((h) => ({
@@ -222,7 +225,7 @@ function ReconciliationLineItemsForm({
       issueDate: formatIssueDateLabel()
     }))
     setLines([createEmptyRdLine(0, settlementMonth || getCurrentCycleLabel())])
-  }, [mode, editRecord, settlementMonth, initialCycle])
+  }, [mode, editRecord, draftRecord, settlementMonth, initialCycle])
 
   useEffect(() => {
     if (!header.partner || header.partnerId) return
@@ -349,6 +352,10 @@ function ReconciliationLineItemsForm({
       memo: header.memo
     }
   }
+
+  useEffect(() => {
+    onFormStateChange?.(mergedRecordForSubmit())
+  }, [header, lines, mode, editRecord?.id, onFormStateChange])
 
   const validate = () => {
     const { error: monthError } = resolveCanonicalSettlementMonth(lines, header.settlementMonth)

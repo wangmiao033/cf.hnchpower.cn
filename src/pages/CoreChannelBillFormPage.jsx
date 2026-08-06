@@ -11,6 +11,11 @@ import {
   invalidateEditRecord,
   loadEditRecord
 } from '@/lib/api/editRecordCache.js'
+import {
+  isMeaningfulChannelDraft,
+  normalizeChannelDraft
+} from '@/domain/drafts/billDrafts.js'
+import { useBillFormSafety } from '@/hooks/useBillFormSafety.js'
 import './CoreBillFormPages.css'
 import '@/components/reconciliation/reconciliation-admin.css'
 
@@ -28,10 +33,13 @@ function CoreChannelBillFormPage({ mode }) {
     settings,
     showToast,
     setActiveView,
+    setNavigationBlocker,
+    clearNavigationBlocker,
     channelEditRecordId,
     channelReturnView
   } = useAppState()
   const isEdit = mode === 'edit'
+  const view = isEdit ? VIEWS.CHANNEL_RECON_EDIT : VIEWS.CHANNEL_RECON_CREATE
   const submitIntentRef = useRef('back')
   const [previewAmount, setPreviewAmount] = useState(0)
   const [remoteRecord, setRemoteRecord] = useState(null)
@@ -95,6 +103,19 @@ function CoreChannelBillFormPage({ mode }) {
   const isReconciled = RECONCILED_STATUSES.has(String(stableRecord?.status || '').toLowerCase())
   const stateLabel = !isEdit ? '新建账单' : isReconciled ? '已核对' : '待核对'
 
+  const safety = useBillFormSafety({
+    type: 'channel',
+    title: isEdit ? '编辑渠道账单' : '新增渠道账单',
+    mode: isEdit ? 'edit' : 'add',
+    view,
+    recordId: isEdit ? String(channelEditRecordId || '') : '',
+    initialRecord: stableRecord,
+    normalize: normalizeChannelDraft,
+    isMeaningful: isMeaningfulChannelDraft,
+    setNavigationBlocker,
+    clearNavigationBlocker
+  })
+
   const listSnapshot = isEdit
     ? (recon.channelRecords || []).find(
         (row) => String(row?.id || '') === String(channelEditRecordId || '')
@@ -118,6 +139,7 @@ function CoreChannelBillFormPage({ mode }) {
   }
 
   const handleAfterSubmit = (intent) => {
+    safety.clearAfterSubmit()
     if (isEdit && channelEditRecordId) {
       invalidateEditRecord('channel', String(channelEditRecordId))
     }
@@ -125,10 +147,13 @@ function CoreChannelBillFormPage({ mode }) {
       showToast('已保存，可继续新增下一张渠道账单', 'success')
       return
     }
-    if (intent === 'confirm') {
-      showToast('渠道账单已完成核对', 'success')
-    }
+    if (intent === 'confirm') showToast('渠道账单已完成核对', 'success')
     goList()
+  }
+
+  const discardDraft = () => {
+    const confirmed = window.confirm('确定清除当前本机草稿并恢复为空白/服务器版本吗？')
+    if (confirmed) safety.discardDraft()
   }
 
   if (isEdit && !channelEditRecordId) {
@@ -174,6 +199,11 @@ function CoreChannelBillFormPage({ mode }) {
                 : '确认明细和附件后，可直接完成核对。'
               : '先选择合作方和账期，再录入游戏明细。'}
           </span>
+          <div className={`core-bill-draft-state ${safety.dirty ? 'is-dirty' : 'is-clean'}`}>
+            <span aria-hidden="true" />
+            <strong>{safety.statusText}</strong>
+            <small>{safety.dirty ? '本机草稿尚未提交服务器' : '已启用离开保护与自动恢复'}</small>
+          </div>
         </div>
         <div className="core-bill-form-total" aria-live="polite">
           <span>预估结算</span>
@@ -183,15 +213,18 @@ function CoreChannelBillFormPage({ mode }) {
 
       <section className="core-bill-card core-bill-card--embedded">
         <ChannelBillingForm
+          key={`${mode}-${channelEditRecordId || 'new'}-${safety.resetVersion}`}
           formId={FORM_ID}
           mode={isEdit ? 'edit' : 'add'}
           recordId={stableRecord?.id}
           sourceRecord={stableRecord}
+          draftRecord={safety.draftRecord}
           onAddRecord={recon.onChannelAddRecord}
           onUpdateRecord={recon.onChannelUpdateRecord}
           submitIntentRef={submitIntentRef}
           onAfterSubmit={handleAfterSubmit}
           onPreviewChange={setPreviewAmount}
+          onFormStateChange={safety.onFormStateChange}
           onError={(msg) => showToast(msg, 'error')}
           partners={settings?.partners || []}
           onAddPartner={async (name) => {
@@ -202,9 +235,7 @@ function CoreChannelBillFormPage({ mode }) {
               createdAt: new Date().toISOString()
             }
             const ok = await settings.persistPartner(newPartner)
-            if (ok) {
-              showToast(`客户「${name}」已加入服务器客户库`, 'success')
-            }
+            if (ok) showToast(`客户「${name}」已加入服务器客户库`, 'success')
           }}
         />
       </section>
@@ -220,6 +251,11 @@ function CoreChannelBillFormPage({ mode }) {
           <strong>{money(previewAmount)}</strong>
         </div>
         <div className="core-bill-footer-actions">
+          {safety.dirty ? (
+            <button type="button" className="core-bill-draft-clear" onClick={discardDraft}>
+              清除草稿
+            </button>
+          ) : null}
           <button type="button" onClick={goList}>返回列表</button>
           {!isEdit ? (
             <button

@@ -15,6 +15,11 @@ import {
   invalidateEditRecord,
   loadEditRecord
 } from '@/lib/api/editRecordCache.js'
+import {
+  isMeaningfulRdDraft,
+  normalizeRdDraft
+} from '@/domain/drafts/billDrafts.js'
+import { useBillFormSafety } from '@/hooks/useBillFormSafety.js'
 import './CoreBillFormPages.css'
 import '@/components/reconciliation/reconciliation-admin.css'
 
@@ -31,10 +36,13 @@ function CoreRdBillFormPage({ mode }) {
     settings,
     showToast,
     setActiveView,
+    setNavigationBlocker,
+    clearNavigationBlocker,
     reconEditRecordId,
     reconReturnView
   } = useAppState()
   const isEdit = mode === 'edit'
+  const view = isEdit ? VIEWS.RECON_EDIT : VIEWS.RECON_CREATE
   const submitIntentRef = useRef('back')
   const [previewAmount, setPreviewAmount] = useState(0)
   const [remoteRecord, setRemoteRecord] = useState(null)
@@ -96,6 +104,19 @@ function CoreRdBillFormPage({ mode }) {
       ? { ...editRecord, id: String(reconEditRecordId) }
       : editRecord
 
+  const safety = useBillFormSafety({
+    type: 'rd',
+    title: isEdit ? '编辑研发账单' : '新增研发账单',
+    mode: isEdit ? 'edit' : 'add',
+    view,
+    recordId: isEdit ? String(reconEditRecordId || '') : '',
+    initialRecord: stableEditRecord,
+    normalize: normalizeRdDraft,
+    isMeaningful: isMeaningfulRdDraft,
+    setNavigationBlocker,
+    clearNavigationBlocker
+  })
+
   const listSnapshot = isEdit
     ? (recon.records || []).find((row) => String(row?.id || '') === String(reconEditRecordId || ''))
     : null
@@ -123,6 +144,7 @@ function CoreRdBillFormPage({ mode }) {
   }
 
   const handleSubmitted = (intent) => {
+    safety.clearAfterSubmit()
     if (isEdit && reconEditRecordId) {
       invalidateEditRecord('rd', String(reconEditRecordId))
     }
@@ -132,6 +154,11 @@ function CoreRdBillFormPage({ mode }) {
       return
     }
     goList()
+  }
+
+  const discardDraft = () => {
+    const confirmed = window.confirm('确定清除当前本机草稿并恢复为空白/服务器版本吗？')
+    if (confirmed) safety.discardDraft()
   }
 
   if (isEdit && !reconEditRecordId) {
@@ -169,6 +196,11 @@ function CoreRdBillFormPage({ mode }) {
           <span className="core-bill-form-tip">
             {isEdit ? '修改基础信息或游戏明细后保存。' : '先确认合作方和账期，再录入游戏流水。'}
           </span>
+          <div className={`core-bill-draft-state ${safety.dirty ? 'is-dirty' : 'is-clean'}`}>
+            <span aria-hidden="true" />
+            <strong>{safety.statusText}</strong>
+            <small>{safety.dirty ? '本机草稿尚未提交服务器' : '已启用离开保护与自动恢复'}</small>
+          </div>
         </div>
         <div className="core-bill-form-total" aria-live="polite">
           <span>预估结算</span>
@@ -178,13 +210,16 @@ function CoreRdBillFormPage({ mode }) {
 
       <section className="core-bill-card core-bill-card--embedded">
         <ReconciliationLineItemsForm
+          key={`${mode}-${reconEditRecordId || 'new'}-${safety.resetVersion}`}
           formId={FORM_ID}
           layout="createPage"
           mode={isEdit ? 'edit' : 'add'}
           editRecord={stableEditRecord}
+          draftRecord={isEdit || !recon.quickFillData ? safety.draftRecord : null}
           showSubmitButton={false}
           submitIntentRef={submitIntentRef}
           onPreviewChange={setPreviewAmount}
+          onFormStateChange={safety.onFormStateChange}
           onSubmitted={handleSubmitted}
           onAddRecord={recon.addRecord}
           onUpdateRecord={recon.updateRecord}
@@ -201,9 +236,7 @@ function CoreRdBillFormPage({ mode }) {
               createdAt: new Date().toISOString()
             }
             const ok = await settings.persistPartner(newPartner)
-            if (ok) {
-              showToast(`客户「${name}」已加入服务器客户库`, 'success')
-            }
+            if (ok) showToast(`客户「${name}」已加入服务器客户库`, 'success')
           }}
         />
       </section>
@@ -219,6 +252,11 @@ function CoreRdBillFormPage({ mode }) {
           <strong>{money(previewAmount)}</strong>
         </div>
         <div className="core-bill-footer-actions">
+          {safety.dirty ? (
+            <button type="button" className="core-bill-draft-clear" onClick={discardDraft}>
+              清除草稿
+            </button>
+          ) : null}
           <button type="button" onClick={goList}>返回列表</button>
           {!isEdit ? (
             <button

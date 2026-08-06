@@ -85,11 +85,13 @@ function ChannelBillingForm({
   mode = 'add',
   recordId = null,
   sourceRecord = null,
+  draftRecord = null,
   onAddRecord,
   onUpdateRecord,
   submitIntentRef,
   onAfterSubmit,
   onPreviewChange,
+  onFormStateChange,
   onError,
   partners = [],
   onAddPartner,
@@ -135,10 +137,11 @@ function ChannelBillingForm({
   }, [previewSettlement, onPreviewChange])
 
   useEffect(() => {
-    if (mode === 'edit' && sourceRecord) {
-      const nextHeader = recordToHeaderForm(sourceRecord)
+    const stateRecord = draftRecord || (mode === 'edit' ? sourceRecord : null)
+    if (stateRecord) {
+      const nextHeader = recordToHeaderForm(stateRecord)
       setPartnerId('')
-      const lf = recordToLineForms(sourceRecord)
+      const lf = recordToLineForms(stateRecord)
       const settlementMonth = nextHeader.settlementMonth || monthFromCycle(lf[0]?.settlementCycle)
       const dateRange = monthDateRange(settlementMonth)
       const defaultCycle = formatCycleFromMonth(settlementMonth)
@@ -148,13 +151,12 @@ function ChannelBillingForm({
           ? lf.map((line) => ({ ...line, settlementCycle: defaultCycle }))
           : [{ ...initialLineItem(), settlementCycle: defaultCycle }]
       )
+      return
     }
-    if (mode === 'add') {
-      setHeader({ ...initialHeaderForm })
-      setPartnerId('')
-      setLines([{ ...initialLineItem() }])
-    }
-  }, [mode, sourceRecord?.id])
+    setHeader({ ...initialHeaderForm })
+    setPartnerId('')
+    setLines([{ ...initialLineItem() }])
+  }, [mode, sourceRecord?.id, draftRecord])
 
   useEffect(() => {
     if (partnerId) return
@@ -206,6 +208,22 @@ function ChannelBillingForm({
       return prev.filter((_, i) => i !== index)
     })
   }
+
+  const formStateRecord = useMemo(() => {
+    const dateRange = monthDateRange(header.settlementMonth)
+    const settlementCycle = formatCycleFromMonth(header.settlementMonth)
+    return {
+      ...buildFullChannelRecord(
+        { ...header, ...dateRange, status: header.status || 'pending' },
+        lines.map((line) => ({ ...line, settlementCycle }))
+      ),
+      ...(recordId != null ? { id: recordId } : {})
+    }
+  }, [header, lines, recordId])
+
+  useEffect(() => {
+    onFormStateChange?.(formStateRecord)
+  }, [formStateRecord, onFormStateChange])
 
   const handleSubmit = async (e) => {
     e.preventDefault()

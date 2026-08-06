@@ -115,6 +115,8 @@ function App() {
   const [channelReturnView, setChannelReturnView] = useState(VIEWS.RECON_CHANNEL)
   const [invoiceEditId, setInvoiceEditId] = useState(null)
   const prevActiveViewRef = useRef(activeView)
+  const activeViewRef = useRef(activeView)
+  const navigationBlockerRef = useRef(null)
   const [toast, setToast] = useState({ isVisible: false, message: '', type: 'success' })
 
   const showToast = useCallback((message, type = 'success') => {
@@ -181,8 +183,37 @@ function App() {
     window.localStorage.setItem(OPEN_TABS_STORAGE_KEY, JSON.stringify(openTabs))
   }, [openTabs])
 
+  const setNavigationBlocker = useCallback((blocker) => {
+    if (!blocker?.active || !blocker?.view) {
+      navigationBlockerRef.current = null
+      return
+    }
+    navigationBlockerRef.current = blocker
+  }, [])
+
+  const clearNavigationBlocker = useCallback((view) => {
+    const current = navigationBlockerRef.current
+    if (!current) return
+    if (!view || current.view === view) navigationBlockerRef.current = null
+  }, [])
+
+  const confirmLeaveCurrentView = useCallback((nextView) => {
+    const blocker = navigationBlockerRef.current
+    const currentView = activeViewRef.current
+    if (!blocker?.active || blocker.view !== currentView || nextView === currentView) return true
+    const confirmed = window.confirm(
+      blocker.message || '当前页面还有未保存内容，确定离开吗？'
+    )
+    if (confirmed) {
+      blocker.onConfirm?.()
+      navigationBlockerRef.current = null
+    }
+    return confirmed
+  }, [])
+
   const openView = useCallback((view) => {
     const nextView = view || VIEWS.DASHBOARD
+    if (!confirmLeaveCurrentView(nextView)) return false
     const tabView = getTabView(nextView)
 
     startTransition(() => {
@@ -191,18 +222,21 @@ function App() {
       }
       setActiveViewState(nextView)
     })
-  }, [])
+    return true
+  }, [confirmLeaveCurrentView])
 
   const setActiveViewRaw = openView
   const navigate = openView
 
   const closeTab = useCallback((view) => {
     const remainingTabs = openTabs.filter((tab) => tab !== view)
+    const closesCurrentView = getTabView(activeView) === view
+    if (closesCurrentView && !confirmLeaveCurrentView(VIEWS.DASHBOARD)) return
 
     startTransition(() => {
       setOpenTabs(remainingTabs)
 
-      if (getTabView(activeView) !== view) return
+      if (!closesCurrentView) return
 
       const group = getGroupForView(view)
       const groupTabs = group.items.map((item) => item.view)
@@ -216,13 +250,17 @@ function App() {
 
       setActiveViewState(previousTab || nextTab || VIEWS.DASHBOARD)
     })
-  }, [activeView, openTabs])
+  }, [activeView, openTabs, confirmLeaveCurrentView])
 
   const hideToast = useCallback(() => {
     setToast((t) => ({ ...t, isVisible: false }))
   }, [])
 
   useEffect(() => {
+    activeViewRef.current = activeView
+    if (navigationBlockerRef.current?.view !== activeView) {
+      navigationBlockerRef.current = null
+    }
     if (prevActiveViewRef.current === VIEWS.RECON_EDIT && activeView !== VIEWS.RECON_EDIT) {
       setReconEditRecordId(null)
     }
@@ -278,6 +316,8 @@ function App() {
     setActiveView: navigate,
     setActiveViewRaw,
     activeView,
+    setNavigationBlocker,
+    clearNavigationBlocker,
     reconEditRecordId,
     reconReturnView,
     openReconciliationEdit,
