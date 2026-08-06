@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
-import { ApiError } from '@/lib/api/client'
+import { ApiError, AUTH_UNAUTHORIZED_EVENT } from '@/lib/api/client'
 import {
   authMe,
   changeMyPassword,
@@ -31,6 +31,17 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     refreshMe()
   }, [refreshMe])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined
+
+    const handleUnauthorized = () => {
+      setUser(null)
+      setLoading(false)
+    }
+    window.addEventListener(AUTH_UNAUTHORIZED_EVENT, handleUnauthorized)
+    return () => window.removeEventListener(AUTH_UNAUTHORIZED_EVENT, handleUnauthorized)
+  }, [])
 
   const signInWithPassword = useCallback(async (account, password) => {
     const me = await loginPassword(account, password)
