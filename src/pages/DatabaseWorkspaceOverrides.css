@@ -1,0 +1,48 @@
+/* Keep the database toolbar dimensions authoritative over shared data-center rules. */
+.quicksdk-library-page .qk-database-toolbar .qk-period-control .qk-period-field {
+  flex: 0 0 176px;
+  width: 176px;
+  max-width: none;
+}
+
+.quicksdk-library-page .qk-database-toolbar button.qk-icon-button {
+  width: 34px;
+  min-width: 34px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid #d8e3f1;
+  background: #ffffff;
+  color: #37506f;
+  font-size: 20px;
+}
+
+.quicksdk-library-page .qk-database-toolbar button.qk-primary-button,
+.quicksdk-library-page .qk-database-toolbar button.qk-refresh-button {
+  min-width: 66px;
+  height: 36px;
+  padding: 0 13px;
+  border-color: #2563eb;
+  background: #2563eb;
+  color: #ffffff;
+}
+
+.quicksdk-library-page .qk-database-toolbar button.qk-secondary-button {
+  min-width: auto;
+  height: 36px;
+  padding: 0 11px;
+  border: 1px solid #d8e3f1;
+  background: #ffffff;
+  color: #4c607b;
+}
+
+.quicksdk-library-page .qk-database-toolbar .qk-period-field span {
+  padding-left: 10px;
+}
+
+@media (max-width: 560px) {
+  .quicksdk-library-page .qk-database-toolbar .qk-period-control .qk-period-field {
+    width: 100%;
+    max-width: none;
+    flex-basis: auto;
+  }
+}

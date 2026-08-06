@@ -7,8 +7,22 @@ import {
   listQuickSdkFlows
 } from '@/lib/api/quicksdk.ts'
 import './QuickSdkLibraryPage.css'
+import './DatabaseWorkspacePolish.css'
 
 const DEFAULT_MONTH = new Date().toISOString().slice(0, 7)
+const FLOW_PAGE_SIZES = [20, 50, 100]
+
+const VIEW_OPTIONS = [
+  { key: 'overview', label: '数据概览' },
+  { key: 'flows', label: '流水明细' },
+  { key: 'imports', label: '导入记录' }
+]
+
+const SEARCH_SCOPES = [
+  { value: 'all', label: '产品或渠道' },
+  { value: 'game', label: '仅产品' },
+  { value: 'channel', label: '仅渠道' }
+]
 
 function money(value) {
   const n = Number(value || 0)
@@ -21,73 +35,129 @@ function dateText(value) {
   return Number.isNaN(d.getTime()) ? String(value) : d.toLocaleString('zh-CN', { hour12: false })
 }
 
+function monthText(value) {
+  const match = String(value || '').match(/^(\d{4})-(\d{1,2})$/)
+  if (!match) return value || '-'
+  return `${match[1]}年${Number(match[2])}月`
+}
+
+function shiftMonthValue(value, amount) {
+  const match = String(value || '').match(/^(\d{4})-(\d{1,2})$/)
+  if (!match) return DEFAULT_MONTH
+  const date = new Date(Number(match[1]), Number(match[2]) - 1 + amount, 1)
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+}
+
 function QuickSdkLibraryPage() {
   const [month, setMonth] = useState(DEFAULT_MONTH)
+  const [latestMonth, setLatestMonth] = useState('')
   const [keyword, setKeyword] = useState('')
+  const [appliedKeyword, setAppliedKeyword] = useState('')
+  const [searchScope, setSearchScope] = useState('all')
+  const [activeView, setActiveView] = useState('overview')
   const [summary, setSummary] = useState(null)
   const [batches, setBatches] = useState([])
+  const [batchTotal, setBatchTotal] = useState(0)
   const [flows, setFlows] = useState([])
+  const [flowTotal, setFlowTotal] = useState(0)
+  const [flowPage, setFlowPage] = useState(0)
+  const [flowPageSize, setFlowPageSize] = useState(20)
   const [analytics, setAnalytics] = useState({ game_rankings: [], channel_rankings: [] })
-  const [loading, setLoading] = useState(false)
+  const [overviewLoading, setOverviewLoading] = useState(false)
+  const [flowLoading, setFlowLoading] = useState(false)
   const [error, setError] = useState('')
+  const [lastUpdatedAt, setLastUpdatedAt] = useState(null)
 
-  const load = async () => {
-    setLoading(true)
+  const loadOverview = async (targetMonth = month) => {
+    setOverviewLoading(true)
     setError('')
     try {
-      const params = { settlement_month: month }
-      const [summaryRes, batchRes, flowRes, analyticsRes] = await Promise.all([
+      const params = { settlement_month: targetMonth }
+      const [summaryRes, batchRes, analyticsRes] = await Promise.all([
         getQuickSdkSummary(params),
-        listQuickSdkBatches({ ...params, limit: 20 }),
-        listQuickSdkFlows({ ...params, q: keyword, limit: 200 }),
+        listQuickSdkBatches({ ...params, limit: 100 }),
         getQuickSdkAnalytics(params)
       ])
       setSummary(summaryRes)
       setBatches(batchRes.items || [])
-      setFlows(flowRes.items || [])
+      setBatchTotal(Number(batchRes.total || 0))
       setAnalytics(analyticsRes || { game_rankings: [], channel_rankings: [] })
+      setLastUpdatedAt(new Date())
     } catch (err) {
-      setError(err instanceof Error ? err.message : '数据库流水读取失败')
+      setError(err instanceof Error ? err.message : '数据库概览读取失败')
     } finally {
-      setLoading(false)
+      setOverviewLoading(false)
+    }
+  }
+
+  const loadFlows = async ({
+    targetMonth = month,
+    targetKeyword = appliedKeyword,
+    targetScope = searchScope,
+    targetPage = flowPage,
+    targetPageSize = flowPageSize
+  } = {}) => {
+    setFlowLoading(true)
+    setError('')
+    try {
+      const params = {
+        settlement_month: targetMonth,
+        limit: targetPageSize,
+        offset: targetPage * targetPageSize
+      }
+      if (targetKeyword) {
+        if (targetScope === 'game') params.game_name = targetKeyword
+        else if (targetScope === 'channel') params.channel_name = targetKeyword
+        else params.q = targetKeyword
+      }
+      const flowRes = await listQuickSdkFlows(params)
+      setFlows(flowRes.items || [])
+      setFlowTotal(Number(flowRes.total || 0))
+      setLastUpdatedAt(new Date())
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '流水明细读取失败')
+    } finally {
+      setFlowLoading(false)
     }
   }
 
   useEffect(() => {
-    load()
+    let cancelled = false
+    listQuickSdkBatches({ limit: 1 })
+      .then((response) => {
+        const latest = response?.items?.[0]?.settlement_month || ''
+        if (cancelled || !latest) return
+        setLatestMonth(latest)
+        setMonth(latest)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    loadOverview(month)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [month])
 
   useEffect(() => {
-    let cancelled = false
-
-    getQuickSdkAnalytics({})
-      .then((overview) => {
-        const latestMonth = overview?.monthly?.[0]?.settlement_month
-        if (!cancelled && latestMonth && latestMonth !== month) {
-          setMonth(latestMonth)
-        }
-      })
-      .catch(() => {})
-
-    return () => {
-      cancelled = true
-    }
-    // Only detect the latest imported month when entering the page.
+    loadFlows({
+      targetMonth: month,
+      targetKeyword: appliedKeyword,
+      targetScope: searchScope,
+      targetPage: flowPage,
+      targetPageSize: flowPageSize
+    })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [month, appliedKeyword, searchScope, flowPage, flowPageSize])
 
   const stats = useMemo(
     () => [
-      { label: '导入批次', value: summary?.batch_count ?? 0, hint: '本月文件批次', tone: 'blue' },
-      { label: '流水行数', value: summary?.row_count ?? 0, hint: '已解析明细', tone: 'slate' },
-      {
-        label: '产品 / 渠道',
-        value: `${summary?.game_count ?? 0} / ${summary?.channel_count ?? 0}`,
-        hint: '覆盖范围',
-        tone: 'green'
-      },
-      { label: '流水合计', value: money(summary?.total_flow), hint: '本月总流水', tone: 'amber' }
+      { label: '导入批次', value: summary?.batch_count ?? 0, hint: '当前账期文件', tone: 'blue' },
+      { label: '流水行数', value: summary?.row_count ?? 0, hint: '数据库明细', tone: 'slate' },
+      { label: '产品数量', value: summary?.game_count ?? 0, hint: '去重产品', tone: 'green' },
+      { label: '渠道数量', value: summary?.channel_count ?? 0, hint: '去重渠道', tone: 'amber' }
     ],
     [summary]
   )
@@ -95,57 +165,188 @@ function QuickSdkLibraryPage() {
   const hasData = Number(summary?.row_count || 0) > 0 || batches.length > 0 || flows.length > 0
   const gameRankings = analytics.game_rankings || []
   const channelRankings = analytics.channel_rankings || []
-  const visibleFlows = useMemo(() => {
-    const q = keyword.trim().toLowerCase()
-    if (!q) return flows
-    return flows.filter((row) => {
-      const game = String(row.game_name || '').toLowerCase()
-      const channel = String(row.channel_name || '').toLowerCase()
-      return game.includes(q) || channel.includes(q)
-    })
-  }, [flows, keyword])
+  const latestSelectedBatch = batches[0]
+  const hasSearch = Boolean(appliedKeyword)
+
+  const viewCounts = useMemo(
+    () => ({
+      overview: Number(summary?.game_count || 0) + Number(summary?.channel_count || 0),
+      flows: flowTotal,
+      imports: batchTotal
+    }),
+    [summary, flowTotal, batchTotal]
+  )
+
+  const setSelectedMonth = (nextMonth) => {
+    if (!nextMonth) return
+    setFlowPage(0)
+    setMonth(nextMonth)
+  }
+
+  const applySearch = (event) => {
+    event?.preventDefault()
+    setFlowPage(0)
+    setAppliedKeyword(keyword.trim())
+    setActiveView('flows')
+  }
+
+  const clearSearch = () => {
+    setKeyword('')
+    setAppliedKeyword('')
+    setSearchScope('all')
+    setFlowPage(0)
+  }
+
+  const refreshAll = async () => {
+    await Promise.all([
+      loadOverview(month),
+      loadFlows({
+        targetMonth: month,
+        targetKeyword: appliedKeyword,
+        targetScope: searchScope,
+        targetPage: flowPage,
+        targetPageSize: flowPageSize
+      })
+    ])
+  }
+
+  const drillIntoRanking = (name, scope) => {
+    const nextKeyword = String(name || '').trim()
+    setKeyword(nextKeyword)
+    setAppliedKeyword(nextKeyword)
+    setSearchScope(scope)
+    setFlowPage(0)
+    setActiveView('flows')
+  }
+
+  const flowColumns = [
+    { label: '序号', align: 'center' },
+    { label: '日期' },
+    { label: '产品' },
+    { label: '渠道' },
+    { label: '流水', align: 'right' }
+  ]
+
+  const flowRows = flows.map((row, index) => ({
+    key: row.id || `${row.game_name}-${row.channel_name}-${index}`,
+    cells: [
+      flowPage * flowPageSize + index + 1,
+      row.flow_date || row.settlement_month || '-',
+      row.game_name || '-',
+      row.channel_name || '-',
+      money(row.gross_flow)
+    ]
+  }))
+
+  const batchColumns = [
+    { label: '序号', align: 'center' },
+    { label: '文件' },
+    { label: '账期' },
+    { label: '行数', align: 'right' },
+    { label: '产品', align: 'right' },
+    { label: '渠道', align: 'right' },
+    { label: '流水', align: 'right' },
+    { label: '导入时间' }
+  ]
+
+  const batchRows = batches.map((batch, index) => ({
+    key: batch.id || `${batch.source_file}-${index}`,
+    cells: [
+      index + 1,
+      batch.source_file || '-',
+      batch.settlement_month || '-',
+      batch.row_count,
+      batch.game_count,
+      batch.channel_count,
+      money(batch.total_flow),
+      dateText(batch.imported_at)
+    ]
+  }))
 
   return (
     <PageContainer hideHeader className="quicksdk-library-page">
-      <section className="qk-page-head">
-        <div className="qk-page-title">
-          <p className="qk-page-eyebrow">数据中心</p>
-          <h1>数据库</h1>
-          <p>按月份查看已导入批次、游戏流水、渠道流水和原始明细，用于研发和渠道对账核验。</p>
-        </div>
-        <div className="qk-toolbar" aria-label="数据库查询条件">
-          <label>
-            <span>月份</span>
-            <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} />
-          </label>
-          <label>
-            <span>搜索</span>
+      <section className="qk-page-head qk-database-head">
+        <div className="qk-toolbar qk-database-toolbar" aria-label="数据库查询条件">
+          <div className="qk-period-control">
+            <button
+              type="button"
+              className="qk-icon-button"
+              onClick={() => setSelectedMonth(shiftMonthValue(month, -1))}
+              title="上一个月"
+              aria-label="上一个月"
+            >
+              ‹
+            </button>
+            <label className="qk-period-field">
+              <span>账期</span>
+              <input type="month" value={month} onChange={(event) => setSelectedMonth(event.target.value)} />
+            </label>
+            <button
+              type="button"
+              className="qk-icon-button"
+              onClick={() => setSelectedMonth(shiftMonthValue(month, 1))}
+              title="下一个月"
+              aria-label="下一个月"
+            >
+              ›
+            </button>
+            <button
+              type="button"
+              className="qk-secondary-button"
+              disabled={!latestMonth || latestMonth === month}
+              onClick={() => setSelectedMonth(latestMonth)}
+            >
+              最新月份
+            </button>
+          </div>
+
+          <form className="qk-search-control" onSubmit={applySearch}>
+            <select
+              value={searchScope}
+              onChange={(event) => {
+                setSearchScope(event.target.value)
+                setFlowPage(0)
+              }}
+              aria-label="搜索范围"
+            >
+              {SEARCH_SCOPES.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
             <input
               type="search"
               value={keyword}
-              onChange={(e) => setKeyword(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') load()
-              }}
-              placeholder="产品或渠道"
+              onChange={(event) => setKeyword(event.target.value)}
+              placeholder="输入产品名或渠道名"
+              aria-label="搜索数据库"
             />
-          </label>
-          <button type="button" onClick={load} disabled={loading}>
-            {loading ? '读取中' : '刷新'}
+            <button type="submit" className="qk-primary-button">查询</button>
+            {keyword || appliedKeyword ? (
+              <button type="button" className="qk-secondary-button" onClick={clearSearch}>清空</button>
+            ) : null}
+          </form>
+
+          <button
+            type="button"
+            className="qk-refresh-button"
+            onClick={refreshAll}
+            disabled={overviewLoading || flowLoading}
+          >
+            {overviewLoading || flowLoading ? '读取中' : '刷新数据'}
           </button>
         </div>
       </section>
 
       {error ? <div className="qk-error">{error}</div> : null}
 
-      <section className="qk-overview">
+      <section className="qk-overview qk-database-overview">
         <div className="qk-overview-main">
-          <span>{month} 数据快照</span>
+          <span>{monthText(month)} 数据快照</span>
           <strong>{money(summary?.total_flow)}</strong>
           <p>
             {hasData
-              ? `已读取 ${summary?.row_count ?? 0} 行流水，覆盖 ${summary?.game_count ?? 0} 个产品、${summary?.channel_count ?? 0} 个渠道。`
-              : '当前月份还没有读取到流水数据，可切换月份或确认是否已完成导入。'}
+              ? `覆盖 ${summary?.game_count ?? 0} 个产品、${summary?.channel_count ?? 0} 个渠道，共 ${summary?.row_count ?? 0} 行流水。`
+              : '当前月份还没有流水数据，可切换月份或前往数据源完成导入。'}
           </p>
         </div>
         <div className="qk-stats">
@@ -159,48 +360,94 @@ function QuickSdkLibraryPage() {
         </div>
       </section>
 
-      <section className="qk-rank-grid">
-        <RankTable title="游戏流水排行" rows={gameRankings} emptyText="暂无游戏排行数据" />
-        <RankTable title="渠道流水排行" rows={channelRankings} emptyText="暂无渠道排行数据" />
+      <section className="qk-database-status" aria-label="数据库状态">
+        <div className={`qk-health-state ${hasData ? 'is-ready' : 'is-empty'}`}>
+          <i aria-hidden="true" />
+          <strong>{hasData ? '数据可用' : '当前账期暂无数据'}</strong>
+        </div>
+        <span>最近导入：{latestSelectedBatch ? dateText(latestSelectedBatch.imported_at) : '-'}</span>
+        <span>页面更新：{lastUpdatedAt ? dateText(lastUpdatedAt) : '-'}</span>
+        {hasSearch ? (
+          <span className="qk-active-query">
+            当前查询：{SEARCH_SCOPES.find((item) => item.value === searchScope)?.label} “{appliedKeyword}”
+          </span>
+        ) : null}
       </section>
 
-      <section className="qk-table-grid">
-        <DataTable
-          title="导入批次"
-          count={batches.length}
-          emptyText="当前月份暂无导入批次"
-          columns={['文件', '月份', '行数', '产品', '渠道', '流水', '导入时间']}
-          minWidth={820}
-          rows={batches.map((batch) => [
-            batch.source_file || '-',
-            batch.settlement_month || '-',
-            batch.row_count,
-            batch.game_count,
-            batch.channel_count,
-            money(batch.total_flow),
-            dateText(batch.imported_at)
-          ])}
-        />
+      <nav className="qk-view-tabs" aria-label="数据库视图">
+        {VIEW_OPTIONS.map((item) => (
+          <button
+            key={item.key}
+            type="button"
+            className={`qk-view-tab ${activeView === item.key ? 'is-active' : ''}`}
+            onClick={() => setActiveView(item.key)}
+          >
+            <span>{item.label}</span>
+            <em>{viewCounts[item.key] || 0}</em>
+          </button>
+        ))}
+      </nav>
+
+      {activeView === 'overview' ? (
+        <section className="qk-rank-grid">
+          <RankTable
+            title="产品流水排行"
+            rows={gameRankings}
+            emptyText="暂无产品排行数据"
+            onSelect={(name) => drillIntoRanking(name, 'game')}
+          />
+          <RankTable
+            title="渠道流水排行"
+            rows={channelRankings}
+            emptyText="暂无渠道排行数据"
+            onSelect={(name) => drillIntoRanking(name, 'channel')}
+          />
+        </section>
+      ) : null}
+
+      {activeView === 'flows' ? (
         <DataTable
           title="流水明细"
-          count={visibleFlows.length}
-          emptyText="暂无流水明细"
-          columns={['日期', '产品', '渠道', '流水']}
-          minWidth={680}
-          rows={visibleFlows.map((row, index) => [
-            row.flow_date || row.settlement_month || '-',
-            row.game_name || '-',
-            row.channel_name || '-',
-            money(row.gross_flow),
-            row.id || `${row.game_name}-${row.channel_name}-${index}`
-          ])}
+          count={flowTotal}
+          description={hasSearch ? '展示当前搜索条件下的服务器结果' : '按流水金额从高到低展示当前账期原始数据'}
+          emptyText="暂无符合条件的流水明细"
+          columns={flowColumns}
+          minWidth={760}
+          rows={flowRows}
+          loading={flowLoading}
+          footer={(
+            <Pager
+              page={flowPage}
+              total={flowTotal}
+              pageSize={flowPageSize}
+              onPageChange={setFlowPage}
+              onPageSizeChange={(size) => {
+                setFlowPage(0)
+                setFlowPageSize(size)
+              }}
+            />
+          )}
         />
-      </section>
+      ) : null}
+
+      {activeView === 'imports' ? (
+        <DataTable
+          title="导入记录"
+          count={batchTotal}
+          description="追踪每次导入文件、数据范围、流水金额和处理时间"
+          emptyText="当前月份暂无导入记录"
+          columns={batchColumns}
+          minWidth={980}
+          rows={batchRows}
+          loading={overviewLoading}
+          footer={batchTotal > batches.length ? <span className="qk-table-note">仅显示最近 {batches.length} 条导入记录</span> : null}
+        />
+      ) : null}
     </PageContainer>
   )
 }
 
-function RankTable({ title, rows, emptyText }) {
+function RankTable({ title, rows, emptyText, onSelect }) {
   const topFlow = Math.max(...rows.map((row) => Number(row.flow || 0)), 0)
 
   return (
@@ -208,7 +455,7 @@ function RankTable({ title, rows, emptyText }) {
       <div className="qk-panel-head">
         <div>
           <h2>{title}</h2>
-          <p>按流水金额排序，默认显示前 10 名</p>
+          <p>点击排行项可直接查看对应流水明细</p>
         </div>
         <span>{rows.length} 个</span>
       </div>
@@ -216,7 +463,13 @@ function RankTable({ title, rows, emptyText }) {
         {rows.slice(0, 10).map((row, index) => {
           const percent = topFlow > 0 ? Math.max(6, (Number(row.flow || 0) / topFlow) * 100) : 0
           return (
-            <div key={`${row.name}-${index}`} className="qk-rank-row">
+            <button
+              type="button"
+              key={`${row.name}-${index}`}
+              className="qk-rank-row"
+              onClick={() => onSelect?.(row.name)}
+              title={`查看 ${row.name} 的流水明细`}
+            >
               <span>{index + 1}</span>
               <strong>{row.name}</strong>
               <div className="qk-rank-meter" aria-hidden="true">
@@ -224,7 +477,7 @@ function RankTable({ title, rows, emptyText }) {
               </div>
               <em>{money(row.flow)}</em>
               <small>{row.percentage ?? 0}%</small>
-            </div>
+            </button>
           )
         })}
         {rows.length === 0 ? <EmptyState title={emptyText} desc="切换到已有导入流水的月份后，这里会显示排行。" /> : null}
@@ -233,13 +486,13 @@ function RankTable({ title, rows, emptyText }) {
   )
 }
 
-function DataTable({ title, count, emptyText, columns, rows, minWidth }) {
+function DataTable({ title, count, description, emptyText, columns, rows, minWidth, loading = false, footer = null }) {
   return (
-    <section className="qk-panel">
+    <section className="qk-panel qk-data-panel">
       <div className="qk-panel-head">
         <div>
           <h2>{title}</h2>
-          <p>{title === '导入批次' ? '用于追踪每次导入文件和汇总结果' : '展示当前查询条件下的原始流水'}</p>
+          <p>{description}</p>
         </div>
         <span>{count} 条</span>
       </div>
@@ -247,23 +500,35 @@ function DataTable({ title, count, emptyText, columns, rows, minWidth }) {
         <table className="qk-table" style={{ minWidth }}>
           <thead>
             <tr>
-              {columns.map((col) => (
-                <th key={col}>{col}</th>
+              {columns.map((column) => (
+                <th key={column.label} className={`is-${column.align || 'left'}`}>{column.label}</th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {rows.length === 0 ? (
+            {loading && rows.length === 0 ? (
               <tr>
                 <td colSpan={columns.length}>
-                  <EmptyState title={emptyText} desc="如果刚导入过数据，请点击右上角刷新。" compact />
+                  <EmptyState title="正在读取数据" desc="正在从服务器整理当前账期数据，请稍候。" compact />
+                </td>
+              </tr>
+            ) : rows.length === 0 ? (
+              <tr>
+                <td colSpan={columns.length}>
+                  <EmptyState title={emptyText} desc="可调整账期或搜索条件后重新查询。" compact />
                 </td>
               </tr>
             ) : (
-              rows.map((row, index) => (
-                <tr key={row[row.length - 1] || `${title}-${index}`}>
-                  {row.slice(0, columns.length).map((cell, cellIndex) => (
-                    <td key={`${title}-${index}-${cellIndex}`}>{cell}</td>
+              rows.map((row) => (
+                <tr key={row.key}>
+                  {row.cells.map((cell, cellIndex) => (
+                    <td
+                      key={`${row.key}-${cellIndex}`}
+                      className={`is-${columns[cellIndex]?.align || 'left'}`}
+                      title={typeof cell === 'string' ? cell : undefined}
+                    >
+                      {cell}
+                    </td>
                   ))}
                 </tr>
               ))
@@ -271,7 +536,32 @@ function DataTable({ title, count, emptyText, columns, rows, minWidth }) {
           </tbody>
         </table>
       </div>
+      {footer ? <div className="qk-table-footer">{footer}</div> : null}
     </section>
+  )
+}
+
+function Pager({ page, total, pageSize, onPageChange, onPageSizeChange }) {
+  const totalPages = Math.max(Math.ceil(total / pageSize), 1)
+  const safePage = Math.min(page, totalPages - 1)
+  const start = total > 0 ? safePage * pageSize + 1 : 0
+  const end = Math.min((safePage + 1) * pageSize, total)
+
+  return (
+    <div className="qk-pager">
+      <span>第 {start}—{end} 条，共 {total} 条</span>
+      <div className="qk-pager-actions">
+        <label>
+          每页
+          <select value={pageSize} onChange={(event) => onPageSizeChange(Number(event.target.value))}>
+            {FLOW_PAGE_SIZES.map((size) => <option key={size} value={size}>{size}</option>)}
+          </select>
+        </label>
+        <button type="button" disabled={safePage <= 0} onClick={() => onPageChange(safePage - 1)}>上一页</button>
+        <strong>{safePage + 1} / {totalPages}</strong>
+        <button type="button" disabled={safePage >= totalPages - 1} onClick={() => onPageChange(safePage + 1)}>下一页</button>
+      </div>
+    </div>
   )
 }
 
