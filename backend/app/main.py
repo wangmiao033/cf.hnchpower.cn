@@ -31,42 +31,86 @@ from app.core.security import require_current_user
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_CORS_ORIGINS = [
+PRODUCTION_CORS_ORIGINS = [
     "https://cf.hnchpower.cn",
     "https://caiwu2026.hnchpower.cn",
     "https://duizhang2025.vercel.app",
     "https://www.duizhang2025.vercel.app",
     "https://cf-hnchpower-cn.vercel.app",
+]
+
+DEVELOPMENT_CORS_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
     "http://localhost:4173",
     "http://127.0.0.1:4173",
 ]
 
+UNSAFE_HTTP_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+SECURITY_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "no-referrer",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+    "Content-Security-Policy": "frame-ancestors 'none'; base-uri 'self'; object-src 'none'",
+}
+
+
+def _is_production_env() -> bool:
+    value = (
+        os.environ.get("APP_ENV")
+        or os.environ.get("ENV")
+        or os.environ.get("ENVIRONMENT")
+        or ""
+    ).strip().lower()
+    return value in {"prod", "production"}
+
+
+def _append_origin(out: list[str], raw: str | None) -> None:
+    value = (raw or "").strip().rstrip("/")
+    if not value:
+        return
+    if not value.startswith(("https://", "http://")):
+        value = f"https://{value}"
+    if value not in out:
+        out.append(value)
+
 
 def get_cors_origins() -> list[str]:
-    """支持环境变量 CORS_EXTRA_ORIGINS（逗号分隔）追加允许的 Origin。"""
-    out = list(DEFAULT_CORS_ORIGINS)
-    primary = os.environ.get("CORS_ORIGIN", "").strip()
-    if primary and primary not in out:
-        out.append(primary)
+    """Return exact trusted Origins; localhost is never enabled by default in production."""
+    out = list(PRODUCTION_CORS_ORIGINS)
+    if not _is_production_env():
+        out.extend(origin for origin in DEVELOPMENT_CORS_ORIGINS if origin not in out)
+
+    # Keep same-origin Vercel Preview deployments functional without allowing a wildcard.
+    for env_name in ("VERCEL_URL", "VERCEL_BRANCH_URL", "VERCEL_PROJECT_PRODUCTION_URL"):
+        _append_origin(out, os.environ.get(env_name))
+
+    _append_origin(out, os.environ.get("CORS_ORIGIN"))
     extra = os.environ.get("CORS_EXTRA_ORIGINS", "").strip()
     if extra:
-        for o in extra.split(","):
-            o = o.strip()
-            if o and o not in out:
-                out.append(o)
+        for origin in extra.split(","):
+            _append_origin(out, origin)
     return out
 
 
 def _cors_headers_for_request(request: Request, allowed: list[str]) -> dict[str, str]:
     origin = request.headers.get("origin")
-    if origin and origin in allowed:
+    if origin and origin.rstrip("/") in allowed:
         return {
             "Access-Control-Allow-Origin": origin,
             "Access-Control-Allow-Credentials": "true",
+            "Vary": "Origin",
         }
     return {}
+
+
+def _apply_common_response_headers(response, path: str) -> None:
+    for key, value in SECURITY_HEADERS.items():
+        response.headers.setdefault(key, value)
+    if path.startswith("/api/") or path == "/health/db":
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["Pragma"] = "no-cache"
 
 
 _cors_allowed = get_cors_origins()
@@ -78,13 +122,34 @@ app = FastAPI(title="caiwuapi", version="0.1.0")
 def migrate_database_schema() -> None:
     run_schema_migrations()
 
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_allowed,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "HEAD", "OPTIONS", "POST", "PUT", "PATCH", "DELETE"],
+    allow_headers=["Accept", "Content-Type", "Origin", "X-Requested-With"],
 )
+
+
+@app.middleware("http")
+async def enforce_origin_and_response_policy(request: Request, call_next):
+    path = request.url.path
+    origin = (request.headers.get("origin") or "").rstrip("/")
+    if (
+        path.startswith("/api/")
+        and request.method.upper() in UNSAFE_HTTP_METHODS
+        and origin
+        and origin not in _cors_allowed
+    ):
+        response = JSONResponse(status_code=403, content={"detail": "请求来源不受信任"})
+        _apply_common_response_headers(response, path)
+        return response
+
+    response = await call_next(request)
+    _apply_common_response_headers(response, path)
+    return response
+
 
 app.include_router(health_router)
 app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
@@ -169,20 +234,19 @@ app.mount("/uploads", StaticFiles(directory=str(_upload_root)), name="uploads")
 async def handle_sqlalchemy_error(request: Request, exc: SQLAlchemyError) -> JSONResponse:
     """
     数据库错误时仍返回带 CORS 头的 JSON，避免浏览器误报为纯 CORS 问题。
-    详细栈记录在服务端日志（systemd journal）。
+    详细栈记录在服务端日志。
     """
     logger.exception("SQLAlchemy error: %s", request.url.path)
-    return JSONResponse(
+    response = JSONResponse(
         status_code=500,
         content={
             "error": "database_error",
-            "message": (
-                "数据库查询失败。请检查 PostgreSQL 表结构是否与当前代码一致，"
-                "必要时重新执行 backend/sql 下的迁移脚本。"
-            ),
+            "message": "数据库查询失败，请联系系统管理员检查服务状态。",
         },
         headers=_cors_headers_for_request(request, _cors_allowed),
     )
+    _apply_common_response_headers(response, request.url.path)
+    return response
 
 
 @app.get("/")
