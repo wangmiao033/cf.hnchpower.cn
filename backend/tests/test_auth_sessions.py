@@ -14,7 +14,10 @@ from app.models.user import AuthSession, AuthUser
 class AuthSessionRevocationTest(unittest.TestCase):
     def setUp(self) -> None:
         self.engine = create_engine("sqlite+pysqlite:///:memory:")
-        Base.metadata.create_all(self.engine)
+        Base.metadata.create_all(
+            self.engine,
+            tables=[AuthUser.__table__, AuthSession.__table__],
+        )
         now = datetime.now(timezone.utc)
         with Session(self.engine) as db:
             db.add(
