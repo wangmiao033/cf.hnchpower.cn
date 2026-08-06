@@ -86,6 +86,16 @@ export function useBillFormSafety({
     if (suppressAutosaveRef.current) suppressAutosaveRef.current = false
   }, [])
 
+  const flushDraft = useCallback(() => {
+    if (!dirty || !currentRecord || suppressAutosaveRef.current) return 0
+    const timestamp = writeBillDraft(draftKey, currentRecord, baseVersion)
+    if (timestamp) {
+      setSavedAt(timestamp)
+      setRestored(false)
+    }
+    return timestamp
+  }, [dirty, currentRecord, draftKey, baseVersion])
+
   useEffect(() => {
     if (!dirty || !currentRecord || suppressAutosaveRef.current) {
       if (!dirty && currentRecord) {
@@ -96,16 +106,9 @@ export function useBillFormSafety({
       return undefined
     }
 
-    const timer = window.setTimeout(() => {
-      const timestamp = writeBillDraft(draftKey, currentRecord, baseVersion)
-      if (timestamp) {
-        setSavedAt(timestamp)
-        setRestored(false)
-      }
-    }, 650)
-
+    const timer = window.setTimeout(flushDraft, 650)
     return () => window.clearTimeout(timer)
-  }, [dirty, currentRecord, draftKey, baseVersion])
+  }, [dirty, currentRecord, flushDraft, draftKey])
 
   useEffect(() => {
     if (!dirty) {
@@ -116,21 +119,23 @@ export function useBillFormSafety({
     setNavigationBlocker?.({
       view,
       active: true,
-      message: `${title}还有未保存内容，离开后仍会保留本机草稿，但当前页面修改尚未提交到服务器。确定离开吗？`
+      message: `${title}还有未保存内容，离开后仍会保留本机草稿，但当前页面修改尚未提交到服务器。确定离开吗？`,
+      onConfirm: flushDraft
     })
 
     return () => clearNavigationBlocker?.(view)
-  }, [dirty, title, view, setNavigationBlocker, clearNavigationBlocker])
+  }, [dirty, title, view, flushDraft, setNavigationBlocker, clearNavigationBlocker])
 
   useEffect(() => {
     if (!dirty) return undefined
     const onBeforeUnload = (event) => {
+      flushDraft()
       event.preventDefault()
       event.returnValue = ''
     }
     window.addEventListener('beforeunload', onBeforeUnload)
     return () => window.removeEventListener('beforeunload', onBeforeUnload)
-  }, [dirty])
+  }, [dirty, flushDraft])
 
   const clearAfterSubmit = useCallback(() => {
     suppressAutosaveRef.current = true
@@ -170,6 +175,7 @@ export function useBillFormSafety({
     resetVersion,
     statusText,
     onFormStateChange,
+    flushDraft,
     clearAfterSubmit,
     discardDraft
   }
