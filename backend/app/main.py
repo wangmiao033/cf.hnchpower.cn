@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -55,6 +56,7 @@ SECURITY_HEADERS = {
     "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
     "Content-Security-Policy": "frame-ancestors 'none'; base-uri 'self'; object-src 'none'",
 }
+_RECONCILIATION_RECORD_PATH_RE = re.compile(r"^/api/reconciliation/[^/]+$")
 
 
 def _is_production_env() -> bool:
@@ -114,6 +116,19 @@ def _apply_common_response_headers(response, path: str) -> None:
         response.headers["Pragma"] = "no-cache"
 
 
+def _is_idempotent_reconciliation_delete_miss(
+    method: str,
+    path: str,
+    status_code: int,
+) -> bool:
+    """Treat a repeated delete of the same研发账单 as a successful no-op."""
+    return (
+        method.upper() == "DELETE"
+        and status_code == 404
+        and bool(_RECONCILIATION_RECORD_PATH_RE.fullmatch(path))
+    )
+
+
 _cors_allowed = get_cors_origins()
 
 app = FastAPI(title="caiwuapi", version="0.1.0")
@@ -148,6 +163,15 @@ async def enforce_origin_and_response_policy(request: Request, call_next):
         return response
 
     response = await call_next(request)
+    if _is_idempotent_reconciliation_delete_miss(
+        request.method,
+        path,
+        response.status_code,
+    ):
+        response = Response(
+            status_code=204,
+            headers=_cors_headers_for_request(request, _cors_allowed),
+        )
     _apply_common_response_headers(response, path)
     return response
 
