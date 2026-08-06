@@ -9,6 +9,10 @@ import PageContainer from '@/components/layout/PageContainer.jsx'
 import RdReconciliationProgressPanel from '@/components/reconciliation/RdReconciliationProgressPanel.jsx'
 import { summarizeChannelBillProgress } from '@/domain/channel/channelBillProgress.js'
 import { summarizeRdReconciliationProgress } from '@/domain/reconciliation/rdReconciliationProgress.js'
+import {
+  buildRdMonthlyProgressRecords,
+  buildRdSettlementPeriodOptions
+} from '@/domain/reconciliation/rdSettlementPeriods.js'
 import { totalReconciliationSettlementAmount } from '@/domain/settlement/calculateSettlementAmount.js'
 import { getBillInvoiceSummary } from '@/lib/api/billInvoiceAllocations.ts'
 import '@/components/reconciliation/reconciliation-admin.css'
@@ -72,16 +76,12 @@ export default function RdReconciliationProgressPage() {
   const channelRecords = recon.channelRecords || []
 
   const monthOptions = useMemo(() => {
-    const source = mode === 'game' ? gameRecords : channelRecords
+    if (mode === 'game') return buildRdSettlementPeriodOptions(gameRecords)
     return Array.from(
       new Set(
-        source
+        channelRecords
           .map((record) =>
-            monthKey(
-              mode === 'game'
-                ? record.month || record.settlementMonth
-                : record.settlementMonth || record.billMonth || record.month
-            )
+            monthKey(record.settlementMonth || record.billMonth || record.month)
           )
           .filter(Boolean)
       )
@@ -95,17 +95,18 @@ export default function RdReconciliationProgressPage() {
 
   const gameSnapshot = useMemo(() => {
     const keyword = clean(query).toLowerCase()
-    const records = gameRecords.filter((record) => {
-      if (activeMonth && monthKey(record.month || record.settlementMonth) !== activeMonth) {
-        return false
-      }
+    const monthlyRecords = buildRdMonthlyProgressRecords(gameRecords, activeMonth)
+    const records = monthlyRecords.filter((record) => {
       if (!keyword) return true
       return [
         record.billNumber,
+        record.settlementNumber,
         record.code,
         record.partnerShortName,
         record.partnerName,
+        record.partner,
         record.gameName,
+        record.game,
         ...(record.items || []).map((item) => item.gameName)
       ]
         .filter(Boolean)
@@ -147,12 +148,14 @@ export default function RdReconciliationProgressPage() {
 
   const visibleInvoiceBills = useMemo(() => {
     const rows = mode === 'game' ? gameSnapshot.rows : channelSnapshot.rows
-    return (rows || [])
-      .map((row) => ({
-        billType: mode === 'game' ? 'rd' : 'channel',
-        billId: String(mode === 'game' ? row.billId || '' : row.id || '')
-      }))
-      .filter((row) => row.billId)
+    const unique = new Map()
+    for (const row of rows || []) {
+      const billType = mode === 'game' ? 'rd' : 'channel'
+      const billId = String(mode === 'game' ? row.billId || '' : row.id || '')
+      if (!billId) continue
+      unique.set(invoiceSummaryKey(billType, billId), { billType, billId })
+    }
+    return [...unique.values()]
   }, [channelSnapshot.rows, gameSnapshot.rows, mode])
 
   useEffect(() => {
@@ -163,7 +166,7 @@ export default function RdReconciliationProgressPage() {
           try {
             return [invoiceSummaryKey(billType, billId), await getBillInvoiceSummary(billType, billId)]
           } catch {
-            return [billId, null]
+            return [invoiceSummaryKey(billType, billId), null]
           }
         })
       )
