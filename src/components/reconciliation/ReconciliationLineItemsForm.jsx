@@ -7,6 +7,13 @@ import {
   calculateRdSettlementRow
 } from '@/domain/settlement/calculateSettlementAmount.js'
 import { rdCompatibilitySettlementMonth } from '@/domain/reconciliation/rdSettlementPeriods.js'
+import {
+  dateToInputValue,
+  inheritRdSettlementCycle,
+  monthInputValueToSettlementCycle,
+  settlementCycleToMonthInputValue,
+  summarizeRdFormPeriods
+} from '@/domain/reconciliation/rdDateInputs.js'
 import { getQuickSdkGameFlow, listQuickSdkRdLines } from '@/lib/api/quicksdk.ts'
 import '@/components/ChannelBilling.css'
 
@@ -56,16 +63,6 @@ function getCurrentCycleLabel() {
   return `${now.getFullYear()}年${now.getMonth() + 1}月`
 }
 
-function buildRecentCycleOptions(monthCount = 12) {
-  const now = new Date()
-  const out = []
-  for (let i = 0; i < monthCount; i += 1) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
-    out.push(`${d.getFullYear()}年${d.getMonth() + 1}月`)
-  }
-  return out
-}
-
 function normalizeSettlementCycleLabel(raw) {
   const text = raw == null ? '' : String(raw).trim()
   if (!text) return ''
@@ -104,12 +101,6 @@ function flowInputValue(value) {
   return String(Math.round(number * 100) / 100)
 }
 
-function formatIssueDateLabel(raw) {
-  const d = raw ? new Date(raw) : new Date()
-  const date = Number.isNaN(d.getTime()) ? new Date() : d
-  return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`
-}
-
 /**
  * 研发对账：布局与渠道 ChannelBillingForm 一致（channel-form-section + LineItemsTable + grid明细）
  */
@@ -133,12 +124,11 @@ function ReconciliationLineItemsForm({
   onFormStateChange,
   submitIntentRef
 }) {
-  const cycleListId = `${formId || 'rd'}-cycle-list`
   const initialCycle = settlementMonth || getCurrentCycleLabel()
 
   const [header, setHeader] = useState({
     settlementMonth: initialCycle,
-    issueDate: formatIssueDateLabel(),
+    issueDate: dateToInputValue(),
     settlementNumber: '',
     partnerId: '',
     partner: '',
@@ -150,30 +140,20 @@ function ReconciliationLineItemsForm({
   const [gameSuggestions, setGameSuggestions] = useState({})
   const [flowStatuses, setFlowStatuses] = useState({})
   const gameSearchTimersRef = useRef({})
-  const cycleOptions = useMemo(() => {
-    const set = new Set()
-    for (const recent of buildRecentCycleOptions(12)) {
-      set.add(recent)
-    }
-    for (const raw of settlementCycles) {
-      const normalized = normalizeSettlementCycleLabel(raw)
-      if (normalized) set.add(normalized)
-    }
-    for (const row of lines) {
-      const normalized = normalizeSettlementCycleLabel(row.settlementCycle)
-      if (normalized) set.add(normalized)
-    }
-    const normalizedHeader = normalizeSettlementCycleLabel(header.settlementMonth)
-    if (normalizedHeader) set.add(normalizedHeader)
-    return Array.from(set).sort((a, b) => b.localeCompare(a))
-  }, [settlementCycles, lines, header.settlementMonth])
+
+  const periodSummary = useMemo(
+    () => summarizeRdFormPeriods(lines, header.settlementMonth),
+    [lines, header.settlementMonth]
+  )
 
   useEffect(() => {
     const stateRecord = draftRecord || (mode === 'edit' ? editRecord : null)
     if (stateRecord) {
       setHeader({
         settlementMonth: stateRecord.settlementMonth ?? initialCycle,
-        issueDate: formatIssueDateLabel(stateRecord.createdAt ?? stateRecord.created_at),
+        issueDate: dateToInputValue(
+          stateRecord.issueDate ?? stateRecord.createdAt ?? stateRecord.created_at
+        ),
         settlementNumber: stateRecord.settlementNumber != null ? String(stateRecord.settlementNumber) : '',
         partnerId: stateRecord.partnerId != null ? String(stateRecord.partnerId) : '',
         partner: stateRecord.partner != null ? String(stateRecord.partner) : '',
@@ -187,7 +167,7 @@ function ReconciliationLineItemsForm({
     setHeader((h) => ({
       ...h,
       settlementMonth: settlementMonth || getCurrentCycleLabel(),
-      issueDate: formatIssueDateLabel()
+      issueDate: dateToInputValue()
     }))
     setLines([createEmptyRdLine(0, settlementMonth || getCurrentCycleLabel())])
   }, [mode, editRecord, draftRecord, settlementMonth, initialCycle])
@@ -291,6 +271,7 @@ function ReconciliationLineItemsForm({
     return {
       ...(mode === 'edit' && editRecord ? { id: editRecord.id } : {}),
       settlementMonth: compatibilitySettlementMonth,
+      issueDate: header.issueDate,
       settlementNumber: header.settlementNumber,
       partnerId: header.partnerId,
       partner: header.partner,
@@ -387,7 +368,7 @@ function ReconciliationLineItemsForm({
     }
     setHeader({
       settlementMonth: settlementMonth || getCurrentCycleLabel(),
-      issueDate: formatIssueDateLabel(),
+      issueDate: dateToInputValue(),
       settlementNumber: '',
       partnerId: '',
       partner: '',
@@ -527,7 +508,13 @@ function ReconciliationLineItemsForm({
   }
 
   const addRow = () => {
-    setLines((prev) => [...prev, createEmptyRdLine(prev.length, header.settlementMonth || '')])
+    setLines((prev) => [
+      ...prev,
+      createEmptyRdLine(
+        prev.length,
+        inheritRdSettlementCycle(prev, header.settlementMonth || getCurrentCycleLabel())
+      )
+    ])
   }
 
   const removeRow = (index) => {
@@ -591,14 +578,14 @@ function ReconciliationLineItemsForm({
               </div>
             )}
             <div className="form-group">
-              <label>出单日期</label>
+              <label>出单日期（系统生成）</label>
               <input
-                type="text"
-                className="admin-input"
+                type="date"
+                className="admin-input rd-native-date-input"
                 value={header.issueDate}
                 readOnly
                 disabled
-                title="系统自动生成出单日期"
+                title="系统按账单创建日期自动生成"
               />
             </div>
             <div className="form-group">
@@ -654,11 +641,11 @@ function ReconciliationLineItemsForm({
         </div>
 
         <div className="channel-form-section">
-          <div className="form-section-title">2）游戏明细（支持每行独立结算周期）</div>
+          <div className="form-section-title">2）游戏明细（每行独立选择结算月份）</div>
           <LineItemsTable
             onAddRow={addRow}
             showAddButton={false}
-            hint="每条明细独立保存结算周期。同一账单可包含多个月份，保存后仍只生成一个账单编号。"
+            hint="点击月份字段直接选择年月；新增一行会自动继承上一行月份，仍可单独修改。"
           >
             <div className="rd-line-items-grid">
               <div className="rd-line-items-grid-head" aria-hidden="true">
@@ -686,23 +673,22 @@ function ReconciliationLineItemsForm({
                 const gameListId = `${formId || 'rd'}-game-list-${index}`
                 return (
                   <div key={line.id} className="rd-line-items-grid-row">
-                    <div className="channel-cell">
+                    <div className="channel-cell rd-period-cell">
                       <input
-                        type="text"
-                        list={cycleListId}
+                        type="month"
                         aria-label={`第 ${index + 1} 行结算周期`}
-                        className="admin-input"
-                        value={line.settlementCycle || header.settlementMonth}
-                        onChange={(e) => updateLine(index, 'settlementCycle', e.target.value)}
-                        onBlur={(e) => {
-                          const normalized = normalizeSettlementCycleLabel(e.target.value)
+                        className="admin-input rd-native-month-input"
+                        value={settlementCycleToMonthInputValue(
+                          line.settlementCycle || header.settlementMonth
+                        )}
+                        onChange={(event) => {
+                          const normalized = monthInputValueToSettlementCycle(event.target.value)
                           updateLine(index, 'settlementCycle', normalized)
                           if (String(line.gameName || '').trim()) {
                             syncGameFlow(index, line.gameName, normalized)
                           }
                         }}
-                        placeholder="如：2026年5月"
-                        title="每一行独立保存，不会同步修改其他明细"
+                        title="该月份仅作用于当前明细行"
                       />
                     </div>
                     <div className="channel-cell">
@@ -780,21 +766,23 @@ function ReconciliationLineItemsForm({
                     <div className="channel-cell channel-cell--num"><input type="text" readOnly disabled aria-label={`第 ${index + 1} 行参与分成金额`} className="admin-input readonly-input channel-input-num" value={gross.toFixed(2)} /></div>
                     <div className="channel-cell channel-cell--num"><input type="text" readOnly disabled aria-label={`第 ${index + 1} 行结算金额`} className="admin-input readonly-input channel-input-num" value={settlement.toFixed(2)} /></div>
                     <div className="channel-cell channel-cell--actions">
-                      <button type="button" className="rec-btn rec-btn--ghost" onClick={addRow} title="新增一行">+</button>
+                      <button type="button" className="rec-btn rec-btn--ghost" onClick={addRow} title="新增一行并继承当前月份">+</button>
                       <button type="button" className="rec-btn rec-btn--danger-outline" disabled={lines.length <= 1} onClick={() => removeRow(index)} title="删除当前行">-</button>
                     </div>
                   </div>
                 )
               })}
-              <datalist id={cycleListId}>
-                {cycleOptions.map((item) => <option key={item} value={item} />)}
-              </datalist>
             </div>
           </LineItemsTable>
         </div>
 
         <div className="channel-form-section">
           <div className="form-section-title">3）汇总</div>
+          <div className="rd-form-period-summary" role="status" aria-live="polite">
+            <span>账单涉及月份</span>
+            <strong>{periodSummary.label}</strong>
+            <em>{periodSummary.count > 1 ? `${periodSummary.count} 个结算周期` : '单周期账单'}</em>
+          </div>
           <div className="channel-line-items-summary channel-line-items-summary--rd">
             <div className="summary-item summary-item--accent"><div className="label">总后台流水</div><div className="value">¥{totals.sumRevenue.toFixed(2)}</div></div>
             <div className="summary-item summary-item--accent"><div className="label">折后总流水</div><div className="value">¥{totals.sumNet.toFixed(2)}</div></div>

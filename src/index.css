@@ -14,6 +14,7 @@
 @import './pages/CoreBillLoadingPolish.css';
 @import './pages/BillDraftPolish.css';
 @import './pages/RdMultiPeriodPolish.css';
+@import './pages/RdDateInputsPolish.css';
 
 * {
   margin: 0;

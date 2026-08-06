@@ -1,0 +1,94 @@
+.rd-recon-billing-form .rd-native-date-input,
+.rd-recon-billing-form .rd-native-month-input {
+  min-height: 34px;
+  padding: 0 9px;
+  color: var(--admin-text-main);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.rd-recon-billing-form .rd-native-date-input:disabled {
+  cursor: default;
+  border-color: #dbe5f1;
+  background: #f7f9fc;
+  color: #53647d;
+  opacity: 1;
+}
+
+.rd-recon-billing-form .rd-native-month-input::-webkit-calendar-picker-indicator,
+.rd-recon-billing-form .rd-native-date-input::-webkit-calendar-picker-indicator {
+  width: 15px;
+  height: 15px;
+  margin-left: 4px;
+  cursor: pointer;
+  opacity: 0.68;
+}
+
+.rd-recon-billing-form .rd-native-month-input:hover,
+.rd-recon-billing-form .rd-native-month-input:focus {
+  border-color: #5b8def;
+  background: #ffffff;
+}
+
+.rd-line-items-grid-head,
+.rd-line-items-grid-row {
+  grid-template-columns:
+    136px minmax(168px, 1.45fr) 108px 80px 88px 84px 84px 84px 72px 72px 72px 96px 88px 76px;
+}
+
+.rd-period-cell {
+  position: relative;
+}
+
+.rd-form-period-summary {
+  min-height: 42px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+  padding: 8px 11px;
+  border: 1px solid #d9e5f4;
+  border-radius: 8px;
+  background: #f7faff;
+}
+
+.rd-form-period-summary > span {
+  color: #6b7a90;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.rd-form-period-summary > strong {
+  min-width: 0;
+  overflow: hidden;
+  color: #174ea6;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rd-form-period-summary > em {
+  display: inline-flex;
+  height: 22px;
+  align-items: center;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: #e9f1ff;
+  color: #3457b2;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .rd-form-period-summary {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .rd-form-period-summary > em {
+    display: none;
+  }
+}
