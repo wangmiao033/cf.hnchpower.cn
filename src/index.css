@@ -16,6 +16,7 @@
 @import './pages/RdMultiPeriodPolish.css';
 @import './pages/RdDateInputsPolish.css';
 
+/* Production release marker: research bill date input upgrade. */
 * {
   margin: 0;
   padding: 0;
