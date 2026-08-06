@@ -1,0 +1,83 @@
+/* Database workspace v2: clearer states, sticky headers and safer long-table browsing. */
+.quicksdk-library-page .qk-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.quicksdk-library-page .qk-error button {
+  min-width: 76px;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid #fda4af;
+  border-radius: 7px;
+  background: #ffffff;
+  color: #be123c;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.quicksdk-library-page .qk-error button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.quicksdk-library-page .qk-health-state.is-loading i {
+  background: #2563eb;
+  box-shadow: 0 0 0 4px rgb(37 99 235 / 10%);
+  animation: qk-database-pulse 1.2s ease-in-out infinite;
+}
+
+.quicksdk-library-page .qk-health-state.is-error i {
+  background: #dc2626;
+  box-shadow: 0 0 0 4px rgb(220 38 38 / 10%);
+}
+
+.quicksdk-library-page .qk-health-state.is-error strong {
+  color: #b91c1c;
+}
+
+.quicksdk-library-page .qk-data-panel.is-loading .qk-table-wrap {
+  cursor: progress;
+}
+
+.quicksdk-library-page .qk-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  box-shadow: inset 0 -1px 0 var(--admin-border-soft);
+}
+
+.quicksdk-library-page .qk-table tbody tr:hover td {
+  background: #f8fbff;
+}
+
+.quicksdk-library-page .qk-pager-actions select:disabled,
+.quicksdk-library-page .qk-pager-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+@keyframes qk-database-pulse {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .quicksdk-library-page .qk-health-state.is-loading i {
+    animation: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .quicksdk-library-page .qk-error {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .quicksdk-library-page .qk-error button {
+    width: 100%;
+  }
+}
