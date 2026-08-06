@@ -145,6 +145,9 @@ function resolveCanonicalSettlementMonth(lines, fallbackMonth) {
   return { month: cycles[0], error: null }
 }
 
+/**
+ * 研发对账：布局与渠道 ChannelBillingForm 一致（channel-form-section + LineItemsTable + grid明细）
+ */
 function ReconciliationLineItemsForm({
   formId,
   layout = 'default',
@@ -184,7 +187,9 @@ function ReconciliationLineItemsForm({
   const gameSearchTimersRef = useRef({})
   const cycleOptions = useMemo(() => {
     const set = new Set()
-    for (const recent of buildRecentCycleOptions(12)) set.add(recent)
+    for (const recent of buildRecentCycleOptions(12)) {
+      set.add(recent)
+    }
     for (const raw of settlementCycles) {
       const normalized = normalizeSettlementCycleLabel(raw)
       if (normalized) set.add(normalized)
@@ -307,7 +312,8 @@ function ReconciliationLineItemsForm({
   }, [lines, header.channelFeeRate])
 
   useEffect(() => {
-    onPreviewChange?.(totals.sumSettlement)
+    if (!onPreviewChange) return
+    onPreviewChange(totals.sumSettlement)
   }, [totals.sumSettlement, onPreviewChange])
 
   const mergedRecordForSubmit = () => {
@@ -329,13 +335,17 @@ function ReconciliationLineItemsForm({
       discount: first ? first.discountRate : '1',
       game: gameLabel,
       gameFlow: String(totals.sumRevenue),
-      testingFee: String(lines.reduce((s, l) => s + (parseFloat(l.testFee || 0) || 0), 0)),
+      testingFee: String(
+        lines.reduce((s, l) => s + (parseFloat(l.testFee || 0) || 0), 0)
+      ),
       voucher: String(lines.reduce((s, l) => s + (parseFloat(l.couponAmount || 0) || 0), 0)),
       refund: String(lines.reduce((s, l) => s + (parseFloat(l.extraFee || 0) || 0), 0)),
       settlementAmount: totals.sumSettlement.toFixed(2),
       items: lines.map((row, idx) => ({
         ...row,
-        settlementCycle: normalizeSettlementCycleLabel(row.settlementCycle || canonicalSettlementMonth),
+        settlementCycle: normalizeSettlementCycleLabel(
+          row.settlementCycle || canonicalSettlementMonth
+        ),
         sortOrder: idx
       })),
       status: header.status,
@@ -350,23 +360,37 @@ function ReconciliationLineItemsForm({
   const validate = () => {
     const { error: monthError } = resolveCanonicalSettlementMonth(lines, header.settlementMonth)
     if (monthError) return monthError
-    if (!header.partnerId) return '请从客户库选择合作方（支持按客户简称搜索）'
+    if (!header.partnerId) {
+      return '请从客户库选择合作方（支持按客户简称搜索）'
+    }
     const cf = parseFloat(header.channelFeeRate || 0)
-    if (Number.isNaN(cf) || cf < 0 || cf > 100) return '通道费率必须在0-100%之间'
+    if (Number.isNaN(cf) || cf < 0 || cf > 100) {
+      return '通道费率必须在0-100%之间'
+    }
     const okLine = lines.some(
       (l) => l.gameName && String(l.gameName).trim() && parseFloat(l.revenue || 0) > 0
     )
-    if (!okLine) return '请至少为一行填写游戏名称，且后台流水大于 0'
+    if (!okLine) {
+      return '请至少为一行填写游戏名称，且后台流水大于 0'
+    }
     for (const l of lines) {
       if (!l.gameName || !String(l.gameName).trim()) continue
       const r = parseFloat(l.revenue || 0)
-      if (Number.isNaN(r) || r <= 0) return `游戏「${l.gameName}」的后台流水须大于 0`
+      if (Number.isNaN(r) || r <= 0) {
+        return `游戏「${l.gameName}」的后台流水须大于 0`
+      }
       const sr = parseFloat(l.shareRatio || 0)
-      if (Number.isNaN(sr) || sr < 0 || sr > 100) return `游戏「${l.gameName}」的分成比例须在 0–100%`
+      if (Number.isNaN(sr) || sr < 0 || sr > 100) {
+        return `游戏「${l.gameName}」的分成比例须在 0–100%`
+      }
       const tr = parseFloat(l.taxRate || 0)
-      if (Number.isNaN(tr) || tr < 0 || tr > 100) return `游戏「${l.gameName}」的税率须在 0–100%`
+      if (Number.isNaN(tr) || tr < 0 || tr > 100) {
+        return `游戏「${l.gameName}」的税率须在 0–100%`
+      }
       const disc = parseFloat(l.discountRate || 1)
-      if (Number.isNaN(disc) || disc < 0 || disc > 1) return `游戏「${l.gameName}」的折扣系数须在 0–1`
+      if (Number.isNaN(disc) || disc < 0 || disc > 1) {
+        return `游戏「${l.gameName}」的折扣系数须在 0–1`
+      }
     }
     return null
   }
@@ -415,13 +439,19 @@ function ReconciliationLineItemsForm({
   }
 
   const applyGamePresetToRow = (index, presetData) => {
-    setLines((prev) => prev.map((row, i) => i === index ? {
-      ...row,
-      shareRatio: presetData.revenueShareRatio || row.shareRatio,
-      discountRate: presetData.discount || row.discountRate,
-      taxRate: presetData.taxPoint || row.taxRate,
-      testFee: presetData.testingFee || row.testFee
-    } : row))
+    setLines((prev) =>
+      prev.map((row, i) =>
+        i === index
+          ? {
+              ...row,
+              shareRatio: presetData.revenueShareRatio || row.shareRatio,
+              discountRate: presetData.discount || row.discountRate,
+              taxRate: presetData.taxPoint || row.taxRate,
+              testFee: presetData.testingFee || row.testFee
+            }
+          : row
+      )
+    )
   }
 
   const onGameNameBlur = (index, name) => {
@@ -448,7 +478,11 @@ function ReconciliationLineItemsForm({
     }
     gameSearchTimersRef.current[lineId] = setTimeout(async () => {
       try {
-        const response = await listQuickSdkRdLines({ settlement_month: month, q: query, limit: 20 })
+        const response = await listQuickSdkRdLines({
+          settlement_month: month,
+          q: query,
+          limit: 20
+        })
         setGameSuggestions((prev) => ({ ...prev, [lineId]: response.items || [] }))
       } catch {
         setGameSuggestions((prev) => ({ ...prev, [lineId]: [] }))
@@ -461,7 +495,9 @@ function ReconciliationLineItemsForm({
     if (!line) return
     const lineId = line.id
     const gameName = String(rawName || '').trim()
-    const month = settlementCycleToMonthValue(cycleOverride || line.settlementCycle || header.settlementMonth)
+    const month = settlementCycleToMonthValue(
+      cycleOverride || line.settlementCycle || header.settlementMonth
+    )
     if (!gameName) {
       setFlowStatus(lineId, null)
       return
@@ -473,40 +509,67 @@ function ReconciliationLineItemsForm({
 
     setFlowStatus(lineId, { type: 'loading', label: '读取中', detail: '正在查询数据库流水' })
     try {
-      const result = await getQuickSdkGameFlow({ settlement_month: month, game_name: gameName })
+      const result = await getQuickSdkGameFlow({
+        settlement_month: month,
+        game_name: gameName
+      })
       const totalFlow = Number(result?.total_flow || 0)
       if (!Number.isFinite(totalFlow) || totalFlow <= 0) {
-        setFlowStatus(lineId, { type: 'warning', label: '未找到', detail: `${month} 的数据库中没有「${gameName}」流水` })
+        setFlowStatus(lineId, {
+          type: 'warning',
+          label: '未找到',
+          detail: `${month} 的数据库中没有「${gameName}」流水`
+        })
         return
       }
 
-      setLines((prev) => prev.map((row, rowIndex) => rowIndex === index ? {
-        ...row,
-        gameName: result.game_name || gameName,
-        revenue: flowInputValue(totalFlow),
-        quicksdkFlow: totalFlow,
-        quicksdkFlowMonth: result.settlement_month || month,
-        quicksdkRowCount: result.row_count || 0,
-        quicksdkChannelCount: result.channel_count || 0,
-        quicksdkSourceGameCount: result.source_game_count || 0,
-        quicksdkTopChannel: result.top_channel || ''
-      } : row))
+      setLines((prev) =>
+        prev.map((row, rowIndex) =>
+          rowIndex === index
+            ? {
+                ...row,
+                gameName: result.game_name || gameName,
+                revenue: flowInputValue(totalFlow),
+                quicksdkFlow: totalFlow,
+                quicksdkFlowMonth: result.settlement_month || month,
+                quicksdkRowCount: result.row_count || 0,
+                quicksdkChannelCount: result.channel_count || 0,
+                quicksdkSourceGameCount: result.source_game_count || 0,
+                quicksdkTopChannel: result.top_channel || ''
+              }
+            : row
+        )
+      )
       const preset = findGamePreset(result.game_name || gameName)
       if (preset) applyGamePresetToRow(index, preset)
       setFlowStatus(lineId, {
         type: 'success',
         label: '已关联',
-        detail: `${result.settlement_month || month} 数据库流水 ¥${totalFlow.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+        detail: `${result.settlement_month || month} 数据库流水 ¥${totalFlow.toLocaleString('zh-CN', {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2
+        })}`
       })
     } catch (error) {
-      setFlowStatus(lineId, { type: 'error', label: '读取失败', detail: error instanceof Error ? error.message : '数据库流水读取失败' })
+      setFlowStatus(lineId, {
+        type: 'error',
+        label: '读取失败',
+        detail: error instanceof Error ? error.message : '数据库流水读取失败'
+      })
     }
   }
 
-  const addRow = () => setLines((prev) => [...prev, createEmptyRdLine(prev.length, header.settlementMonth || '')])
-  const removeRow = (index) => setLines((prev) => prev.length <= 1 ? prev : prev.filter((_, i) => i !== index))
+  const addRow = () => {
+    setLines((prev) => [...prev, createEmptyRdLine(prev.length, header.settlementMonth || '')])
+  }
+
+  const removeRow = (index) => {
+    setLines((prev) => (prev.length <= 1 ? prev : prev.filter((_, i) => i !== index)))
+  }
+
   const isDrawer = layout === 'drawer'
   const isCreatePage = layout === 'createPage'
+
   const formClass = `channel-form rd-recon-billing-form ${isDrawer ? 'channel-form--drawer' : 'channel-form--page'}`
 
   return (
@@ -515,15 +578,33 @@ function ReconciliationLineItemsForm({
         {!isDrawer && !isCreatePage && (
           <div className="rd-recon-meta-header">
             <div style={{ flex: '1 1 200px', minWidth: 0 }}>
-              <h3 style={{ margin: 0, fontSize: 'var(--admin-font-title)' }}>{mode === 'edit' ? '编辑对账记录' : '添加对账记录'}</h3>
-              <span className="channel-discount-hint" style={{ display: 'block', marginTop: 4 }}>必填项见标签；税率与通道费按比例参与结算公式计算。</span>
+              <h3 style={{ margin: 0, fontSize: 'var(--admin-font-title)' }}>
+                {mode === 'edit' ? '编辑对账记录' : '添加对账记录'}
+              </h3>
+              <span className="channel-discount-hint" style={{ display: 'block', marginTop: 4 }}>
+                必填项见标签；税率与通道费按比例参与结算公式计算。
+              </span>
             </div>
-            <GamePresets onApplyPreset={(p) => applyGamePresetToRow(0, p)} currentGameName={lines[0]?.gameName} />
+            <GamePresets
+              onApplyPreset={(p) => applyGamePresetToRow(0, p)}
+              currentGameName={lines[0]?.gameName}
+            />
           </div>
         )}
-        {(isDrawer || isCreatePage) && (
+        {isDrawer && (
           <div className="rd-recon-meta-header" style={{ justifyContent: 'flex-end' }}>
-            <GamePresets onApplyPreset={(p) => applyGamePresetToRow(0, p)} currentGameName={lines[0]?.gameName} />
+            <GamePresets
+              onApplyPreset={(p) => applyGamePresetToRow(0, p)}
+              currentGameName={lines[0]?.gameName}
+            />
+          </div>
+        )}
+        {isCreatePage && (
+          <div className="rd-recon-meta-header" style={{ justifyContent: 'flex-end' }}>
+            <GamePresets
+              onApplyPreset={(p) => applyGamePresetToRow(0, p)}
+              currentGameName={lines[0]?.gameName}
+            />
           </div>
         )}
 
@@ -533,35 +614,72 @@ function ReconciliationLineItemsForm({
             {mode === 'edit' && (
               <div className="form-group">
                 <label>结算单编号</label>
-                <input type="text" className="admin-input" value={header.settlementNumber} onChange={(e) => setHeader((h) => ({ ...h, settlementNumber: e.target.value }))} placeholder="结算单编号" />
+                <input
+                  type="text"
+                  className="admin-input"
+                  value={header.settlementNumber}
+                  onChange={(e) => setHeader((h) => ({ ...h, settlementNumber: e.target.value }))}
+                  placeholder="结算单编号"
+                />
               </div>
             )}
             <div className="form-group">
               <label>出单日期</label>
-              <input type="text" className="admin-input" value={header.issueDate} readOnly disabled title="系统自动生成出单日期" />
+              <input
+                type="text"
+                className="admin-input"
+                value={header.issueDate}
+                readOnly
+                disabled
+                title="系统自动生成出单日期"
+              />
             </div>
             <div className="form-group">
               <label>合作方</label>
-              <PartnerPicker value={header.partner} partnerId={header.partnerId} partners={partners} onChange={(partner, partnerId = '') => setHeader((h) => ({ ...h, partner, partnerId }))} onAddPartner={onAddPartner} />
+              <PartnerPicker
+                value={header.partner}
+                partnerId={header.partnerId}
+                partners={partners}
+                onChange={(partner, partnerId = '') =>
+                  setHeader((h) => ({ ...h, partner, partnerId }))
+                }
+                onAddPartner={onAddPartner}
+              />
             </div>
           </div>
           <div className="form-row">
             <div className="form-group full-width">
               <label>备注</label>
-              <input type="text" className="admin-input" value={header.memo} onChange={(e) => setHeader((h) => ({ ...h, memo: e.target.value }))} placeholder="内部备注" />
+              <input
+                type="text"
+                className="admin-input"
+                value={header.memo}
+                onChange={(e) => setHeader((h) => ({ ...h, memo: e.target.value }))}
+                placeholder="内部备注"
+              />
             </div>
           </div>
           <details className="rd-recon-defaults-panel">
             <summary className="rd-recon-defaults-panel__summary">
               <span className="rd-recon-defaults-panel__title">默认整单值</span>
-              <span className="rd-recon-defaults-panel__meta">通道费率 {header.channelFeeRate || '0'}% · 应用到所有明细行</span>
+              <span className="rd-recon-defaults-panel__meta">
+                通道费率 {header.channelFeeRate || '0'}% · 应用到所有明细行
+              </span>
             </summary>
             <div className="rd-recon-defaults-panel__body">
               <div className="form-row">
                 <div className="form-group">
                   <label>通道费率（%）整单共用</label>
-                  <input type="number" step="0.01" className="admin-input channel-input-num" value={header.channelFeeRate} onChange={(e) => setHeader((h) => ({ ...h, channelFeeRate: e.target.value }))} />
-                  <span className="channel-discount-hint">这是默认值。下方每行的“通道费%”会同步显示这个整单费率。</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    className="admin-input channel-input-num"
+                    value={header.channelFeeRate}
+                    onChange={(e) => setHeader((h) => ({ ...h, channelFeeRate: e.target.value }))}
+                  />
+                  <span className="channel-discount-hint">
+                    这是默认值。下方每行的“通道费%”会同步显示这个整单费率。
+                  </span>
                 </div>
               </div>
             </div>
@@ -570,46 +688,248 @@ function ReconciliationLineItemsForm({
 
         <div className="channel-form-section">
           <div className="form-section-title">2）游戏明细</div>
-          <LineItemsTable onAddRow={addRow} showAddButton={false} hint="输入游戏名称后，会按结算周期自动读取数据库流水；绿色“已关联”表示取数成功，后台流水仍可人工调整。">
+          <LineItemsTable
+            onAddRow={addRow}
+            showAddButton={false}
+            hint="输入游戏名称后，会按结算周期自动读取数据库流水；绿色“已关联”表示取数成功，后台流水仍可人工调整。"
+          >
             <div className="rd-line-items-grid">
               <div className="rd-line-items-grid-head" aria-hidden="true">
-                {['结算周期','游戏名称','后台流水','折扣','总流水','代金券','测试费','额外费用','通道费%','税率%','分成%','参与分成金额','结算金额','操作'].map((label, index) => <div key={label} className={`channel-cell${index >= 2 && index <= 12 ? ' channel-cell--num' : ''}${index === 13 ? ' channel-cell--actions' : ''}`}>{label}</div>)}
+                <div className="channel-cell">结算周期</div>
+                <div className="channel-cell">游戏名称</div>
+                <div className="channel-cell channel-cell--num">后台流水</div>
+                <div className="channel-cell channel-cell--num">折扣</div>
+                <div className="channel-cell channel-cell--num">总流水</div>
+                <div className="channel-cell channel-cell--num">代金券</div>
+                <div className="channel-cell channel-cell--num">测试费</div>
+                <div className="channel-cell channel-cell--num">额外费用</div>
+                <div className="channel-cell channel-cell--num">通道费%</div>
+                <div className="channel-cell channel-cell--num">税率%</div>
+                <div className="channel-cell channel-cell--num">分成%</div>
+                <div className="channel-cell channel-cell--num">参与分成金额</div>
+                <div className="channel-cell channel-cell--num">结算金额</div>
+                <div className="channel-cell channel-cell--actions">操作</div>
               </div>
               {lines.map((line, index) => {
                 const calc = calculateRdSettlementRow(line, header.channelFeeRate)
+                const net = calc.totalFlow
+                const gross = calc.shareAmount
+                const settlement = calc.settlementAmount
                 const flowStatus = flowStatuses[line.id]
                 const gameListId = `${formId || 'rd'}-game-list-${index}`
                 return (
                   <div key={line.id} className="rd-line-items-grid-row">
                     <div className="channel-cell">
-                      <input type="text" list={cycleListId} aria-label={`第 ${index + 1} 行结算周期`} className="admin-input" value={line.settlementCycle || header.settlementMonth} onChange={(e) => updateLine(index, 'settlementCycle', e.target.value)} onBlur={(e) => { const normalized = normalizeSettlementCycleLabel(e.target.value); updateLine(index, 'settlementCycle', normalized); if (String(line.gameName || '').trim()) syncGameFlow(index, line.gameName, normalized) }} placeholder="如：2025年10月" />
+                      <input
+                        type="text"
+                        list={cycleListId}
+                        aria-label={`第 ${index + 1} 行结算周期`}
+                        className="admin-input"
+                        value={line.settlementCycle || header.settlementMonth}
+                        onChange={(e) => updateLine(index, 'settlementCycle', e.target.value)}
+                        onBlur={(e) => {
+                          const normalized = normalizeSettlementCycleLabel(e.target.value)
+                          updateLine(index, 'settlementCycle', normalized)
+                          if (String(line.gameName || '').trim()) {
+                            syncGameFlow(index, line.gameName, normalized)
+                          }
+                        }}
+                        placeholder="如：2025年10月"
+                        title="可选历史周期，也支持自定义录入"
+                      />
                     </div>
                     <div className="channel-cell">
                       <div className={`rd-game-source-field${flowStatus ? ` is-${flowStatus.type}` : ''}`}>
-                        <input type="search" list={gameListId} aria-label={`第 ${index + 1} 行游戏名称`} className="admin-input" value={line.gameName} onFocus={(e) => queueGameSuggestions(index, e.target.value)} onChange={(e) => { updateLine(index, 'gameName', e.target.value); setFlowStatus(line.id, null); queueGameSuggestions(index, e.target.value) }} onBlur={(e) => { onGameNameBlur(index, e.target.value); syncGameFlow(index, e.target.value) }} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur() } }} placeholder="搜索数据库游戏" title={flowStatus?.detail || '输入游戏名称，自动读取该月份数据库流水'} />
-                        {flowStatus ? <span className="rd-game-source-field__status" title={flowStatus.detail}>{flowStatus.label}</span> : null}
+                        <input
+                          type="search"
+                          list={gameListId}
+                          aria-label={`第 ${index + 1} 行游戏名称`}
+                          className="admin-input"
+                          value={line.gameName}
+                          onFocus={(e) => queueGameSuggestions(index, e.target.value)}
+                          onChange={(e) => {
+                            updateLine(index, 'gameName', e.target.value)
+                            setFlowStatus(line.id, null)
+                            queueGameSuggestions(index, e.target.value)
+                          }}
+                          onBlur={(e) => {
+                            onGameNameBlur(index, e.target.value)
+                            syncGameFlow(index, e.target.value)
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault()
+                              e.currentTarget.blur()
+                            }
+                          }}
+                          placeholder="搜索数据库游戏"
+                          title={flowStatus?.detail || '输入游戏名称，自动读取该月份数据库流水'}
+                        />
+                        {flowStatus ? (
+                          <span className="rd-game-source-field__status" title={flowStatus.detail}>
+                            {flowStatus.label}
+                          </span>
+                        ) : null}
                       </div>
-                      <datalist id={gameListId}>{(gameSuggestions[line.id] || []).map((item) => <option key={`${item.settlement_month || ''}-${item.game_name}`} value={item.game_name}>¥{Number(item.total_flow || 0).toLocaleString('zh-CN')}</option>)}</datalist>
+                      <datalist id={gameListId}>
+                        {(gameSuggestions[line.id] || []).map((item) => (
+                          <option
+                            key={`${item.settlement_month || ''}-${item.game_name}`}
+                            value={item.game_name}
+                          >
+                            ¥{Number(item.total_flow || 0).toLocaleString('zh-CN')}
+                          </option>
+                        ))}
+                      </datalist>
                     </div>
-                    <NumberCell value={line.revenue} label={`第 ${index + 1} 行后台流水`} onChange={(value) => { updateLine(index, 'revenue', value); setFlowStatus(line.id, { type: 'manual', label: '已调整', detail: '该流水已由人工调整' }) }} />
-                    <NumberCell value={line.discountRate} label={`第 ${index + 1} 行折扣`} step="0.001" min="0" max="1" onChange={(value) => updateLine(index, 'discountRate', value)} />
-                    <ReadonlyCell value={calc.totalFlow.toFixed(2)} label={`第 ${index + 1} 行总流水`} />
-                    <NumberCell value={line.couponAmount} label={`第 ${index + 1} 行代金券`} onChange={(value) => updateLine(index, 'couponAmount', value)} />
-                    <NumberCell value={line.testFee} label={`第 ${index + 1} 行测试费`} onChange={(value) => updateLine(index, 'testFee', value)} />
-                    <NumberCell value={line.extraFee} label={`第 ${index + 1} 行额外费用`} onChange={(value) => updateLine(index, 'extraFee', value)} />
-                    <NumberCell value={header.channelFeeRate} label={`第 ${index + 1} 行通道费率`} onChange={(value) => setHeader((h) => ({ ...h, channelFeeRate: value }))} />
-                    <NumberCell value={line.taxRate} label={`第 ${index + 1} 行税率`} onChange={(value) => updateLine(index, 'taxRate', value)} />
-                    <NumberCell value={line.shareRatio} label={`第 ${index + 1} 行分成比例`} onChange={(value) => updateLine(index, 'shareRatio', value)} />
-                    <ReadonlyCell value={calc.shareAmount.toFixed(2)} label={`第 ${index + 1} 行参与分成金额`} />
-                    <ReadonlyCell value={calc.settlementAmount.toFixed(2)} label={`第 ${index + 1} 行结算金额`} />
+                    <div className="channel-cell channel-cell--num">
+                      <input
+                        type="number"
+                        step="0.01"
+                        aria-label={`第 ${index + 1} 行后台流水`}
+                        className="admin-input channel-input-num"
+                        value={line.revenue}
+                        onChange={(e) => {
+                          updateLine(index, 'revenue', e.target.value)
+                          setFlowStatus(line.id, {
+                            type: 'manual',
+                            label: '已调整',
+                            detail: '该流水已由人工调整'
+                          })
+                        }}
+                        title={flowStatus?.detail || '后台流水'}
+                      />
+                    </div>
+                    <div className="channel-cell channel-cell--num">
+                      <input
+                        type="number"
+                        step="0.001"
+                        min="0"
+                        max="1"
+                        aria-label={`第 ${index + 1} 行折扣`}
+                        className="admin-input channel-input-num"
+                        value={line.discountRate}
+                        onChange={(e) => updateLine(index, 'discountRate', e.target.value)}
+                        title="0.05折填0.005"
+                      />
+                    </div>
+                    <div className="channel-cell channel-cell--num">
+                      <input
+                        type="text"
+                        readOnly
+                        disabled
+                        aria-label={`第 ${index + 1} 行总流水`}
+                        className="admin-input readonly-input channel-input-num"
+                        value={net.toFixed(2)}
+                      />
+                    </div>
+                    <div className="channel-cell channel-cell--num">
+                      <input
+                        type="number"
+                        step="0.01"
+                        aria-label={`第 ${index + 1} 行代金券`}
+                        className="admin-input channel-input-num"
+                        value={line.couponAmount}
+                        onChange={(e) => updateLine(index, 'couponAmount', e.target.value)}
+                      />
+                    </div>
+                    <div className="channel-cell channel-cell--num">
+                      <input
+                        type="number"
+                        step="0.01"
+                        aria-label={`第 ${index + 1} 行测试费`}
+                        className="admin-input channel-input-num"
+                        value={line.testFee}
+                        onChange={(e) => updateLine(index, 'testFee', e.target.value)}
+                      />
+                    </div>
+                    <div className="channel-cell channel-cell--num">
+                      <input
+                        type="number"
+                        step="0.01"
+                        aria-label={`第 ${index + 1} 行额外费用`}
+                        className="admin-input channel-input-num"
+                        value={line.extraFee}
+                        onChange={(e) => updateLine(index, 'extraFee', e.target.value)}
+                      />
+                    </div>
+                    <div className="channel-cell channel-cell--num">
+                      <input
+                        type="number"
+                        step="0.01"
+                        aria-label={`第 ${index + 1} 行通道费率`}
+                        className="admin-input channel-input-num"
+                        value={header.channelFeeRate}
+                        onChange={(e) => setHeader((h) => ({ ...h, channelFeeRate: e.target.value }))}
+                      />
+                    </div>
+                    <div className="channel-cell channel-cell--num">
+                      <input
+                        type="number"
+                        step="0.01"
+                        aria-label={`第 ${index + 1} 行税率`}
+                        className="admin-input channel-input-num"
+                        value={line.taxRate}
+                        onChange={(e) => updateLine(index, 'taxRate', e.target.value)}
+                      />
+                    </div>
+                    <div className="channel-cell channel-cell--num">
+                      <input
+                        type="number"
+                        step="0.01"
+                        aria-label={`第 ${index + 1} 行分成比例`}
+                        className="admin-input channel-input-num"
+                        value={line.shareRatio}
+                        onChange={(e) => updateLine(index, 'shareRatio', e.target.value)}
+                      />
+                    </div>
+                    <div className="channel-cell channel-cell--num">
+                      <input
+                        type="text"
+                        readOnly
+                        disabled
+                        aria-label={`第 ${index + 1} 行参与分成金额`}
+                        className="admin-input readonly-input channel-input-num"
+                        value={gross.toFixed(2)}
+                      />
+                    </div>
+                    <div className="channel-cell channel-cell--num">
+                      <input
+                        type="text"
+                        readOnly
+                        disabled
+                        aria-label={`第 ${index + 1} 行结算金额`}
+                        className="admin-input readonly-input channel-input-num"
+                        value={settlement.toFixed(2)}
+                      />
+                    </div>
                     <div className="channel-cell channel-cell--actions">
-                      <button type="button" className="rec-btn rec-btn--ghost" onClick={addRow}>+</button>
-                      <button type="button" className="rec-btn rec-btn--danger-outline" disabled={lines.length <= 1} onClick={() => removeRow(index)}>-</button>
+                      <button
+                        type="button"
+                        className="rec-btn rec-btn--ghost"
+                        onClick={addRow}
+                        title="新增一行"
+                      >
+                        +
+                      </button>
+                      <button
+                        type="button"
+                        className="rec-btn rec-btn--danger-outline"
+                        disabled={lines.length <= 1}
+                        onClick={() => removeRow(index)}
+                        title="删除当前行"
+                      >
+                        -
+                      </button>
                     </div>
                   </div>
                 )
               })}
-              <datalist id={cycleListId}>{cycleOptions.map((item) => <option key={item} value={item} />)}</datalist>
+              <datalist id={cycleListId}>
+                {cycleOptions.map((item) => (
+                  <option key={item} value={item} />
+                ))}
+              </datalist>
             </div>
           </LineItemsTable>
         </div>
@@ -617,38 +937,73 @@ function ReconciliationLineItemsForm({
         <div className="channel-form-section">
           <div className="form-section-title">3）汇总</div>
           <div className="channel-line-items-summary channel-line-items-summary--rd">
-            <Summary label="总后台流水" value={totals.sumRevenue} accent />
-            <Summary label="折后总流水" value={totals.sumNet} accent />
-            <Summary label="总代金券" value={totals.sumCoupon} />
-            <Summary label="总参与分成金额" value={totals.sumShareAmount} />
-            <Summary label="总结算金额" value={totals.sumSettlement} hero />
+            <div className="summary-item summary-item--accent">
+              <div className="label">总后台流水</div>
+              <div className="value">¥{totals.sumRevenue.toFixed(2)}</div>
+            </div>
+            <div className="summary-item summary-item--accent">
+              <div className="label">折后总流水</div>
+              <div className="value">¥{totals.sumNet.toFixed(2)}</div>
+            </div>
+            <div className="summary-item">
+              <div className="label">总代金券</div>
+              <div className="value">¥{totals.sumCoupon.toFixed(2)}</div>
+            </div>
+            <div className="summary-item">
+              <div className="label">总参与分成金额</div>
+              <div className="value">¥{totals.sumShareAmount.toFixed(2)}</div>
+            </div>
+            <div className="summary-item summary-item--hero">
+              <div className="label">总结算金额</div>
+              <div className="value">¥{totals.sumSettlement.toFixed(2)}</div>
+            </div>
           </div>
         </div>
 
         {mode === 'edit' && (
           <div className="channel-form-section">
             <div className="form-section-title">状态</div>
-            <div className="form-row"><div className="form-group"><label>记录状态</label><select className="admin-input" value={header.status || 'pending'} onChange={(e) => setHeader((h) => ({ ...h, status: e.target.value }))}>{STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select></div></div>
+            <div className="form-row">
+              <div className="form-group">
+                <label>记录状态</label>
+                <select
+                  aria-label="记录状态"
+                  className="admin-input"
+                  value={header.status || 'pending'}
+                  onChange={(e) => setHeader((h) => ({ ...h, status: e.target.value }))}
+                >
+                  {STATUS_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
           </div>
         )}
 
-        {!isDrawer && !isCreatePage && <div className="channel-form-section" style={{ padding: '12px 16px' }}><div className="form-row" style={{ alignItems: 'center' }}><span style={{ color: 'var(--admin-text-sub)', fontSize: 14 }}>预计结算金额</span><span style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--admin-success)' }}>{`¥${totals.sumSettlement.toFixed(2)}`}</span></div></div>}
-        {showSubmitButton && <div className="form-actions" style={{ marginTop: 8 }}><button type="submit" className="rec-btn rec-btn--primary">{mode === 'edit' ? '保存修改' : '添加记录'}</button></div>}
+        {!isDrawer && !isCreatePage && (
+          <div className="channel-form-section" style={{ padding: '12px 16px' }}>
+            <div className="form-row" style={{ alignItems: 'center' }}>
+              <span style={{ color: 'var(--admin-text-sub)', fontSize: 14 }}>预计结算金额</span>
+              <span style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--admin-success)' }}>
+                {`\u00a5${totals.sumSettlement.toFixed(2)}`}
+              </span>
+            </div>
+          </div>
+        )}
+
+        {showSubmitButton && (
+          <div className="form-actions" style={{ marginTop: 8 }}>
+            <button type="submit" className="rec-btn rec-btn--primary">
+              {mode === 'edit' ? '保存修改' : '添加记录'}
+            </button>
+          </div>
+        )}
       </form>
     </div>
   )
-}
-
-function NumberCell({ value, label, onChange, step = '0.01', min, max }) {
-  return <div className="channel-cell channel-cell--num"><input type="number" step={step} min={min} max={max} aria-label={label} className="admin-input channel-input-num" value={value} onChange={(e) => onChange(e.target.value)} /></div>
-}
-
-function ReadonlyCell({ value, label }) {
-  return <div className="channel-cell channel-cell--num"><input type="text" readOnly disabled aria-label={label} className="admin-input readonly-input channel-input-num" value={value} /></div>
-}
-
-function Summary({ label, value, accent = false, hero = false }) {
-  return <div className={`summary-item${accent ? ' summary-item--accent' : ''}${hero ? ' summary-item--hero' : ''}`}><div className="label">{label}</div><div className="value">¥{Number(value || 0).toFixed(2)}</div></div>
 }
 
 function PartnerPicker({ value, partnerId, partners, onChange, onAddPartner }) {
@@ -658,32 +1013,145 @@ function PartnerPicker({ value, partnerId, partners, onChange, onAddPartner }) {
   const matches = useMemo(() => {
     const source = (partners || []).filter((partner) => partner?.name)
     if (!query) return source.slice(0, 8)
-    return source.filter((partner) => [partner.shortName, partner.name, partner.category, partner.taxRegistrationNo, partner.tag2].filter(Boolean).join(' ').toLowerCase().includes(query)).slice(0, 8)
+    return source
+      .filter((partner) =>
+        [
+          partner.shortName,
+          partner.name,
+          partner.category,
+          partner.taxRegistrationNo,
+          partner.tag2
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase()
+          .includes(query)
+      )
+      .slice(0, 8)
   }, [partners, query])
   const exactMatch = findExactPartner(partners, value)
-  const selectPartner = (partner) => { onChange(partner.name, String(partner.id || '')); setOpen(false) }
-  const addPartner = () => { const name = String(value || '').trim(); if (!name) { inputRef.current?.focus(); setOpen(true); return }; onAddPartner?.(name); setOpen(false) }
+
+  const selectPartner = (partner) => {
+    onChange(partner.name, String(partner.id || ''))
+    setOpen(false)
+  }
+
+  const addPartner = () => {
+    const name = String(value || '').trim()
+    if (!name) {
+      inputRef.current?.focus()
+      setOpen(true)
+      return
+    }
+    onAddPartner?.(name)
+    setOpen(false)
+  }
 
   return (
     <div className="rd-partner-picker">
       <div className="rd-partner-picker__control">
-        <input ref={inputRef} type="search" role="combobox" aria-label="搜索客户库合作方" aria-expanded={open} aria-autocomplete="list" className="admin-input" value={value} onFocus={() => setOpen(true)} onBlur={() => window.setTimeout(() => setOpen(false), 120)} onChange={(event) => { const nextValue = event.target.value; const matched = findExactPartner(partners, nextValue); onChange(nextValue, matched ? String(matched.id || '') : ''); setOpen(true) }} onKeyDown={(event) => { if (event.key === 'Escape') setOpen(false); if (event.key === 'Enter' && open && matches.length === 1) { event.preventDefault(); selectPartner(matches[0]) } }} placeholder="搜索客户库中的合作方" />
-        <button type="button" className="rd-partner-picker__add" onClick={addPartner}>+</button>
+        <input
+          ref={inputRef}
+          type="search"
+          role="combobox"
+          aria-label="搜索客户库合作方"
+          aria-expanded={open}
+          aria-autocomplete="list"
+          className="admin-input"
+          value={value}
+          onFocus={() => setOpen(true)}
+          onBlur={() => window.setTimeout(() => setOpen(false), 120)}
+          onChange={(event) => {
+            const nextValue = event.target.value
+            const matched = findExactPartner(partners, nextValue)
+            onChange(nextValue, matched ? String(matched.id || '') : '')
+            setOpen(true)
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') setOpen(false)
+            if (event.key === 'Enter' && open && matches.length === 1) {
+              event.preventDefault()
+              selectPartner(matches[0])
+            }
+          }}
+          placeholder="搜索客户库中的合作方"
+        />
+        <button
+          type="button"
+          className="rd-partner-picker__add"
+          onClick={addPartner}
+          title={value && !exactMatch ? '新增到客户库' : '输入新的合作方名称'}
+          aria-label="新增合作方"
+        >
+          +
+        </button>
       </div>
-      <div className={`rd-partner-picker__link-state ${partnerId ? 'rd-partner-picker__link-state--linked' : ''}`}>{partnerId ? '已关联客户库，客户资料更新后账单仍保持关联' : '请从客户库结果中选择合作方'}</div>
-      {open ? <div className="rd-partner-picker__menu" role="listbox"><div className="rd-partner-picker__menu-head"><strong>客户库</strong><span>{(partners || []).length} 个合作方</span></div>{matches.map((partner) => <button key={partner.id || partner.name} type="button" role="option" aria-selected={String(partner.id || '') === String(partnerId || '')} onMouseDown={(event) => event.preventDefault()} onClick={() => selectPartner(partner)}><span><strong>{partner.shortName || partner.name}</strong><small>{partner.shortName ? partner.name : partner.category || '未分类'}</small></span><em>{partner.category || partner.taxRegistrationNo || partner.tag2 || ''}</em></button>)}{matches.length === 0 ? <div className="rd-partner-picker__empty">客户库中没有匹配的合作方</div> : null}{String(value || '').trim() && !exactMatch ? <button type="button" className="rd-partner-picker__create" onMouseDown={(event) => event.preventDefault()} onClick={addPartner}><span>+</span>将“{String(value || '').trim()}”新增到客户库</button> : null}</div> : null}
+      <div
+        className={`rd-partner-picker__link-state ${
+          partnerId ? 'rd-partner-picker__link-state--linked' : ''
+        }`}
+      >
+        {partnerId ? '已关联客户库，客户资料更新后账单仍保持关联' : '请从客户库结果中选择合作方'}
+      </div>
+      {open ? (
+        <div className="rd-partner-picker__menu" role="listbox" aria-label="客户库合作方">
+          <div className="rd-partner-picker__menu-head">
+            <strong>客户库</strong>
+            <span>{(partners || []).length} 个合作方</span>
+          </div>
+          {matches.map((partner) => (
+            <button
+              key={partner.id || partner.name}
+              type="button"
+              role="option"
+              aria-selected={String(partner.id || '') === String(partnerId || '')}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => selectPartner(partner)}
+            >
+              <span>
+                <strong>{partner.shortName || partner.name}</strong>
+                <small>{partner.shortName ? partner.name : partner.category || '未分类'}</small>
+              </span>
+              <em>{partner.category || partner.taxRegistrationNo || partner.tag2 || ''}</em>
+            </button>
+          ))}
+          {matches.length === 0 ? (
+            <div className="rd-partner-picker__empty">客户库中没有匹配的合作方</div>
+          ) : null}
+          {String(value || '').trim() && !exactMatch ? (
+            <button
+              type="button"
+              className="rd-partner-picker__create"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={addPartner}
+            >
+              <span>+</span>
+              将“{String(value || '').trim()}”新增到客户库
+            </button>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   )
 }
 
 function partnerKey(value) {
-  return String(value || '').trim().toLowerCase().replace(/[（(]/g, '(').replace(/[）)]/g, ')').replace(/\s+/g, '')
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[（(]/g, '(')
+    .replace(/[）)]/g, ')')
+    .replace(/\s+/g, '')
 }
 
 function findExactPartner(partners, value) {
   const key = partnerKey(value)
   if (!key) return null
-  const matches = (partners || []).filter((partner) => partner?.name && [partner.name, partner.shortName].some((candidate) => partnerKey(candidate) === key))
+  const matches = (partners || []).filter(
+    (partner) =>
+      partner?.name &&
+      [partner.name, partner.shortName].some((candidate) => partnerKey(candidate) === key)
+  )
   const unique = new Map(matches.map((partner) => [String(partner.id || partner.name), partner]))
   return unique.size === 1 ? [...unique.values()][0] : null
 }
