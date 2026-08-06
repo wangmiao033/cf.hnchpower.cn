@@ -4,7 +4,6 @@ import { useAuth } from '@/features/auth/AuthContext.jsx'
 import './LoginPage.css'
 
 const REMEMBER_ACCOUNT_KEY = 'duizhang:remember-account'
-const DEFAULT_ACCOUNT = 'adam'
 
 function normalizeAuthError(err, fallback = '操作失败') {
   if (!(err instanceof ApiError)) return fallback
@@ -18,10 +17,10 @@ function LoginPage() {
   const { signInWithPassword } = useAuth()
   const savedAccount =
     typeof window !== 'undefined' ? window.localStorage.getItem(REMEMBER_ACCOUNT_KEY) : ''
-  const [account, setAccount] = useState(savedAccount || DEFAULT_ACCOUNT)
+  const [account, setAccount] = useState(savedAccount || '')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
-  const [rememberAccount, setRememberAccount] = useState(true)
+  const [rememberAccount, setRememberAccount] = useState(Boolean(savedAccount))
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
 
@@ -91,8 +90,8 @@ function LoginPage() {
               <span>数据统一保存</span>
             </div>
             <div className="login-hero-metric">
-              <strong>1 天</strong>
-              <span>安全会话时效</span>
+              <strong>受保护</strong>
+              <span>安全会话机制</span>
             </div>
           </div>
 
@@ -126,6 +125,7 @@ function LoginPage() {
                   onChange={(e) => setAccount(e.target.value)}
                   placeholder="请输入账号"
                   autoComplete="username"
+                  autoFocus={!savedAccount}
                   required
                 />
               </div>
@@ -147,6 +147,7 @@ function LoginPage() {
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="请输入密码"
                   autoComplete="current-password"
+                  autoFocus={Boolean(savedAccount)}
                   required
                 />
                 <button
@@ -169,8 +170,8 @@ function LoginPage() {
                   </svg>
                 </span>
                 <span>
-                  <strong>登录状态保留 1 天</strong>
-                  <small>会话由安全 Cookie 保存，公共电脑使用后请退出。</small>
+                  <strong>登录状态由安全 Cookie 保存</strong>
+                  <small>会话到期后会自动返回登录页，公共电脑使用后请主动退出。</small>
                 </span>
               </div>
               <label className="login-option">
