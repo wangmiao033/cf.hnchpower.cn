@@ -48,7 +48,7 @@ describe('multi-period research bill export', () => {
     const lines = expandRdRecordsForSettlementExport([bill])
 
     expect(lines).toHaveLength(2)
-    expect(lines.map((line) => line.settlementCycle)).toEqual([
+    expect(lines.map((line) => line.settlementMonth)).toEqual([
       '2026年5月',
       '2026年6月'
     ])
@@ -62,7 +62,7 @@ describe('multi-period research bill export', () => {
     expect(flattened).toContain('450')
   })
 
-  it('creates one formal worksheet for the single master bill', () => {
+  it('creates one formal worksheet named by the single master bill number', () => {
     const { wb } = buildSettlementWorkbookFromSelected([bill])
     expect(wb.SheetNames).toEqual(['JS-20260806-001'])
   })
