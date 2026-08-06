@@ -28,13 +28,15 @@ export type ApiReconciliationLineItemRow = {
   share_amount: number
   settlement_amount: number
   sort_order: number
-  created_at: string
+  created_at?: string
 }
 
 export type ApiReconciliationRow = {
   id: string
   statement_no: string
   settlement_month: string | null
+  settlement_periods?: string[]
+  settlement_period_label?: string | null
   partner_id?: string | null
   partner_name: string | null
   partner_short_name?: string | null
@@ -54,16 +56,20 @@ export type ApiReconciliationRow = {
   remark: string | null
   created_at: string
   updated_at: string
-  /** GET单条时返回；列表接口为空数组 */
   items?: ApiReconciliationLineItemRow[]
-  /** 列表用：未登记 / 待打款 / 已提交 / 已付款 / 金额异常 / 打款失败 */
   bank_payment_list_status?: string | null
-  /** 银行付款登记（bank_transactions）关联聚合，由后端计算 */
   paid_amount?: number
   unpaid_amount?: number
   payment_status?: string
   payment_count?: number
   latest_payment_date?: string | null
+}
+
+export type ApiReconciliationPeriodSummary = {
+  bill_id: string
+  periods: string[]
+  period_label: string
+  items: ApiReconciliationLineItemRow[]
 }
 
 export type BankPaymentTransferStatus = 'pending_submit' | 'submitted' | 'paid' | 'failed'
@@ -99,7 +105,6 @@ export type ApiBankPaymentAttachmentRow = {
   id: string
   bank_payment_id: string
   file_name: string
-  /** 相对 API 根的下载路径，如 /api/reconciliation/.../file */
   file_url: string
   file_type: string | null
   created_at: string
@@ -169,8 +174,40 @@ export type ReconciliationCreatePayload = {
 export type ReconciliationUpdatePayload = Partial<ReconciliationCreatePayload>
 
 const PATH = '/api/reconciliation'
+const PERIOD_PATH = '/api/reconciliation-periods'
 
-export function listReconciliationRecords(params?: {
+async function attachPeriodMetadata(
+  response: ReconciliationListResponse
+): Promise<ReconciliationListResponse> {
+  if (!Array.isArray(response.items) || response.items.length === 0) return response
+  const ids = response.items.map((row) => row.id).filter(Boolean)
+  if (ids.length === 0) return response
+
+  try {
+    const periods = await apiGet<{ items: ApiReconciliationPeriodSummary[]; total: number }>(
+      `${PERIOD_PATH}?ids=${encodeURIComponent(ids.join(','))}`
+    )
+    const periodMap = new Map((periods.items || []).map((item) => [String(item.bill_id), item]))
+    return {
+      ...response,
+      items: response.items.map((row) => {
+        const summary = periodMap.get(String(row.id))
+        if (!summary) return row
+        return {
+          ...row,
+          settlement_periods: summary.periods || [],
+          settlement_period_label: summary.period_label || row.settlement_month,
+          items: summary.items || []
+        }
+      })
+    }
+  } catch (error) {
+    console.warn('研发账单周期明细读取失败，继续使用主表兼容字段。', error)
+    return response
+  }
+}
+
+export async function listReconciliationRecords(params?: {
   search?: string
   settlement_month?: string
   partner_name?: string
@@ -188,7 +225,8 @@ export function listReconciliationRecords(params?: {
   if (params?.limit != null) q.set('limit', String(params.limit))
   if (params?.offset != null) q.set('offset', String(params.offset))
   const qs = q.toString()
-  return apiGet<ReconciliationListResponse>(`${PATH}${qs ? `?${qs}` : ''}`)
+  const response = await apiGet<ReconciliationListResponse>(`${PATH}${qs ? `?${qs}` : ''}`)
+  return attachPeriodMetadata(response)
 }
 
 export function getReconciliationRecord(id: string): Promise<ApiReconciliationRow> {
@@ -272,7 +310,6 @@ export function deleteBankPaymentAttachment(
   )
 }
 
-/** 列表/表格行主键：统一为字符串，与后端 UUID 及路由 state 一致 */
 export function getReconciliationRecordId(
   record: Record<string, unknown> | null | undefined
 ): string {
@@ -298,11 +335,14 @@ function apiLineToFrontend(line: ApiReconciliationLineItemRow, parentSettlementM
     gameName: line.game_name != null ? String(line.game_name) : '',
     revenue: String(line.revenue ?? 0),
     discountRate: String(line.discount_rate ?? 1),
+    netRevenue: Number(line.net_revenue ?? 0),
     couponAmount: String(line.coupon_amount ?? 0),
     testFee: String(line.test_fee ?? 0),
     extraFee: String(line.extra_fee ?? 0),
     shareRatio: String(line.share_ratio ?? 0),
     taxRate: String(line.tax_rate ?? 0),
+    shareAmount: Number(line.share_amount ?? 0),
+    settlementAmount: Number(line.settlement_amount ?? 0),
     sortOrder: line.sort_order ?? 0
   }
 }
@@ -311,20 +351,23 @@ function legacyItemsFromApiRow(row: ApiReconciliationRow) {
   return [
     {
       id: `legacy-${row.id}`,
+      settlementCycle: row.settlement_month ?? '',
       gameName: row.game_name != null ? String(row.game_name) : '',
       revenue: String(row.game_flow ?? 0),
       discountRate: String(row.discount_value ?? 1),
+      netRevenue: Number(row.game_flow ?? 0) * Number(row.discount_value ?? 1),
       couponAmount: String(row.voucher_cost ?? 0),
       testFee: String(row.test_cost ?? 0),
       extraFee: String(row.refund_amount ?? 0),
       shareRatio: String(row.revenue_share_rate ?? 0),
       taxRate: String(row.tax_rate ?? 0),
+      shareAmount: 0,
+      settlementAmount: Number(row.settlement_amount ?? 0),
       sortOrder: 0
     }
   ]
 }
 
-/** 后端行 -> 前端列表/表单使用的记录结构（字段名与 DataForm / store 一致） */
 export function apiRowToFrontend(row: ApiReconciliationRow): Record<string, unknown> {
   const idStr = row.id != null && String(row.id).trim() !== '' ? String(row.id) : ''
   const rawItems = row.items
@@ -335,6 +378,8 @@ export function apiRowToFrontend(row: ApiReconciliationRow): Record<string, unkn
   return {
     id: idStr,
     settlementMonth: row.settlement_month ?? '',
+    settlementPeriods: row.settlement_periods ?? [],
+    settlementPeriodLabel: row.settlement_period_label ?? '',
     settlementNumber: row.statement_no ?? '',
     partnerId: row.partner_id ?? '',
     partner: row.partner_name ?? '',
@@ -371,7 +416,6 @@ export function apiRowToFrontend(row: ApiReconciliationRow): Record<string, unkn
   }
 }
 
-/** 前端记录 -> API 写入体 */
 export function frontendRecordToApiPayload(
   record: Record<string, unknown>,
   options?: { includeStatementNo?: boolean }
