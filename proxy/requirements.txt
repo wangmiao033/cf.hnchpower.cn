@@ -1,4 +1,4 @@
-fastapi
-httpx
-psycopg[binary]
-PyJWT
+fastapi==0.141.1
+httpx==0.28.1
+psycopg[binary]==3.3.4
+PyJWT==2.13.0

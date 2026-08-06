@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import os
 from datetime import datetime, timezone
-from secrets import compare_digest
 from uuid import uuid4
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException, status
@@ -56,6 +55,7 @@ def _normalize_account(value: str | None) -> str:
 
 
 def _get_or_create_builtin_user(db: Session) -> AuthUser:
+    """Create the first administrator once; never re-apply the bootstrap password later."""
     user = get_user_by_email(db, BUILTIN_ACCOUNT) or db.get(AuthUser, "auth-user-adam")
 
     if user is None:
@@ -80,16 +80,13 @@ def _get_or_create_builtin_user(db: Session) -> AuthUser:
             user = get_user_by_email(db, BUILTIN_ACCOUNT) or db.get(AuthUser, "auth-user-adam")
             if user is None:
                 raise
+    elif not user.password_hash and BUILTIN_PASSWORDS:
+        # 仅兼容历史上已建账号但尚未设置密码的初始化状态。
+        user.password_hash = hash_password(BUILTIN_PASSWORDS[0])
+        db.flush()
 
-    user.email = BUILTIN_ACCOUNT
-    user.display_name = BUILTIN_ACCOUNT
-    user.role = "admin"
-    user.is_active = True
+    # 已存在账号的密码、角色和启用状态完全由数据库控制。
     return user
-
-
-def _matches_configured_builtin_password(password: str) -> bool:
-    return any(compare_digest(password, candidate) for candidate in BUILTIN_PASSWORDS)
 
 
 def _session_id_from_token(token: str | None) -> str:
@@ -133,17 +130,10 @@ def login_password(payload: PasswordLoginRequest, db: Session = Depends(get_db))
     user = _get_or_create_builtin_user(db) if account == BUILTIN_ACCOUNT else get_user_by_email(db, account)
     if user is None or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="账号或密码错误")
-    configured_builtin_login = (
-        account == BUILTIN_ACCOUNT and _matches_configured_builtin_password(payload.password)
-    )
-    if is_locked(user) and not configured_builtin_login:
+    if is_locked(user):
         raise HTTPException(status_code=423, detail="登录已锁定，请稍后再试")
-    password_matches = verify_password(payload.password, user.password_hash)
-    if not password_matches and configured_builtin_login:
-        user.password_hash = hash_password(payload.password)
-        password_matches = True
 
-    if not password_matches:
+    if not verify_password(payload.password, user.password_hash):
         register_login_fail(user)
         db.commit()
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="账号或密码错误")
