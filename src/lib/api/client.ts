@@ -4,10 +4,13 @@
 
 /// <reference types="vite/client" />
 
-const rawBase =
-  (import.meta.env.VITE_API_BASE_URL || '').trim()
+const rawBase = (import.meta.env.VITE_API_BASE_URL || '').trim()
 
 export const API_BASE_URL = rawBase.replace(/\/$/, '')
+export const AUTH_UNAUTHORIZED_EVENT = 'cf:auth-unauthorized'
+
+const DEFAULT_REQUEST_TIMEOUT_MS = 30_000
+const UPLOAD_REQUEST_TIMEOUT_MS = 90_000
 
 type ApiRequestOptions = {
   timeoutMs?: number
@@ -42,7 +45,11 @@ function toNetworkApiError(err: unknown): ApiError {
   return new ApiError(msg, 0, err)
 }
 
-async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit, timeoutMs?: number) {
+async function fetchWithTimeout(
+  input: RequestInfo | URL,
+  init: RequestInit,
+  timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS
+) {
   if (!timeoutMs || timeoutMs <= 0) {
     try {
       return await fetch(input, init)
@@ -50,6 +57,7 @@ async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit, tim
       throw toNetworkApiError(e)
     }
   }
+
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)
   try {
@@ -66,68 +74,81 @@ function joinUrl(path: string): string {
   return `${API_BASE_URL}${p}`
 }
 
+function notifyUnauthorized() {
+  if (typeof window === 'undefined') return
+  window.dispatchEvent(new Event(AUTH_UNAUTHORIZED_EVENT))
+}
+
 export async function apiGet<T>(path: string, options?: ApiRequestOptions): Promise<T> {
   const res = await fetchWithTimeout(
     joinUrl(path),
     { method: 'GET', credentials: 'include' },
-    options?.timeoutMs
+    options?.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS
   )
   return parseResponse<T>(res)
 }
 
-export async function apiPost<T>(path: string, body: unknown): Promise<T> {
-  let res: Response
-  try {
-    res = await fetch(joinUrl(path), {
+export async function apiPost<T>(
+  path: string,
+  body: unknown,
+  options?: ApiRequestOptions
+): Promise<T> {
+  const res = await fetchWithTimeout(
+    joinUrl(path),
+    {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
-    })
-  } catch (e) {
-    throw toNetworkApiError(e)
-  }
+    },
+    options?.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS
+  )
   return parseResponse<T>(res)
 }
 
-export async function apiPut<T>(path: string, body: unknown): Promise<T> {
-  let res: Response
-  try {
-    res = await fetch(joinUrl(path), {
+export async function apiPut<T>(
+  path: string,
+  body: unknown,
+  options?: ApiRequestOptions
+): Promise<T> {
+  const res = await fetchWithTimeout(
+    joinUrl(path),
+    {
       method: 'PUT',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
-    })
-  } catch (e) {
-    throw toNetworkApiError(e)
-  }
+    },
+    options?.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS
+  )
   return parseResponse<T>(res)
 }
 
-export async function apiDelete(path: string): Promise<void> {
-  let res: Response
-  try {
-    res = await fetch(joinUrl(path), { method: 'DELETE', credentials: 'include' })
-  } catch (e) {
-    throw toNetworkApiError(e)
-  }
+export async function apiDelete(path: string, options?: ApiRequestOptions): Promise<void> {
+  const res = await fetchWithTimeout(
+    joinUrl(path),
+    { method: 'DELETE', credentials: 'include' },
+    options?.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS
+  )
   if (res.status === 204) return
   await parseResponse<unknown>(res)
 }
 
 /** multipart/form-data（不设置 Content-Type，由浏览器带 boundary） */
-export async function apiPostMultipart<T>(path: string, formData: FormData): Promise<T> {
-  let res: Response
-  try {
-    res = await fetch(joinUrl(path), {
+export async function apiPostMultipart<T>(
+  path: string,
+  formData: FormData,
+  options?: ApiRequestOptions
+): Promise<T> {
+  const res = await fetchWithTimeout(
+    joinUrl(path),
+    {
       method: 'POST',
       credentials: 'include',
       body: formData
-    })
-  } catch (e) {
-    throw toNetworkApiError(e)
-  }
+    },
+    options?.timeoutMs ?? UPLOAD_REQUEST_TIMEOUT_MS
+  )
   return parseResponse<T>(res)
 }
 
@@ -142,6 +163,8 @@ export async function parseResponse<T>(res: Response): Promise<T> {
     }
   }
   if (!res.ok) {
+    if (res.status === 401) notifyUnauthorized()
+
     const detail =
       data && typeof data === 'object' && data !== null && 'detail' in data
         ? (() => {
