@@ -19,6 +19,15 @@ import AppShell from './app/AppShell.jsx'
 import { AppStateProvider } from './app/AppStateContext.jsx'
 import { getGroupForView, getTabView, SIDEBAR_GROUPS, VIEWS } from './app/routes.js'
 import { useAuth } from '@/features/auth/AuthContext.jsx'
+import {
+  apiRowToFrontend,
+  getReconciliationRecord
+} from '@/lib/api/reconciliation.ts'
+import {
+  apiChannelRowToFrontend,
+  getChannelRecord
+} from '@/lib/api/channel.ts'
+import { prefetchEditRecord } from '@/lib/api/editRecordCache.js'
 import CoreDashboardPage from './pages/CoreDashboardPage.jsx'
 import LoginPage from './pages/LoginPage.jsx'
 import '@/styles/admin-polish.css'
@@ -86,6 +95,16 @@ function preloadAuthenticatedPages() {
   })
 }
 
+function scheduleIdleTask(callback) {
+  if (typeof window === 'undefined') return () => {}
+  if (typeof window.requestIdleCallback === 'function') {
+    const id = window.requestIdleCallback(callback, { timeout: 2500 })
+    return () => window.cancelIdleCallback?.(id)
+  }
+  const id = window.setTimeout(callback, 1200)
+  return () => window.clearTimeout(id)
+}
+
 function App() {
   const { isAuthenticated, loading } = useAuth()
   const [activeView, setActiveViewState] = useState(VIEWS.DASHBOARD)
@@ -118,6 +137,44 @@ function App() {
     const timer = window.setTimeout(preloadAuthenticatedPages, 0)
     return () => window.clearTimeout(timer)
   }, [isAuthenticated, loading])
+
+  useEffect(() => {
+    if (!isAuthenticated || loading) return undefined
+
+    let cancelled = false
+    const rdCandidates = (recon.records || []).slice(0, 2)
+    const channelCandidates = (recon.channelRecords || []).slice(0, 2)
+    const tasks = [
+      ...rdCandidates.map((row) => async () => {
+        const id = String(row?.id || '')
+        if (!id) return
+        await prefetchEditRecord('rd', id, async () => {
+          const detail = await getReconciliationRecord(id)
+          return apiRowToFrontend(detail)
+        })
+      }),
+      ...channelCandidates.map((row) => async () => {
+        const id = String(row?.id || '')
+        if (!id) return
+        await prefetchEditRecord('channel', id, async () => {
+          const detail = await getChannelRecord(id)
+          return apiChannelRowToFrontend(detail)
+        })
+      })
+    ]
+
+    if (tasks.length === 0) return undefined
+
+    return scheduleIdleTask(() => {
+      void (async () => {
+        for (const task of tasks) {
+          if (cancelled) return
+          await task()
+          await new Promise((resolve) => window.setTimeout(resolve, 120))
+        }
+      })()
+    })
+  }, [isAuthenticated, loading, recon.records, recon.channelRecords])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -179,13 +236,27 @@ function App() {
   }, [activeView])
 
   const openReconciliationEdit = useCallback((id, returnView = VIEWS.RECON_RD) => {
-    setReconEditRecordId(id)
+    const recordId = String(id || '')
+    if (recordId) {
+      void prefetchEditRecord('rd', recordId, async () => {
+        const detail = await getReconciliationRecord(recordId)
+        return apiRowToFrontend(detail)
+      })
+    }
+    setReconEditRecordId(recordId)
     setReconReturnView(returnView)
     setActiveViewRaw(VIEWS.RECON_EDIT)
   }, [setActiveViewRaw])
 
   const openChannelReconciliationEdit = useCallback((id, returnView = VIEWS.RECON_CHANNEL) => {
-    setChannelEditRecordId(id)
+    const recordId = String(id || '')
+    if (recordId) {
+      void prefetchEditRecord('channel', recordId, async () => {
+        const detail = await getChannelRecord(recordId)
+        return apiChannelRowToFrontend(detail)
+      })
+    }
+    setChannelEditRecordId(recordId)
     setChannelReturnView(returnView)
     navigate(VIEWS.CHANNEL_RECON_EDIT)
   }, [navigate])

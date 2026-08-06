@@ -6,6 +6,11 @@ import ChannelBillingForm from '@/components/channel/ChannelBillingForm.jsx'
 import { CoreBillLoadingState } from '@/pages/CoreBillLoadingState.jsx'
 import { VIEWS } from '@/app/routes.js'
 import { apiChannelRowToFrontend, getChannelRecord } from '@/lib/api/channel.ts'
+import {
+  getCachedEditRecord,
+  invalidateEditRecord,
+  loadEditRecord
+} from '@/lib/api/editRecordCache.js'
 import './CoreBillFormPages.css'
 import '@/components/reconciliation/reconciliation-admin.css'
 
@@ -31,23 +36,47 @@ function CoreChannelBillFormPage({ mode }) {
   const [previewAmount, setPreviewAmount] = useState(0)
   const [remoteRecord, setRemoteRecord] = useState(null)
   const [loading, setLoading] = useState(isEdit)
+  const [loadError, setLoadError] = useState('')
+  const [loadAttempt, setLoadAttempt] = useState(0)
 
   useEffect(() => {
     if (!isEdit) return
     if (!channelEditRecordId) {
       setRemoteRecord(null)
       setLoading(false)
+      setLoadError('')
       return
     }
+
+    const recordId = String(channelEditRecordId)
+    const cached = getCachedEditRecord('channel', recordId)
+    if (cached) {
+      setRemoteRecord(cached)
+      setLoading(false)
+      setLoadError('')
+      return
+    }
+
     let cancelled = false
     async function loadRecord() {
       setRemoteRecord(null)
       setLoading(true)
+      setLoadError('')
       try {
-        const row = await getChannelRecord(String(channelEditRecordId))
-        if (!cancelled) setRemoteRecord(apiChannelRowToFrontend(row))
-      } catch {
-        if (!cancelled) showToast('无法加载渠道账单，请返回列表重试', 'error')
+        const record = await loadEditRecord('channel', recordId, async () => {
+          const row = await getChannelRecord(recordId)
+          return apiChannelRowToFrontend(row)
+        })
+        if (!cancelled) setRemoteRecord(record)
+      } catch (error) {
+        if (!cancelled) {
+          const message =
+            error instanceof Error && error.message
+              ? error.message
+              : '读取账单明细失败，请稍后重试。'
+          setLoadError(message)
+          showToast('渠道账单加载失败，可以在当前页面重试', 'error')
+        }
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -56,7 +85,7 @@ function CoreChannelBillFormPage({ mode }) {
     return () => {
       cancelled = true
     }
-  }, [isEdit, channelEditRecordId, showToast])
+  }, [isEdit, channelEditRecordId, loadAttempt, showToast])
 
   const editRecord = remoteRecord
   const stableRecord =
@@ -66,9 +95,32 @@ function CoreChannelBillFormPage({ mode }) {
   const isReconciled = RECONCILED_STATUSES.has(String(stableRecord?.status || '').toLowerCase())
   const stateLabel = !isEdit ? '新建账单' : isReconciled ? '已核对' : '待核对'
 
+  const listSnapshot = isEdit
+    ? (recon.channelRecords || []).find(
+        (row) => String(row?.id || '') === String(channelEditRecordId || '')
+      )
+    : null
+  const loadingSummary = listSnapshot
+    ? [
+        { label: '账单编号', value: listSnapshot.billNumber || listSnapshot.statementNo || '-' },
+        { label: '渠道', value: listSnapshot.channelName || '-' },
+        { label: '账单月份', value: listSnapshot.settlementMonth || '-' },
+        { label: '结算金额', value: money(listSnapshot.settlementAmount) }
+      ]
+    : []
+
   const goList = () => setActiveView(channelReturnView || VIEWS.RECON_CHANNEL)
 
+  const retryLoad = () => {
+    if (!channelEditRecordId) return
+    invalidateEditRecord('channel', String(channelEditRecordId))
+    setLoadAttempt((value) => value + 1)
+  }
+
   const handleAfterSubmit = (intent) => {
+    if (isEdit && channelEditRecordId) {
+      invalidateEditRecord('channel', String(channelEditRecordId))
+    }
     if (intent === 'continue') {
       showToast('已保存，可继续新增下一张渠道账单', 'success')
       return
@@ -83,8 +135,16 @@ function CoreChannelBillFormPage({ mode }) {
     return <EmptyState title="请选择渠道账单" onBack={goList} />
   }
 
-  if (loading) {
-    return <CoreBillLoadingState billType="渠道账单" />
+  if (loading || loadError) {
+    return (
+      <CoreBillLoadingState
+        billType="渠道账单"
+        summary={loadingSummary}
+        error={loadError}
+        onRetry={retryLoad}
+        onBack={goList}
+      />
+    )
   }
 
   if (isEdit && !stableRecord) {

@@ -10,6 +10,11 @@ import {
   getReconciliationRecord,
   getReconciliationRecordId
 } from '@/lib/api/reconciliation.ts'
+import {
+  getCachedEditRecord,
+  invalidateEditRecord,
+  loadEditRecord
+} from '@/lib/api/editRecordCache.js'
 import './CoreBillFormPages.css'
 import '@/components/reconciliation/reconciliation-admin.css'
 
@@ -34,23 +39,47 @@ function CoreRdBillFormPage({ mode }) {
   const [previewAmount, setPreviewAmount] = useState(0)
   const [remoteRecord, setRemoteRecord] = useState(null)
   const [loading, setLoading] = useState(isEdit)
+  const [loadError, setLoadError] = useState('')
+  const [loadAttempt, setLoadAttempt] = useState(0)
 
   useEffect(() => {
     if (!isEdit) return
     if (!reconEditRecordId) {
       setRemoteRecord(null)
       setLoading(false)
+      setLoadError('')
       return
     }
+
+    const recordId = String(reconEditRecordId)
+    const cached = getCachedEditRecord('rd', recordId)
+    if (cached) {
+      setRemoteRecord(cached)
+      setLoading(false)
+      setLoadError('')
+      return
+    }
+
     let cancelled = false
     async function loadRecord() {
       setRemoteRecord(null)
       setLoading(true)
+      setLoadError('')
       try {
-        const row = await getReconciliationRecord(String(reconEditRecordId))
-        if (!cancelled) setRemoteRecord(apiRowToFrontend(row))
-      } catch {
-        if (!cancelled) showToast('无法加载研发账单，请返回列表重试', 'error')
+        const record = await loadEditRecord('rd', recordId, async () => {
+          const row = await getReconciliationRecord(recordId)
+          return apiRowToFrontend(row)
+        })
+        if (!cancelled) setRemoteRecord(record)
+      } catch (error) {
+        if (!cancelled) {
+          const message =
+            error instanceof Error && error.message
+              ? error.message
+              : '读取账单明细失败，请稍后重试。'
+          setLoadError(message)
+          showToast('研发账单加载失败，可以在当前页面重试', 'error')
+        }
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -59,7 +88,7 @@ function CoreRdBillFormPage({ mode }) {
     return () => {
       cancelled = true
     }
-  }, [isEdit, reconEditRecordId, showToast])
+  }, [isEdit, reconEditRecordId, loadAttempt, showToast])
 
   const editRecord = remoteRecord
   const stableEditRecord =
@@ -67,12 +96,36 @@ function CoreRdBillFormPage({ mode }) {
       ? { ...editRecord, id: String(reconEditRecordId) }
       : editRecord
 
+  const listSnapshot = isEdit
+    ? (recon.records || []).find((row) => String(row?.id || '') === String(reconEditRecordId || ''))
+    : null
+  const loadingSummary = listSnapshot
+    ? [
+        { label: '账单编号', value: listSnapshot.settlementNumber || '-' },
+        {
+          label: '合作方',
+          value: listSnapshot.partnerShortName || listSnapshot.partner || listSnapshot.partyBName || '-'
+        },
+        { label: '账单月份', value: listSnapshot.settlementMonth || '-' },
+        { label: '结算金额', value: money(listSnapshot.settlementAmount) }
+      ]
+    : []
+
   const goList = () => {
     recon.setQuickFillData(null)
     setActiveView(isEdit ? reconReturnView || VIEWS.RECON_RD : VIEWS.RECON_RD)
   }
 
+  const retryLoad = () => {
+    if (!reconEditRecordId) return
+    invalidateEditRecord('rd', String(reconEditRecordId))
+    setLoadAttempt((value) => value + 1)
+  }
+
   const handleSubmitted = (intent) => {
+    if (isEdit && reconEditRecordId) {
+      invalidateEditRecord('rd', String(reconEditRecordId))
+    }
     if (intent === 'continue') {
       recon.setQuickFillData(null)
       showToast('已保存，可继续新增下一张研发账单', 'success')
@@ -85,8 +138,16 @@ function CoreRdBillFormPage({ mode }) {
     return <EmptyState title="请选择研发账单" onBack={goList} />
   }
 
-  if (loading) {
-    return <CoreBillLoadingState billType="研发账单" />
+  if (loading || loadError) {
+    return (
+      <CoreBillLoadingState
+        billType="研发账单"
+        summary={loadingSummary}
+        error={loadError}
+        onRetry={retryLoad}
+        onBack={goList}
+      />
+    )
   }
 
   if (isEdit && !stableEditRecord) {
