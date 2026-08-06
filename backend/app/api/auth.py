@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import os
-from secrets import compare_digest
 from datetime import datetime, timezone
+from secrets import compare_digest
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Cookie, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
@@ -15,9 +15,11 @@ from sqlalchemy.orm import Session
 
 from app.core.deps import get_db
 from app.core.security import (
+    AUTH_COOKIE_NAME,
     clear_auth_cookie,
     clear_login_fail,
     create_session,
+    decode_access_token,
     get_user_by_email,
     hash_password,
     is_locked,
@@ -90,6 +92,36 @@ def _matches_configured_builtin_password(password: str) -> bool:
     return any(compare_digest(password, candidate) for candidate in BUILTIN_PASSWORDS)
 
 
+def _session_id_from_token(token: str | None) -> str:
+    if not token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="请先登录")
+    payload = decode_access_token(token)
+    session_id = str(payload.get("sid") or "")
+    if not session_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="登录凭证无效")
+    return session_id
+
+
+def _revoke_sessions(
+    db: Session,
+    user_id: str,
+    *,
+    except_session_id: str | None = None,
+) -> int:
+    stmt = select(AuthSession).where(
+        AuthSession.user_id == user_id,
+        AuthSession.revoked_at.is_(None),
+    )
+    if except_session_id:
+        stmt = stmt.where(AuthSession.id != except_session_id)
+
+    sessions = db.execute(stmt).scalars().all()
+    revoked_at = datetime.now(timezone.utc)
+    for session in sessions:
+        session.revoked_at = revoked_at
+    return len(sessions)
+
+
 @router.post("/login-password", response_model=AuthMeResponse)
 def login_password(payload: PasswordLoginRequest, db: Session = Depends(get_db)) -> JSONResponse:
     from app.core.security import verify_password
@@ -137,19 +169,12 @@ def login_password(payload: PasswordLoginRequest, db: Session = Depends(get_db))
 def logout(
     user: AuthUser = Depends(require_current_user),
     db: Session = Depends(get_db),
+    token: str | None = Cookie(default=None, alias=AUTH_COOKIE_NAME),
 ) -> JSONResponse:
-    latest = (
-        db.execute(
-            select(AuthSession)
-            .where(AuthSession.user_id == user.id, AuthSession.revoked_at.is_(None))
-            .order_by(AuthSession.created_at.desc())
-            .limit(1)
-        )
-        .scalars()
-        .first()
-    )
-    if latest is not None:
-        latest.revoked_at = datetime.now(timezone.utc)
+    current_session_id = _session_id_from_token(token)
+    session = db.get(AuthSession, current_session_id)
+    if session is not None and session.user_id == user.id and session.revoked_at is None:
+        session.revoked_at = datetime.now(timezone.utc)
         db.commit()
     resp = JSONResponse(content=AuthMessageResponse(message="已退出登录").model_dump(mode="json"))
     clear_auth_cookie(resp)
@@ -173,14 +198,20 @@ def change_my_password(
     payload: ChangePasswordRequest,
     user: AuthUser = Depends(require_current_user),
     db: Session = Depends(get_db),
+    token: str | None = Cookie(default=None, alias=AUTH_COOKIE_NAME),
 ) -> AuthMessageResponse:
     from app.core.security import verify_password
 
     if not verify_password(payload.current_password, user.password_hash):
         raise HTTPException(status_code=400, detail="当前密码错误")
+
+    current_session_id = _session_id_from_token(token)
     user.password_hash = hash_password(payload.new_password)
+    user.failed_login_count = 0
+    user.locked_until = None
+    _revoke_sessions(db, user.id, except_session_id=current_session_id)
     db.commit()
-    return AuthMessageResponse(message="密码修改成功")
+    return AuthMessageResponse(message="密码修改成功，其他设备已退出登录")
 
 
 @router.get("/users", response_model=AuthUsersListResponse)
@@ -228,6 +259,8 @@ def set_user_status(
     if user is None:
         raise HTTPException(status_code=404, detail="用户不存在")
     user.is_active = payload.is_active
+    if not payload.is_active:
+        _revoke_sessions(db, user.id)
     db.commit()
     db.refresh(user)
     return AuthUserRead.model_validate(user)
@@ -246,5 +279,6 @@ def admin_reset_password(
     user.password_hash = hash_password(payload.new_password)
     user.failed_login_count = 0
     user.locked_until = None
+    _revoke_sessions(db, user.id)
     db.commit()
-    return AuthMessageResponse(message="密码已重置")
+    return AuthMessageResponse(message="密码已重置，该账号需重新登录")
