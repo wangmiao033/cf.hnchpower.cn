@@ -8,6 +8,12 @@ import {
   resolveRdRecordsForSettlementExport,
   writeSettlementWorkbookToFile
 } from '@/domain/export/settlementConfirmationExport.js'
+import {
+  buildRdSettlementPeriodOptions,
+  getRdRecordSettlementPeriods,
+  rdRecordMatchesSettlementPeriod,
+  rdRecordSettlementPeriodLabel
+} from '@/domain/reconciliation/rdSettlementPeriods.js'
 import { totalReconciliationSettlementAmount } from '@/domain/settlement/calculateSettlementAmount.js'
 import {
   apiRowToFrontend,
@@ -41,10 +47,6 @@ function text(value, fallback = '-') {
   return raw || fallback
 }
 
-function monthOf(row) {
-  return text(row.settlementMonth, '')
-}
-
 function monthKey(value) {
   const raw = String(value || '').trim()
   const match = raw.match(/^(\d{4})(?:-|年)\s*(\d{1,2})(?:月)?$/)
@@ -58,15 +60,9 @@ function monthLabel(value) {
   return match ? `${match[1]}年${Number(match[2])}月` : normalized
 }
 
-function billMonthLabel(value) {
-  const normalized = monthKey(value)
-  const match = normalized.match(/^(\d{4})-(\d{2})$/)
-  return match ? `${match[1]}年${Number(match[2])}月` : text(value)
-}
-
 function gameText(row) {
   if (Array.isArray(row.items) && row.items.length > 0) {
-    return row.items.map((item) => item.gameName).filter(Boolean).join('、')
+    return [...new Set(row.items.map((item) => text(item.gameName, '')).filter(Boolean))].join('、')
   }
   return text(row.game, '')
 }
@@ -92,9 +88,7 @@ function CoreReconciliationPage() {
   const [isExporting, setIsExporting] = useState(false)
 
   const monthOptions = useMemo(
-    () =>
-      [...new Set((recon.records || []).map((row) => monthKey(monthOf(row))).filter(Boolean))]
-        .sort((a, b) => b.localeCompare(a, 'zh-CN')),
+    () => buildRdSettlementPeriodOptions(recon.records || []),
     [recon.records]
   )
 
@@ -120,7 +114,7 @@ function CoreReconciliationPage() {
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase()
     return (recon.records || []).filter((row) => {
-      const matchesMonth = !month || monthKey(monthOf(row)) === month
+      const matchesMonth = !month || rdRecordMatchesSettlementPeriod(row, month)
       const rowPartner = text(row.partner || row.partyBName, '')
       const rowPartnerShortName = text(row.partnerShortName, '')
       const matchesPartner =
@@ -135,6 +129,7 @@ function CoreReconciliationPage() {
         rowPartnerShortName,
         row.game,
         gameText(row),
+        rdRecordSettlementPeriodLabel(row),
         row.remark
       ]
         .filter(Boolean)
@@ -373,66 +368,71 @@ function CoreReconciliationPage() {
                   <td colSpan={10} className="core-recon-empty">暂无研发账单</td>
                 </tr>
               ) : (
-                rows.map((row) => (
-                  <tr
-                    key={row.id}
-                    className={selectedIds.includes(String(row.id)) ? 'is-selected' : ''}
-                  >
-                    <td className="core-rd-month-cell">
-                      <input
-                        type="checkbox"
-                        aria-label={`选择账单 ${text(row.settlementNumber)}`}
-                        checked={selectedIds.includes(String(row.id))}
-                        onChange={() => toggleSelected(row.id)}
-                      />
-                      <span>{billMonthLabel(row.settlementMonth)}</span>
-                    </td>
-                    <td>{text(row.settlementNumber)}</td>
-                    <td>
-                      <strong
-                        className="core-recon-partner-short-name"
-                        title={text(row.partner || row.partyBName)}
-                      >
-                        {text(row.partnerShortName || row.partner || row.partyBName)}
-                      </strong>
-                    </td>
-                    <td>
-                      <span className="core-recon-game-text" title={text(gameText(row))}>
-                        {text(gameText(row))}
-                      </span>
-                    </td>
-                    <td className="core-recon-money">
-                      {money(row.gameFlow || sumItems(row, 'revenue'))}
-                    </td>
-                    <td className="core-recon-rate">
-                      {text(row.revenueShareRatio != null ? `${row.revenueShareRatio}%` : '')}
-                    </td>
-                    <td className="core-recon-money core-recon-money--settlement">
-                      {money(recordSettlementAmount(row))}
-                    </td>
-                    <td
-                      className="core-recon-money core-recon-money--received"
-                      title={row.paymentStatus || '未付款'}
+                rows.map((row) => {
+                  const periodLabel = rdRecordSettlementPeriodLabel(row)
+                  const periodCount = getRdRecordSettlementPeriods(row).length
+                  return (
+                    <tr
+                      key={row.id}
+                      className={selectedIds.includes(String(row.id)) ? 'is-selected' : ''}
                     >
-                      {money(row.paidAmount)}
-                    </td>
-                    <td>
-                      <span className={`core-recon-status core-recon-status--${row.status || 'pending'}`}>
-                        {STATUS_LABELS[row.status] || row.status || '待处理'}
-                      </span>
-                    </td>
-                    <td>
-                      <div className="core-recon-row-actions">
-                        <button type="button" onClick={() => openReconciliationEdit(String(row.id))}>
-                          编辑
-                        </button>
-                        <button type="button" className="danger" onClick={() => recon.deleteRecord(row.id)}>
-                          删除
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                      <td className="core-rd-month-cell" title={periodLabel}>
+                        <input
+                          type="checkbox"
+                          aria-label={`选择账单 ${text(row.settlementNumber)}`}
+                          checked={selectedIds.includes(String(row.id))}
+                          onChange={() => toggleSelected(row.id)}
+                        />
+                        <span>{periodLabel}</span>
+                        {periodCount > 1 ? <em className="core-rd-period-badge">多周期</em> : null}
+                      </td>
+                      <td>{text(row.settlementNumber)}</td>
+                      <td>
+                        <strong
+                          className="core-recon-partner-short-name"
+                          title={text(row.partner || row.partyBName)}
+                        >
+                          {text(row.partnerShortName || row.partner || row.partyBName)}
+                        </strong>
+                      </td>
+                      <td>
+                        <span className="core-recon-game-text" title={text(gameText(row))}>
+                          {text(gameText(row))}
+                        </span>
+                      </td>
+                      <td className="core-recon-money">
+                        {money(row.gameFlow || sumItems(row, 'revenue'))}
+                      </td>
+                      <td className="core-recon-rate">
+                        {text(row.revenueShareRatio != null ? `${row.revenueShareRatio}%` : '')}
+                      </td>
+                      <td className="core-recon-money core-recon-money--settlement">
+                        {money(recordSettlementAmount(row))}
+                      </td>
+                      <td
+                        className="core-recon-money core-recon-money--received"
+                        title={row.paymentStatus || '未付款'}
+                      >
+                        {money(row.paidAmount)}
+                      </td>
+                      <td>
+                        <span className={`core-recon-status core-recon-status--${row.status || 'pending'}`}>
+                          {STATUS_LABELS[row.status] || row.status || '待处理'}
+                        </span>
+                      </td>
+                      <td>
+                        <div className="core-recon-row-actions">
+                          <button type="button" onClick={() => openReconciliationEdit(String(row.id))}>
+                            编辑
+                          </button>
+                          <button type="button" className="danger" onClick={() => recon.deleteRecord(row.id)}>
+                            删除
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })
               )}
             </tbody>
           </table>
@@ -458,8 +458,9 @@ function mapRdImportRow(row) {
   const game = String(readAny(row, ['游戏', '游戏项目', '产品', '项目'])).trim()
   const gameFlow = Number(readAny(row, ['游戏流水', '流水', '充值金额', '后台流水']) || 0)
   if (!game && !gameFlow) return null
+  const settlementCycle = String(readAny(row, ['结算月份', '月份', '账期'])).trim()
   return {
-    settlementMonth: String(readAny(row, ['结算月份', '月份', '账期'])).trim(),
+    settlementMonth: settlementCycle,
     partner: String(readAny(row, ['合作方', '客户', '研发商'])).trim(),
     game,
     gameFlow,
@@ -470,6 +471,20 @@ function mapRdImportRow(row) {
     revenueShareRatio: Number(readAny(row, ['分成比例', '合作方分成比例']) || 0),
     discount: Number(readAny(row, ['折扣', '折扣系数']) || 1),
     refund: Number(readAny(row, ['退款', '额外费用']) || 0),
+    items: [
+      {
+        settlementCycle,
+        gameName: game,
+        revenue: gameFlow,
+        discountRate: Number(readAny(row, ['折扣', '折扣系数']) || 1),
+        couponAmount: Number(readAny(row, ['代金券', '券成本']) || 0),
+        testFee: Number(readAny(row, ['测试费', '平台币', '测试费用']) || 0),
+        extraFee: Number(readAny(row, ['退款', '额外费用']) || 0),
+        shareRatio: Number(readAny(row, ['分成比例', '合作方分成比例']) || 0),
+        taxRate: Number(readAny(row, ['税点', '税率']) || 0),
+        sortOrder: 0
+      }
+    ],
     status: 'pending'
   }
 }

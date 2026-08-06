@@ -13,6 +13,7 @@
 @import './styles/GlobalShellPolish.css';
 @import './pages/CoreBillLoadingPolish.css';
 @import './pages/BillDraftPolish.css';
+@import './pages/RdMultiPeriodPolish.css';
 
 * {
   margin: 0;

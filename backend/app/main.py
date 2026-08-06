@@ -22,6 +22,7 @@ from app.api.invoice_payment_link import router as invoice_payment_link_router
 from app.api.payment import router as payment_router
 from app.api.bank_transaction import router as bank_transaction_router
 from app.api.reconciliation import router as reconciliation_router
+from app.api.reconciliation_period import router as reconciliation_period_router
 from app.api.contract import router as contract_router
 from app.api.quicksdk import router as quicksdk_router
 from app.api.product_source import router as product_source_router
@@ -157,6 +158,12 @@ app.include_router(
     reconciliation_router,
     prefix="/api/reconciliation",
     tags=["reconciliation"],
+    dependencies=[Depends(require_current_user)],
+)
+app.include_router(
+    reconciliation_period_router,
+    prefix="/api/reconciliation-periods",
+    tags=["reconciliation-periods"],
     dependencies=[Depends(require_current_user)],
 )
 app.include_router(
