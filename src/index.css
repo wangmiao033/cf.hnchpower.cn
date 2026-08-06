@@ -12,6 +12,7 @@
 @import './pages/InvoiceNavigationPolish.css';
 @import './styles/GlobalShellPolish.css';
 @import './pages/CoreBillLoadingPolish.css';
+@import './pages/BillDraftPolish.css';
 
 * {
   margin: 0;
