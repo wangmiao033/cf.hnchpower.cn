@@ -71,11 +71,18 @@ describe('research bill settlement periods', () => {
     expect(rdCompatibilitySettlementMonth(MULTI_PERIOD_BILL.items)).toBe('2026年5月')
   })
 
-  it('allows the same bill to match both monthly filters without duplicating the master row', () => {
-    expect(rdRecordMatchesSettlementPeriod(MULTI_PERIOD_BILL, '2026-05')).toBe(true)
-    expect(rdRecordMatchesSettlementPeriod(MULTI_PERIOD_BILL, '2026-06')).toBe(true)
-    expect(rdRecordMatchesSettlementPeriod(MULTI_PERIOD_BILL, '2026-07')).toBe(false)
-    expect(buildRdSettlementPeriodOptions([MULTI_PERIOD_BILL])).toEqual(['2026-06', '2026-05'])
+  it('shows one master row in either monthly filter', () => {
+    const records = [MULTI_PERIOD_BILL]
+    const mayRows = records.filter((record) => rdRecordMatchesSettlementPeriod(record, '2026-05'))
+    const juneRows = records.filter((record) => rdRecordMatchesSettlementPeriod(record, '2026-06'))
+    const julyRows = records.filter((record) => rdRecordMatchesSettlementPeriod(record, '2026-07'))
+
+    expect(mayRows).toHaveLength(1)
+    expect(juneRows).toHaveLength(1)
+    expect(julyRows).toHaveLength(0)
+    expect(mayRows[0].settlementNumber).toBe('JS-20260806-001')
+    expect(juneRows[0].settlementNumber).toBe('JS-20260806-001')
+    expect(buildRdSettlementPeriodOptions(records)).toEqual(['2026-06', '2026-05'])
   })
 
   it('splits monthly statistics by line period, not by bill total', () => {
@@ -92,6 +99,9 @@ describe('research bill settlement periods', () => {
     expect(june.settlementAmount).toBe(170)
     expect(june.items[0].settlementCycle).toBe('2026年6月')
 
+    expect(may.id).toBe('bill-1')
+    expect(june.id).toBe('bill-1')
+    expect(new Set([may.id, june.id])).toEqual(new Set(['bill-1']))
     expect(buildRdMonthlyProgressRecords([MULTI_PERIOD_BILL], '2026-05')).toHaveLength(1)
     expect(buildRdMonthlyProgressRecords([MULTI_PERIOD_BILL], '2026-06')).toHaveLength(1)
   })
