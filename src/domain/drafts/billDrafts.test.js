@@ -33,9 +33,33 @@ describe('bill drafts', () => {
     expect(isMeaningfulRdDraft({ partner: '研发商甲' })).toBe(true)
 
     expect(isMeaningfulChannelDraft({
-      items: [{ discountFactor: '1', flow: '0', settlementAmount: '0' }]
+      items: [{
+        discountFactor: '1',
+        flow: '0',
+        shareRate: '30',
+        taxRate: '5',
+        settlementAmount: '0'
+      }]
     })).toBe(false)
     expect(isMeaningfulChannelDraft({ settlementMonth: '2026-08' })).toBe(true)
+  })
+
+  it('ignores derived channel settlement-cycle formatting during comparison', () => {
+    expect(
+      areNormalizedDraftsEqual(
+        {
+          channelName: '渠道甲',
+          settlementMonth: '2026-08',
+          items: [{ gameName: '游戏A', flow: 80, settlementCycle: '' }]
+        },
+        {
+          channelName: '渠道甲',
+          settlementMonth: '2026-08',
+          items: [{ gameName: '游戏A', flow: '80.00', settlementCycle: '2026年8月' }]
+        },
+        normalizeChannelDraft
+      )
+    ).toBe(true)
   })
 
   it('normalizes numeric strings before dirty comparison', () => {
