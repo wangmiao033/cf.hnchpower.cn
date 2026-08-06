@@ -68,10 +68,9 @@ def get_auth_cookie_samesite() -> str:
         value = raw.strip().lower()
         if value in {"none", "lax", "strict"}:
             return value
-    # 本地开发（HTTP）默认用 lax，避免浏览器拒收 Cookie。
-    if not get_auth_cookie_secure():
-        return "lax"
-    return "none"
+    # 前端与 API 在同一站点下，默认使用 Lax，避免会话 Cookie 被跨站请求携带。
+    # 如确有跨站嵌入需求，可通过 AUTH_COOKIE_SAMESITE 显式覆盖。
+    return "lax"
 
 
 def verify_password(plain_password: str, hashed_password: str | None) -> bool:
