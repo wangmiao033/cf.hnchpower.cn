@@ -108,7 +108,7 @@ export function listQuickSdkBatches(params: {
   return apiGet<QuickSdkBatchListResponse>(`${PATH}/batches${queryString(params)}`, READ_OPTIONS)
 }
 
-export async function listQuickSdkFlows(params: {
+export function listQuickSdkFlows(params: {
   settlement_month?: string
   game_name?: string
   channel_name?: string
@@ -116,36 +116,7 @@ export async function listQuickSdkFlows(params: {
   limit?: number
   offset?: number
 } = {}) {
-  const hasClientFilter = Boolean(params.q || params.game_name || params.channel_name)
-  const requestParams = hasClientFilter
-    ? { ...params, limit: Math.max(Number(params.limit || 0), 1000), offset: 0 }
-    : params
-  const response = await apiGet<QuickSdkFlowListResponse>(
-    `${PATH}/flows${queryString(requestParams)}`,
-    READ_OPTIONS
-  )
-
-  if (!hasClientFilter) return response
-
-  const keyword = String(params.q || '').trim().toLowerCase()
-  const gameName = String(params.game_name || '').trim().toLowerCase()
-  const channelName = String(params.channel_name || '').trim().toLowerCase()
-  const filtered = (response.items || []).filter((row) => {
-    const game = String(row.game_name || '').trim().toLowerCase()
-    const channel = String(row.channel_name || '').trim().toLowerCase()
-    const matchesKeyword = !keyword || game.includes(keyword) || channel.includes(keyword)
-    const matchesGame = !gameName || game.includes(gameName)
-    const matchesChannel = !channelName || channel.includes(channelName)
-    return matchesKeyword && matchesGame && matchesChannel
-  })
-  const offset = Math.max(Number(params.offset || 0), 0)
-  const limit = Math.max(Number(params.limit || filtered.length), 0)
-
-  return {
-    ...response,
-    items: filtered.slice(offset, offset + limit),
-    total: filtered.length
-  }
+  return apiGet<QuickSdkFlowListResponse>(`${PATH}/flows${queryString(params)}`, READ_OPTIONS)
 }
 
 export function getQuickSdkAnalytics(params: { settlement_month?: string; limit?: number } = {}) {
