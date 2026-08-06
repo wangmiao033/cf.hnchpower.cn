@@ -22,6 +22,7 @@ describe('edit record cache', () => {
 
     const first = loadEditRecord('rd', 'record-1', loader)
     const second = loadEditRecord('rd', 'record-1', loader)
+    await Promise.resolve()
 
     expect(loader).toHaveBeenCalledTimes(1)
     resolveRequest({ id: 'record-1', amount: 100 })
