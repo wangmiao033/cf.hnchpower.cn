@@ -11,6 +11,7 @@
 @import './pages/SystemSurfacePolish.css';
 @import './pages/InvoiceNavigationPolish.css';
 @import './styles/GlobalShellPolish.css';
+@import './pages/CoreBillLoadingPolish.css';
 
 * {
   margin: 0;
