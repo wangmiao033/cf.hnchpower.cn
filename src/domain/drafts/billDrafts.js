@@ -26,7 +26,6 @@ function normalizeRdLine(line = {}) {
 
 function normalizeChannelLine(line = {}) {
   return {
-    settlementCycle: text(line.settlementCycle),
     gameName: text(line.gameName),
     flow: number(line.flow),
     discountFactor: number(line.discountFactor, 1),
@@ -35,9 +34,12 @@ function normalizeChannelLine(line = {}) {
     refundCost: number(line.refundCost),
     testCost: number(line.testCost),
     welfareCost: number(line.welfareCost),
-    shareRate: number(line.shareRate),
-    taxRate: number(line.taxRate),
+    coinCost: number(line.coinCost),
+    shareRate: number(line.shareRate, 30),
+    taxRate: number(line.taxRate, 5),
+    channelFeeRate: number(line.channelFeeRate),
     gatewayCost: number(line.gatewayCost),
+    calculationMode: text(line.calculationMode),
     settlementAmount: number(line.settlementAmount)
   }
 }
@@ -60,8 +62,14 @@ export function normalizeChannelDraft(record = {}) {
     settlementMonth: text(record.settlementMonth),
     channelName: text(record.channelName),
     partnerName: text(record.partnerName),
+    invoiceStatus: text(record.invoiceStatus || record.invoice_status) || 'pending_invoice',
     remark: text(record.remark),
     status: text(record.status) || 'pending',
+    serverCost: number(record.serverCost),
+    discountType: text(record.discountType),
+    channelFeeRate: number(record.channelFeeRate),
+    devShareRate: number(record.devShareRate),
+    profitRate: number(record.profitRate),
     items: Array.isArray(record.items) ? record.items.map(normalizeChannelLine) : []
   }
 }
@@ -96,7 +104,12 @@ export function isMeaningfulChannelDraft(record = {}) {
     normalized.settlementMonth ||
     normalized.channelName ||
     normalized.partnerName ||
-    normalized.remark
+    normalized.remark ||
+    normalized.serverCost !== 0 ||
+    normalized.discountType ||
+    normalized.channelFeeRate !== 0 ||
+    normalized.devShareRate !== 0 ||
+    normalized.profitRate !== 0
   ) {
     return true
   }
@@ -109,9 +122,12 @@ export function isMeaningfulChannelDraft(record = {}) {
       line.refundCost !== 0 ||
       line.testCost !== 0 ||
       line.welfareCost !== 0 ||
-      line.shareRate !== 0 ||
-      line.taxRate !== 0 ||
+      line.coinCost !== 0 ||
+      line.shareRate !== 30 ||
+      line.taxRate !== 5 ||
+      line.channelFeeRate !== 0 ||
       line.gatewayCost !== 0 ||
+      line.calculationMode ||
       line.discountFactor !== 1 ||
       line.settlementAmount !== 0
   )
