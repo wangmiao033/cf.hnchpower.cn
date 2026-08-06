@@ -18,8 +18,8 @@ def health() -> dict:
     return {"ok": True}
 
 
-@router.get("/health/db")
-def health_db() -> dict | JSONResponse:
+@router.get("/health/db", response_model=None)
+def health_db():
     ok, detail = test_db_connection()
     if ok:
         return {"ok": True, "database": "connected"}
