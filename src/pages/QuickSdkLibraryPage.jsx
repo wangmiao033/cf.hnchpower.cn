@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import PageContainer from '@/components/layout/PageContainer.jsx'
 import {
   getQuickSdkAnalytics,
@@ -6,11 +6,18 @@ import {
   listQuickSdkBatches,
   listQuickSdkFlows
 } from '@/lib/api/quicksdk.ts'
+import {
+  DATABASE_PAGE_SIZES,
+  buildQuickSdkBatchParams,
+  buildQuickSdkFlowParams,
+  getDatabaseViewCounts,
+  getPagerRange
+} from '@/domain/quicksdk/workspace.js'
 import './QuickSdkLibraryPage.css'
 import './DatabaseWorkspacePolish.css'
+import './DatabaseWorkspaceV2.css'
 
 const DEFAULT_MONTH = new Date().toISOString().slice(0, 7)
-const FLOW_PAGE_SIZES = [20, 50, 100]
 
 const VIEW_OPTIONS = [
   { key: 'overview', label: '数据概览' },
@@ -48,7 +55,12 @@ function shiftMonthValue(value, amount) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
 }
 
+function errorText(error, fallback) {
+  return error instanceof Error ? error.message : fallback
+}
+
 function QuickSdkLibraryPage() {
+  const [bootstrapped, setBootstrapped] = useState(false)
   const [month, setMonth] = useState(DEFAULT_MONTH)
   const [latestMonth, setLatestMonth] = useState('')
   const [keyword, setKeyword] = useState('')
@@ -56,8 +68,11 @@ function QuickSdkLibraryPage() {
   const [searchScope, setSearchScope] = useState('all')
   const [activeView, setActiveView] = useState('overview')
   const [summary, setSummary] = useState(null)
+  const [latestSelectedBatch, setLatestSelectedBatch] = useState(null)
   const [batches, setBatches] = useState([])
   const [batchTotal, setBatchTotal] = useState(0)
+  const [batchPage, setBatchPage] = useState(0)
+  const [batchPageSize, setBatchPageSize] = useState(20)
   const [flows, setFlows] = useState([])
   const [flowTotal, setFlowTotal] = useState(0)
   const [flowPage, setFlowPage] = useState(0)
@@ -65,28 +80,36 @@ function QuickSdkLibraryPage() {
   const [analytics, setAnalytics] = useState({ game_rankings: [], channel_rankings: [] })
   const [overviewLoading, setOverviewLoading] = useState(false)
   const [flowLoading, setFlowLoading] = useState(false)
-  const [error, setError] = useState('')
+  const [batchLoading, setBatchLoading] = useState(false)
+  const [overviewError, setOverviewError] = useState('')
+  const [flowError, setFlowError] = useState('')
+  const [batchError, setBatchError] = useState('')
   const [lastUpdatedAt, setLastUpdatedAt] = useState(null)
+  const overviewRequestId = useRef(0)
+  const flowRequestId = useRef(0)
+  const batchRequestId = useRef(0)
 
   const loadOverview = async (targetMonth = month) => {
+    const requestId = ++overviewRequestId.current
     setOverviewLoading(true)
-    setError('')
+    setOverviewError('')
     try {
       const params = { settlement_month: targetMonth }
-      const [summaryRes, batchRes, analyticsRes] = await Promise.all([
+      const [summaryRes, latestBatchRes, analyticsRes] = await Promise.all([
         getQuickSdkSummary(params),
-        listQuickSdkBatches({ ...params, limit: 100 }),
+        listQuickSdkBatches({ ...params, limit: 1 }),
         getQuickSdkAnalytics(params)
       ])
+      if (requestId !== overviewRequestId.current) return
       setSummary(summaryRes)
-      setBatches(batchRes.items || [])
-      setBatchTotal(Number(batchRes.total || 0))
+      setLatestSelectedBatch(latestBatchRes.items?.[0] || null)
       setAnalytics(analyticsRes || { game_rankings: [], channel_rankings: [] })
       setLastUpdatedAt(new Date())
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '数据库概览读取失败')
+    } catch (error) {
+      if (requestId !== overviewRequestId.current) return
+      setOverviewError(errorText(error, '数据库概览读取失败'))
     } finally {
-      setOverviewLoading(false)
+      if (requestId === overviewRequestId.current) setOverviewLoading(false)
     }
   }
 
@@ -97,27 +120,56 @@ function QuickSdkLibraryPage() {
     targetPage = flowPage,
     targetPageSize = flowPageSize
   } = {}) => {
+    const requestId = ++flowRequestId.current
     setFlowLoading(true)
-    setError('')
+    setFlowError('')
     try {
-      const params = {
-        settlement_month: targetMonth,
-        limit: targetPageSize,
-        offset: targetPage * targetPageSize
-      }
-      if (targetKeyword) {
-        if (targetScope === 'game') params.game_name = targetKeyword
-        else if (targetScope === 'channel') params.channel_name = targetKeyword
-        else params.q = targetKeyword
-      }
-      const flowRes = await listQuickSdkFlows(params)
+      const flowRes = await listQuickSdkFlows(
+        buildQuickSdkFlowParams({
+          month: targetMonth,
+          keyword: targetKeyword,
+          scope: targetScope,
+          page: targetPage,
+          pageSize: targetPageSize
+        })
+      )
+      if (requestId !== flowRequestId.current) return
       setFlows(flowRes.items || [])
       setFlowTotal(Number(flowRes.total || 0))
       setLastUpdatedAt(new Date())
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '流水明细读取失败')
+    } catch (error) {
+      if (requestId !== flowRequestId.current) return
+      setFlowError(errorText(error, '流水明细读取失败'))
     } finally {
-      setFlowLoading(false)
+      if (requestId === flowRequestId.current) setFlowLoading(false)
+    }
+  }
+
+  const loadBatches = async ({
+    targetMonth = month,
+    targetPage = batchPage,
+    targetPageSize = batchPageSize
+  } = {}) => {
+    const requestId = ++batchRequestId.current
+    setBatchLoading(true)
+    setBatchError('')
+    try {
+      const batchRes = await listQuickSdkBatches(
+        buildQuickSdkBatchParams({
+          month: targetMonth,
+          page: targetPage,
+          pageSize: targetPageSize
+        })
+      )
+      if (requestId !== batchRequestId.current) return
+      setBatches(batchRes.items || [])
+      setBatchTotal(Number(batchRes.total || 0))
+      setLastUpdatedAt(new Date())
+    } catch (error) {
+      if (requestId !== batchRequestId.current) return
+      setBatchError(errorText(error, '导入记录读取失败'))
+    } finally {
+      if (requestId === batchRequestId.current) setBatchLoading(false)
     }
   }
 
@@ -131,17 +183,22 @@ function QuickSdkLibraryPage() {
         setMonth(latest)
       })
       .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setBootstrapped(true)
+      })
     return () => {
       cancelled = true
     }
   }, [])
 
   useEffect(() => {
+    if (!bootstrapped) return
     loadOverview(month)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [month])
+  }, [bootstrapped, month])
 
   useEffect(() => {
+    if (!bootstrapped || activeView !== 'flows') return
     loadFlows({
       targetMonth: month,
       targetKeyword: appliedKeyword,
@@ -150,7 +207,17 @@ function QuickSdkLibraryPage() {
       targetPageSize: flowPageSize
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [month, appliedKeyword, searchScope, flowPage, flowPageSize])
+  }, [bootstrapped, activeView, month, appliedKeyword, searchScope, flowPage, flowPageSize])
+
+  useEffect(() => {
+    if (!bootstrapped || activeView !== 'imports') return
+    loadBatches({
+      targetMonth: month,
+      targetPage: batchPage,
+      targetPageSize: batchPageSize
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bootstrapped, activeView, month, batchPage, batchPageSize])
 
   const stats = useMemo(
     () => [
@@ -162,24 +229,38 @@ function QuickSdkLibraryPage() {
     [summary]
   )
 
-  const hasData = Number(summary?.row_count || 0) > 0 || batches.length > 0 || flows.length > 0
+  const hasData = Number(summary?.row_count || 0) > 0
   const gameRankings = analytics.game_rankings || []
   const channelRankings = analytics.channel_rankings || []
-  const latestSelectedBatch = batches[0]
   const hasSearch = Boolean(appliedKeyword)
+  const activeError =
+    activeView === 'flows'
+      ? flowError || overviewError
+      : activeView === 'imports'
+        ? batchError || overviewError
+        : overviewError
+  const activeLoading =
+    !bootstrapped ||
+    overviewLoading ||
+    (activeView === 'flows' && flowLoading) ||
+    (activeView === 'imports' && batchLoading)
 
   const viewCounts = useMemo(
-    () => ({
-      overview: Number(summary?.game_count || 0) + Number(summary?.channel_count || 0),
-      flows: flowTotal,
-      imports: batchTotal
-    }),
-    [summary, flowTotal, batchTotal]
+    () => getDatabaseViewCounts({ summary, flowTotal, batchTotal, hasSearch }),
+    [summary, flowTotal, batchTotal, hasSearch]
   )
 
   const setSelectedMonth = (nextMonth) => {
-    if (!nextMonth) return
+    if (!nextMonth || nextMonth === month) return
+    overviewRequestId.current += 1
+    flowRequestId.current += 1
+    batchRequestId.current += 1
     setFlowPage(0)
+    setBatchPage(0)
+    setFlows([])
+    setBatches([])
+    setFlowTotal(0)
+    setBatchTotal(0)
     setMonth(nextMonth)
   }
 
@@ -197,17 +278,29 @@ function QuickSdkLibraryPage() {
     setFlowPage(0)
   }
 
-  const refreshAll = async () => {
-    await Promise.all([
-      loadOverview(month),
-      loadFlows({
-        targetMonth: month,
-        targetKeyword: appliedKeyword,
-        targetScope: searchScope,
-        targetPage: flowPage,
-        targetPageSize: flowPageSize
-      })
-    ])
+  const refreshCurrentView = async () => {
+    const tasks = [loadOverview(month)]
+    if (activeView === 'flows') {
+      tasks.push(
+        loadFlows({
+          targetMonth: month,
+          targetKeyword: appliedKeyword,
+          targetScope: searchScope,
+          targetPage: flowPage,
+          targetPageSize: flowPageSize
+        })
+      )
+    }
+    if (activeView === 'imports') {
+      tasks.push(
+        loadBatches({
+          targetMonth: month,
+          targetPage: batchPage,
+          targetPageSize: batchPageSize
+        })
+      )
+    }
+    await Promise.all(tasks)
   }
 
   const drillIntoRanking = (name, scope) => {
@@ -252,7 +345,7 @@ function QuickSdkLibraryPage() {
   const batchRows = batches.map((batch, index) => ({
     key: batch.id || `${batch.source_file}-${index}`,
     cells: [
-      index + 1,
+      batchPage * batchPageSize + index + 1,
       batch.source_file || '-',
       batch.settlement_month || '-',
       batch.row_count,
@@ -262,6 +355,17 @@ function QuickSdkLibraryPage() {
       dateText(batch.imported_at)
     ]
   }))
+
+  const healthClass = overviewError
+    ? 'is-error'
+    : !bootstrapped || (overviewLoading && !summary)
+      ? 'is-loading'
+      : 'is-ready'
+  const healthLabel = overviewError
+    ? '数据库读取异常'
+    : !bootstrapped || (overviewLoading && !summary)
+      ? '正在连接数据库'
+      : '数据库已连接'
 
   return (
     <PageContainer hideHeader className="quicksdk-library-page">
@@ -329,15 +433,20 @@ function QuickSdkLibraryPage() {
           <button
             type="button"
             className="qk-refresh-button"
-            onClick={refreshAll}
-            disabled={overviewLoading || flowLoading}
+            onClick={refreshCurrentView}
+            disabled={activeLoading}
           >
-            {overviewLoading || flowLoading ? '读取中' : '刷新数据'}
+            {activeLoading ? '读取中' : '刷新数据'}
           </button>
         </div>
       </section>
 
-      {error ? <div className="qk-error">{error}</div> : null}
+      {activeError ? (
+        <div className="qk-error" role="alert">
+          <span>{activeError}</span>
+          <button type="button" onClick={refreshCurrentView} disabled={activeLoading}>重新读取</button>
+        </div>
+      ) : null}
 
       <section className="qk-overview qk-database-overview">
         <div className="qk-overview-main">
@@ -361,10 +470,11 @@ function QuickSdkLibraryPage() {
       </section>
 
       <section className="qk-database-status" aria-label="数据库状态">
-        <div className={`qk-health-state ${hasData ? 'is-ready' : 'is-empty'}`}>
+        <div className={`qk-health-state ${healthClass}`}>
           <i aria-hidden="true" />
-          <strong>{hasData ? '数据可用' : '当前账期暂无数据'}</strong>
+          <strong>{healthLabel}</strong>
         </div>
+        <span>当前账期：{hasData ? `${summary?.row_count ?? 0} 行数据` : '暂无数据'}</span>
         <span>最近导入：{latestSelectedBatch ? dateText(latestSelectedBatch.imported_at) : '-'}</span>
         <span>页面更新：{lastUpdatedAt ? dateText(lastUpdatedAt) : '-'}</span>
         {hasSearch ? (
@@ -381,6 +491,7 @@ function QuickSdkLibraryPage() {
             type="button"
             className={`qk-view-tab ${activeView === item.key ? 'is-active' : ''}`}
             onClick={() => setActiveView(item.key)}
+            aria-current={activeView === item.key ? 'page' : undefined}
           >
             <span>{item.label}</span>
             <em>{viewCounts[item.key] || 0}</em>
@@ -409,7 +520,7 @@ function QuickSdkLibraryPage() {
         <DataTable
           title="流水明细"
           count={flowTotal}
-          description={hasSearch ? '展示当前搜索条件下的服务器结果' : '按流水金额从高到低展示当前账期原始数据'}
+          description={hasSearch ? '展示当前搜索条件下的数据库完整结果' : '按日期和流水金额展示当前账期原始数据'}
           emptyText="暂无符合条件的流水明细"
           columns={flowColumns}
           minWidth={760}
@@ -420,6 +531,8 @@ function QuickSdkLibraryPage() {
               page={flowPage}
               total={flowTotal}
               pageSize={flowPageSize}
+              pageSizes={DATABASE_PAGE_SIZES}
+              disabled={flowLoading}
               onPageChange={setFlowPage}
               onPageSizeChange={(size) => {
                 setFlowPage(0)
@@ -439,8 +552,21 @@ function QuickSdkLibraryPage() {
           columns={batchColumns}
           minWidth={980}
           rows={batchRows}
-          loading={overviewLoading}
-          footer={batchTotal > batches.length ? <span className="qk-table-note">仅显示最近 {batches.length} 条导入记录</span> : null}
+          loading={batchLoading}
+          footer={(
+            <Pager
+              page={batchPage}
+              total={batchTotal}
+              pageSize={batchPageSize}
+              pageSizes={DATABASE_PAGE_SIZES}
+              disabled={batchLoading}
+              onPageChange={setBatchPage}
+              onPageSizeChange={(size) => {
+                setBatchPage(0)
+                setBatchPageSize(size)
+              }}
+            />
+          )}
         />
       ) : null}
     </PageContainer>
@@ -488,13 +614,13 @@ function RankTable({ title, rows, emptyText, onSelect }) {
 
 function DataTable({ title, count, description, emptyText, columns, rows, minWidth, loading = false, footer = null }) {
   return (
-    <section className="qk-panel qk-data-panel">
+    <section className={`qk-panel qk-data-panel ${loading ? 'is-loading' : ''}`} aria-busy={loading}>
       <div className="qk-panel-head">
         <div>
           <h2>{title}</h2>
           <p>{description}</p>
         </div>
-        <span>{count} 条</span>
+        <span>{loading ? '读取中…' : `${count} 条`}</span>
       </div>
       <div className="qk-table-wrap">
         <table className="qk-table" style={{ minWidth }}>
@@ -541,11 +667,8 @@ function DataTable({ title, count, description, emptyText, columns, rows, minWid
   )
 }
 
-function Pager({ page, total, pageSize, onPageChange, onPageSizeChange }) {
-  const totalPages = Math.max(Math.ceil(total / pageSize), 1)
-  const safePage = Math.min(page, totalPages - 1)
-  const start = total > 0 ? safePage * pageSize + 1 : 0
-  const end = Math.min((safePage + 1) * pageSize, total)
+function Pager({ page, total, pageSize, pageSizes, disabled = false, onPageChange, onPageSizeChange }) {
+  const { totalPages, safePage, start, end } = getPagerRange(page, total, pageSize)
 
   return (
     <div className="qk-pager">
@@ -553,13 +676,23 @@ function Pager({ page, total, pageSize, onPageChange, onPageSizeChange }) {
       <div className="qk-pager-actions">
         <label>
           每页
-          <select value={pageSize} onChange={(event) => onPageSizeChange(Number(event.target.value))}>
-            {FLOW_PAGE_SIZES.map((size) => <option key={size} value={size}>{size}</option>)}
+          <select
+            value={pageSize}
+            disabled={disabled}
+            onChange={(event) => onPageSizeChange(Number(event.target.value))}
+          >
+            {pageSizes.map((size) => <option key={size} value={size}>{size}</option>)}
           </select>
         </label>
-        <button type="button" disabled={safePage <= 0} onClick={() => onPageChange(safePage - 1)}>上一页</button>
+        <button type="button" disabled={disabled || safePage <= 0} onClick={() => onPageChange(safePage - 1)}>上一页</button>
         <strong>{safePage + 1} / {totalPages}</strong>
-        <button type="button" disabled={safePage >= totalPages - 1} onClick={() => onPageChange(safePage + 1)}>下一页</button>
+        <button
+          type="button"
+          disabled={disabled || safePage >= totalPages - 1}
+          onClick={() => onPageChange(safePage + 1)}
+        >
+          下一页
+        </button>
       </div>
     </div>
   )
