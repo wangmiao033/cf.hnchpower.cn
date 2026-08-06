@@ -32,10 +32,10 @@ class BuiltinAccountBootstrapTest(unittest.TestCase):
             user = auth_api._get_or_create_builtin_user(db)
             db.commit()
 
-        self.assertEqual(user.email, "admin")
-        self.assertEqual(user.role, "admin")
-        self.assertTrue(user.is_active)
-        self.assertTrue(verify_password("initial-secret", user.password_hash))
+            self.assertEqual(user.email, "admin")
+            self.assertEqual(user.role, "admin")
+            self.assertTrue(user.is_active)
+            self.assertTrue(verify_password("initial-secret", user.password_hash))
 
     def test_existing_password_role_and_status_are_never_reapplied_from_environment(self) -> None:
         with Session(self.engine) as db:
