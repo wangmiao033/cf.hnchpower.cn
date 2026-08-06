@@ -204,7 +204,10 @@ function App() {
     const confirmed = window.confirm(
       blocker.message || '当前页面还有未保存内容，确定离开吗？'
     )
-    if (confirmed) navigationBlockerRef.current = null
+    if (confirmed) {
+      blocker.onConfirm?.()
+      navigationBlockerRef.current = null
+    }
     return confirmed
   }, [])
 
