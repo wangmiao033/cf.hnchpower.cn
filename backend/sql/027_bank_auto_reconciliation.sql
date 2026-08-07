@@ -83,3 +83,72 @@ DROP TRIGGER IF EXISTS trg_bank_reconciliation_match_audit ON bank_reconciliatio
 CREATE TRIGGER trg_bank_reconciliation_match_audit
 AFTER INSERT OR UPDATE ON bank_reconciliation_matches
 FOR EACH ROW EXECUTE FUNCTION app_capture_bank_reconciliation_match_log();
+
+CREATE OR REPLACE FUNCTION app_guard_confirmed_bank_transaction()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    has_match BOOLEAN;
+BEGIN
+    SELECT EXISTS(
+        SELECT 1
+        FROM bank_reconciliation_matches m
+        WHERE m.bank_transaction_id = OLD.id
+          AND m.status = 'confirmed'
+    ) INTO has_match;
+
+    IF NOT has_match THEN
+        IF TG_OP = 'DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF;
+    END IF;
+
+    IF TG_OP = 'DELETE' THEN
+        RAISE EXCEPTION '已核销银行流水不能直接删除，请先撤销核销';
+    END IF;
+
+    IF NEW.type IS DISTINCT FROM OLD.type
+       OR NEW.trade_date IS DISTINCT FROM OLD.trade_date
+       OR NEW.payer_name IS DISTINCT FROM OLD.payer_name
+       OR NEW.payee_name IS DISTINCT FROM OLD.payee_name
+       OR NEW.amount IS DISTINCT FROM OLD.amount
+       OR NEW.income_amount IS DISTINCT FROM OLD.income_amount
+       OR NEW.expense_amount IS DISTINCT FROM OLD.expense_amount
+       OR NEW.currency IS DISTINCT FROM OLD.currency
+       OR NEW.transaction_no IS DISTINCT FROM OLD.transaction_no
+       OR NEW.reconciliation_id IS DISTINCT FROM OLD.reconciliation_id
+       OR NEW.reconciliation_type IS DISTINCT FROM OLD.reconciliation_type
+       OR NEW.reconciliation_no IS DISTINCT FROM OLD.reconciliation_no
+       OR NEW.linked_amount IS DISTINCT FROM OLD.linked_amount
+       OR NEW.status IS DISTINCT FROM OLD.status THEN
+        RAISE EXCEPTION '已核销银行流水的资金字段不能直接修改，请先撤销核销';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_bank_transaction_reconciliation_guard ON bank_transactions;
+CREATE TRIGGER trg_bank_transaction_reconciliation_guard
+BEFORE UPDATE OR DELETE ON bank_transactions
+FOR EACH ROW EXECUTE FUNCTION app_guard_confirmed_bank_transaction();
+
+CREATE OR REPLACE FUNCTION app_guard_auto_channel_receipt_delete()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    IF EXISTS(
+        SELECT 1
+        FROM bank_reconciliation_matches m
+        WHERE m.generated_receipt_id = OLD.id
+          AND m.status = 'confirmed'
+    ) THEN
+        RAISE EXCEPTION '自动核销生成的收款记录不能直接删除，请先撤销核销';
+    END IF;
+    RETURN OLD;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_auto_channel_receipt_delete_guard ON channel_receipts;
+CREATE TRIGGER trg_auto_channel_receipt_delete_guard
+BEFORE DELETE ON channel_receipts
+FOR EACH ROW EXECUTE FUNCTION app_guard_auto_channel_receipt_delete();
