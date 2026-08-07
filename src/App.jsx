@@ -87,14 +87,6 @@ function readOpenTabs() {
   }
 }
 
-function preloadAuthenticatedPages() {
-  Object.values(PAGE_LOADERS).forEach((loadPage) => {
-    void loadPage().catch((error) => {
-      console.warn('页面预加载失败，将在打开时重试。', error)
-    })
-  })
-}
-
 function scheduleIdleTask(callback) {
   if (typeof window === 'undefined') return () => {}
   if (typeof window.requestIdleCallback === 'function') {
@@ -132,13 +124,6 @@ function App() {
     enabled: isAuthenticated && !loading
   })
   const invoice = useInvoiceStore({ showToast, enabled: isAuthenticated && !loading })
-
-  useEffect(() => {
-    if (!isAuthenticated || loading) return undefined
-
-    const timer = window.setTimeout(preloadAuthenticatedPages, 0)
-    return () => window.clearTimeout(timer)
-  }, [isAuthenticated, loading])
 
   useEffect(() => {
     if (!isAuthenticated || loading) return undefined

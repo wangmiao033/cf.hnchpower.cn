@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
-import * as XLSX from 'xlsx'
 import { STORAGE_KEYS, storageGet, storageSet } from '@/store/useAppStorage.js'
 import { parseInvoiceFromFilename } from '@/domain/invoice/invoiceParsers.js'
 import { parseTaxInvoiceWorkbook } from '@/domain/invoice/taxInvoiceExcelImport.js'
@@ -520,8 +519,10 @@ export function useInvoiceStore({ showToast, enabled = true }) {
       }
 
       if (lowerName.endsWith('.xlsx') || lowerName.endsWith('.xls')) {
+        const xlsxModule = await import('xlsx')
+        const XLSX = xlsxModule.default || xlsxModule
         const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array' })
-        const parsed = parseTaxInvoiceWorkbook(workbook, file.name)
+        const parsed = parseTaxInvoiceWorkbook(workbook, file.name, XLSX.utils)
         if (!parsed.detected) {
           throw new Error('未识别到“抵扣勾选”或“全量发票查询”导出表')
         }

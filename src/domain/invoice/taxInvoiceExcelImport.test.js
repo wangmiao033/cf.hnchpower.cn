@@ -15,7 +15,7 @@ describe('税务 Excel 发票导入', () => {
       [1, '否', '26117000001134616865', '2026-07-30 11:37:34', '145.51', '13.10', '13.10', '91440104MABURP0XXA', '阿里巴巴云计算（北京）有限公司', '91110108769914581E', '电子发票服务平台', '数电发票（增值税专用发票）', '正常', '未锁定', '正常', '无风险']
     ])
 
-    const result = parseTaxInvoiceWorkbook(workbook, '抵扣勾选.xlsx')
+    const result = parseTaxInvoiceWorkbook(workbook, '抵扣勾选.xlsx', XLSX.utils)
     expect(result.type).toBe('input_deduction')
     expect(result.records).toHaveLength(1)
     expect(result.records[0]).toMatchObject({
@@ -46,7 +46,7 @@ describe('税务 Excel 发票导入', () => {
       [2, '26442000008419337986', '91440104MABURP0XXA', '广州熊动科技有限公司', '91330302MA29A6CE0J', '温州赏金猎人网络科技有限公司', '2026-07-23 16:31:52', -178.55, -10.71, -189.26, '电子发票服务平台', '数电发票（增值税专用发票）', '正常', '否', '正常', '马纯敏', '被红冲蓝字数电发票号码：26442000008413305781']
     ]), '发票基础信息')
 
-    const result = parseTaxInvoiceWorkbook(workbook, '全量发票.xlsx')
+    const result = parseTaxInvoiceWorkbook(workbook, '全量发票.xlsx', XLSX.utils)
     expect(result.type).toBe('output_full_query')
     expect(result.records).toHaveLength(2)
     expect(result.records[0]).toMatchObject({
@@ -60,7 +60,11 @@ describe('税务 Excel 发票导入', () => {
   })
 
   it('拒绝无法识别的 Excel 模板', () => {
-    const result = parseTaxInvoiceWorkbook(workbookWithSheet('Sheet1', [['foo'], ['bar']]), 'x.xlsx')
+    const result = parseTaxInvoiceWorkbook(
+      workbookWithSheet('Sheet1', [['foo'], ['bar']]),
+      'x.xlsx',
+      XLSX.utils
+    )
     expect(result.detected).toBe(false)
     expect(result.records).toEqual([])
   })

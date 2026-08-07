@@ -1,5 +1,3 @@
-import * as XLSX from 'xlsx'
-
 const FULL_QUERY_SHEET = '发票基础信息'
 const FULL_QUERY_DETAIL_SHEET = '信息汇总表'
 
@@ -70,10 +68,15 @@ function joinRemark(...parts) {
   return parts.map(text).filter(Boolean).join('\n')
 }
 
-function sheetRows(workbook, sheetName) {
+function requireSheetUtils(utils) {
+  if (!utils?.sheet_to_json) throw new Error('缺少 Excel 解析引擎')
+  return utils
+}
+
+function sheetRows(workbook, sheetName, utils) {
   const sheet = workbook.Sheets[sheetName]
   if (!sheet) return []
-  return XLSX.utils.sheet_to_json(sheet, { defval: '', raw: false })
+  return requireSheetUtils(utils).sheet_to_json(sheet, { defval: '', raw: false })
 }
 
 function outputRecord(row, sourceFile) {
@@ -180,14 +183,14 @@ function validRecords(records) {
   return { records: Array.from(unique.values()), skipped }
 }
 
-function headersForSheet(workbook, sheetName) {
+function headersForSheet(workbook, sheetName, utils) {
   const sheet = workbook.Sheets[sheetName]
   if (!sheet) return []
-  const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: false })
+  const rows = requireSheetUtils(utils).sheet_to_json(sheet, { header: 1, defval: '', raw: false })
   return (rows[0] || []).map(normalizedHeader)
 }
 
-export function detectTaxInvoiceWorkbook(workbook) {
+export function detectTaxInvoiceWorkbook(workbook, utils) {
   if (workbook.Sheets[FULL_QUERY_SHEET]) {
     return { detected: true, type: 'output_full_query', sheetName: FULL_QUERY_SHEET }
   }
@@ -195,7 +198,7 @@ export function detectTaxInvoiceWorkbook(workbook) {
     return { detected: true, type: 'output_full_query', sheetName: FULL_QUERY_DETAIL_SHEET }
   }
   for (const sheetName of workbook.SheetNames || []) {
-    const headers = new Set(headersForSheet(workbook, sheetName))
+    const headers = new Set(headersForSheet(workbook, sheetName, utils))
     if (headers.has('是否勾选') && headers.has('有效抵扣税额') && headers.has('购买方识别号')) {
       return { detected: true, type: 'input_deduction', sheetName }
     }
@@ -203,8 +206,8 @@ export function detectTaxInvoiceWorkbook(workbook) {
   return { detected: false, type: 'unknown', sheetName: '' }
 }
 
-export function parseTaxInvoiceWorkbook(workbook, sourceFile = '税务发票导出.xlsx') {
-  const detected = detectTaxInvoiceWorkbook(workbook)
+export function parseTaxInvoiceWorkbook(workbook, sourceFile = '税务发票导出.xlsx', utils) {
+  const detected = detectTaxInvoiceWorkbook(workbook, utils)
   if (!detected.detected) {
     return {
       detected: false,
@@ -215,7 +218,7 @@ export function parseTaxInvoiceWorkbook(workbook, sourceFile = '税务发票导�
     }
   }
 
-  const rows = sheetRows(workbook, detected.sheetName)
+  const rows = sheetRows(workbook, detected.sheetName, utils)
   const parsed = rows.map((row) =>
     detected.type === 'input_deduction'
       ? inputRecord(row, sourceFile)
