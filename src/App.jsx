@@ -33,6 +33,7 @@ import LoginPage from './pages/LoginPage.jsx'
 import '@/styles/admin-polish.css'
 
 const PAGE_LOADERS = Object.freeze({
+  anomalies: () => import('./pages/AnomalyCenterPage.jsx'),
   coreReconciliation: () => import('./pages/CoreReconciliationPage.jsx'),
   reconciliationProgress: () => import('./pages/RdReconciliationProgressPage.jsx'),
   reconciliationCreate: () => import('./pages/ReconciliationCreatePage.jsx'),
@@ -51,6 +52,7 @@ const PAGE_LOADERS = Object.freeze({
   userCenter: () => import('./pages/UserCenterPage.jsx')
 })
 
+const AnomalyCenterPage = lazy(PAGE_LOADERS.anomalies)
 const CoreReconciliationPage = lazy(PAGE_LOADERS.coreReconciliation)
 const RdReconciliationProgressPage = lazy(PAGE_LOADERS.reconciliationProgress)
 const ReconciliationCreatePage = lazy(PAGE_LOADERS.reconciliationCreate)
@@ -322,6 +324,8 @@ function App() {
 
   const renderView = () => {
     switch (activeView) {
+      case VIEWS.ANOMALIES:
+        return <AnomalyCenterPage />
       case VIEWS.RECON_RD:
         return <CoreReconciliationPage />
       case VIEWS.RECON_PROGRESS:
