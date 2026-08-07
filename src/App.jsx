@@ -18,6 +18,7 @@ import { useInvoiceStore } from './store/useInvoiceStore.js'
 import AppShell from './app/AppShell.jsx'
 import { AppStateProvider } from './app/AppStateContext.jsx'
 import { getGroupForView, getTabView, SIDEBAR_GROUPS, VIEWS } from './app/routes.js'
+import { canOpenView } from './app/viewPermissions.js'
 import { useAuth } from '@/features/auth/AuthContext.jsx'
 import { apiRowToFrontend, getReconciliationRecord } from '@/lib/api/reconciliation.ts'
 import { apiChannelRowToFrontend, getChannelRecord } from '@/lib/api/channel.ts'
@@ -102,7 +103,7 @@ function scheduleIdleTask(callback) {
 }
 
 function App() {
-  const { isAuthenticated, loading } = useAuth()
+  const { isAuthenticated, loading, can } = useAuth()
   const [activeView, setActiveViewState] = useState(VIEWS.DASHBOARD)
   const [openTabs, setOpenTabs] = useState(readOpenTabs)
   const [reconEditRecordId, setReconEditRecordId] = useState(null)
@@ -156,6 +157,16 @@ function App() {
     if (typeof window !== 'undefined') window.localStorage.setItem(OPEN_TABS_STORAGE_KEY, JSON.stringify(openTabs))
   }, [openTabs])
 
+  useEffect(() => {
+    if (!isAuthenticated || loading) return
+    setOpenTabs((current) => current.filter((view) => canOpenView(can, view)))
+    if (!canOpenView(can, activeView)) {
+      navigationBlockerRef.current = null
+      setActiveViewState(VIEWS.DASHBOARD)
+      setBill360Target(null)
+    }
+  }, [isAuthenticated, loading, can, activeView])
+
   const setNavigationBlocker = useCallback((blocker) => {
     navigationBlockerRef.current = blocker?.active && blocker?.view ? blocker : null
   }, [])
@@ -179,6 +190,10 @@ function App() {
 
   const openView = useCallback((view) => {
     const nextView = view || VIEWS.DASHBOARD
+    if (!canOpenView(can, nextView)) {
+      showToast('当前账号没有访问该模块的权限', 'error')
+      return false
+    }
     if (!confirmLeaveCurrentView(nextView)) return false
     const tabView = getTabView(nextView)
     startTransition(() => {
@@ -188,7 +203,7 @@ function App() {
       setActiveViewState(nextView)
     })
     return true
-  }, [confirmLeaveCurrentView])
+  }, [can, confirmLeaveCurrentView, showToast])
 
   const setActiveViewRaw = openView
   const navigate = openView
@@ -203,11 +218,11 @@ function App() {
       const group = getGroupForView(view)
       const groupTabs = group.items.map((item) => item.view)
       const closedIndex = groupTabs.indexOf(view)
-      const previousTab = [...groupTabs.slice(0, Math.max(closedIndex, 0))].reverse().find((tab) => remainingTabs.includes(tab))
-      const nextTab = groupTabs.slice(Math.max(closedIndex + 1, 0)).find((tab) => remainingTabs.includes(tab))
+      const previousTab = [...groupTabs.slice(0, Math.max(closedIndex, 0))].reverse().find((tab) => remainingTabs.includes(tab) && canOpenView(can, tab))
+      const nextTab = groupTabs.slice(Math.max(closedIndex + 1, 0)).find((tab) => remainingTabs.includes(tab) && canOpenView(can, tab))
       setActiveViewState(previousTab || nextTab || VIEWS.DASHBOARD)
     })
-  }, [activeView, openTabs, confirmLeaveCurrentView])
+  }, [activeView, openTabs, confirmLeaveCurrentView, can])
 
   const hideToast = useCallback(() => setToast((t) => ({ ...t, isVisible: false })), [])
 
@@ -237,9 +252,13 @@ function App() {
   }, [navigate])
 
   const openBill360 = useCallback((billType, id, initialRecord = null) => {
+    if (!can('reconciliation.view')) {
+      showToast('当前账号没有查看账单详情的权限', 'error')
+      return
+    }
     const billId = String(id || '')
     if (billId) setBill360Target({ billType: billType === 'channel' ? 'channel' : 'rd', billId, initialRecord })
-  }, [])
+  }, [can, showToast])
 
   const closeBill360 = useCallback(() => setBill360Target(null), [])
   const openInvoiceEdit = useCallback((id) => { setInvoiceEditId(String(id)); navigate(VIEWS.INVOICE_EDIT) }, [navigate])
@@ -259,6 +278,7 @@ function App() {
   }
 
   const renderView = () => {
+    if (!canOpenView(can, activeView)) return <CoreDashboardPage />
     switch (activeView) {
       case VIEWS.ANOMALIES: return <AnomalyCenterPage />
       case VIEWS.BUSINESS_DASHBOARD: return <MonthlyBusinessDashboardPage />
