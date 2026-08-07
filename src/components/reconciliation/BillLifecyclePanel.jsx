@@ -29,6 +29,8 @@ function errorMessage(error) {
   if (!error) return '状态流转失败'
   if (error.detail?.message) return error.detail.message
   if (error.data?.detail?.message) return error.data.detail.message
+  if (error.body?.detail?.message) return error.body.detail.message
+  if (typeof error.body?.detail === 'string') return error.body.detail
   return error.message || '状态流转失败'
 }
 
