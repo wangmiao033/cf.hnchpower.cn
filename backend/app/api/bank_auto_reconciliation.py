@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_db
 from app.core.security import require_current_user
+from app.models.bank_reconciliation_match import BankReconciliationMatch
 from app.models.user import AuthUser
 from app.schemas.bank_auto_reconciliation import (
     BankAutoReconciliationDashboard,
@@ -26,7 +28,16 @@ def get_bank_auto_reconciliation_dashboard(
     db: Session = Depends(get_db),
     _user: AuthUser = Depends(require_current_user),
 ) -> BankAutoReconciliationDashboard:
-    return BankAutoReconciliationDashboard.model_validate(build_dashboard(db, limit=limit))
+    result = build_dashboard(db, limit=limit)
+    confirmed_count, confirmed_amount = db.execute(
+        select(
+            func.count(BankReconciliationMatch.id),
+            func.coalesce(func.sum(BankReconciliationMatch.linked_amount), 0),
+        ).where(BankReconciliationMatch.status == "confirmed")
+    ).one()
+    result["stats"]["confirmed_matches"] = int(confirmed_count or 0)
+    result["stats"]["confirmed_amount"] = round(float(confirmed_amount or 0), 2)
+    return BankAutoReconciliationDashboard.model_validate(result)
 
 
 @router.post("/{transaction_id}/confirm", response_model=BankMatchConfirmResponse)
