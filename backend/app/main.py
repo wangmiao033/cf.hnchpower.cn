@@ -13,6 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.api.anomaly import router as anomaly_router
+from app.api.bill_lifecycle import router as bill_lifecycle_router
 from app.api.channel import router as channel_router
 from app.api.bill_attachment import router as bill_attachment_router
 from app.api.bill_invoice_allocation import router as bill_invoice_allocation_router
@@ -87,7 +88,6 @@ def get_cors_origins() -> list[str]:
     if not _is_production_env():
         out.extend(origin for origin in DEVELOPMENT_CORS_ORIGINS if origin not in out)
 
-    # Keep same-origin Vercel Preview deployments functional without allowing a wildcard.
     for env_name in ("VERCEL_URL", "VERCEL_BRANCH_URL", "VERCEL_PROJECT_PRODUCTION_URL"):
         _append_origin(out, os.environ.get(env_name))
 
@@ -123,7 +123,6 @@ def _is_idempotent_reconciliation_delete_miss(
     path: str,
     status_code: int,
 ) -> bool:
-    """Treat a repeated delete of the same研发账单 as a successful no-op."""
     return (
         method.upper() == "DELETE"
         and status_code == 404
@@ -196,6 +195,12 @@ app.include_router(
     channel_router,
     prefix="/api/channel-records",
     tags=["channel-records"],
+    dependencies=[Depends(require_current_user)],
+)
+app.include_router(
+    bill_lifecycle_router,
+    prefix="/api/bill-lifecycle",
+    tags=["bill-lifecycle"],
     dependencies=[Depends(require_current_user)],
 )
 app.include_router(
@@ -277,10 +282,6 @@ app.mount("/uploads", StaticFiles(directory=str(_upload_root)), name="uploads")
 
 @app.exception_handler(SQLAlchemyError)
 async def handle_sqlalchemy_error(request: Request, exc: SQLAlchemyError) -> JSONResponse:
-    """
-    数据库错误时仍返回带 CORS 头的 JSON，避免浏览器误报为纯 CORS 问题。
-    详细栈记录在服务端日志。
-    """
     logger.exception("SQLAlchemy error: %s", request.url.path)
     response = JSONResponse(
         status_code=500,
