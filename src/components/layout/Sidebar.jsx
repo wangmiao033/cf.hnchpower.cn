@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { getGroupForView, getTabView, SIDEBAR_GROUPS, VIEW_ICONS } from '@/app/routes.js'
+import { canOpenView } from '@/app/viewPermissions.js'
+import { useAuth } from '@/features/auth/AuthContext.jsx'
 import './Sidebar.css'
 
 const EXPANDED_GROUPS_STORAGE_KEY = 'core-sidebar-expanded-groups-v2'
@@ -20,13 +22,24 @@ function readExpandedGroups() {
 }
 
 function Sidebar({ activeView, onNavigate, collapsed = false }) {
+  const { can } = useAuth()
+  const accessibleGroups = useMemo(
+    () => SIDEBAR_GROUPS
+      .map((group) => ({
+        ...group,
+        items: group.items.filter((item) => canOpenView(can, item.view))
+      }))
+      .filter((group) => group.items.length > 0),
+    [can]
+  )
   const activeGroup = useMemo(() => getGroupForView(activeView), [activeView])
   const activeGroupId = activeGroup?.id
   const activeTabView = getTabView(activeView)
   const [expandedGroups, setExpandedGroups] = useState(readExpandedGroups)
 
   useEffect(() => {
-    if (!activeGroupId || activeGroup?.items.length <= 1) return
+    const visibleActiveGroup = accessibleGroups.find((group) => group.id === activeGroupId)
+    if (!visibleActiveGroup || visibleActiveGroup.items.length <= 1) return
 
     setExpandedGroups((current) => {
       if (current.has(activeGroupId)) return current
@@ -34,7 +47,7 @@ function Sidebar({ activeView, onNavigate, collapsed = false }) {
       next.add(activeGroupId)
       return next
     })
-  }, [activeGroup, activeGroupId])
+  }, [accessibleGroups, activeGroupId])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -85,7 +98,7 @@ function Sidebar({ activeView, onNavigate, collapsed = false }) {
         </div>
 
         <nav className="sidebar-nav" aria-label="功能分组">
-          {SIDEBAR_GROUPS.map((group) => {
+          {accessibleGroups.map((group) => {
             const isSingleton = group.items.length === 1
             const groupActive = activeGroupId === group.id
             const firstItem = group.items[0]
