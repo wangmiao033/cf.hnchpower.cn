@@ -28,6 +28,7 @@ import {
   filterBill360Contracts,
   summarizeBill360
 } from '@/domain/reconciliation/bill360.js'
+import BillOperationTimeline from './BillOperationTimeline.jsx'
 import './Bill360Drawer.css'
 
 const TABS = [
@@ -36,6 +37,7 @@ const TABS = [
   ['invoice', '发票'],
   ['payment', '收付款'],
   ['contract', '合同'],
+  ['history', '操作日志'],
   ['attachment', '附件']
 ]
 
@@ -91,8 +93,7 @@ function Bill360Drawer({ target, onClose }) {
   const {
     setActiveView,
     openReconciliationEdit,
-    openChannelReconciliationEdit,
-    showToast
+    openChannelReconciliationEdit
   } = useAppState()
   const [activeTab, setActiveTab] = useState('overview')
   const [record, setRecord] = useState(target?.initialRecord || null)
@@ -437,6 +438,10 @@ function Bill360Drawer({ target, onClose }) {
                     {contracts.length === 0 ? <div className="bill360-empty-block">没有匹配到该合作方合同。</div> : contracts.map((contract) => <article key={contract.id}><div><span className={`bill360-contract-status is-${contract.timeline_status}`}>{contract.timeline_status || '未判断'}</span><h4>{contract.contract_name || contract.contract_no || '未命名合同'}</h4><p>{contract.contract_no || '无合同编号'} · {contract.contract_type || '未分类'}</p></div><dl><div><dt>合作方</dt><dd>{contract.partner_short_name || contract.partner_name || contract.counterparty || '-'}</dd></div><div><dt>有效期</dt><dd>{contract.effective_date || '-'} ～ {contract.end_date || '-'}</dd></div><div><dt>金额</dt><dd>{contract.amount ? money(contract.amount) : '-'}</dd></div></dl></article>)}
                   </div>
                 </section>
+              )}
+
+              {activeTab === 'history' && (
+                <BillOperationTimeline billType={billType} billId={billId} />
               )}
 
               {activeTab === 'attachment' && (
