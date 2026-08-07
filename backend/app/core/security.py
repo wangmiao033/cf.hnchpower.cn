@@ -9,7 +9,7 @@ from uuid import uuid4
 import jwt
 from fastapi import Cookie, Depends, HTTPException, status
 from passlib.context import CryptContext
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_db
@@ -171,6 +171,20 @@ def clear_login_fail(user: AuthUser) -> None:
     user.last_login_at = _utcnow()
 
 
+def _set_audit_actor(db: Session, user: AuthUser) -> None:
+    """Expose the authenticated actor to PostgreSQL triggers for this transaction only."""
+    db.execute(
+        text(
+            """
+            SELECT
+              set_config('app.current_user_id', :user_id, true),
+              set_config('app.current_user_email', :email, true)
+            """
+        ),
+        {"user_id": str(user.id), "email": str(user.email or "")},
+    )
+
+
 def require_current_user(
     db: Session = Depends(get_db),
     token: str | None = Cookie(default=None, alias=AUTH_COOKIE_NAME),
@@ -198,6 +212,8 @@ def require_current_user(
         or session.expires_at <= now
     ):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="登录已失效，请重新登录")
+
+    _set_audit_actor(db, user)
     return user
 
 
