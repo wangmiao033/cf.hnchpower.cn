@@ -211,7 +211,7 @@ export default defineConfig(({ mode }) => {
             ) {
               return 'react'
             }
-            return 'vendor'
+            return undefined
           }
         }
       }
