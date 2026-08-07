@@ -68,6 +68,7 @@ ROLE_PRESETS: dict[str, frozenset[str]] = {
         "contracts.view",
         "data.view", "data.manage",
         "partners.view", "partners.manage",
+        "audit.view",
     }),
     "viewer": frozenset({
         "analytics.view",
@@ -145,8 +146,9 @@ def set_user_access(
     role: str,
     overrides: dict[str, str],
 ) -> None:
-    normalized_role = normalize_role(role)
-    if str(role or "").strip().lower() not in ROLE_PRESETS:
+    raw_role = str(role or "").strip().lower()
+    normalized_role = ROLE_ALIASES.get(raw_role, raw_role)
+    if normalized_role not in ROLE_PRESETS:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail={"error": "invalid_role", "allowed": sorted(ROLE_PRESETS)},
@@ -199,18 +201,54 @@ def require_permission(permission: str) -> Callable:
     return dependency
 
 
-def require_module_access(view_permission: str, manage_permission: str | None = None) -> Callable:
-    if view_permission not in ALL_PERMISSIONS:
-        raise ValueError(f"Unknown permission: {view_permission}")
-    if manage_permission is not None and manage_permission not in ALL_PERMISSIONS:
-        raise ValueError(f"Unknown permission: {manage_permission}")
+def _path_override_permission(
+    path: str,
+    method: str,
+    path_overrides: dict[str, tuple[str, str | None]] | None,
+) -> str | None:
+    if not path_overrides:
+        return None
+    normalized_path = str(path or "").rstrip("/") or "/"
+    for prefix in sorted(path_overrides, key=len, reverse=True):
+        normalized_prefix = str(prefix or "").rstrip("/") or "/"
+        if normalized_path != normalized_prefix and not normalized_path.startswith(f"{normalized_prefix}/"):
+            continue
+        view_permission, manage_permission = path_overrides[prefix]
+        return (
+            manage_permission
+            if method.upper() in UNSAFE_METHODS and manage_permission
+            else view_permission
+        )
+    return None
+
+
+def require_module_access(
+    view_permission: str,
+    manage_permission: str | None = None,
+    *,
+    path_overrides: dict[str, tuple[str, str | None]] | None = None,
+) -> Callable:
+    permissions_to_validate = {view_permission}
+    if manage_permission is not None:
+        permissions_to_validate.add(manage_permission)
+    for override in (path_overrides or {}).values():
+        permissions_to_validate.add(override[0])
+        if override[1] is not None:
+            permissions_to_validate.add(override[1])
+    unknown = sorted(permission for permission in permissions_to_validate if permission not in ALL_PERMISSIONS)
+    if unknown:
+        raise ValueError(f"Unknown permission(s): {', '.join(unknown)}")
 
     def dependency(
         request: Request,
         user: AuthUser = Depends(require_current_user),
         db: Session = Depends(get_db),
     ) -> AuthUser:
-        permission = (
+        permission = _path_override_permission(
+            request.url.path,
+            request.method,
+            path_overrides,
+        ) or (
             manage_permission
             if request.method.upper() in UNSAFE_METHODS and manage_permission
             else view_permission
