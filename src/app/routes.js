@@ -1,6 +1,5 @@
 /**
  * Core routes for the rebuilt reconciliation console.
- * Production release marker: V2.2-1 monthly business dashboard.
  */
 
 export const VIEWS = {
@@ -8,6 +7,9 @@ export const VIEWS = {
   BUSINESS_DASHBOARD: 'business-dashboard',
   PROFIT_ANALYSIS: 'profit-analysis',
   ANOMALIES: 'anomalies',
+  BANK_RECONCILIATION: 'bank-reconciliation',
+  BANK_TRANSACTIONS_LEDGER: 'bank-transactions-ledger',
+  BANK_STATEMENT_IMPORT: 'bank-statement-import',
   RECON_RD: 'recon-rd',
   RECON_PROGRESS: 'recon-progress',
   RECON_CREATE: 'recon-create',
@@ -37,6 +39,15 @@ export const SIDEBAR_GROUPS = [
       { view: VIEWS.BUSINESS_DASHBOARD, label: '经营驾驶舱' },
       { view: VIEWS.PROFIT_ANALYSIS, label: '利润分析' },
       { view: VIEWS.ANOMALIES, label: '异常中心' }
+    ]
+  },
+  {
+    id: 'funds',
+    label: '资金管理',
+    items: [
+      { view: VIEWS.BANK_RECONCILIATION, label: '银行核销' },
+      { view: VIEWS.BANK_TRANSACTIONS_LEDGER, label: '流水台账' },
+      { view: VIEWS.BANK_STATEMENT_IMPORT, label: '流水录入' }
     ]
   },
   {
@@ -79,6 +90,9 @@ const VIEW_TITLES = {
   [VIEWS.BUSINESS_DASHBOARD]: '月度经营驾驶舱',
   [VIEWS.PROFIT_ANALYSIS]: '利润分析',
   [VIEWS.ANOMALIES]: '异常中心',
+  [VIEWS.BANK_RECONCILIATION]: '银行流水自动核销',
+  [VIEWS.BANK_TRANSACTIONS_LEDGER]: '银行流水台账',
+  [VIEWS.BANK_STATEMENT_IMPORT]: '银行流水录入',
   [VIEWS.RECON_RD]: '研发账单',
   [VIEWS.RECON_PROGRESS]: '对账进度',
   [VIEWS.RECON_CREATE]: '新增研发账单',
@@ -104,6 +118,9 @@ const VIEW_DESCRIPTIONS = {
   [VIEWS.BUSINESS_DASHBOARD]: '按月区分权责结算与实际现金口径，查看渠道应收、研发应付、现金收支、结算贡献、产品排行与账单完成度。',
   [VIEWS.PROFIT_ANALYSIS]: '按管理口径分析经营利润、费用结构和产品可归属利润，并维护月度经营费用台账。',
   [VIEWS.ANOMALIES]: '自动巡检账单、收付款、发票、合同和流水数据中的异常与待处理风险。',
+  [VIEWS.BANK_RECONCILIATION]: '按金额、合作方、账单编号和结算时间自动匹配银行流水，高置信可批量核销并支持撤销。',
+  [VIEWS.BANK_TRANSACTIONS_LEDGER]: '统一查看银行流水、付款登记、回款登记及账单关联。',
+  [VIEWS.BANK_STATEMENT_IMPORT]: '录入或粘贴银行流水与电子回单文本，写入统一银行流水台账。',
   [VIEWS.RECON_RD]: '保留现有研发账单计算、录入、筛选、导入和导出逻辑。',
   [VIEWS.RECON_PROGRESS]: '集中查看游戏账单与渠道流水的核对、结算和待处理明细。',
   [VIEWS.RECON_CREATE]: '使用现有研发账单录入逻辑新增记录。',
@@ -129,6 +146,9 @@ export const VIEW_ICONS = {
   [VIEWS.BUSINESS_DASHBOARD]: '营',
   [VIEWS.PROFIT_ANALYSIS]: '利',
   [VIEWS.ANOMALIES]: '异',
+  [VIEWS.BANK_RECONCILIATION]: '核',
+  [VIEWS.BANK_TRANSACTIONS_LEDGER]: '流',
+  [VIEWS.BANK_STATEMENT_IMPORT]: '录',
   [VIEWS.RECON_RD]: '研',
   [VIEWS.RECON_PROGRESS]: '进',
   [VIEWS.RECON_CREATE]: '增',
@@ -141,7 +161,7 @@ export const VIEW_ICONS = {
   [VIEWS.INVOICE_INPUT]: '进',
   [VIEWS.INVOICE_CREATE]: '增',
   [VIEWS.INVOICE_EDIT]: '编',
-  [VIEWS.QUICKSDK_LIBRARY]: '流',
+  [VIEWS.QUICKSDK_LIBRARY]: '库',
   [VIEWS.PRODUCT_SOURCES]: '源',
   [VIEWS.QUICKSDK_GAMES]: '游',
   [VIEWS.QUICKSDK_CHANNELS]: '渠',
@@ -158,92 +178,42 @@ export function getPageDescription(view) {
 }
 
 export function getPageMeta(view) {
-  return {
-    title: getPageTitle(view),
-    description: getPageDescription(view)
-  }
+  return { title: getPageTitle(view), description: getPageDescription(view) }
 }
 
 export function getGroupForView(view) {
-  if (view === VIEWS.RECON_CREATE || view === VIEWS.RECON_EDIT) {
+  if (view === VIEWS.RECON_CREATE || view === VIEWS.RECON_EDIT || view === VIEWS.CHANNEL_RECON_CREATE || view === VIEWS.CHANNEL_RECON_EDIT) {
     return SIDEBAR_GROUPS.find((group) => group.id === 'reconciliation')
   }
-
-  if (view === VIEWS.CHANNEL_RECON_CREATE || view === VIEWS.CHANNEL_RECON_EDIT) {
-    return SIDEBAR_GROUPS.find((group) => group.id === 'reconciliation')
-  }
-
   if (view === VIEWS.INVOICE_CREATE || view === VIEWS.INVOICE_EDIT) {
     return SIDEBAR_GROUPS.find((group) => group.id === 'invoices')
   }
-
   return SIDEBAR_GROUPS.find((group) => group.items.some((item) => item.view === view)) || SIDEBAR_GROUPS[0]
 }
 
 export function getTabView(view) {
-  if (view === VIEWS.USER_CENTER) {
-    return VIEWS.DASHBOARD
-  }
-
-  if (view === VIEWS.RECON_CREATE || view === VIEWS.RECON_EDIT) {
-    return VIEWS.RECON_RD
-  }
-
-  if (view === VIEWS.CHANNEL_RECON_CREATE || view === VIEWS.CHANNEL_RECON_EDIT) {
-    return VIEWS.RECON_CHANNEL
-  }
-
-  if (view === VIEWS.INVOICE_CREATE || view === VIEWS.INVOICE_EDIT) {
-    return VIEWS.INVOICE_MANAGE
-  }
-
+  if (view === VIEWS.USER_CENTER) return VIEWS.DASHBOARD
+  if (view === VIEWS.RECON_CREATE || view === VIEWS.RECON_EDIT) return VIEWS.RECON_RD
+  if (view === VIEWS.CHANNEL_RECON_CREATE || view === VIEWS.CHANNEL_RECON_EDIT) return VIEWS.RECON_CHANNEL
+  if (view === VIEWS.INVOICE_CREATE || view === VIEWS.INVOICE_EDIT) return VIEWS.INVOICE_MANAGE
   return view
 }
 
 export function getBreadcrumb(view) {
-  if (view === VIEWS.DASHBOARD) {
-    return [{ label: getPageTitle(view), current: true }]
-  }
-
-  if (view === VIEWS.USER_CENTER) {
-    return [
-      { label: '核心工作台', view: VIEWS.DASHBOARD },
-      { label: getPageTitle(view), current: true }
-    ]
-  }
-
+  if (view === VIEWS.DASHBOARD) return [{ label: getPageTitle(view), current: true }]
+  if (view === VIEWS.USER_CENTER) return [{ label: '核心工作台', view: VIEWS.DASHBOARD }, { label: getPageTitle(view), current: true }]
   if (view === VIEWS.RECON_CREATE || view === VIEWS.RECON_EDIT) {
-    return [
-      { label: '核心工作台', view: VIEWS.DASHBOARD },
-      { label: '核心对账' },
-      { label: getPageTitle(VIEWS.RECON_RD), view: VIEWS.RECON_RD },
-      { label: getPageTitle(view), current: true }
-    ]
+    return [{ label: '核心工作台', view: VIEWS.DASHBOARD }, { label: '核心对账' }, { label: getPageTitle(VIEWS.RECON_RD), view: VIEWS.RECON_RD }, { label: getPageTitle(view), current: true }]
   }
-
   if (view === VIEWS.CHANNEL_RECON_CREATE || view === VIEWS.CHANNEL_RECON_EDIT) {
-    return [
-      { label: '核心工作台', view: VIEWS.DASHBOARD },
-      { label: '核心对账' },
-      { label: getPageTitle(VIEWS.RECON_CHANNEL), view: VIEWS.RECON_CHANNEL },
-      { label: getPageTitle(view), current: true }
-    ]
+    return [{ label: '核心工作台', view: VIEWS.DASHBOARD }, { label: '核心对账' }, { label: getPageTitle(VIEWS.RECON_CHANNEL), view: VIEWS.RECON_CHANNEL }, { label: getPageTitle(view), current: true }]
   }
-
   if (view === VIEWS.INVOICE_CREATE || view === VIEWS.INVOICE_EDIT) {
-    return [
-      { label: '核心工作台', view: VIEWS.DASHBOARD },
-      { label: '发票中心' },
-      { label: getPageTitle(VIEWS.INVOICE_MANAGE), view: VIEWS.INVOICE_MANAGE },
-      { label: getPageTitle(view), current: true }
-    ]
+    return [{ label: '核心工作台', view: VIEWS.DASHBOARD }, { label: '发票中心' }, { label: getPageTitle(VIEWS.INVOICE_MANAGE), view: VIEWS.INVOICE_MANAGE }, { label: getPageTitle(view), current: true }]
   }
-
   const group = SIDEBAR_GROUPS.find((g) => g.items.some((i) => i.view === view))
   const crumbs = [{ label: '核心工作台', view: VIEWS.DASHBOARD }]
-  if (group && group.id !== 'workbench') {
-    crumbs.push({ label: group.label })
-  }
+  if (group && group.id !== 'workbench') crumbs.push({ label: group.label })
   crumbs.push({ label: getPageTitle(view), current: true })
   return crumbs
 }
