@@ -115,17 +115,20 @@ export default function BillLifecyclePanel({
   }
 
   if (loading && !lifecycle) {
-    return <section className="bill-lifecycle-panel is-loading">正在读取账单状态与结算条件…</section>
+    return <section className="bill-lifecycle-panel is-loading" aria-label="账单生命周期">正在读取账单状态与结算条件…</section>
   }
 
   if (error && !lifecycle) {
-    return <section className="bill-lifecycle-panel is-error">状态流转信息读取失败：{error}</section>
+    return <section className="bill-lifecycle-panel is-error" aria-label="账单生命周期">状态流转信息读取失败：{error}</section>
   }
 
   if (!lifecycle) return null
 
   return (
-    <section className={`bill-lifecycle-panel ${lifecycle.locked ? 'is-locked' : 'is-editable'}`}>
+    <section
+      className={`bill-lifecycle-panel ${lifecycle.locked ? 'is-locked' : 'is-editable'}`}
+      aria-label="账单生命周期"
+    >
       <div className="bill-lifecycle-head">
         <div>
           <span>账单生命周期</span>
