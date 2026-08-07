@@ -2,6 +2,7 @@ import unittest
 
 from fastapi import HTTPException
 
+from app.api.bill_lifecycle import _apply_cross_link_guards
 from app.services.bill_lifecycle import (
     _transition_requires_reason,
     assert_update_allowed,
@@ -44,6 +45,40 @@ class BillLifecycleRulesTest(unittest.TestCase):
         self.assertFalse(_transition_requires_reason("pending", "confirmed"))
         self.assertEqual(transition_label("rd", "confirmed", "invoiced"), "发票已收齐")
         self.assertEqual(transition_label("channel", "confirmed", "invoiced"), "发票已开齐")
+
+    def test_cancellation_is_blocked_when_money_or_invoice_is_linked(self):
+        base = {
+            "status": "confirmed",
+            "paid_amount": 10,
+            "invoice_allocated_amount": 0,
+            "transitions": [
+                {
+                    "status": "cancelled",
+                    "available": True,
+                    "blocked_reason": None,
+                }
+            ],
+        }
+        guarded = _apply_cross_link_guards(base)
+        option = guarded["transitions"][0]
+        self.assertFalse(option["available"])
+        self.assertIn("收付款", option["blocked_reason"])
+
+        invoice_only = {
+            "status": "confirmed",
+            "paid_amount": 0,
+            "invoice_allocated_amount": 100,
+            "transitions": [
+                {
+                    "status": "cancelled",
+                    "available": True,
+                    "blocked_reason": None,
+                }
+            ],
+        }
+        guarded_invoice = _apply_cross_link_guards(invoice_only)
+        self.assertFalse(guarded_invoice["transitions"][0]["available"])
+        self.assertIn("发票", guarded_invoice["transitions"][0]["blocked_reason"])
 
 
 if __name__ == "__main__":
