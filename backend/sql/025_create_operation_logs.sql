@@ -58,7 +58,7 @@ DECLARE
     actor_id TEXT := NULLIF(current_setting('app.current_user_id', true), '');
     actor_email_value TEXT := NULLIF(current_setting('app.current_user_email', true), '');
 BEGIN
-    IF entity_type_value LIKE '@%' THEN
+    IF left(entity_type_value, 1) = '@' THEN
         entity_type_value := COALESCE(
             new_json ->> substring(entity_type_value FROM 2),
             old_json ->> substring(entity_type_value FROM 2)
