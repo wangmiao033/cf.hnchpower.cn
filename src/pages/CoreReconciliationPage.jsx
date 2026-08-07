@@ -71,7 +71,14 @@ function partnerKey(value) {
 }
 
 function CoreReconciliationPage() {
-  const { recon, settings, showToast, setActiveView, openReconciliationEdit } = useAppState()
+  const {
+    recon,
+    settings,
+    showToast,
+    setActiveView,
+    openReconciliationEdit,
+    openBill360
+  } = useAppState()
   const fileRef = useRef(null)
   const [month, setMonth] = useState('')
   const [partner, setPartner] = useState('')
@@ -422,6 +429,9 @@ function CoreReconciliationPage() {
                       </td>
                       <td>
                         <div className="core-recon-row-actions">
+                          <button type="button" onClick={() => openBill360('rd', String(row.id), row)}>
+                            详情
+                          </button>
                           <button type="button" onClick={() => openReconciliationEdit(String(row.id))}>
                             编辑
                           </button>
