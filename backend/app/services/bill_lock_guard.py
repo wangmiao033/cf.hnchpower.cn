@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from fastapi import HTTPException, status
-from sqlalchemy import event, inspect
+from sqlalchemy import event, inspect, select
 from sqlalchemy.orm import Session
 
 from app.models.channel import ChannelRecord, ChannelRecordLineItem
@@ -100,9 +100,51 @@ def _status_error(current: str, requested: str) -> HTTPException:
     )
 
 
+def _identity_parent(session: Session, parent_type, parent_id: str | None):
+    if not parent_id:
+        return None
+    for candidate in session.identity_map.values():
+        if isinstance(candidate, parent_type) and str(candidate.id) == str(parent_id):
+            return candidate
+    return None
+
+
+def _bulk_delete_parent_id(statement, expected_prefix: str) -> str | None:
+    try:
+        params = statement.compile().params
+    except Exception:
+        return None
+    for key, value in params.items():
+        if key.startswith(expected_prefix) and value not in (None, ""):
+            return str(value)
+    return None
+
+
 @event.listens_for(Session, "before_flush")
 def enforce_bill_lock(session: Session, _flush_context, _instances) -> None:
     transition_mode = bool(session.info.get("allow_lifecycle_transition"))
+
+    for obj in list(session.new):
+        if isinstance(obj, ReconciliationRecord):
+            requested = _normal(obj.status)
+            if requested not in EDITABLE and not transition_mode:
+                raise _status_error("pending", requested)
+        elif isinstance(obj, ChannelRecord):
+            requested = _normal(obj.status)
+            if requested not in EDITABLE and not transition_mode:
+                raise _status_error("pending", requested)
+        elif isinstance(obj, ReconciliationLineItem) and not transition_mode:
+            parent = obj.reconciliation or _identity_parent(
+                session, ReconciliationRecord, getattr(obj, "reconciliation_id", None)
+            )
+            if parent is not None and _normal(parent.status) not in EDITABLE:
+                raise _locked_error(_normal(parent.status), ["items"])
+        elif isinstance(obj, ChannelRecordLineItem) and not transition_mode:
+            parent = obj.parent or _identity_parent(
+                session, ChannelRecord, getattr(obj, "channel_record_id", None)
+            )
+            if parent is not None and _normal(parent.status) not in EDITABLE:
+                raise _locked_error(_normal(parent.status), ["items"])
 
     for obj in list(session.dirty):
         if isinstance(obj, ReconciliationRecord):
@@ -149,3 +191,39 @@ def enforce_bill_lock(session: Session, _flush_context, _instances) -> None:
             parent = obj.parent
             if parent is not None and _normal(parent.status) not in EDITABLE and not transition_mode:
                 raise _locked_error(_normal(parent.status), ["items"])
+
+
+@event.listens_for(Session, "do_orm_execute")
+def enforce_bulk_line_delete(orm_execute_state) -> None:
+    """Guard Core DELETE used by bill update endpoints when replacing all line items."""
+    if not orm_execute_state.is_delete:
+        return
+    session = orm_execute_state.session
+    if session.info.get("allow_lifecycle_transition"):
+        return
+
+    statement = orm_execute_state.statement
+    table = getattr(statement, "table", None)
+    table_name = getattr(table, "name", "")
+    if table_name == ReconciliationLineItem.__tablename__:
+        parent_id = _bulk_delete_parent_id(statement, "reconciliation_id")
+        if not parent_id:
+            return
+        current = session.connection().execute(
+            select(ReconciliationRecord.__table__.c.status).where(
+                ReconciliationRecord.__table__.c.id == parent_id
+            )
+        ).scalar_one_or_none()
+        if current is not None and _normal(current) not in EDITABLE:
+            raise _locked_error(_normal(current), ["items"])
+    elif table_name == ChannelRecordLineItem.__tablename__:
+        parent_id = _bulk_delete_parent_id(statement, "channel_record_id")
+        if not parent_id:
+            return
+        current = session.connection().execute(
+            select(ChannelRecord.__table__.c.status).where(
+                ChannelRecord.__table__.c.id == parent_id
+            )
+        ).scalar_one_or_none()
+        if current is not None and _normal(current) not in EDITABLE:
+            raise _locked_error(_normal(current), ["items"])
