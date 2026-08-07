@@ -28,6 +28,7 @@ from app.api.operating_expense import router as operating_expense_router
 from app.api.profit_analysis import router as profit_analysis_router
 from app.api.payment import router as payment_router
 from app.api.bank_transaction import router as bank_transaction_router
+from app.api.bank_auto_reconciliation import router as bank_auto_reconciliation_router
 from app.api.reconciliation import router as reconciliation_router
 from app.api.reconciliation_period import router as reconciliation_period_router
 from app.api.contract import router as contract_router
@@ -167,135 +168,34 @@ async def enforce_origin_and_response_policy(request: Request, call_next):
         return response
 
     response = await call_next(request)
-    if _is_idempotent_reconciliation_delete_miss(
-        request.method,
-        path,
-        response.status_code,
-    ):
-        response = Response(
-            status_code=204,
-            headers=_cors_headers_for_request(request, _cors_allowed),
-        )
+    if _is_idempotent_reconciliation_delete_miss(request.method, path, response.status_code):
+        response = Response(status_code=204, headers=_cors_headers_for_request(request, _cors_allowed))
     _apply_common_response_headers(response, path)
     return response
 
 
 app.include_router(health_router)
 app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
-app.include_router(
-    reconciliation_router,
-    prefix="/api/reconciliation",
-    tags=["reconciliation"],
-    dependencies=[Depends(require_current_user)],
-)
-app.include_router(
-    reconciliation_period_router,
-    prefix="/api/reconciliation-periods",
-    tags=["reconciliation-periods"],
-    dependencies=[Depends(require_current_user)],
-)
-app.include_router(
-    channel_router,
-    prefix="/api/channel-records",
-    tags=["channel-records"],
-    dependencies=[Depends(require_current_user)],
-)
-app.include_router(
-    bill_lifecycle_router,
-    prefix="/api/bill-lifecycle",
-    tags=["bill-lifecycle"],
-    dependencies=[Depends(require_current_user)],
-)
-app.include_router(
-    business_dashboard_router,
-    prefix="/api/business-dashboard",
-    tags=["business-dashboard"],
-    dependencies=[Depends(require_current_user)],
-)
-app.include_router(
-    profit_analysis_router,
-    prefix="/api/profit-analysis",
-    tags=["profit-analysis"],
-    dependencies=[Depends(require_current_user)],
-)
-app.include_router(
-    operating_expense_router,
-    prefix="/api/operating-expenses",
-    tags=["operating-expenses"],
-    dependencies=[Depends(require_current_user)],
-)
-app.include_router(
-    invoice_router,
-    prefix="/api/invoices",
-    tags=["invoices"],
-    dependencies=[Depends(require_current_user)],
-)
-app.include_router(
-    payment_router,
-    prefix="/api/payments",
-    tags=["payments"],
-    dependencies=[Depends(require_current_user)],
-)
-app.include_router(
-    invoice_payment_link_router,
-    prefix="/api/invoice-payment-links",
-    tags=["invoice-payment-links"],
-    dependencies=[Depends(require_current_user)],
-)
-app.include_router(
-    exception_status_router,
-    prefix="/api/exception-statuses",
-    tags=["exception-statuses"],
-    dependencies=[Depends(require_current_user)],
-)
-app.include_router(
-    anomaly_router,
-    prefix="/api/anomaly-data",
-    tags=["anomaly-data"],
-    dependencies=[Depends(require_current_user)],
-)
-app.include_router(
-    operation_log_router,
-    prefix="/api/operation-logs",
-    tags=["operation-logs"],
-    dependencies=[Depends(require_current_user)],
-)
-app.include_router(
-    bank_transaction_router,
-    prefix="/api/bank-transactions",
-    tags=["bank-transactions"],
-    dependencies=[Depends(require_current_user)],
-)
-app.include_router(
-    contract_router,
-    prefix="/api/contracts",
-    tags=["contracts"],
-    dependencies=[Depends(require_current_user)],
-)
-app.include_router(
-    quicksdk_router,
-    prefix="/api/quicksdk",
-    tags=["quicksdk"],
-    dependencies=[Depends(require_current_user)],
-)
-app.include_router(
-    bill_attachment_router,
-    prefix="/api/bill-attachments",
-    tags=["bill-attachments"],
-    dependencies=[Depends(require_current_user)],
-)
-app.include_router(
-    bill_invoice_allocation_router,
-    prefix="/api/bill-invoice-allocations",
-    tags=["bill-invoice-allocations"],
-    dependencies=[Depends(require_current_user)],
-)
-app.include_router(
-    product_source_router,
-    prefix="/api/product-sources",
-    tags=["product-sources"],
-    dependencies=[Depends(require_current_user)],
-)
+app.include_router(reconciliation_router, prefix="/api/reconciliation", tags=["reconciliation"], dependencies=[Depends(require_current_user)])
+app.include_router(reconciliation_period_router, prefix="/api/reconciliation-periods", tags=["reconciliation-periods"], dependencies=[Depends(require_current_user)])
+app.include_router(channel_router, prefix="/api/channel-records", tags=["channel-records"], dependencies=[Depends(require_current_user)])
+app.include_router(bill_lifecycle_router, prefix="/api/bill-lifecycle", tags=["bill-lifecycle"], dependencies=[Depends(require_current_user)])
+app.include_router(business_dashboard_router, prefix="/api/business-dashboard", tags=["business-dashboard"], dependencies=[Depends(require_current_user)])
+app.include_router(profit_analysis_router, prefix="/api/profit-analysis", tags=["profit-analysis"], dependencies=[Depends(require_current_user)])
+app.include_router(operating_expense_router, prefix="/api/operating-expenses", tags=["operating-expenses"], dependencies=[Depends(require_current_user)])
+app.include_router(invoice_router, prefix="/api/invoices", tags=["invoices"], dependencies=[Depends(require_current_user)])
+app.include_router(payment_router, prefix="/api/payments", tags=["payments"], dependencies=[Depends(require_current_user)])
+app.include_router(invoice_payment_link_router, prefix="/api/invoice-payment-links", tags=["invoice-payment-links"], dependencies=[Depends(require_current_user)])
+app.include_router(exception_status_router, prefix="/api/exception-statuses", tags=["exception-statuses"], dependencies=[Depends(require_current_user)])
+app.include_router(anomaly_router, prefix="/api/anomaly-data", tags=["anomaly-data"], dependencies=[Depends(require_current_user)])
+app.include_router(operation_log_router, prefix="/api/operation-logs", tags=["operation-logs"], dependencies=[Depends(require_current_user)])
+app.include_router(bank_transaction_router, prefix="/api/bank-transactions", tags=["bank-transactions"], dependencies=[Depends(require_current_user)])
+app.include_router(bank_auto_reconciliation_router, prefix="/api/bank-auto-reconciliation", tags=["bank-auto-reconciliation"], dependencies=[Depends(require_current_user)])
+app.include_router(contract_router, prefix="/api/contracts", tags=["contracts"], dependencies=[Depends(require_current_user)])
+app.include_router(quicksdk_router, prefix="/api/quicksdk", tags=["quicksdk"], dependencies=[Depends(require_current_user)])
+app.include_router(bill_attachment_router, prefix="/api/bill-attachments", tags=["bill-attachments"], dependencies=[Depends(require_current_user)])
+app.include_router(bill_invoice_allocation_router, prefix="/api/bill-invoice-allocations", tags=["bill-invoice-allocations"], dependencies=[Depends(require_current_user)])
+app.include_router(product_source_router, prefix="/api/product-sources", tags=["product-sources"], dependencies=[Depends(require_current_user)])
 
 _upload_root = ensure_upload_root()
 app.mount("/uploads", StaticFiles(directory=str(_upload_root)), name="uploads")
@@ -306,10 +206,7 @@ async def handle_sqlalchemy_error(request: Request, exc: SQLAlchemyError) -> JSO
     logger.exception("SQLAlchemy error: %s", request.url.path)
     response = JSONResponse(
         status_code=500,
-        content={
-            "error": "database_error",
-            "message": "数据库查询失败，请联系系统管理员检查服务状态。",
-        },
+        content={"error": "database_error", "message": "数据库查询失败，请联系系统管理员检查服务状态。"},
         headers=_cors_headers_for_request(request, _cors_allowed),
     )
     _apply_common_response_headers(response, request.url.path)
