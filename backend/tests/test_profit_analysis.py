@@ -2,6 +2,9 @@ import unittest
 from collections import defaultdict
 from types import SimpleNamespace
 
+from fastapi import HTTPException
+
+from app.api.operating_expense import _validate_category, _validate_month
 from app.services.profit_analysis import (
     ProfitGameBucket,
     ProfitMonthBucket,
@@ -14,6 +17,14 @@ from app.services.profit_analysis import (
 
 
 class ProfitAnalysisTest(unittest.TestCase):
+    def test_expense_month_and_category_validation(self):
+        self.assertEqual(_validate_month("2026年8月"), "2026-08")
+        self.assertEqual(_validate_category("marketing"), "marketing")
+        with self.assertRaises(HTTPException):
+            _validate_month("not-a-month")
+        with self.assertRaises(HTTPException):
+            _validate_category("unknown-cost")
+
     def test_rd_multi_period_cost_is_split_by_line_month(self):
         records = [
             SimpleNamespace(
