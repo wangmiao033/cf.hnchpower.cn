@@ -12,6 +12,7 @@ from app.schemas.bill_lifecycle import (
     BillLifecycleRead,
     BillTransitionRequest,
 )
+from app.services import bill_lock_guard as _bill_lock_guard  # noqa: F401  注册 SQLAlchemy 锁单守卫
 from app.services.bill_lifecycle import (
     build_lifecycle_snapshot,
     load_bill,
@@ -43,8 +44,9 @@ def transition_bill_status(
     user: AuthUser = Depends(require_current_user),
 ) -> BillLifecycleRead:
     bill = load_bill(db, bill_type, bill_id)
-    return BillLifecycleRead.model_validate(
-        transition_bill(
+    db.info["allow_lifecycle_transition"] = True
+    try:
+        snapshot = transition_bill(
             db,
             bill_type,
             bill,
@@ -52,4 +54,6 @@ def transition_bill_status(
             payload.reason,
             user,
         )
-    )
+    finally:
+        db.info.pop("allow_lifecycle_transition", None)
+    return BillLifecycleRead.model_validate(snapshot)
