@@ -103,7 +103,12 @@ def list_operating_expenses(
         db.execute(select(func.coalesce(func.sum(filtered.c.amount), 0))).scalar_one() or 0
     )
     rows = (
-        db.execute(base.order_by(OperatingExpense.expense_month.desc(), OperatingExpense.created_at.desc()).limit(limit).offset(offset))
+        db.execute(
+            base.order_by(
+                OperatingExpense.expense_month.desc(),
+                OperatingExpense.created_at.desc(),
+            ).limit(limit).offset(offset)
+        )
         .scalars()
         .all()
     )
@@ -126,6 +131,7 @@ def create_operating_expense(
     data["vendor_name"] = _normalize_text(data.get("vendor_name"))
     data["remark"] = _normalize_text(data.get("remark"))
     data["expense_date"] = _normalize_text(data.get("expense_date"))
+    data["source"] = str(data.get("source") or "manual").strip() or "manual"
     row = OperatingExpense(id=str(uuid4()), **data)
     db.add(row)
     db.commit()
@@ -147,6 +153,13 @@ def update_operating_expense(
         data["expense_month"] = _validate_month(data.get("expense_month"))
     if "category" in data:
         data["category"] = _validate_category(data.get("category"))
+    if "amount" in data and data.get("amount") is None:
+        raise HTTPException(status_code=422, detail="费用金额不能为空")
+    if "source" in data:
+        source = str(data.get("source") or "").strip()
+        if not source:
+            raise HTTPException(status_code=422, detail="费用来源不能为空")
+        data["source"] = source
     for field in ("game_name", "vendor_name", "remark", "expense_date"):
         if field in data:
             data[field] = _normalize_text(data.get(field))
