@@ -25,7 +25,7 @@ class AdminResetPasswordRequest(BaseModel):
 class UserCreateRequest(BaseModel):
     email: str = Field(min_length=1, max_length=128)
     display_name: str | None = None
-    role: str = "user"
+    role: str = "operator"
     password: str | None = Field(default=None, min_length=6, max_length=128)
 
 
@@ -33,11 +33,19 @@ class UserStatusRequest(BaseModel):
     is_active: bool
 
 
+class UserAccessUpdateRequest(BaseModel):
+    role: str = Field(min_length=1, max_length=32)
+    permission_overrides: dict[str, str] = Field(default_factory=dict)
+
+
 class AuthMeResponse(BaseModel):
     id: str
     email: str
     display_name: str | None
     role: str
+    role_label: str = "运营"
+    permissions: list[str] = Field(default_factory=list)
+    permission_overrides: dict[str, str] = Field(default_factory=dict)
     is_active: bool
     last_login_at: datetime | None
 
@@ -49,6 +57,9 @@ class AuthUserRead(BaseModel):
     email: str
     display_name: str | None
     role: str
+    role_label: str = "运营"
+    permissions: list[str] = Field(default_factory=list)
+    permission_overrides: dict[str, str] = Field(default_factory=dict)
     is_active: bool
     failed_login_count: int
     locked_until: datetime | None

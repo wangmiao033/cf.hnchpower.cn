@@ -36,7 +36,7 @@ from app.api.quicksdk import router as quicksdk_router
 from app.api.product_source import router as product_source_router
 from app.core.migrations import run_schema_migrations
 from app.core.runtime_paths import ensure_upload_root
-from app.core.security import require_current_user
+from app.services.permissions import require_module_access
 
 logger = logging.getLogger(__name__)
 
@@ -174,28 +174,43 @@ async def enforce_origin_and_response_policy(request: Request, call_next):
     return response
 
 
+reconciliation_access = Depends(require_module_access("reconciliation.view", "reconciliation.manage"))
+analytics_access = Depends(require_module_access("analytics.view", "analytics.manage"))
+anomaly_access = Depends(require_module_access("anomalies.view", "anomalies.manage"))
+funds_access = Depends(require_module_access("funds.view", "funds.manage"))
+invoice_access = Depends(require_module_access("invoices.view", "invoices.manage"))
+contract_access = Depends(
+    require_module_access(
+        "contracts.view",
+        "contracts.manage",
+        path_overrides={"/api/contracts/partners": ("partners.view", "partners.manage")},
+    )
+)
+data_access = Depends(require_module_access("data.view", "data.manage"))
+audit_access = Depends(require_module_access("audit.view"))
+
 app.include_router(health_router)
 app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
-app.include_router(reconciliation_router, prefix="/api/reconciliation", tags=["reconciliation"], dependencies=[Depends(require_current_user)])
-app.include_router(reconciliation_period_router, prefix="/api/reconciliation-periods", tags=["reconciliation-periods"], dependencies=[Depends(require_current_user)])
-app.include_router(channel_router, prefix="/api/channel-records", tags=["channel-records"], dependencies=[Depends(require_current_user)])
-app.include_router(bill_lifecycle_router, prefix="/api/bill-lifecycle", tags=["bill-lifecycle"], dependencies=[Depends(require_current_user)])
-app.include_router(business_dashboard_router, prefix="/api/business-dashboard", tags=["business-dashboard"], dependencies=[Depends(require_current_user)])
-app.include_router(profit_analysis_router, prefix="/api/profit-analysis", tags=["profit-analysis"], dependencies=[Depends(require_current_user)])
-app.include_router(operating_expense_router, prefix="/api/operating-expenses", tags=["operating-expenses"], dependencies=[Depends(require_current_user)])
-app.include_router(invoice_router, prefix="/api/invoices", tags=["invoices"], dependencies=[Depends(require_current_user)])
-app.include_router(payment_router, prefix="/api/payments", tags=["payments"], dependencies=[Depends(require_current_user)])
-app.include_router(invoice_payment_link_router, prefix="/api/invoice-payment-links", tags=["invoice-payment-links"], dependencies=[Depends(require_current_user)])
-app.include_router(exception_status_router, prefix="/api/exception-statuses", tags=["exception-statuses"], dependencies=[Depends(require_current_user)])
-app.include_router(anomaly_router, prefix="/api/anomaly-data", tags=["anomaly-data"], dependencies=[Depends(require_current_user)])
-app.include_router(operation_log_router, prefix="/api/operation-logs", tags=["operation-logs"], dependencies=[Depends(require_current_user)])
-app.include_router(bank_transaction_router, prefix="/api/bank-transactions", tags=["bank-transactions"], dependencies=[Depends(require_current_user)])
-app.include_router(bank_auto_reconciliation_router, prefix="/api/bank-auto-reconciliation", tags=["bank-auto-reconciliation"], dependencies=[Depends(require_current_user)])
-app.include_router(contract_router, prefix="/api/contracts", tags=["contracts"], dependencies=[Depends(require_current_user)])
-app.include_router(quicksdk_router, prefix="/api/quicksdk", tags=["quicksdk"], dependencies=[Depends(require_current_user)])
-app.include_router(bill_attachment_router, prefix="/api/bill-attachments", tags=["bill-attachments"], dependencies=[Depends(require_current_user)])
-app.include_router(bill_invoice_allocation_router, prefix="/api/bill-invoice-allocations", tags=["bill-invoice-allocations"], dependencies=[Depends(require_current_user)])
-app.include_router(product_source_router, prefix="/api/product-sources", tags=["product-sources"], dependencies=[Depends(require_current_user)])
+app.include_router(reconciliation_router, prefix="/api/reconciliation", tags=["reconciliation"], dependencies=[reconciliation_access])
+app.include_router(reconciliation_period_router, prefix="/api/reconciliation-periods", tags=["reconciliation-periods"], dependencies=[reconciliation_access])
+app.include_router(channel_router, prefix="/api/channel-records", tags=["channel-records"], dependencies=[reconciliation_access])
+app.include_router(bill_lifecycle_router, prefix="/api/bill-lifecycle", tags=["bill-lifecycle"], dependencies=[reconciliation_access])
+app.include_router(business_dashboard_router, prefix="/api/business-dashboard", tags=["business-dashboard"], dependencies=[analytics_access])
+app.include_router(profit_analysis_router, prefix="/api/profit-analysis", tags=["profit-analysis"], dependencies=[analytics_access])
+app.include_router(operating_expense_router, prefix="/api/operating-expenses", tags=["operating-expenses"], dependencies=[analytics_access])
+app.include_router(invoice_router, prefix="/api/invoices", tags=["invoices"], dependencies=[invoice_access])
+app.include_router(payment_router, prefix="/api/payments", tags=["payments"], dependencies=[funds_access])
+app.include_router(invoice_payment_link_router, prefix="/api/invoice-payment-links", tags=["invoice-payment-links"], dependencies=[invoice_access])
+app.include_router(exception_status_router, prefix="/api/exception-statuses", tags=["exception-statuses"], dependencies=[anomaly_access])
+app.include_router(anomaly_router, prefix="/api/anomaly-data", tags=["anomaly-data"], dependencies=[anomaly_access])
+app.include_router(operation_log_router, prefix="/api/operation-logs", tags=["operation-logs"], dependencies=[audit_access])
+app.include_router(bank_transaction_router, prefix="/api/bank-transactions", tags=["bank-transactions"], dependencies=[funds_access])
+app.include_router(bank_auto_reconciliation_router, prefix="/api/bank-auto-reconciliation", tags=["bank-auto-reconciliation"], dependencies=[funds_access])
+app.include_router(contract_router, prefix="/api/contracts", tags=["contracts"], dependencies=[contract_access])
+app.include_router(quicksdk_router, prefix="/api/quicksdk", tags=["quicksdk"], dependencies=[data_access])
+app.include_router(bill_attachment_router, prefix="/api/bill-attachments", tags=["bill-attachments"], dependencies=[reconciliation_access])
+app.include_router(bill_invoice_allocation_router, prefix="/api/bill-invoice-allocations", tags=["bill-invoice-allocations"], dependencies=[invoice_access])
+app.include_router(product_source_router, prefix="/api/product-sources", tags=["product-sources"], dependencies=[data_access])
 
 _upload_root = ensure_upload_root()
 app.mount("/uploads", StaticFiles(directory=str(_upload_root)), name="uploads")

@@ -18,11 +18,13 @@ export function AuthProvider({ children }) {
     try {
       const me = await authMe()
       setUser(me)
+      return me
     } catch (err) {
       setUser(null)
       if (!(err instanceof ApiError) || err.status !== 401) {
         console.error(err)
       }
+      return null
     } finally {
       setLoading(false)
     }
@@ -63,18 +65,25 @@ export function AuthProvider({ children }) {
     return changeMyPassword(currentPassword, newPassword)
   }, [])
 
+  const permissionSet = useMemo(() => new Set(user?.permissions || []), [user?.permissions])
+  const can = useCallback((permission) => {
+    if (!permission || user?.role === 'admin') return true
+    return permissionSet.has(permission)
+  }, [permissionSet, user?.role])
+
   const value = useMemo(
     () => ({
       user,
       loading,
       isAuthenticated: !!user,
       isAdmin: user?.role === 'admin',
+      can,
       refreshMe,
       signInWithPassword,
       signOut,
       updateMyPassword
     }),
-    [user, loading, refreshMe, signInWithPassword, signOut, updateMyPassword]
+    [user, loading, can, refreshMe, signInWithPassword, signOut, updateMyPassword]
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

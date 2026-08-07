@@ -1,10 +1,15 @@
 import { apiGet, apiPost, apiPut } from '@/lib/api/client'
 
+export type PermissionEffect = 'allow' | 'deny'
+
 export type AuthMe = {
   id: string
   email: string
   display_name?: string | null
-  role: 'admin' | 'user' | string
+  role: string
+  role_label?: string
+  permissions?: string[]
+  permission_overrides?: Record<string, PermissionEffect>
   is_active: boolean
   last_login_at?: string | null
 }
@@ -14,6 +19,9 @@ export type AuthUser = {
   email: string
   display_name?: string | null
   role: string
+  role_label?: string
+  permissions?: string[]
+  permission_overrides?: Record<string, PermissionEffect>
   is_active: boolean
   failed_login_count: number
   locked_until?: string | null
@@ -22,8 +30,17 @@ export type AuthUser = {
   updated_at: string
 }
 
+export type PermissionCatalog = {
+  roles: Array<{ role: string; label: string; permissions: string[] }>
+  permissions: Array<{
+    code: string
+    group: string
+    label: string
+    description: string
+  }>
+}
+
 export async function authMe(): Promise<AuthMe> {
-  // 避免登录态探测无限等待，超时后交给上层兜底处理（回到登录页）
   return apiGet<AuthMe>('/api/auth/me', { timeoutMs: 8000 })
 }
 
@@ -40,6 +57,10 @@ export async function changeMyPassword(currentPassword: string, newPassword: str
     current_password: currentPassword,
     new_password: newPassword
   })
+}
+
+export async function getPermissionCatalog(): Promise<PermissionCatalog> {
+  return apiGet('/api/auth/permissions')
 }
 
 export async function listAuthUsers(): Promise<{ items: AuthUser[]; total: number }> {
@@ -62,6 +83,13 @@ export async function createAuthUser(input: {
 
 export async function setAuthUserStatus(userId: string, isActive: boolean): Promise<AuthUser> {
   return apiPut(`/api/auth/users/${encodeURIComponent(userId)}/status`, { is_active: isActive })
+}
+
+export async function updateUserAccess(
+  userId: string,
+  input: { role: string; permission_overrides: Record<string, PermissionEffect> }
+): Promise<AuthUser> {
+  return apiPut(`/api/auth/users/${encodeURIComponent(userId)}/access`, input)
 }
 
 export async function resetAuthUserPassword(userId: string, newPassword: string): Promise<{ ok: boolean; message: string }> {
