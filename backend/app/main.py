@@ -21,6 +21,7 @@ from app.api.auth import router as auth_router
 from app.api.invoice import router as invoice_router
 from app.api.exception_status import router as exception_status_router
 from app.api.invoice_payment_link import router as invoice_payment_link_router
+from app.api.operation_log import router as operation_log_router
 from app.api.payment import router as payment_router
 from app.api.bank_transaction import router as bank_transaction_router
 from app.api.reconciliation import router as reconciliation_router
@@ -225,6 +226,12 @@ app.include_router(
     anomaly_router,
     prefix="/api/anomaly-data",
     tags=["anomaly-data"],
+    dependencies=[Depends(require_current_user)],
+)
+app.include_router(
+    operation_log_router,
+    prefix="/api/operation-logs",
+    tags=["operation-logs"],
     dependencies=[Depends(require_current_user)],
 )
 app.include_router(
