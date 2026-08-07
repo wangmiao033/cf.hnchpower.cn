@@ -1,0 +1,130 @@
+.bill360-operation-note {
+  margin: 0 18px 16px;
+  padding: 10px 12px;
+  border-radius: 9px;
+  background: #f7f9fc;
+  color: #7a8798;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.bill360-timeline {
+  position: relative;
+  padding: 4px 18px 22px 30px;
+}
+
+.bill360-timeline::before {
+  content: '';
+  position: absolute;
+  left: 44px;
+  top: 14px;
+  bottom: 30px;
+  width: 1px;
+  background: #e4e9f0;
+}
+
+.bill360-timeline-item {
+  position: relative;
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  gap: 14px;
+  padding: 11px 0;
+}
+
+.bill360-timeline-mark {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 3px solid #fff;
+  border-radius: 50%;
+  background: #edf2f8;
+  color: #526176;
+  font-size: 10px;
+  font-weight: 900;
+  box-shadow: 0 0 0 1px #dce3ec;
+}
+
+.bill360-timeline-mark.is-create { background: #eaf8f1; color: #13714c; box-shadow: 0 0 0 1px #cae9d8; }
+.bill360-timeline-mark.is-update { background: #edf4ff; color: #315e9e; box-shadow: 0 0 0 1px #d4e1f4; }
+.bill360-timeline-mark.is-status { background: #f1edff; color: #674fb0; box-shadow: 0 0 0 1px #ddd5f5; }
+.bill360-timeline-mark.is-money { background: #fff5df; color: #966619; box-shadow: 0 0 0 1px #f0dfb8; }
+.bill360-timeline-mark.is-invoice { background: #eaf7fa; color: #247080; box-shadow: 0 0 0 1px #cce8ed; }
+.bill360-timeline-mark.is-delete { background: #fff0f0; color: #b23e3e; box-shadow: 0 0 0 1px #efd0d0; }
+
+.bill360-timeline-card {
+  min-width: 0;
+  padding: 13px 14px;
+  border: 1px solid #e6eaf0;
+  border-radius: 11px;
+  background: #fbfcfe;
+}
+
+.bill360-timeline-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.bill360-timeline-head > div { min-width: 0; }
+.bill360-timeline-head strong { display: block; color: #2e3a4e; font-size: 13px; }
+.bill360-timeline-head span { display: block; margin-top: 4px; color: #8793a4; font-size: 10px; }
+.bill360-timeline-head time { flex: 0 0 auto; color: #8a96a7; font-size: 10px; white-space: nowrap; }
+
+.bill360-change-list {
+  display: grid;
+  gap: 6px;
+  margin-top: 11px;
+  padding-top: 10px;
+  border-top: 1px dashed #e6eaf0;
+}
+
+.bill360-change-row {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: 12px;
+  align-items: baseline;
+  font-size: 11px;
+}
+
+.bill360-change-row > span { color: #7d899a; }
+.bill360-change-values {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  color: #465367;
+}
+
+.bill360-change-values del,
+.bill360-change-values ins {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-decoration: none;
+}
+
+.bill360-change-values del { color: #9a5a5a; }
+.bill360-change-values ins { color: #2d6b50; font-weight: 700; }
+.bill360-change-values b { color: #a4adba; font-weight: 500; }
+.bill360-change-more { margin-top: 8px; color: #8c97a7; font-size: 10px; }
+
+.bill360-history-empty {
+  padding: 44px 20px;
+  text-align: center;
+  color: #8a96a7;
+  font-size: 12px;
+}
+
+@media (max-width: 640px) {
+  .bill360-timeline { padding-left: 14px; }
+  .bill360-timeline::before { left: 28px; }
+  .bill360-timeline-item { grid-template-columns: 30px minmax(0, 1fr); gap: 10px; }
+  .bill360-change-row { grid-template-columns: 92px minmax(0, 1fr); }
+  .bill360-timeline-head { display: block; }
+  .bill360-timeline-head time { margin-top: 5px; }
+}
