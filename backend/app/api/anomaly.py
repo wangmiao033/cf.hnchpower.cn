@@ -1,4 +1,4 @@
-"""异常中心所需的轻量聚合读取接口。"""
+"""异常中心所需的轻量聚合与智能风险分析接口。"""
 
 from __future__ import annotations
 
@@ -14,6 +14,8 @@ from app.models.channel import ChannelRecord
 from app.models.invoice import InvoiceRecord
 from app.models.reconciliation import ReconciliationRecord
 from app.schemas.anomaly import BillInvoiceOverview
+from app.schemas.anomaly_ai import AnomalyAiAnalysisRequest, AnomalyAiAnalysisResponse
+from app.services.anomaly_ai import analyze_with_database
 
 router = APIRouter()
 ACTIVE_STATUSES = ("suggested", "confirmed")
@@ -95,33 +97,45 @@ def list_bill_invoice_overviews(
             )
         )
 
-    allocation_rows = db.execute(
-        select(BillInvoiceAllocation).where(
-            or_(*predicates),
-            BillInvoiceAllocation.status.in_(ACTIVE_STATUSES),
-        )
-    ).scalars().all() if predicates else []
+    allocation_rows = (
+        db.execute(
+            select(BillInvoiceAllocation).where(
+                or_(*predicates),
+                BillInvoiceAllocation.status.in_(ACTIVE_STATUSES),
+            )
+        ).scalars().all()
+        if predicates
+        else []
+    )
 
     invoice_ids = list({row.invoice_id for row in allocation_rows})
-    invoices = {
-        str(invoice.id): invoice
-        for invoice in db.execute(
-            select(InvoiceRecord).where(InvoiceRecord.id.in_(invoice_ids))
-        ).scalars().all()
-    } if invoice_ids else {}
+    invoices = (
+        {
+            str(invoice.id): invoice
+            for invoice in db.execute(
+                select(InvoiceRecord).where(InvoiceRecord.id.in_(invoice_ids))
+            ).scalars().all()
+        }
+        if invoice_ids
+        else {}
+    )
 
-    red_totals = {
-        str(original_id): float(total or 0)
-        for original_id, total in db.execute(
-            select(
-                InvoiceRecord.original_invoice_id,
-                func.coalesce(func.sum(func.abs(InvoiceRecord.amount_with_tax)), 0),
-            ).where(
-                InvoiceRecord.original_invoice_id.in_(invoice_ids),
-                InvoiceRecord.tax_status == "red",
-            ).group_by(InvoiceRecord.original_invoice_id)
-        ).all()
-    } if invoice_ids else {}
+    red_totals = (
+        {
+            str(original_id): float(total or 0)
+            for original_id, total in db.execute(
+                select(
+                    InvoiceRecord.original_invoice_id,
+                    func.coalesce(func.sum(func.abs(InvoiceRecord.amount_with_tax)), 0),
+                ).where(
+                    InvoiceRecord.original_invoice_id.in_(invoice_ids),
+                    InvoiceRecord.tax_status == "red",
+                ).group_by(InvoiceRecord.original_invoice_id)
+            ).all()
+        }
+        if invoice_ids
+        else {}
+    )
 
     allocated_by_bill: dict[tuple[str, str], float] = defaultdict(float)
     count_by_bill: dict[tuple[str, str], int] = defaultdict(int)
@@ -156,3 +170,14 @@ def list_bill_invoice_overviews(
             )
         )
     return items
+
+
+@router.post("/ai-analysis", response_model=AnomalyAiAnalysisResponse)
+def analyze_anomaly_risks(
+    payload: AnomalyAiAnalysisRequest,
+    db: Session = Depends(get_db),
+) -> AnomalyAiAnalysisResponse:
+    """根据当前巡检异常 + 银行核销 + 利润信号生成可解释风险分析。"""
+    return AnomalyAiAnalysisResponse.model_validate(
+        analyze_with_database(db, payload.items)
+    )

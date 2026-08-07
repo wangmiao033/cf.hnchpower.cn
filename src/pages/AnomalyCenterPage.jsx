@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAppState } from '@/app/AppStateContext.jsx'
 import { VIEWS } from '@/app/routes.js'
 import PageContainer from '@/components/layout/PageContainer.jsx'
+import AnomalyAiInsightPanel from '@/components/anomalies/AnomalyAiInsightPanel.jsx'
 import {
   ANOMALY_CATEGORY_LABELS,
   buildReconciliationAnomalies,
@@ -191,9 +192,9 @@ export default function AnomalyCenterPage() {
     <PageContainer hideHeader className="anomaly-center-page">
       <section className="anomaly-head">
         <div>
-          <span>工作台 · 自动巡检</span>
+          <span>工作台 · 自动巡检 + 智能风险分析</span>
           <h1>异常中心</h1>
-          <p>自动汇总收付款、发票、合同、QuickSDK 数据和重复编号风险；处理结果会保留，不重复干扰。</p>
+          <p>自动汇总收付款、发票、合同、QuickSDK、银行核销和经营风险；先巡检，再按风险优先级给出可解释诊断。</p>
         </div>
         <button type="button" onClick={loadSnapshot} disabled={loading}>
           {loading ? '巡检中…' : '重新巡检'}
@@ -217,6 +218,8 @@ export default function AnomalyCenterPage() {
           <span>已解决</span><strong>{summary.resolved}</strong><small>历史处理</small>
         </button>
       </section>
+
+      <AnomalyAiInsightPanel anomalies={anomalies} sourceLoading={loading} />
 
       <section className="anomaly-source-state" aria-label="巡检数据源状态">
         <span>账单 {rdRecords.length + channelRecords.length} 笔</span>
@@ -279,7 +282,7 @@ export default function AnomalyCenterPage() {
             <h2>巡检结果</h2>
             <p>当前筛选显示 {visible.length} 条，共识别 {anomalies.length} 条。</p>
           </div>
-          <span>{loading ? '正在更新' : `最近巡检完成`}</span>
+          <span>{loading ? '正在更新' : '最近巡检完成'}</span>
         </div>
 
         <div className="anomaly-table-wrap">
