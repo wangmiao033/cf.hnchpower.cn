@@ -122,12 +122,14 @@ function App() {
     showNotification(message, type, 3000)
   }, [])
 
+  const hasReconciliationAccess = isAuthenticated && !loading && can('reconciliation.view')
+  const hasInvoiceAccess = isAuthenticated && !loading && can('invoices.view')
   const settings = useSettingsStore({ showToast, enabled: isAuthenticated && !loading })
-  const recon = useReconciliationStore(settings, showToast, { enabled: isAuthenticated && !loading })
-  const invoice = useInvoiceStore({ showToast, enabled: isAuthenticated && !loading })
+  const recon = useReconciliationStore(settings, showToast, { enabled: hasReconciliationAccess })
+  const invoice = useInvoiceStore({ showToast, enabled: hasInvoiceAccess })
 
   useEffect(() => {
-    if (!isAuthenticated || loading) return undefined
+    if (!hasReconciliationAccess) return undefined
     let cancelled = false
     const tasks = [
       ...(recon.records || []).slice(0, 2).map((row) => async () => {
@@ -151,7 +153,7 @@ function App() {
         }
       })()
     })
-  }, [isAuthenticated, loading, recon.records, recon.channelRecords])
+  }, [hasReconciliationAccess, recon.records, recon.channelRecords])
 
   useEffect(() => {
     if (typeof window !== 'undefined') window.localStorage.setItem(OPEN_TABS_STORAGE_KEY, JSON.stringify(openTabs))
