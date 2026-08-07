@@ -14,6 +14,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.api.anomaly import router as anomaly_router
 from app.api.bill_lifecycle import router as bill_lifecycle_router
+from app.api.business_dashboard import router as business_dashboard_router
 from app.api.channel import router as channel_router
 from app.api.bill_attachment import router as bill_attachment_router
 from app.api.bill_invoice_allocation import router as bill_invoice_allocation_router
@@ -201,6 +202,12 @@ app.include_router(
     bill_lifecycle_router,
     prefix="/api/bill-lifecycle",
     tags=["bill-lifecycle"],
+    dependencies=[Depends(require_current_user)],
+)
+app.include_router(
+    business_dashboard_router,
+    prefix="/api/business-dashboard",
+    tags=["business-dashboard"],
     dependencies=[Depends(require_current_user)],
 )
 app.include_router(
