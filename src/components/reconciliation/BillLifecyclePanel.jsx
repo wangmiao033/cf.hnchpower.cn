@@ -66,7 +66,9 @@ export default function BillLifecyclePanel({
     return () => {
       cancelled = true
     }
-  }, [billId, billType, onLifecycleChange])
+    // onLifecycleChange intentionally excluded: lifecycle reloads only when the bill identity changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [billId, billType])
 
   const currentStatus = lifecycle?.status || recordStatus || 'pending'
   const currentIndex = useMemo(() => stepIndex(currentStatus), [currentStatus])
