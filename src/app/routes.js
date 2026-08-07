@@ -1,5 +1,6 @@
 /**
  * Core routes for the rebuilt reconciliation console.
+ * Production release marker: V2.2-1 monthly business dashboard.
  */
 
 export const VIEWS = {
