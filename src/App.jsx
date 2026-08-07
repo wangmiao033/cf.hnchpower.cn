@@ -34,6 +34,7 @@ import '@/styles/admin-polish.css'
 
 const PAGE_LOADERS = Object.freeze({
   anomalies: () => import('./pages/AnomalyCenterPage.jsx'),
+  businessDashboard: () => import('./pages/MonthlyBusinessDashboardPage.jsx'),
   bill360: () => import('./components/reconciliation/Bill360Drawer.jsx'),
   coreReconciliation: () => import('./pages/CoreReconciliationPage.jsx'),
   reconciliationProgress: () => import('./pages/RdReconciliationProgressPage.jsx'),
@@ -54,6 +55,7 @@ const PAGE_LOADERS = Object.freeze({
 })
 
 const AnomalyCenterPage = lazy(PAGE_LOADERS.anomalies)
+const MonthlyBusinessDashboardPage = lazy(PAGE_LOADERS.businessDashboard)
 const Bill360Drawer = lazy(PAGE_LOADERS.bill360)
 const CoreReconciliationPage = lazy(PAGE_LOADERS.coreReconciliation)
 const RdReconciliationProgressPage = lazy(PAGE_LOADERS.reconciliationProgress)
@@ -344,6 +346,8 @@ function App() {
     switch (activeView) {
       case VIEWS.ANOMALIES:
         return <AnomalyCenterPage />
+      case VIEWS.BUSINESS_DASHBOARD:
+        return <MonthlyBusinessDashboardPage />
       case VIEWS.RECON_RD:
         return <CoreReconciliationPage />
       case VIEWS.RECON_PROGRESS:
