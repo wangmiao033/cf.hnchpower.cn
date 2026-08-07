@@ -1,13 +1,7 @@
 import React, { useMemo, useRef, useState } from 'react'
-import * as XLSX from 'xlsx'
 import { useAppState } from '@/app/AppStateContext.jsx'
 import PageContainer from '@/components/layout/PageContainer.jsx'
 import { VIEWS } from '@/app/routes.js'
-import {
-  buildSettlementWorkbookFromSelected,
-  resolveRdRecordsForSettlementExport,
-  writeSettlementWorkbookToFile
-} from '@/domain/export/settlementConfirmationExport.js'
 import {
   buildRdSettlementPeriodOptions,
   getRdRecordSettlementPeriods,
@@ -173,6 +167,11 @@ function CoreReconciliationPage() {
     }
     setIsExporting(true)
     try {
+      const {
+        buildSettlementWorkbookFromSelected,
+        resolveRdRecordsForSettlementExport,
+        writeSettlementWorkbookToFile
+      } = await import('@/domain/export/settlementConfirmationExport.js')
       const fullRecords = await resolveRdRecordsForSettlementExport(
         target,
         async (id) => apiRowToFrontend(await getReconciliationRecord(id))
@@ -195,11 +194,12 @@ function CoreReconciliationPage() {
     event.target.value = ''
     if (!file) return
     try {
+      const XLSX = await import('xlsx')
       const data = await file.arrayBuffer()
       const workbook = XLSX.read(data, { type: 'array' })
       const sheet = workbook.Sheets[workbook.SheetNames[0]]
-      const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' })
-      const records = rows.map(mapRdImportRow).filter(Boolean)
+      const importedRows = XLSX.utils.sheet_to_json(sheet, { defval: '' })
+      const records = importedRows.map(mapRdImportRow).filter(Boolean)
       if (records.length === 0) {
         showToast('没有识别到可导入的研发对账数据', 'error')
         return
