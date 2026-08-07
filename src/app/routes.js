@@ -97,7 +97,7 @@ const VIEW_TITLES = {
 
 const VIEW_DESCRIPTIONS = {
   [VIEWS.DASHBOARD]: '研发对账、渠道对账、合同、数据库和客户资料统一管理。',
-  [VIEWS.BUSINESS_DASHBOARD]: '按月查看渠道应收、研发应付、现金收支、结算贡献、产品排行与账单完成度。',
+  [VIEWS.BUSINESS_DASHBOARD]: '按月区分权责结算与实际现金口径，查看渠道应收、研发应付、现金收支、结算贡献、产品排行与账单完成度。',
   [VIEWS.ANOMALIES]: '自动巡检账单、收付款、发票、合同和流水数据中的异常与待处理风险。',
   [VIEWS.RECON_RD]: '保留现有研发账单计算、录入、筛选、导入和导出逻辑。',
   [VIEWS.RECON_PROGRESS]: '集中查看游戏账单与渠道流水的核对、结算和待处理明细。',
