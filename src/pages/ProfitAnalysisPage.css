@@ -1,0 +1,371 @@
+.profit-analysis-page {
+  --profit-ink: #1f2a3d;
+  --profit-muted: #7c899b;
+  --profit-line: #e5eaf1;
+  --profit-panel: #ffffff;
+  --profit-soft: #f7f9fc;
+  padding-bottom: 44px;
+  background: #f4f6f9;
+}
+
+.profit-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 28px 30px 22px;
+}
+
+.profit-kicker,
+.profit-card-head > div > span {
+  color: #8c98a9;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .13em;
+}
+
+.profit-head h1 {
+  margin: 5px 0 5px;
+  color: var(--profit-ink);
+  font-size: 28px;
+  letter-spacing: -.03em;
+}
+
+.profit-head p,
+.profit-card-head p {
+  margin: 0;
+  color: var(--profit-muted);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.profit-head-actions {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.profit-head-actions label {
+  display: grid;
+  gap: 5px;
+}
+
+.profit-head-actions label > span {
+  color: #8793a4;
+  font-size: 10px;
+}
+
+.profit-head-actions select,
+.profit-head-actions button,
+.profit-card-head > button,
+.profit-row-actions button,
+.profit-editor input,
+.profit-editor select,
+.profit-editor textarea,
+.profit-editor footer button {
+  border: 1px solid #dce3ec;
+  border-radius: 8px;
+  background: #fff;
+  color: #425066;
+  font: inherit;
+}
+
+.profit-head-actions select,
+.profit-head-actions button,
+.profit-card-head > button {
+  height: 36px;
+  padding: 0 13px;
+  font-size: 11px;
+}
+
+.profit-head-actions button,
+.profit-card-head > button,
+.profit-row-actions button,
+.profit-editor footer button {
+  cursor: pointer;
+}
+
+.profit-head-actions .is-primary,
+.profit-editor footer .is-primary {
+  border-color: #2d5f9f;
+  background: #2d5f9f;
+  color: #fff;
+}
+
+.profit-error {
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+  margin: 0 30px 18px;
+  padding: 22px;
+  border: 1px solid #f0d0d0;
+  border-radius: 12px;
+  background: #fff8f8;
+  color: #934444;
+}
+
+.profit-error button {
+  padding: 7px 12px;
+  border: 1px solid #e7c4c4;
+  border-radius: 7px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.profit-hero {
+  display: grid;
+  grid-template-columns: minmax(240px, .8fr) minmax(520px, 1.8fr);
+  gap: 26px;
+  margin: 0 30px 16px;
+  padding: 24px 26px;
+  border: 1px solid #dfe5ed;
+  border-radius: 15px;
+  background: linear-gradient(135deg, #fff 0%, #f7f9fd 100%);
+  box-shadow: 0 7px 24px rgba(31, 49, 78, .05);
+}
+
+.profit-hero.is-profit { border-top: 3px solid #3d8064; }
+.profit-hero.is-loss { border-top: 3px solid #b55757; }
+
+.profit-hero-main > span {
+  color: #7f8b9c;
+  font-size: 11px;
+}
+
+.profit-hero-main > strong {
+  display: block;
+  margin-top: 7px;
+  color: #263448;
+  font-size: clamp(30px, 3vw, 43px);
+  letter-spacing: -.045em;
+}
+
+.profit-hero.is-loss .profit-hero-main > strong { color: #a64242; }
+.profit-hero-main p { margin: 6px 0 0; color: #7f8b9c; font-size: 11px; }
+
+.profit-bridge {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(90px, 1fr) 22px) minmax(110px, 1.15fr);
+  align-items: center;
+  gap: 3px;
+}
+
+.profit-bridge > div {
+  min-width: 0;
+  padding: 13px 11px;
+  border-radius: 9px;
+  background: #fff;
+  box-shadow: inset 0 0 0 1px #e6eaf0;
+}
+
+.profit-bridge > div span { display: block; color: #8b96a6; font-size: 9px; }
+.profit-bridge > div strong { display: block; margin-top: 5px; overflow: hidden; color: #344258; font-size: 12px; text-overflow: ellipsis; }
+.profit-bridge > i { color: #9ba6b5; font-style: normal; text-align: center; }
+.profit-bridge > .is-result { background: #edf6f2; box-shadow: inset 0 0 0 1px #d5e8df; }
+.profit-hero.is-loss .profit-bridge > .is-result { background: #fff1f1; box-shadow: inset 0 0 0 1px #efd7d7; }
+
+.profit-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0 30px 16px;
+}
+
+.profit-metric {
+  min-width: 0;
+  padding: 17px 18px;
+  border: 1px solid var(--profit-line);
+  border-radius: 12px;
+  background: #fff;
+  text-align: left;
+  box-shadow: 0 3px 12px rgba(32, 49, 76, .035);
+}
+
+button.profit-metric { font: inherit; }
+.profit-metric.is-clickable { cursor: pointer; transition: transform .15s ease, box-shadow .15s ease; }
+.profit-metric.is-clickable:hover { transform: translateY(-1px); box-shadow: 0 7px 18px rgba(32, 49, 76, .07); }
+.profit-metric > span { color: #8490a1; font-size: 10px; }
+.profit-metric > strong { display: block; margin-top: 6px; color: #2d3a4f; font-size: 20px; letter-spacing: -.025em; }
+.profit-metric > small { display: block; margin-top: 6px; color: #919bab; font-size: 9px; line-height: 1.5; }
+.profit-metric.is-revenue { border-top: 2px solid #4d799f; }
+.profit-metric.is-rd { border-top: 2px solid #6f6aa5; }
+.profit-metric.is-server { border-top: 2px solid #8d7c64; }
+.profit-metric.is-expense { border-top: 2px solid #a66e58; }
+
+.profit-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(300px, .8fr);
+  gap: 16px;
+  margin: 0 30px 16px;
+}
+
+.profit-card {
+  min-width: 0;
+  border: 1px solid var(--profit-line);
+  border-radius: 13px;
+  background: var(--profit-panel);
+  box-shadow: 0 4px 16px rgba(31, 49, 78, .035);
+}
+
+.profit-card--games,
+.profit-card--ledger { margin: 0 30px 16px; }
+
+.profit-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid #edf0f4;
+}
+
+.profit-card-head h2 { margin: 3px 0 3px; color: #2c394d; font-size: 15px; }
+
+.profit-legend { display: flex; gap: 12px; color: #7e8999; font-size: 9px; }
+.profit-legend span::before { content: ''; display: inline-block; width: 8px; height: 8px; margin-right: 5px; border-radius: 2px; vertical-align: -1px; }
+.profit-legend .is-revenue::before { background: #9bb1c7; }
+.profit-legend .is-profit::before { background: #589077; }
+
+.profit-trend {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(20px, 1fr));
+  align-items: end;
+  gap: 5px;
+  height: 185px;
+  padding: 22px 20px 10px;
+}
+
+.profit-trend-col { display: grid; grid-template-rows: 1fr auto; height: 100%; gap: 6px; min-width: 0; }
+.profit-trend-bars { display: flex; align-items: end; justify-content: center; gap: 2px; min-height: 0; }
+.profit-trend-bars i { display: block; width: min(11px, 43%); min-height: 3px; border-radius: 3px 3px 1px 1px; }
+.profit-trend-bars .is-revenue { background: #a8b9cb; }
+.profit-trend-bars .is-profit { background: #5d927b; }
+.profit-trend-bars .is-profit.is-loss { background: #c77676; }
+.profit-trend-col > span { color: #9aa4b2; font-size: 8px; text-align: center; white-space: nowrap; }
+
+.profit-table-wrap { overflow: auto; }
+.profit-table-wrap table { width: 100%; border-collapse: collapse; min-width: 720px; }
+.profit-table-wrap th,
+.profit-table-wrap td { padding: 10px 12px; border-bottom: 1px solid #eef1f5; color: #536075; font-size: 10px; text-align: right; white-space: nowrap; }
+.profit-table-wrap th { position: sticky; top: 0; z-index: 1; background: #fafbfc; color: #8994a4; font-size: 9px; font-weight: 700; }
+.profit-table-wrap th:nth-child(1),
+.profit-table-wrap td:nth-child(1),
+.profit-card--games .profit-table-wrap th:nth-child(2),
+.profit-card--games .profit-table-wrap td:nth-child(2),
+.profit-card--ledger .profit-table-wrap th,
+.profit-card--ledger .profit-table-wrap td { text-align: left; }
+.profit-table-wrap tr.is-current td { background: #f7faff; }
+.profit-table-wrap .is-positive { color: #2f7657; }
+.profit-table-wrap .is-negative { color: #aa4f4f; }
+.profit-empty-cell { padding: 34px !important; color: #929cab !important; text-align: center !important; }
+
+.profit-category-list { display: grid; gap: 14px; padding: 18px 20px; }
+.profit-category-list > div > div:first-child { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: baseline; }
+.profit-category-list span { color: #667286; font-size: 10px; }
+.profit-category-list strong { color: #344155; font-size: 11px; }
+.profit-category-list small { color: #98a2b0; font-size: 9px; }
+.profit-category-track { height: 5px; margin-top: 6px; overflow: hidden; border-radius: 9px; background: #eef1f5; }
+.profit-category-track i { display: block; height: 100%; border-radius: inherit; background: #718baa; }
+.profit-empty { padding: 28px 0; color: #929cab; font-size: 11px; text-align: center; }
+.profit-shared-summary { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid #edf0f4; }
+.profit-shared-summary > div { padding: 15px 18px; }
+.profit-shared-summary > div + div { border-left: 1px solid #edf0f4; }
+.profit-shared-summary span { display: block; color: #8994a4; font-size: 9px; }
+.profit-shared-summary strong { display: block; margin-top: 5px; color: #344155; font-size: 13px; }
+
+.profit-card--games .profit-table-wrap table { min-width: 900px; }
+.profit-card--ledger .profit-table-wrap table { min-width: 920px; }
+.profit-remark { max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+.profit-shared-tag { display: inline-flex; padding: 3px 7px; border-radius: 99px; background: #f0f2f5; color: #707d8f; font-size: 9px; }
+.profit-row-actions { display: flex; gap: 5px; }
+.profit-row-actions button { padding: 5px 8px; font-size: 9px; }
+.profit-row-actions .is-danger { color: #a44d4d; }
+
+.profit-methodology {
+  display: grid;
+  grid-template-columns: 100px 1fr;
+  gap: 18px;
+  margin: 0 30px;
+  padding: 18px 20px;
+  border: 1px solid #e3e8ef;
+  border-radius: 11px;
+  background: #f9fafc;
+}
+.profit-methodology > strong { color: #536075; font-size: 11px; }
+.profit-methodology p { margin: 0 0 5px; color: #8792a2; font-size: 10px; line-height: 1.65; }
+
+.profit-editor-backdrop {
+  position: fixed;
+  z-index: 1200;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(22, 31, 45, .38);
+  backdrop-filter: blur(2px);
+}
+
+.profit-editor {
+  width: min(680px, 100%);
+  overflow: hidden;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 28px 70px rgba(25, 35, 52, .25);
+}
+
+.profit-editor > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 20px 22px 15px;
+  border-bottom: 1px solid #e9edf2;
+}
+.profit-editor > header span { color: #8b96a6; font-size: 9px; }
+.profit-editor > header h2 { margin: 3px 0 0; color: #2d394c; font-size: 17px; }
+.profit-editor > header > button { border: 0; background: none; color: #8b96a6; font-size: 24px; cursor: pointer; }
+.profit-editor form { padding: 20px 22px 0; }
+.profit-editor-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.profit-editor-grid label { display: grid; gap: 6px; }
+.profit-editor-grid label > span { color: #647185; font-size: 10px; font-weight: 650; }
+.profit-editor-grid .is-wide { grid-column: 1 / -1; }
+.profit-editor input,
+.profit-editor select,
+.profit-editor textarea { width: 100%; box-sizing: border-box; padding: 9px 10px; outline: none; font-size: 11px; }
+.profit-editor input,
+.profit-editor select { height: 38px; }
+.profit-editor textarea { resize: vertical; }
+.profit-editor input:focus,
+.profit-editor select:focus,
+.profit-editor textarea:focus { border-color: #8ba6c5; box-shadow: 0 0 0 3px rgba(91, 126, 165, .09); }
+.profit-editor-note { margin-top: 14px; padding: 10px 12px; border-radius: 8px; background: #f6f8fb; color: #7d899a; font-size: 9px; line-height: 1.6; }
+.profit-editor footer { display: flex; justify-content: flex-end; gap: 8px; margin: 20px -22px 0; padding: 14px 22px; border-top: 1px solid #e9edf2; background: #fafbfc; }
+.profit-editor footer button { min-width: 86px; height: 34px; font-size: 10px; }
+
+@media (max-width: 1180px) {
+  .profit-hero { grid-template-columns: 1fr; }
+  .profit-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 900px) {
+  .profit-head { align-items: flex-start; flex-direction: column; }
+  .profit-metrics { grid-template-columns: 1fr 1fr; }
+  .profit-bridge { grid-template-columns: 1fr; gap: 5px; }
+  .profit-bridge > i { transform: rotate(90deg); }
+}
+
+@media (max-width: 640px) {
+  .profit-head,
+  .profit-hero,
+  .profit-metrics,
+  .profit-grid,
+  .profit-card--games,
+  .profit-card--ledger,
+  .profit-methodology { margin-left: 14px; margin-right: 14px; }
+  .profit-head { padding-left: 0; padding-right: 0; }
+  .profit-metrics { grid-template-columns: 1fr; }
+  .profit-trend { overflow-x: auto; grid-template-columns: repeat(12, 34px); }
+  .profit-methodology { grid-template-columns: 1fr; }
+  .profit-editor-grid { grid-template-columns: 1fr; }
+  .profit-editor-grid .is-wide { grid-column: auto; }
+}
