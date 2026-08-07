@@ -264,7 +264,7 @@ export function useInvoiceStore({ showToast, enabled = true }) {
             amount: amountStr,
             id: sid
           }
-          await apiUpdateInvoiceRecord(sid, frontendInvoiceRecordToApiPayload(merged))
+          await apiUpdateInvoiceRecord(sid, frontendInvoiceRecordToPayload(merged))
           await refetchInvoiceFromApi()
           showToast('发票记录已更新', 'success')
           return true
