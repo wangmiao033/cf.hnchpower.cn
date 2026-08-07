@@ -39,7 +39,13 @@ function monthLabel(value) {
 }
 
 function CoreChannelReconciliationPage() {
-  const { recon, showToast, setActiveView, openChannelReconciliationEdit } = useAppState()
+  const {
+    recon,
+    showToast,
+    setActiveView,
+    openChannelReconciliationEdit,
+    openBill360
+  } = useAppState()
   const fileRef = useRef(null)
   const [month, setMonth] = useState('')
   const [channel, setChannel] = useState('')
@@ -435,6 +441,7 @@ function CoreChannelReconciliationPage() {
                     </td>
                     <td>
                       <div className="core-recon-row-actions">
+                        <button type="button" onClick={() => openBill360('channel', String(row.id), row)}>详情</button>
                         <button type="button" onClick={() => openChannelReconciliationEdit(String(row.id))}>编辑</button>
                         <button
                           type="button"

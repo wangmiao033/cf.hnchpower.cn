@@ -34,6 +34,7 @@ import '@/styles/admin-polish.css'
 
 const PAGE_LOADERS = Object.freeze({
   anomalies: () => import('./pages/AnomalyCenterPage.jsx'),
+  bill360: () => import('./components/reconciliation/Bill360Drawer.jsx'),
   coreReconciliation: () => import('./pages/CoreReconciliationPage.jsx'),
   reconciliationProgress: () => import('./pages/RdReconciliationProgressPage.jsx'),
   reconciliationCreate: () => import('./pages/ReconciliationCreatePage.jsx'),
@@ -53,6 +54,7 @@ const PAGE_LOADERS = Object.freeze({
 })
 
 const AnomalyCenterPage = lazy(PAGE_LOADERS.anomalies)
+const Bill360Drawer = lazy(PAGE_LOADERS.bill360)
 const CoreReconciliationPage = lazy(PAGE_LOADERS.coreReconciliation)
 const RdReconciliationProgressPage = lazy(PAGE_LOADERS.reconciliationProgress)
 const ReconciliationCreatePage = lazy(PAGE_LOADERS.reconciliationCreate)
@@ -108,6 +110,7 @@ function App() {
   const [channelEditRecordId, setChannelEditRecordId] = useState(null)
   const [channelReturnView, setChannelReturnView] = useState(VIEWS.RECON_CHANNEL)
   const [invoiceEditId, setInvoiceEditId] = useState(null)
+  const [bill360Target, setBill360Target] = useState(null)
   const prevActiveViewRef = useRef(activeView)
   const activeViewRef = useRef(activeView)
   const navigationBlockerRef = useRef(null)
@@ -286,6 +289,20 @@ function App() {
     navigate(VIEWS.CHANNEL_RECON_EDIT)
   }, [navigate])
 
+  const openBill360 = useCallback((billType, id, initialRecord = null) => {
+    const billId = String(id || '')
+    if (!billId) return
+    setBill360Target({
+      billType: billType === 'channel' ? 'channel' : 'rd',
+      billId,
+      initialRecord
+    })
+  }, [])
+
+  const closeBill360 = useCallback(() => {
+    setBill360Target(null)
+  }, [])
+
   const openInvoiceEdit = useCallback((id) => {
     setInvoiceEditId(String(id))
     navigate(VIEWS.INVOICE_EDIT)
@@ -311,6 +328,7 @@ function App() {
     channelEditRecordId,
     channelReturnView,
     openChannelReconciliationEdit,
+    openBill360,
     invoiceEditId,
     openInvoiceEdit,
     navigateBankPaymentForReconciliation
@@ -387,6 +405,12 @@ function App() {
         >
           <Suspense fallback={null}>{renderView()}</Suspense>
         </AppShell>
+
+        {bill360Target ? (
+          <Suspense fallback={null}>
+            <Bill360Drawer target={bill360Target} onClose={closeBill360} />
+          </Suspense>
+        ) : null}
 
         <ConfirmDialog
           isOpen={recon.showDeleteConfirm}
