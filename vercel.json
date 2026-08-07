@@ -26,6 +26,11 @@
       "root": "backend/",
       "entrypoint": "main:app",
       "framework": "fastapi"
+    },
+    "contract_ai": {
+      "root": "contract_ai/",
+      "entrypoint": "main:app",
+      "framework": "fastapi"
     }
   },
   "headers": [
@@ -108,6 +113,18 @@
       "source": "/api/partners/(.*)",
       "destination": {
         "service": "backend"
+      }
+    },
+    {
+      "source": "/api/contracts/smart-scan",
+      "destination": {
+        "service": "contract_ai"
+      }
+    },
+    {
+      "source": "/api/contracts/internal-numbers",
+      "destination": {
+        "service": "contract_ai"
       }
     },
     {

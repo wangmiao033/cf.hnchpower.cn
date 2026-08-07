@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react'
 import Header from '@/components/layout/Header.jsx'
 import Sidebar from '@/components/layout/Sidebar.jsx'
 import TopSubnav from '@/components/layout/TopSubnav.jsx'
+import ContractSmartIntakeLauncher, { CONTRACT_SMART_SAVED_EVENT } from '@/components/contract/ContractSmartIntakeLauncher.jsx'
+import { VIEWS } from '@/app/routes.js'
 import './AppShell.css'
 
 /**
@@ -19,10 +21,17 @@ function AppShell({
   const [sidebarCollapsed, setSidebarCollapsed] = useState(
     () => window.localStorage.getItem('core-sidebar-collapsed') === 'true'
   )
+  const [contractRefreshKey, setContractRefreshKey] = useState(0)
 
   useEffect(() => {
     window.localStorage.setItem('core-sidebar-collapsed', String(sidebarCollapsed))
   }, [sidebarCollapsed])
+
+  useEffect(() => {
+    const refreshContractWorkspace = () => setContractRefreshKey((value) => value + 1)
+    window.addEventListener(CONTRACT_SMART_SAVED_EVENT, refreshContractWorkspace)
+    return () => window.removeEventListener(CONTRACT_SMART_SAVED_EVENT, refreshContractWorkspace)
+  }, [])
 
   return (
     <div className="app">
@@ -54,7 +63,12 @@ function AppShell({
             openTabs={openTabs}
             onCloseTab={onCloseTab}
           />
-          <main className="app-workspace">{children}</main>
+          <main className="app-workspace">
+            <React.Fragment key={activeView === VIEWS.CONTRACTS ? `contracts-${contractRefreshKey}` : activeView}>
+              {children}
+            </React.Fragment>
+          </main>
+          {activeView === VIEWS.CONTRACTS ? <ContractSmartIntakeLauncher /> : null}
         </div>
       </div>
     </div>
