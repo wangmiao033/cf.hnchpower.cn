@@ -130,7 +130,7 @@ function ContractDetailsDrawer({
                 <span className="contract-link-badge is-unlinked">未关联客户</span>
               )}
               {contract.contract_no_duplicate ? (
-                <span className="contract-duplicate-badge">编号重复待核验</span>
+                <span className="contract-duplicate-badge">客户/原编号重复待核验</span>
               ) : null}
             </div>
           </div>
@@ -145,7 +145,8 @@ function ContractDetailsDrawer({
 
         <div className="contract-drawer-section">
           <h4>基础信息</h4>
-          <DetailRow label="合同编号" value={contract.contract_no} />
+          <DetailRow label="我司合同编号" value={contract.internal_contract_no || '生成中'} />
+          <DetailRow label="客户/原合同编号" value={contract.contract_no} />
           <DetailRow label="合同类型" value={contract.contract_type} />
           <DetailRow label="签订状态" value={contract.signing_status} />
           <DetailRow label="履约状态" value={contract.performance_status} />

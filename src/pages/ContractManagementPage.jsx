@@ -161,11 +161,12 @@ function formToPayload(form) {
 
 function exportCsv(records) {
   const headers = [
+    '我司合同编号',
     '合同名称',
     '合同类型',
     '合同总额',
     '合同签约方',
-    '合同编号',
+    '客户/原合同编号',
     '签订日期',
     '签订状态',
     '生效日期',
@@ -176,6 +177,7 @@ function exportCsv(records) {
   ]
   const lines = records.map((record) =>
     [
+      record.internal_contract_no,
       record.contract_name,
       record.contract_type,
       record.amount,
@@ -274,6 +276,7 @@ function ContractManagementPage() {
       if (paymentType !== '全部' && record.payment_type !== paymentType) return false
       if (!term) return true
       return [
+        record.internal_contract_no,
         record.contract_name,
         record.contract_type,
         record.counterparty,
@@ -326,7 +329,7 @@ function ContractManagementPage() {
       )
       if (result.duplicate_contract_numbers?.length) {
         showToast(
-          `发现 ${result.duplicate_contract_numbers.length} 组重复合同编号，已保留并标记待核验`,
+          `发现 ${result.duplicate_contract_numbers.length} 组重复客户/原合同编号，已保留并标记待核验`,
           'info'
         )
       }
@@ -366,7 +369,7 @@ function ContractManagementPage() {
       const payload = formToPayload(form)
       if (editingId === 'new') {
         await createContract(payload)
-        showToast('合同已新增并保存到服务器', 'success')
+        showToast('合同已新增，我司合同编号将自动生成', 'success')
       } else {
         await updateContract(editingId, payload)
         showToast('合同资料已更新', 'success')
@@ -411,9 +414,15 @@ function ContractManagementPage() {
   }
 
   const handleAttachmentUploaded = (updatedContract) => {
-    setSelectedContract(updatedContract)
+    const previous = records.find((item) => String(item.id) === String(updatedContract.id))
+    const enriched = {
+      ...updatedContract,
+      internal_contract_no:
+        updatedContract.internal_contract_no || previous?.internal_contract_no || ''
+    }
+    setSelectedContract(enriched)
     setRecords((items) =>
-      items.map((item) => (item.id === updatedContract.id ? updatedContract : item))
+      items.map((item) => (item.id === enriched.id ? enriched : item))
     )
   }
 
@@ -449,7 +458,7 @@ function ContractManagementPage() {
         <div className="contract-hero__copy">
           <p>合同中心</p>
           <h1>合同台账</h1>
-          <span>统一维护 WPS 合同、签约方、金额、有效期和附件信息，数据保存于服务器。</span>
+          <span>每份合同自动生成唯一我司编号，同时保留客户/原合同编号、金额、有效期和附件。</span>
         </div>
         <div className="contract-hero__status">
           <span className="contract-sync-dot" aria-hidden="true" />
@@ -526,7 +535,7 @@ function ContractManagementPage() {
               type="search"
               value={keyword}
               onChange={(event) => setKeyword(event.target.value)}
-              placeholder="搜索合同名称、签约方、客户简称、合同编号或附件"
+              placeholder="搜索我司编号、客户原编号、合同名称、签约方或附件"
             />
           </label>
           <select value={contractType} onChange={(event) => setContractType(event.target.value)}>
@@ -590,7 +599,7 @@ function ContractManagementPage() {
                 <thead>
                   <tr>
                     <th className="contract-index-col">序号</th>
-                    <th>合同名称</th>
+                    <th>合同名称 / 编号</th>
                     <th>签约方 / 客户</th>
                     <th>合同类型</th>
                     <th className="is-number">合同总额</th>
@@ -629,9 +638,12 @@ function ContractManagementPage() {
                       </td>
                       <td className="contract-name-cell">
                         <strong title={contract.contract_name}>{contract.contract_name}</strong>
-                        <span>{contract.contract_no || '未填写合同编号'}</span>
+                        <span>
+                          {contract.internal_contract_no || '我司编号生成中'}
+                          {contract.contract_no ? ` · 原号 ${contract.contract_no}` : ''}
+                        </span>
                         {contract.contract_no_duplicate ? (
-                          <em>编号重复待核验</em>
+                          <em>客户/原编号重复待核验</em>
                         ) : null}
                       </td>
                       <td className="contract-party-cell">
@@ -818,7 +830,7 @@ function ContractManagementPage() {
             </div>
             <div className="contract-form-grid">
               <Field label="合同名称" required value={form.contract_name} onChange={(value) => setForm({ ...form, contract_name: value })} wide />
-              <Field label="合同编号" value={form.contract_no} onChange={(value) => setForm({ ...form, contract_no: value })} />
+              <Field label="客户/原合同编号" value={form.contract_no} onChange={(value) => setForm({ ...form, contract_no: value })} placeholder="合同原件有编号就填写，没有可留空" />
               <Field label="合同类型" value={form.contract_type} onChange={(value) => setForm({ ...form, contract_type: value })} />
               <SelectField
                 label="档案角色"
@@ -839,6 +851,9 @@ function ContractManagementPage() {
               <Field label="合同附件名称" value={form.attachments} onChange={(value) => setForm({ ...form, attachments: value })} placeholder="多个附件用分号分隔" wide />
             </div>
             <div className="contract-form-actions">
+              <span style={{ marginRight: 'auto', color: '#7b8798', fontSize: 12 }}>
+                我司合同编号由系统保存后自动生成，例如 HT-202608-0001
+              </span>
               <button type="button" className="contract-cancel-btn" onClick={closeEditor}>取消</button>
               <button type="submit" className="contract-save-btn" disabled={saving}>
                 {saving ? '正在保存…' : '保存合同'}

@@ -6,6 +6,7 @@ import {
   apiPut,
   parseResponse
 } from '@/lib/api/client.ts'
+import { listInternalContractNumbers } from '@/lib/api/contractNumbers.ts'
 
 export type ApiContractAttachment = {
   id: string
@@ -57,6 +58,7 @@ export type ApiContractRow = {
   amount: string | null
   counterparty: string
   contract_no: string
+  internal_contract_no?: string
   signing_date: string | null
   signing_status: string
   effective_date: string | null
@@ -151,7 +153,7 @@ export type ContractAttachmentUploadResult = {
 
 const PATH = '/api/contracts'
 
-export function listContracts(params?: {
+export async function listContracts(params?: {
   q?: string
   contractType?: string
   paymentType?: string
@@ -167,7 +169,27 @@ export function listContracts(params?: {
   if (params?.limit != null) query.set('limit', String(params.limit))
   if (params?.offset != null) query.set('offset', String(params.offset))
   const qs = query.toString()
-  return apiGet<ContractListResponse>(`${PATH}${qs ? `?${qs}` : ''}`)
+  const response = await apiGet<ContractListResponse>(`${PATH}${qs ? `?${qs}` : ''}`)
+
+  try {
+    const numbering = await listInternalContractNumbers()
+    const numberMap = new Map(
+      (numbering.items || []).map((item) => [String(item.contract_id), item.internal_contract_no])
+    )
+    return {
+      ...response,
+      items: (response.items || []).map((item) => ({
+        ...item,
+        internal_contract_no: numberMap.get(String(item.id)) || ''
+      }))
+    }
+  } catch (error) {
+    console.warn('Internal contract numbering unavailable; contract list remains usable.', error)
+    return {
+      ...response,
+      items: (response.items || []).map((item) => ({ ...item, internal_contract_no: '' }))
+    }
+  }
 }
 
 export function importContracts(items: ContractPayload[]) {
