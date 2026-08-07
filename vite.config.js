@@ -203,7 +203,6 @@ export default defineConfig(({ mode }) => {
         output: {
           manualChunks(id) {
             if (!id.includes('node_modules')) return undefined
-            if (id.includes('node_modules/xlsx')) return 'xlsx'
             if (id.includes('node_modules/dayjs')) return 'date'
             if (
               id.includes('node_modules/react') ||
