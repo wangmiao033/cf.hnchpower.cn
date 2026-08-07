@@ -4,6 +4,7 @@
 
 export const VIEWS = {
   DASHBOARD: 'dashboard',
+  ANOMALIES: 'anomalies',
   RECON_RD: 'recon-rd',
   RECON_PROGRESS: 'recon-progress',
   RECON_CREATE: 'recon-create',
@@ -28,7 +29,10 @@ export const SIDEBAR_GROUPS = [
   {
     id: 'workbench',
     label: '工作台',
-    items: [{ view: VIEWS.DASHBOARD, label: '总览' }]
+    items: [
+      { view: VIEWS.DASHBOARD, label: '总览' },
+      { view: VIEWS.ANOMALIES, label: '异常中心' }
+    ]
   },
   {
     id: 'reconciliation',
@@ -67,6 +71,7 @@ export const SIDEBAR_GROUPS = [
 
 const VIEW_TITLES = {
   [VIEWS.DASHBOARD]: '核心工作台',
+  [VIEWS.ANOMALIES]: '异常中心',
   [VIEWS.RECON_RD]: '研发账单',
   [VIEWS.RECON_PROGRESS]: '对账进度',
   [VIEWS.RECON_CREATE]: '新增研发账单',
@@ -89,6 +94,7 @@ const VIEW_TITLES = {
 
 const VIEW_DESCRIPTIONS = {
   [VIEWS.DASHBOARD]: '研发对账、渠道对账、合同、数据库和客户资料统一管理。',
+  [VIEWS.ANOMALIES]: '自动巡检账单、收付款、发票、合同和流水数据中的异常与待处理风险。',
   [VIEWS.RECON_RD]: '保留现有研发账单计算、录入、筛选、导入和导出逻辑。',
   [VIEWS.RECON_PROGRESS]: '集中查看游戏账单与渠道流水的核对、结算和待处理明细。',
   [VIEWS.RECON_CREATE]: '使用现有研发账单录入逻辑新增记录。',
@@ -111,6 +117,7 @@ const VIEW_DESCRIPTIONS = {
 
 export const VIEW_ICONS = {
   [VIEWS.DASHBOARD]: '总',
+  [VIEWS.ANOMALIES]: '异',
   [VIEWS.RECON_RD]: '研',
   [VIEWS.RECON_PROGRESS]: '进',
   [VIEWS.RECON_CREATE]: '增',

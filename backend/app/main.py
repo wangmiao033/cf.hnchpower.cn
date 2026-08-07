@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.exc import SQLAlchemyError
 
+from app.api.anomaly import router as anomaly_router
 from app.api.channel import router as channel_router
 from app.api.bill_attachment import router as bill_attachment_router
 from app.api.bill_invoice_allocation import router as bill_invoice_allocation_router
@@ -218,6 +219,12 @@ app.include_router(
     exception_status_router,
     prefix="/api/exception-statuses",
     tags=["exception-statuses"],
+    dependencies=[Depends(require_current_user)],
+)
+app.include_router(
+    anomaly_router,
+    prefix="/api/anomaly-data",
+    tags=["anomaly-data"],
     dependencies=[Depends(require_current_user)],
 )
 app.include_router(
