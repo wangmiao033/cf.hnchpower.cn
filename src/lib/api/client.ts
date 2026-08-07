@@ -11,6 +11,9 @@ export const AUTH_UNAUTHORIZED_EVENT = 'cf:auth-unauthorized'
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000
 const UPLOAD_REQUEST_TIMEOUT_MS = 90_000
+const RECENT_API_ERROR_MAX_AGE_MS = 2_500
+
+let lastApiError = { message: '', at: 0 }
 
 type ApiRequestOptions = {
   timeoutMs?: number
@@ -28,11 +31,28 @@ export class ApiError extends Error {
   }
 }
 
+function rememberApiError(message: string) {
+  const normalized = String(message || '').trim()
+  if (!normalized) return
+  lastApiError = { message: normalized, at: Date.now() }
+}
+
+/**
+ * 供旧页面的笼统错误 Toast 使用：只返回刚刚发生的 API 错误，避免拿很久以前的错误覆盖当前提示。
+ */
+export function getRecentApiErrorMessage(maxAgeMs = RECENT_API_ERROR_MAX_AGE_MS): string {
+  if (!lastApiError.message) return ''
+  if (Date.now() - lastApiError.at > maxAgeMs) return ''
+  return lastApiError.message
+}
+
 /** 将 fetch 网络层异常转为 ApiError，便于登录页等统一展示中文说明 */
 function toNetworkApiError(err: unknown): ApiError {
   if (err instanceof ApiError) return err
   if (err instanceof Error && err.name === 'AbortError') {
-    return new ApiError('请求超时，请稍后重试。', 0, err)
+    const apiError = new ApiError('请求超时，请稍后重试。', 0, err)
+    rememberApiError(apiError.message)
+    return apiError
   }
   const msg =
     err instanceof TypeError ||
@@ -42,7 +62,9 @@ function toNetworkApiError(err: unknown): ApiError {
       : err instanceof Error
         ? err.message
         : '请求失败，请稍后重试。'
-  return new ApiError(msg, 0, err)
+  const apiError = new ApiError(msg, 0, err)
+  rememberApiError(apiError.message)
+  return apiError
 }
 
 async function fetchWithTimeout(
@@ -152,6 +174,28 @@ export async function apiPostMultipart<T>(
   return parseResponse<T>(res)
 }
 
+function responseErrorMessage(data: unknown, statusText: string): string {
+  if (data && typeof data === 'object' && data !== null && 'detail' in data) {
+    const rawDetail = (data as { detail: unknown }).detail
+    if (typeof rawDetail === 'string') return rawDetail
+    if (
+      rawDetail &&
+      typeof rawDetail === 'object' &&
+      'message' in rawDetail &&
+      typeof (rawDetail as { message?: unknown }).message === 'string'
+    ) {
+      return String((rawDetail as { message: string }).message).trim()
+    }
+    try {
+      return JSON.stringify(rawDetail)
+    } catch {
+      return String(rawDetail)
+    }
+  }
+  if (typeof data === 'string') return data
+  return statusText
+}
+
 export async function parseResponse<T>(res: Response): Promise<T> {
   const text = await res.text()
   let data: unknown = null
@@ -165,21 +209,10 @@ export async function parseResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
     if (res.status === 401) notifyUnauthorized()
 
-    const detail =
-      data && typeof data === 'object' && data !== null && 'detail' in data
-        ? (() => {
-            const rawDetail = (data as { detail: unknown }).detail
-            if (typeof rawDetail === 'string') return rawDetail
-            try {
-              return JSON.stringify(rawDetail)
-            } catch {
-              return String(rawDetail)
-            }
-          })()
-        : typeof data === 'string'
-          ? data
-          : res.statusText
-    throw new ApiError(detail || res.statusText, res.status, data)
+    const detail = responseErrorMessage(data, res.statusText)
+    const message = detail || res.statusText || '请求失败，请稍后重试。'
+    rememberApiError(message)
+    throw new ApiError(message, res.status, data)
   }
   return data as T
 }

@@ -8,7 +8,7 @@
   display: grid;
   grid-template-columns: 54px minmax(0, 1fr);
   gap: 18px;
-  width: min(720px, 100%);
+  width: min(760px, 100%);
   padding: 28px;
   border: 1px solid #dfe6ef;
   border-radius: 16px;
@@ -57,11 +57,13 @@
 
 .locked-bill-edit-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 9px;
   margin-top: 18px;
 }
 
-.locked-bill-edit-actions button {
+.locked-bill-edit-actions button,
+.locked-bill-return-form button {
   border: 1px solid #d7dfeb;
   border-radius: 9px;
   background: #fff;
@@ -78,12 +80,74 @@
   color: #fff;
 }
 
+.locked-bill-return-form {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+  padding: 14px;
+  border: 1px solid #f0d6c1;
+  border-radius: 12px;
+  background: #fffaf5;
+}
+
+.locked-bill-return-form label {
+  display: grid;
+  gap: 7px;
+}
+
+.locked-bill-return-form label > span {
+  color: #795b45;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.locked-bill-return-form textarea {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  min-height: 82px;
+  border: 1px solid #dfc8b6;
+  border-radius: 9px;
+  background: #fff;
+  padding: 10px 11px;
+  color: #46566a;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.55;
+  outline: none;
+}
+
+.locked-bill-return-form textarea:focus {
+  border-color: #c68e61;
+  box-shadow: 0 0 0 3px rgba(198, 142, 97, .1);
+}
+
+.locked-bill-return-form > div {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.locked-bill-return-form button.danger {
+  border-color: #c56d52;
+  background: #c56d52;
+  color: #fff;
+}
+
+.locked-bill-return-form button:disabled,
+.locked-bill-edit-actions button:disabled {
+  opacity: .55;
+  cursor: not-allowed;
+}
+
 @media (max-width: 640px) {
   .locked-bill-edit-card {
     grid-template-columns: 1fr;
     padding: 20px;
   }
-  .locked-bill-edit-actions {
+
+  .locked-bill-edit-actions,
+  .locked-bill-return-form > div {
     display: grid;
   }
 }

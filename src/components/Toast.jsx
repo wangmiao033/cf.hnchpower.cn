@@ -1,5 +1,8 @@
 import React, { useEffect } from 'react'
+import { getRecentApiErrorMessage } from '@/lib/api/client.ts'
 import './Toast.css'
+
+const GENERIC_SERVER_ERROR_RE = /(更新|保存|同步|删除).*(服务器).*失败|服务器.*失败/i
 
 function Toast({ message, type = 'success', isVisible, onClose }) {
   useEffect(() => {
@@ -13,12 +16,17 @@ function Toast({ message, type = 'success', isVisible, onClose }) {
 
   if (!isVisible) return null
 
+  const displayMessage =
+    type === 'error' && GENERIC_SERVER_ERROR_RE.test(String(message || ''))
+      ? getRecentApiErrorMessage() || message
+      : message
+
   return (
     <div className={`toast toast-${type}`}>
       <span className="toast-icon">
         {type === 'success' ? '✓' : type === 'error' ? '✕' : 'ℹ'}
       </span>
-      <span className="toast-message">{message}</span>
+      <span className="toast-message">{displayMessage}</span>
       <button className="toast-close" onClick={onClose}>×</button>
     </div>
   )
