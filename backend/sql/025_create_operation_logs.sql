@@ -26,17 +26,17 @@ IMMUTABLE
 AS $$
     SELECT COALESCE(
         jsonb_object_agg(
-            key,
-            jsonb_build_object('before', old_row -> key, 'after', new_row -> key)
+            changed.key,
+            jsonb_build_object('before', old_row -> changed.key, 'after', new_row -> changed.key)
         ),
         '{}'::jsonb
     )
     FROM (
-        SELECT key
-        FROM jsonb_object_keys(COALESCE(old_row, '{}'::jsonb) || COALESCE(new_row, '{}'::jsonb)) AS key
-        WHERE key NOT IN ('id', 'created_at', 'updated_at')
-          AND (old_row -> key) IS DISTINCT FROM (new_row -> key)
-    ) changed;
+        SELECT keys.key
+        FROM jsonb_object_keys(COALESCE(old_row, '{}'::jsonb) || COALESCE(new_row, '{}'::jsonb)) AS keys(key)
+        WHERE keys.key NOT IN ('id', 'created_at', 'updated_at')
+          AND (old_row -> keys.key) IS DISTINCT FROM (new_row -> keys.key)
+    ) AS changed;
 $$;
 
 CREATE OR REPLACE FUNCTION app_capture_bill_operation_log()
@@ -71,12 +71,12 @@ BEGIN
     END IF;
 
     IF entity_type_value IS NULL OR entity_id_value IS NULL OR entity_id_value = '' THEN
-        RETURN COALESCE(NEW, OLD);
+        IF TG_OP = 'DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF;
     END IF;
 
     changed := app_operation_log_changes(old_json, new_json);
 
-    -- 收款汇总会自动回写渠道主表，已经有收款明细日志时不重复制造噪音。
+    -- 收款汇总会自动回写渠道主表；收款明细本身已有日志时，不重复制造一条主表更新日志。
     IF TG_TABLE_NAME = 'channel_records' AND TG_OP = 'UPDATE' THEN
         IF (changed - 'received_amount' - 'receipt_status') = '{}'::jsonb THEN
             RETURN NEW;
@@ -85,10 +85,10 @@ BEGIN
 
     IF TG_TABLE_NAME = 'bank_transactions' THEN
         IF COALESCE(new_json ->> 'reconciliation_id', old_json ->> 'reconciliation_id', '') = '' THEN
-            RETURN COALESCE(NEW, OLD);
+            IF TG_OP = 'DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF;
         END IF;
         IF COALESCE(new_json ->> 'reconciliation_type', old_json ->> 'reconciliation_type', '') NOT IN ('rd', 'channel') THEN
-            RETURN COALESCE(NEW, OLD);
+            IF TG_OP = 'DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF;
         END IF;
         entity_type_value := COALESCE(new_json ->> 'reconciliation_type', old_json ->> 'reconciliation_type');
         entity_id_value := COALESCE(new_json ->> 'reconciliation_id', old_json ->> 'reconciliation_id');
@@ -98,6 +98,7 @@ BEGIN
         IF TG_OP = 'INSERT' THEN
             action_value := 'create';
             summary_value := CASE entity_type_value WHEN 'rd' THEN '创建研发账单' ELSE '创建渠道账单' END;
+            changed := '{}'::jsonb;
         ELSIF TG_OP = 'DELETE' THEN
             action_value := 'delete';
             summary_value := CASE entity_type_value WHEN 'rd' THEN '删除研发账单' ELSE '删除渠道账单' END;
@@ -161,7 +162,7 @@ BEGIN
         changes,
         metadata
     ) VALUES (
-        gen_random_uuid()::text,
+        md5(random()::text || clock_timestamp()::text || entity_type_value || entity_id_value),
         entity_type_value,
         entity_id_value,
         entity_number_value,
@@ -173,7 +174,7 @@ BEGIN
         jsonb_build_object('table', TG_TABLE_NAME, 'operation', TG_OP)
     );
 
-    RETURN COALESCE(NEW, OLD);
+    IF TG_OP = 'DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF;
 END;
 $$;
 
