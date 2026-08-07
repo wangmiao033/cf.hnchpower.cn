@@ -74,6 +74,9 @@ export default function BillLifecyclePanel({
 
   const currentStatus = lifecycle?.status || recordStatus || 'pending'
   const currentIndex = useMemo(() => stepIndex(currentStatus), [currentStatus])
+  const hasCancelTransition = Boolean(
+    lifecycle?.transitions?.some((option) => option.status === 'cancelled')
+  )
 
   const runTransition = async (option) => {
     if (!option.available) {
@@ -175,6 +178,11 @@ export default function BillLifecyclePanel({
         ))}
         {(lifecycle.transitions || []).length === 0 ? <span className="bill-lifecycle-no-action">当前状态没有可继续流转的操作。</span> : null}
       </div>
+      {hasCancelTransition ? (
+        <div className="bill-lifecycle-cancelled">
+          资金安全规则：取消账单前必须先解除已关联的付款/收款与发票分配。
+        </div>
+      ) : null}
     </section>
   )
 }
