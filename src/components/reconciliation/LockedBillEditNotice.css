@@ -1,0 +1,89 @@
+.locked-bill-edit-page {
+  display: grid;
+  place-items: center;
+  min-height: min(620px, calc(100vh - 180px));
+}
+
+.locked-bill-edit-card {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr);
+  gap: 18px;
+  width: min(720px, 100%);
+  padding: 28px;
+  border: 1px solid #dfe6ef;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 12px 36px rgba(15, 23, 42, .06);
+}
+
+.locked-bill-edit-mark {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  background: #eef3fa;
+  color: #456a9d;
+  font-size: 17px;
+  font-weight: 900;
+}
+
+.locked-bill-edit-eyebrow {
+  color: #7d899a;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .06em;
+}
+
+.locked-bill-edit-card h1 {
+  margin: 5px 0 9px;
+  color: #28384e;
+  font-size: 20px;
+}
+
+.locked-bill-edit-card p {
+  margin: 0;
+  color: #667386;
+  font-size: 13px;
+  line-height: 1.75;
+}
+
+.locked-bill-edit-card small {
+  display: block;
+  margin-top: 14px;
+  color: #95a0af;
+  font-size: 10px;
+}
+
+.locked-bill-edit-actions {
+  display: flex;
+  gap: 9px;
+  margin-top: 18px;
+}
+
+.locked-bill-edit-actions button {
+  border: 1px solid #d7dfeb;
+  border-radius: 9px;
+  background: #fff;
+  color: #4a596d;
+  padding: 9px 14px;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.locked-bill-edit-actions button.primary {
+  border-color: #3968a8;
+  background: #3968a8;
+  color: #fff;
+}
+
+@media (max-width: 640px) {
+  .locked-bill-edit-card {
+    grid-template-columns: 1fr;
+    padding: 20px;
+  }
+  .locked-bill-edit-actions {
+    display: grid;
+  }
+}

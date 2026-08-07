@@ -20,7 +20,6 @@ import './CoreBillFormPages.css'
 import '@/components/reconciliation/reconciliation-admin.css'
 
 const FORM_ID = 'core-channel-bill-form'
-const RECONCILED_STATUSES = new Set(['confirmed', 'completed', 'settled', 'reconciled', 'verified'])
 
 function money(value) {
   const n = Number(value || 0)
@@ -100,8 +99,7 @@ function CoreChannelBillFormPage({ mode }) {
     editRecord && (!editRecord.id || editRecord.id === '')
       ? { ...editRecord, id: String(channelEditRecordId) }
       : editRecord
-  const isReconciled = RECONCILED_STATUSES.has(String(stableRecord?.status || '').toLowerCase())
-  const stateLabel = !isEdit ? '新建账单' : isReconciled ? '已核对' : '待核对'
+  const stateLabel = !isEdit ? '新建账单' : '待核对'
 
   const safety = useBillFormSafety({
     type: 'channel',
@@ -147,7 +145,9 @@ function CoreChannelBillFormPage({ mode }) {
       showToast('已保存，可继续新增下一张渠道账单', 'success')
       return
     }
-    if (intent === 'confirm') showToast('渠道账单已完成核对', 'success')
+    if (isEdit) {
+      showToast('渠道账单已保存。完成核对请到账单 360° → 操作日志进行状态流转。', 'success')
+    }
     goList()
   }
 
@@ -186,17 +186,13 @@ function CoreChannelBillFormPage({ mode }) {
           <div className="core-bill-form-title-row">
             <span className="core-bill-form-kind">渠道账单</span>
             <h1>{isEdit ? '编辑渠道账单' : '新增渠道账单'}</h1>
-            <span
-              className={`core-bill-state-tag ${isEdit ? (isReconciled ? 'is-complete' : 'is-pending') : ''}`}
-            >
+            <span className={`core-bill-state-tag ${isEdit ? 'is-pending' : ''}`}>
               {stateLabel}
             </span>
           </div>
           <span className="core-bill-form-tip">
             {isEdit
-              ? isReconciled
-                ? '该账单已核对，修改后保存即可同步。'
-                : '确认明细和附件后，可直接完成核对。'
+              ? '当前为待核对状态，可修改明细；保存后请到账单 360° 的“操作日志”中完成核对及后续状态流转。'
               : '先选择合作方和账期，再录入游戏明细。'}
           </span>
           <div className={`core-bill-draft-state ${safety.dirty ? 'is-dirty' : 'is-clean'}`}>
@@ -268,40 +264,16 @@ function CoreChannelBillFormPage({ mode }) {
               保存并继续
             </button>
           ) : null}
-          {isEdit && !isReconciled ? (
-            <>
-              <button
-                type="button"
-                onClick={() => {
-                  submitIntentRef.current = 'back'
-                  document.getElementById(FORM_ID)?.requestSubmit()
-                }}
-              >
-                仅保存
-              </button>
-              <button
-                type="button"
-                className="primary"
-                onClick={() => {
-                  submitIntentRef.current = 'confirm'
-                  document.getElementById(FORM_ID)?.requestSubmit()
-                }}
-              >
-                完成核对
-              </button>
-            </>
-          ) : (
-            <button
-              type="button"
-              className="primary"
-              onClick={() => {
-                submitIntentRef.current = 'back'
-                document.getElementById(FORM_ID)?.requestSubmit()
-              }}
-            >
-              {isEdit ? '保存修改' : '保存账单'}
-            </button>
-          )}
+          <button
+            type="button"
+            className="primary"
+            onClick={() => {
+              submitIntentRef.current = 'back'
+              document.getElementById(FORM_ID)?.requestSubmit()
+            }}
+          >
+            {isEdit ? '保存修改' : '保存账单'}
+          </button>
         </div>
       </section>
     </PageContainer>

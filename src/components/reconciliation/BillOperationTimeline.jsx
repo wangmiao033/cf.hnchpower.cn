@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
+import { useAppState } from '@/app/AppStateContext.jsx'
 import { listOperationLogs } from '@/lib/api/operationLog.ts'
 import {
   operationActionMeta,
@@ -6,6 +7,7 @@ import {
   operationChangeLines,
   operationHiddenChangeCount
 } from '@/domain/reconciliation/operationLogPresentation.js'
+import BillLifecyclePanel from './BillLifecyclePanel.jsx'
 import './Bill360OperationTimeline.css'
 
 function dateTime(value) {
@@ -25,9 +27,11 @@ function dateTime(value) {
 }
 
 export default function BillOperationTimeline({ billType, billId }) {
+  const { recon, showToast } = useAppState()
   const [logs, setLogs] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [revision, setRevision] = useState(0)
 
   useEffect(() => {
     if (!billId) return undefined
@@ -55,67 +59,87 @@ export default function BillOperationTimeline({ billType, billId }) {
     return () => {
       cancelled = true
     }
-  }, [billId, billType])
+  }, [billId, billType, revision])
 
   const ordered = useMemo(
     () => [...logs].sort((left, right) => String(right.created_at).localeCompare(String(left.created_at))),
     [logs]
   )
 
+  const handleTransitioned = async () => {
+    if (billType === 'rd') {
+      await recon.refetchReconciliationFromApi?.()
+    } else {
+      await recon.refetchChannelFromApi?.()
+    }
+    setRevision((value) => value + 1)
+  }
+
   return (
-    <section className="bill360-card bill360-card--table">
-      <div className="bill360-card-head">
-        <div><span>审计轨迹</span><h3>操作日志</h3></div>
-        <span className="bill360-card-meta">{loading ? '读取中…' : `${ordered.length} 条`}</span>
-      </div>
-      <div className="bill360-operation-note">
-        日志由数据库自动记录，包含账单修改、状态变化、收付款、付款指令与发票关联。V2.1-2 上线后的操作开始完整留痕。
-      </div>
+    <div className="bill360-status-history-stack">
+      <BillLifecyclePanel
+        billType={billType}
+        billId={billId}
+        onTransitioned={handleTransitioned}
+        showToast={showToast}
+      />
 
-      {error ? <div className="bill360-history-empty">{error}</div> : null}
-      {!error && loading ? <div className="bill360-history-empty">正在读取操作日志…</div> : null}
-      {!error && !loading && ordered.length === 0 ? (
-        <div className="bill360-history-empty">当前账单暂无操作日志。历史数据不会反向伪造日志，新操作会从本版本开始记录。</div>
-      ) : null}
-
-      {!error && ordered.length > 0 ? (
-        <div className="bill360-timeline">
-          {ordered.map((log) => {
-            const action = operationActionMeta(log.action)
-            const changes = operationChangeLines(log.changes, 8)
-            const hidden = operationHiddenChangeCount(log.changes, changes.length)
-            return (
-              <article className="bill360-timeline-item" key={log.id}>
-                <span className={`bill360-timeline-mark is-${action.tone}`}>{action.mark}</span>
-                <div className="bill360-timeline-card">
-                  <div className="bill360-timeline-head">
-                    <div>
-                      <strong>{log.summary || action.label}</strong>
-                      <span>{operationActorLabel(log)} · {action.label}</span>
-                    </div>
-                    <time>{dateTime(log.created_at)}</time>
-                  </div>
-                  {changes.length > 0 ? (
-                    <div className="bill360-change-list">
-                      {changes.map((change) => (
-                        <div className="bill360-change-row" key={`${log.id}-${change.field}`}>
-                          <span>{change.label}</span>
-                          <div className="bill360-change-values">
-                            <del title={change.before}>{change.before}</del>
-                            <b>→</b>
-                            <ins title={change.after}>{change.after}</ins>
-                          </div>
-                        </div>
-                      ))}
-                      {hidden > 0 ? <div className="bill360-change-more">另有 {hidden} 项变更已留档</div> : null}
-                    </div>
-                  ) : null}
-                </div>
-              </article>
-            )
-          })}
+      <section className="bill360-card bill360-card--table">
+        <div className="bill360-card-head">
+          <div><span>审计轨迹</span><h3>状态流转与操作日志</h3></div>
+          <span className="bill360-card-meta">{loading ? '读取中…' : `${ordered.length} 条`}</span>
         </div>
-      ) : null}
-    </section>
+        <div className="bill360-operation-note">
+          已核对及后续状态会自动锁定账单金额与业务字段；需要修改时必须先通过上方状态流转退回“待核对”，原因会写入审计记录。
+        </div>
+
+        {error ? <div className="bill360-history-empty">{error}</div> : null}
+        {!error && loading ? <div className="bill360-history-empty">正在读取操作日志…</div> : null}
+        {!error && !loading && ordered.length === 0 ? (
+          <div className="bill360-history-empty">当前账单暂无操作日志。历史数据不会反向伪造日志，新操作会从 V2.1-2 开始记录。</div>
+        ) : null}
+
+        {!error && ordered.length > 0 ? (
+          <div className="bill360-timeline">
+            {ordered.map((log) => {
+              const action = operationActionMeta(log.action)
+              const changes = operationChangeLines(log.changes, 8)
+              const hidden = operationHiddenChangeCount(log.changes, changes.length)
+              const reason = log.metadata?.reason ? String(log.metadata.reason) : ''
+              return (
+                <article className="bill360-timeline-item" key={log.id}>
+                  <span className={`bill360-timeline-mark is-${action.tone}`}>{action.mark}</span>
+                  <div className="bill360-timeline-card">
+                    <div className="bill360-timeline-head">
+                      <div>
+                        <strong>{log.summary || action.label}</strong>
+                        <span>{operationActorLabel(log)} · {action.label}</span>
+                      </div>
+                      <time>{dateTime(log.created_at)}</time>
+                    </div>
+                    {reason ? <div className="bill360-transition-reason">原因：{reason}</div> : null}
+                    {changes.length > 0 ? (
+                      <div className="bill360-change-list">
+                        {changes.map((change) => (
+                          <div className="bill360-change-row" key={`${log.id}-${change.field}`}>
+                            <span>{change.label}</span>
+                            <div className="bill360-change-values">
+                              <del title={change.before}>{change.before}</del>
+                              <b>→</b>
+                              <ins title={change.after}>{change.after}</ins>
+                            </div>
+                          </div>
+                        ))}
+                        {hidden > 0 ? <div className="bill360-change-more">另有 {hidden} 项变更已留档</div> : null}
+                      </div>
+                    ) : null}
+                  </div>
+                </article>
+              )
+            })}
+          </div>
+        ) : null}
+      </section>
+    </div>
   )
 }
