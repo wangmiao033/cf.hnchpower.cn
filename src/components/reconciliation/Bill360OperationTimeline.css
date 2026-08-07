@@ -1,3 +1,12 @@
+.bill360-status-history-stack {
+  display: grid;
+  gap: 14px;
+}
+
+.bill360-status-history-stack .bill-lifecycle-panel {
+  margin: 0;
+}
+
 .bill360-operation-note {
   margin: 0 18px 16px;
   padding: 10px 12px;
@@ -6,6 +15,16 @@
   color: #7a8798;
   font-size: 11px;
   line-height: 1.6;
+}
+
+.bill360-transition-reason {
+  margin-top: 9px;
+  padding: 7px 9px;
+  border-radius: 7px;
+  background: #fff8e9;
+  color: #805f26;
+  font-size: 10px;
+  line-height: 1.5;
 }
 
 .bill360-timeline {
