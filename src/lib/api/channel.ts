@@ -9,6 +9,7 @@ export type ApiChannelLineItem = {
   id: string
   channel_record_id: string
   sort_order: number
+  settlement_cycle: string | null
   game_name: string | null
   billing_flow: number
   discount_factor: number
@@ -62,12 +63,10 @@ export type ApiChannelRow = {
   items?: ApiChannelLineItem[]
 }
 
-export type ChannelListResponse = {
-  items: ApiChannelRow[]
-  total: number
-}
+export type ChannelListResponse = { items: ApiChannelRow[]; total: number }
 
 export type ChannelLinePayload = {
+  settlement_cycle?: string | null
   game_name?: string | null
   billing_flow: number
   discount_factor: number
@@ -101,9 +100,7 @@ export type ChannelRecordPayload = {
   items: ChannelLinePayload[]
 }
 
-export type ChannelRecordUpdatePayload = Partial<Omit<ChannelRecordPayload, 'items'>> & {
-  items?: ChannelLinePayload[]
-}
+export type ChannelRecordUpdatePayload = Partial<Omit<ChannelRecordPayload, 'items'>> & { items?: ChannelLinePayload[] }
 
 const PATH = '/api/channel-records'
 
@@ -131,18 +128,11 @@ export function listChannelRecords(params?: {
 export function getChannelRecord(id: string): Promise<ApiChannelRow> {
   return apiGet<ApiChannelRow>(`${PATH}/${encodeURIComponent(id)}`)
 }
-
-export function createChannelRecord(payload: ChannelRecordPayload): Promise<ApiChannelRow> {
-  return apiPost<ApiChannelRow>(PATH, payload)
-}
-
+export function createChannelRecord(payload: ChannelRecordPayload): Promise<ApiChannelRow> { return apiPost<ApiChannelRow>(PATH, payload) }
 export function updateChannelRecord(id: string, payload: ChannelRecordUpdatePayload): Promise<ApiChannelRow> {
   return apiPut<ApiChannelRow>(`${PATH}/${encodeURIComponent(id)}`, payload)
 }
-
-export function deleteChannelRecord(id: string): Promise<void> {
-  return apiDelete(`${PATH}/${encodeURIComponent(id)}`)
-}
+export function deleteChannelRecord(id: string): Promise<void> { return apiDelete(`${PATH}/${encodeURIComponent(id)}`) }
 
 export type ChannelReceiptPayload = {
   amount: number
@@ -152,13 +142,11 @@ export type ChannelReceiptPayload = {
   attachment_url?: string | null
 }
 
-/** 上传收款回单附件，返回相对路径 URL */
 export function uploadChannelReceiptAttachment(file: File): Promise<{ url: string }> {
   const fd = new FormData()
   fd.append('file', file)
   return apiPostMultipart<{ url: string }>(`${PATH}/receipt-attachment`, fd)
 }
-
 export function createChannelReceipt(recordId: string, body: ChannelReceiptPayload): Promise<ApiChannelRow> {
   return apiPost<ApiChannelRow>(`${PATH}/${encodeURIComponent(recordId)}/receipts`, body)
 }
@@ -173,15 +161,10 @@ export type ApiChannelReceipt = {
   attachment_url: string | null
   created_at: string
 }
-
-export type ChannelReceiptListApiResponse = {
-  items: ApiChannelReceipt[]
-}
-
+export type ChannelReceiptListApiResponse = { items: ApiChannelReceipt[] }
 export function listChannelReceipts(recordId: string): Promise<ChannelReceiptListApiResponse> {
   return apiGet<ChannelReceiptListApiResponse>(`${PATH}/${encodeURIComponent(recordId)}/receipts`)
 }
-
 export function deleteChannelReceipt(recordId: string, receiptId: string): Promise<void> {
   return apiDelete(`${PATH}/${encodeURIComponent(recordId)}/receipts/${encodeURIComponent(receiptId)}`)
 }
@@ -197,6 +180,7 @@ function apiLineToFrontend(row: ApiChannelLineItem): Record<string, unknown> {
     id: row.id != null ? String(row.id) : '',
     channelRecordId: row.channel_record_id,
     sortOrder: row.sort_order,
+    settlementCycle: row.settlement_cycle ?? '',
     gameName: row.game_name ?? '',
     flow: row.billing_flow,
     discountFactor: row.discount_factor ?? 1,
@@ -218,6 +202,7 @@ function frontendLineToPayload(line: Record<string, unknown>): ChannelLinePayloa
   const df = parseFloat(String(line.discountFactor ?? 1))
   const discount_factor = Number.isFinite(df) && df > 0 ? df : 1
   return {
+    settlement_cycle: line.settlementCycle != null && String(line.settlementCycle).trim() !== '' ? String(line.settlementCycle).trim() : null,
     game_name: (line.gameName as string) || null,
     billing_flow: parseFloat(String(line.flow ?? 0)),
     discount_factor,
@@ -235,7 +220,6 @@ function frontendLineToPayload(line: Record<string, unknown>): ChannelLinePayloa
   }
 }
 
-/** API 行 -> 前端列表/表单（含 items） */
 export function apiChannelRowToFrontend(row: ApiChannelRow): Record<string, unknown> {
   const items = (row.items ?? []).map(apiLineToFrontend)
   const record = {
@@ -271,21 +255,14 @@ export function apiChannelRowToFrontend(row: ApiChannelRow): Record<string, unkn
     profitRate: row.profit_rate,
     items
   }
-  return {
-    ...record,
-    billNumber: row.statement_no || getChannelBillNumber(record)
-  }
+  return { ...record, billNumber: row.statement_no || getChannelBillNumber(record) }
 }
 
-/** 前端整单 -> API 写入体（新建须含 items） */
 export function frontendChannelRecordToPayload(record: Record<string, unknown>): ChannelRecordPayload {
   const rawItems = record.items as Record<string, unknown>[] | undefined
   const items = Array.isArray(rawItems) ? rawItems.map(frontendLineToPayload) : []
   return {
-    statement_no:
-      record.billNumber != null && String(record.billNumber).trim() !== ''
-        ? String(record.billNumber).trim()
-        : null,
+    statement_no: record.billNumber != null && String(record.billNumber).trim() !== '' ? String(record.billNumber).trim() : null,
     channel_name: (record.channelName as string) || null,
     partner_name: (record.partnerName as string) || null,
     settlement_month: (record.settlementMonth as string) || null,
