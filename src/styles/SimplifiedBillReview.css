@@ -1,0 +1,40 @@
+.core-bill-form-page .channel-form-section:has(select[aria-label="记录状态"]) {
+  display: none;
+}
+
+.core-bill-review-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #5f6f82;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.core-bill-review-hint::before {
+  content: '✓';
+  display: grid;
+  place-items: center;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: #eaf7f0;
+  color: #188457;
+  font-size: 10px;
+}
+
+.core-bill-footer-actions .confirm-review {
+  border-color: #1f7a56;
+  background: #1f7a56;
+  color: #fff;
+}
+
+.core-bill-footer-actions .confirm-review:hover:not(:disabled) {
+  border-color: #176243;
+  background: #176243;
+}
+
+.core-bill-footer-actions button:disabled {
+  opacity: .58;
+  cursor: wait;
+}
