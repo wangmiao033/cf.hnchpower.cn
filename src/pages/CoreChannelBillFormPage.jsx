@@ -6,6 +6,7 @@ import ChannelBillingForm from '@/components/channel/ChannelBillingForm.jsx'
 import { CoreBillLoadingState } from '@/pages/CoreBillLoadingState.jsx'
 import { VIEWS } from '@/app/routes.js'
 import { apiChannelRowToFrontend, getChannelRecord } from '@/lib/api/channel.ts'
+import { transitionBillLifecycle } from '@/lib/api/billLifecycle.ts'
 import {
   getCachedEditRecord,
   invalidateEditRecord,
@@ -18,12 +19,23 @@ import {
 import { useBillFormSafety } from '@/hooks/useBillFormSafety.js'
 import './CoreBillFormPages.css'
 import '@/components/reconciliation/reconciliation-admin.css'
+import '@/styles/SimplifiedBillReview.css'
 
 const FORM_ID = 'core-channel-bill-form'
 
 function money(value) {
   const n = Number(value || 0)
   return `¥ ${n.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+}
+
+function reviewValidation(record) {
+  if (!String(record?.partnerName || record?.channelName || '').trim()) return '请先选择合作方。'
+  if (!String(record?.settlementMonth || '').trim()) return '请先选择账单月份。'
+  const items = Array.isArray(record?.items) ? record.items : []
+  const validItems = items.filter((item) => String(item?.gameName || '').trim())
+  if (!validItems.length) return '请至少填写一条游戏明细。'
+  if (Number(record?.settlementAmount || 0) <= 0) return '结算金额必须大于 0 才能确认核对。'
+  return ''
 }
 
 function CoreChannelBillFormPage({ mode }) {
@@ -45,6 +57,7 @@ function CoreChannelBillFormPage({ mode }) {
   const [loading, setLoading] = useState(isEdit)
   const [loadError, setLoadError] = useState('')
   const [loadAttempt, setLoadAttempt] = useState(0)
+  const [reviewing, setReviewing] = useState(false)
 
   useEffect(() => {
     if (!isEdit) return
@@ -99,7 +112,6 @@ function CoreChannelBillFormPage({ mode }) {
     editRecord && (!editRecord.id || editRecord.id === '')
       ? { ...editRecord, id: String(channelEditRecordId) }
       : editRecord
-  const stateLabel = !isEdit ? '新建账单' : '待核对'
 
   const safety = useBillFormSafety({
     type: 'channel',
@@ -145,10 +157,44 @@ function CoreChannelBillFormPage({ mode }) {
       showToast('已保存，可继续新增下一张渠道账单', 'success')
       return
     }
-    if (isEdit) {
-      showToast('渠道账单已保存。完成核对请到账单 360° → 操作日志进行状态流转。', 'success')
-    }
     goList()
+  }
+
+  const confirmReview = async () => {
+    if (!isEdit || !channelEditRecordId || reviewing) return
+    const candidate = safety.currentRecord || safety.draftRecord || stableRecord
+    const validationMessage = reviewValidation(candidate)
+    if (validationMessage) {
+      showToast(validationMessage, 'error')
+      return
+    }
+    const confirmed = window.confirm(
+      `确认核对这张渠道账单吗？\n\n结算金额：${money(candidate?.settlementAmount || previewAmount)}\n\n确认后账单会自动锁定；如需再修改，可点击“退回修改”。`
+    )
+    if (!confirmed) return
+
+    setReviewing(true)
+    const billId = String(channelEditRecordId)
+    try {
+      const saved = await recon.onChannelUpdateRecord(billId, {
+        ...stableRecord,
+        ...candidate,
+        id: billId,
+        status: stableRecord?.status || 'pending'
+      })
+      if (saved === false) return
+      safety.clearAfterSubmit()
+      invalidateEditRecord('channel', billId)
+
+      await transitionBillLifecycle('channel', billId, 'confirmed', '')
+      await recon.refetchChannelFromApi?.()
+      showToast('核对完成，账单已锁定', 'success')
+      goList()
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : '账单已保存，但确认核对失败，请稍后重试。', 'error')
+    } finally {
+      setReviewing(false)
+    }
   }
 
   const discardDraft = () => {
@@ -187,14 +233,15 @@ function CoreChannelBillFormPage({ mode }) {
             <span className="core-bill-form-kind">渠道账单</span>
             <h1>{isEdit ? '编辑渠道账单' : '新增渠道账单'}</h1>
             <span className={`core-bill-state-tag ${isEdit ? 'is-pending' : ''}`}>
-              {stateLabel}
+              {isEdit ? '待核对' : '新建账单'}
             </span>
           </div>
           <span className="core-bill-form-tip">
             {isEdit
-              ? '当前为待核对状态，可修改明细；保存后请到账单 360° 的“操作日志”中完成核对及后续状态流转。'
-              : '先选择合作方和账期，再录入游戏明细。'}
+              ? '修改完成后可直接“保存并确认核对”，确认后系统自动锁定账单。'
+              : '先选择合作方和账期，再录入游戏明细。保存后账单进入待核对。'}
           </span>
+          {isEdit ? <span className="core-bill-review-hint">日常只需要“确认核对”与“退回修改”两个动作</span> : null}
           <div className={`core-bill-draft-state ${safety.dirty ? 'is-dirty' : 'is-clean'}`}>
             <span aria-hidden="true" />
             <strong>{safety.statusText}</strong>
@@ -252,7 +299,7 @@ function CoreChannelBillFormPage({ mode }) {
               清除草稿
             </button>
           ) : null}
-          <button type="button" onClick={goList}>返回列表</button>
+          <button type="button" onClick={goList} disabled={reviewing}>返回列表</button>
           {!isEdit ? (
             <button
               type="button"
@@ -266,7 +313,8 @@ function CoreChannelBillFormPage({ mode }) {
           ) : null}
           <button
             type="button"
-            className="primary"
+            className={isEdit ? '' : 'primary'}
+            disabled={reviewing}
             onClick={() => {
               submitIntentRef.current = 'back'
               document.getElementById(FORM_ID)?.requestSubmit()
@@ -274,6 +322,11 @@ function CoreChannelBillFormPage({ mode }) {
           >
             {isEdit ? '保存修改' : '保存账单'}
           </button>
+          {isEdit ? (
+            <button type="button" className="confirm-review" disabled={reviewing} onClick={() => void confirmReview()}>
+              {reviewing ? '正在确认…' : '保存并确认核对'}
+            </button>
+          ) : null}
         </div>
       </section>
     </PageContainer>
