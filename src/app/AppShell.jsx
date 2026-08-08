@@ -56,7 +56,11 @@ function AppShell({
           </button>
         </div>
         <div className="app-main-shell">
-          <Header activeView={activeView} onNavigate={onNavigate} onSettingsChange={onSettingsChange} />
+          <Header
+            activeView={activeView}
+            onNavigate={onNavigate}
+            onSettingsChange={onSettingsChange}
+          />
           <TopSubnav
             activeView={activeView}
             onNavigate={onNavigate}
