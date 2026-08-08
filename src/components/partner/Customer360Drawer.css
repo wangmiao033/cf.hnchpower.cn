@@ -1,0 +1,529 @@
+.customer360-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1360;
+  display: flex;
+  justify-content: flex-end;
+  background: rgb(15 23 42 / 38%);
+  backdrop-filter: blur(2px);
+}
+
+.customer360-drawer {
+  width: min(1480px, 88vw);
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #f5f7fb;
+  border-left: 1px solid #d9e2ef;
+  box-shadow: -18px 0 50px rgb(15 23 42 / 14%);
+}
+
+.customer360-header {
+  min-height: 86px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 14px 18px;
+  background: #ffffff;
+  border-bottom: 1px solid #e3e9f2;
+}
+
+.customer360-title {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.customer360-avatar {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: #eaf2ff;
+  color: #1d4ed8;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.customer360-eyebrow {
+  color: #7b8aa0;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+
+.customer360-title h2 {
+  margin: 2px 0 0;
+  overflow: hidden;
+  color: #10233f;
+  font-size: 21px;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.customer360-title p {
+  margin: 4px 0 0;
+  overflow: hidden;
+  color: #65758c;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.customer360-header-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.customer360-header-actions button,
+.customer360-section-head button {
+  min-height: 32px;
+  padding: 0 11px;
+  border: 1px solid #d7e1ee;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #34455f;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.customer360-header-actions button:hover,
+.customer360-section-head button:hover {
+  border-color: #9db6d8;
+  background: #f8fbff;
+}
+
+.customer360-header-actions .customer360-close {
+  width: 34px;
+  min-width: 34px;
+  padding: 0;
+  color: #64748b;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.customer360-kpis {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+  padding: 10px 12px 0;
+}
+
+.customer360-kpis article {
+  position: relative;
+  min-width: 0;
+  min-height: 74px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 10px 13px;
+  overflow: hidden;
+  border: 1px solid #dce4ef;
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgb(15 23 42 / 4%);
+}
+
+.customer360-kpis article::before {
+  position: absolute;
+  top: 0;
+  right: 12px;
+  left: 12px;
+  height: 2px;
+  border-radius: 0 0 2px 2px;
+  background: #2563eb;
+  content: '';
+}
+
+.customer360-kpis article:nth-child(2)::before { background: #16a34a; }
+.customer360-kpis article:nth-child(3)::before { background: #7c3aed; }
+.customer360-kpis article:nth-child(4)::before { background: #d97706; }
+.customer360-kpis article:nth-child(5)::before { background: #0891b2; }
+
+.customer360-kpis span {
+  color: #75859b;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.customer360-kpis strong {
+  margin-top: 5px;
+  overflow: hidden;
+  color: #122642;
+  font-size: 18px;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.customer360-kpis small {
+  margin-top: 5px;
+  overflow: hidden;
+  color: #7d8ca0;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.customer360-tabs {
+  min-height: 46px;
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  padding: 8px 12px 0;
+  border-bottom: 1px solid #dfe6ef;
+}
+
+.customer360-tabs button {
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 14px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: #65758b;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.customer360-tabs button:hover { color: #1e40af; }
+
+.customer360-tabs button.is-active {
+  border-bottom-color: #2563eb;
+  color: #1d4ed8;
+}
+
+.customer360-tabs em {
+  min-width: 18px;
+  height: 18px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #edf2f8;
+  color: #607086;
+  font-size: 9px;
+  font-style: normal;
+}
+
+.customer360-content {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 10px 12px 18px;
+}
+
+.customer360-overview {
+  display: grid;
+  grid-template-columns: minmax(0, 1.12fr) minmax(380px, .88fr);
+  gap: 10px;
+}
+
+.customer360-card,
+.customer360-table-card {
+  overflow: hidden;
+  border: 1px solid #dce4ef;
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgb(15 23 42 / 4%);
+}
+
+.customer360-card-head,
+.customer360-section-head {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  border-bottom: 1px solid #e7ecf3;
+  background: #fbfcfe;
+}
+
+.customer360-card-head span,
+.customer360-section-head span {
+  color: #8391a5;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .08em;
+}
+
+.customer360-card-head h3,
+.customer360-section-head h3 {
+  margin: 2px 0 0;
+  color: #263a57;
+  font-size: 13px;
+}
+
+.customer360-card-head small,
+.customer360-section-head small {
+  color: #8391a5;
+  font-size: 10px;
+}
+
+.customer360-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+  padding: 3px 12px 12px;
+}
+
+.customer360-detail-grid > div {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr);
+  gap: 10px;
+  padding: 10px 4px;
+  border-bottom: 1px dashed #e7ecf3;
+}
+
+.customer360-detail-grid > div.is-wide { grid-column: 1 / -1; }
+
+.customer360-detail-grid dt {
+  color: #8492a5;
+  font-size: 10px;
+}
+
+.customer360-detail-grid dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: #283b56;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.customer360-activity-list {
+  max-height: calc(100vh - 330px);
+  overflow: auto;
+  padding: 5px 8px 9px;
+}
+
+.customer360-activity-list button {
+  width: 100%;
+  min-height: 51px;
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 7px;
+  border: 0;
+  border-bottom: 1px solid #edf1f6;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.customer360-activity-list button:hover { background: #f5f8fd; }
+
+.customer360-activity-mark {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: #edf3ff;
+  color: #2456b7;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.customer360-activity-mark.is-rd_bill { background: #f2edff; color: #6d28d9; }
+.customer360-activity-mark.is-channel_bill { background: #ecfdf3; color: #15803d; }
+.customer360-activity-mark.is-invoice { background: #fff7ed; color: #c2410c; }
+.customer360-activity-mark.is-bank_transaction { background: #ecfeff; color: #0e7490; }
+
+.customer360-activity-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.customer360-activity-copy strong {
+  overflow: hidden;
+  color: #2c405c;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.customer360-activity-copy small {
+  overflow: hidden;
+  color: #8b98a9;
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.customer360-activity-list b {
+  color: #334a68;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.customer360-bill-stack {
+  display: grid;
+  gap: 10px;
+}
+
+.customer360-table-wrap {
+  width: 100%;
+  max-height: calc(100vh - 315px);
+  overflow: auto;
+}
+
+.customer360-bill-stack .customer360-table-wrap { max-height: 290px; }
+
+.customer360-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: auto;
+}
+
+.customer360-table th,
+.customer360-table td {
+  min-height: 38px;
+  padding: 9px 10px;
+  border-bottom: 1px solid #edf1f6;
+  color: #47586f;
+  font-size: 10px;
+  text-align: left;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.customer360-table th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #f7f9fc;
+  color: #697a90;
+  font-weight: 800;
+}
+
+.customer360-table tbody tr { cursor: pointer; }
+.customer360-table tbody tr:nth-child(even) td { background: #fcfdff; }
+.customer360-table tbody tr:hover td { background: #f2f7ff; }
+.customer360-table td strong { color: #263c5a; font-weight: 800; }
+
+.customer360-status,
+.customer360-direction {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #53647b;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.customer360-status.is-active { background: #ecfdf3; color: #15803d; }
+.customer360-status.is-pending { background: #fff7ed; color: #b45309; }
+.customer360-status.is-expired,
+.customer360-status.is-ended { background: #fef2f2; color: #b91c1c; }
+.customer360-direction.is-input { background: #eef2ff; color: #4338ca; }
+.customer360-direction.is-output { background: #ecfdf3; color: #15803d; }
+
+.customer360-empty,
+.customer360-loading,
+.customer360-error {
+  min-height: 160px;
+  display: grid;
+  place-items: center;
+  padding: 28px;
+  color: #7d8ca0;
+  font-size: 11px;
+  text-align: center;
+}
+
+.customer360-loading,
+.customer360-error {
+  flex: 1;
+  align-content: center;
+}
+
+.customer360-error strong {
+  color: #b42318;
+  font-size: 14px;
+}
+
+.customer360-error p {
+  max-width: 560px;
+  margin: 7px 0 12px;
+  color: #7f1d1d;
+}
+
+.customer360-error button {
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  background: #fff;
+  color: #b91c1c;
+  cursor: pointer;
+}
+
+.customer-name-link {
+  max-width: 100%;
+  height: auto !important;
+  padding: 0 !important;
+  overflow: hidden;
+  border: 0 !important;
+  background: transparent !important;
+  color: #1d4ed8;
+  font: inherit;
+  font-weight: 700;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.customer-name-link:hover { text-decoration: underline; }
+
+.customer-360-btn {
+  border-color: #bfd2f3 !important;
+  background: #eff6ff !important;
+  color: #1d4ed8 !important;
+  font-weight: 800 !important;
+}
+
+@media (max-width: 1180px) {
+  .customer360-drawer { width: 94vw; }
+  .customer360-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .customer360-overview { grid-template-columns: 1fr; }
+  .customer360-activity-list { max-height: 330px; }
+}
+
+@media (max-width: 760px) {
+  .customer360-drawer { width: 100vw; }
+  .customer360-header { align-items: flex-start; }
+  .customer360-title p { white-space: normal; }
+  .customer360-header-actions button:not(.customer360-close) { display: none; }
+  .customer360-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .customer360-tabs { overflow-x: auto; align-items: center; }
+  .customer360-tabs button { flex: 0 0 auto; }
+  .customer360-detail-grid { grid-template-columns: 1fr; }
+  .customer360-detail-grid > div.is-wide { grid-column: auto; }
+}
+
+@media (max-width: 520px) {
+  .customer360-kpis { grid-template-columns: 1fr; }
+}
