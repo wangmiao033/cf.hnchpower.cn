@@ -2,10 +2,18 @@ import React, { useMemo, useRef, useState } from 'react'
 import * as XLSX from 'xlsx'
 import { useAppState } from '@/app/AppStateContext.jsx'
 import PageContainer from '@/components/layout/PageContainer.jsx'
+import ChannelReceiptDrawer from '@/components/channel/ChannelReceiptDrawer.jsx'
 import { VIEWS } from '@/app/routes.js'
 import { buildChannelBillFromSingleGameForm } from '@/domain/channel/channelBillingForm.js'
+import {
+  getChannelReceivedAmount,
+  getChannelTotals,
+  isChannelReceiptSettled,
+  sumChannelNumericLines
+} from '@/domain/channel/channelAggregates.js'
 import { parseChannelStatementWorkbook } from '@/domain/channel/channelStatementImport.js'
 import { getChannelBillNumber } from '@/utils/channelBillNumber.js'
+import '@/components/reconciliation/reconciliation-admin.css'
 import './CoreReconciliationPages.css'
 
 const STATUS_LABELS = {
@@ -38,9 +46,25 @@ function monthLabel(value) {
   return match ? `${match[1]}年${Number(match[2])}月` : normalized
 }
 
+function channelGames(record) {
+  const rawNames = Array.isArray(record?.items) && record.items.length > 0
+    ? record.items.map((item) => item?.gameName)
+    : String(record?.gameName || '').split(/[、,，]/)
+  const seen = new Set()
+  const names = []
+  rawNames.forEach((value) => {
+    const name = String(value || '').trim()
+    if (!name || seen.has(name)) return
+    seen.add(name)
+    names.push(name)
+  })
+  return names
+}
+
 function CoreChannelReconciliationPage() {
   const {
     recon,
+    settings,
     showToast,
     setActiveView,
     openChannelReconciliationEdit,
@@ -54,6 +78,7 @@ function CoreChannelReconciliationPage() {
   const [query, setQuery] = useState('')
   const [selectedIds, setSelectedIds] = useState([])
   const [isDeleting, setIsDeleting] = useState(false)
+  const [receiptRecord, setReceiptRecord] = useState(null)
 
   const monthOptions = useMemo(
     () =>
@@ -77,7 +102,13 @@ function CoreChannelReconciliationPage() {
       const matchesChannel =
         !channelQuery || text(row.channelName, '').toLowerCase().includes(channelQuery)
       const matchesStatus = !status || String(row.status || 'pending') === status
-      const haystack = [getChannelBillNumber(row), row.channelName, row.partnerName, row.gameName, row.remark]
+      const haystack = [
+        getChannelBillNumber(row),
+        row.channelName,
+        row.partnerName,
+        ...channelGames(row),
+        row.remark
+      ]
         .filter(Boolean)
         .join(' ')
         .toLowerCase()
@@ -93,15 +124,16 @@ function CoreChannelReconciliationPage() {
   const partiallyVisibleSelected = selectedRows.length > 0 && !allVisibleSelected
 
   const stats = useMemo(() => {
-    const flow = rows.reduce((sum, row) => sum + Number(row.flow || 0), 0)
-    const settlement = rows.reduce((sum, row) => sum + Number(row.settlementAmount || 0), 0)
+    const settlement = rows.reduce((sum, row) => sum + getChannelTotals(row).settlementAmount, 0)
+    const received = rows.reduce((sum, row) => sum + getChannelReceivedAmount(row), 0)
+    const unpaid = Math.max(0, settlement - received)
     const channels = new Set(rows.map((row) => text(row.channelName, '')).filter(Boolean))
-    const games = new Set(rows.flatMap((row) => String(row.gameName || '').split('、').filter(Boolean)))
+    const games = new Set(rows.flatMap((row) => channelGames(row)))
     return [
       { label: '账单数量', value: rows.length },
       { label: '渠道', value: channels.size },
       { label: '产品', value: games.size },
-      { label: '结算金额', value: money(settlement), note: `计费流水 ${money(flow)}` }
+      { label: '渠道应收', value: money(settlement), note: `已收 ${money(received)} · 未收 ${money(unpaid)}` }
     ]
   }, [rows])
 
@@ -163,22 +195,29 @@ function CoreChannelReconciliationPage() {
       showToast('没有可导出的渠道账单', 'error')
       return
     }
-    const data = target.map((row) => ({
-      月份: row.settlementMonth || '',
-      编号: getChannelBillNumber(row),
-      渠道: row.channelName || '',
-      合作方: row.partnerName || '',
-      产品: row.gameName || '',
-      计费流水: Number(row.flow || 0),
-      计费金额: Number(row.billingAmount || 0),
-      分成金额: Number(row.shareAmount || 0),
-      税率: row.taxRate || 0,
-      通道费: Number(row.gatewayCost || 0),
-      结算金额: Number(row.settlementAmount || 0),
-      已收款: Number(row.receivedAmount || 0),
-      状态: STATUS_LABELS[row.status] || row.status || '待处理',
-      备注: row.remark || ''
-    }))
+    const data = target.map((row) => {
+      const totals = getChannelTotals(row)
+      const received = getChannelReceivedAmount(row)
+      const games = channelGames(row)
+      return {
+        月份: row.settlementMonth || '',
+        编号: getChannelBillNumber(row),
+        渠道: row.channelName || '',
+        合作方: row.partnerName || '',
+        产品数量: games.length,
+        产品: games.join('、'),
+        计费流水: totals.flow,
+        计费金额: sumChannelNumericLines(row, 'billingAmount'),
+        分成金额: sumChannelNumericLines(row, 'shareAmount'),
+        通道费: sumChannelNumericLines(row, 'gatewayCost'),
+        渠道应收: totals.settlementAmount,
+        已收款: received,
+        未收款: Math.max(0, totals.settlementAmount - received),
+        收款状态: isChannelReceiptSettled(row) ? '已结清' : received > 0 ? '部分收款' : '未收款',
+        状态: STATUS_LABELS[row.status] || row.status || '待处理',
+        备注: row.remark || ''
+      }
+    })
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), '渠道账单')
     XLSX.writeFile(wb, `渠道账单_${new Date().toISOString().slice(0, 10)}.xlsx`)
@@ -200,8 +239,8 @@ function CoreChannelReconciliationPage() {
         return
       }
       const sheet = workbook.Sheets[workbook.SheetNames[0]]
-      const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' })
-      const records = rows.map(mapChannelImportRow).filter(Boolean)
+      const importRows = XLSX.utils.sheet_to_json(sheet, { defval: '' })
+      const records = importRows.map(mapChannelImportRow).filter(Boolean)
       if (records.length === 0) {
         showToast('没有识别到可导入的渠道对账数据', 'error')
         return
@@ -352,13 +391,13 @@ function CoreChannelReconciliationPage() {
               <col className="core-channel-col-number" />
               <col className="core-channel-col-channel" />
               <col className="core-channel-col-partner" />
-              <col className="core-channel-col-game" />
+              <col className="core-channel-col-game" style={{ width: 180 }} />
               <col className="core-channel-col-flow" />
               <col className="core-channel-col-share" />
               <col className="core-channel-col-settlement" />
-              <col className="core-channel-col-received" />
+              <col className="core-channel-col-received" style={{ width: 150 }} />
               <col className="core-channel-col-status" />
-              <col className="core-channel-col-actions" />
+              <col className="core-channel-col-actions" style={{ width: 155 }} />
             </colgroup>
             <thead>
               <tr>
@@ -383,8 +422,8 @@ function CoreChannelReconciliationPage() {
                 <th>产品</th>
                 <th className="core-recon-align-right">计费流水</th>
                 <th className="core-recon-align-right">分成金额</th>
-                <th className="core-recon-align-right">结算金额</th>
-                <th className="core-recon-align-right">收款</th>
+                <th className="core-recon-align-right">渠道应收</th>
+                <th className="core-recon-align-right">已收 / 未收</th>
                 <th>状态</th>
                 <th>操作</th>
               </tr>
@@ -395,71 +434,102 @@ function CoreChannelReconciliationPage() {
                   <td colSpan={11} className="core-recon-empty">暂无渠道账单</td>
                 </tr>
               ) : (
-                rows.map((row) => (
-                  <tr
-                    key={row.id}
-                    className={selectedIds.includes(String(row.id)) ? 'is-selected' : ''}
-                  >
-                    <td className="core-rd-month-cell">
-                      <input
-                        type="checkbox"
-                        aria-label={`选择渠道账单 ${text(row.channelName)} ${monthLabel(row.settlementMonth)}`}
-                        checked={selectedIds.includes(String(row.id))}
-                        disabled={isDeleting}
-                        onChange={() => toggleSelected(row.id)}
-                      />
-                      <span>{monthLabel(row.settlementMonth)}</span>
-                    </td>
-                    <td className="core-recon-number">{getChannelBillNumber(row)}</td>
-                    <td>
-                      <strong className="core-recon-partner-short-name" title={text(row.channelName)}>
-                        {text(row.channelName)}
-                      </strong>
-                    </td>
-                    <td>
-                      <span className="core-recon-game-text" title={text(row.partnerName)}>
-                        {text(row.partnerName)}
-                      </span>
-                    </td>
-                    <td>
-                      <span className="core-recon-game-text" title={text(row.gameName)}>
-                        {text(row.gameName)}
-                      </span>
-                    </td>
-                    <td className="core-recon-money">{money(row.flow)}</td>
-                    <td className="core-recon-money">{money(row.shareAmount)}</td>
-                    <td className="core-recon-money core-recon-money--settlement">
-                      {money(row.settlementAmount)}
-                    </td>
-                    <td className="core-recon-money core-recon-money--received">
-                      {money(row.receivedAmount)}
-                    </td>
-                    <td>
-                      <span className={`core-recon-status core-recon-status--${row.status || 'pending'}`}>
-                        {STATUS_LABELS[row.status] || row.status || '待处理'}
-                      </span>
-                    </td>
-                    <td>
-                      <div className="core-recon-row-actions">
-                        <button type="button" onClick={() => openBill360('channel', String(row.id), row)}>详情</button>
-                        <button type="button" onClick={() => openChannelReconciliationEdit(String(row.id))}>编辑</button>
-                        <button
-                          type="button"
-                          className="danger"
+                rows.map((row) => {
+                  const totals = getChannelTotals(row)
+                  const games = channelGames(row)
+                  const received = getChannelReceivedAmount(row)
+                  const unpaid = Math.max(0, totals.settlementAmount - received)
+                  const settled = isChannelReceiptSettled(row)
+                  const gameText = games.join('、')
+                  return (
+                    <tr
+                      key={row.id}
+                      className={selectedIds.includes(String(row.id)) ? 'is-selected' : ''}
+                    >
+                      <td className="core-rd-month-cell">
+                        <input
+                          type="checkbox"
+                          aria-label={`选择渠道账单 ${text(row.channelName)} ${monthLabel(row.settlementMonth)}`}
+                          checked={selectedIds.includes(String(row.id))}
                           disabled={isDeleting}
-                          onClick={() => handleSingleDelete(row)}
-                        >
-                          删除
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                          onChange={() => toggleSelected(row.id)}
+                        />
+                        <span>{monthLabel(row.settlementMonth)}</span>
+                      </td>
+                      <td className="core-recon-number">{getChannelBillNumber(row)}</td>
+                      <td>
+                        <strong className="core-recon-partner-short-name" title={text(row.channelName)}>
+                          {text(row.channelName)}
+                        </strong>
+                      </td>
+                      <td>
+                        <span className="core-recon-game-text" title={text(row.partnerName)}>
+                          {text(row.partnerName)}
+                        </span>
+                      </td>
+                      <td>
+                        <span className="core-recon-game-text" title={gameText || '-'}>
+                          {games.length > 1 ? `${games.length}个 · ${gameText}` : text(gameText)}
+                        </span>
+                      </td>
+                      <td className="core-recon-money">{money(totals.flow)}</td>
+                      <td className="core-recon-money">{money(sumChannelNumericLines(row, 'shareAmount'))}</td>
+                      <td className="core-recon-money core-recon-money--settlement">
+                        {money(totals.settlementAmount)}
+                      </td>
+                      <td className="core-recon-money core-recon-money--received">
+                        <strong style={{ display: 'block', fontWeight: 700 }}>{money(received)}</strong>
+                        <small style={{ display: 'block', marginTop: 2, color: '#8a98aa', fontSize: 10 }}>
+                          未收 {money(unpaid)}
+                        </small>
+                      </td>
+                      <td>
+                        <span className={`core-recon-status core-recon-status--${row.status || 'pending'}`}>
+                          {STATUS_LABELS[row.status] || row.status || '待处理'}
+                        </span>
+                      </td>
+                      <td>
+                        <div className="core-recon-row-actions">
+                          <button type="button" onClick={() => openBill360('channel', String(row.id), row)}>详情</button>
+                          <button
+                            type="button"
+                            disabled={settled || !recon.channelApiEnabled}
+                            title={!recon.channelApiEnabled ? '渠道 API 不可用，暂不能登记收款' : settled ? '该账单已结清' : '登记渠道收款'}
+                            onClick={() => setReceiptRecord(row)}
+                          >
+                            {settled ? '已结清' : '收款'}
+                          </button>
+                          <button type="button" onClick={() => openChannelReconciliationEdit(String(row.id))}>编辑</button>
+                          <button
+                            type="button"
+                            className="danger"
+                            disabled={isDeleting}
+                            onClick={() => handleSingleDelete(row)}
+                          >
+                            删除
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })
               )}
             </tbody>
           </table>
         </div>
       </section>
+
+      <ChannelReceiptDrawer
+        open={Boolean(receiptRecord)}
+        record={receiptRecord}
+        quickFull={false}
+        partyA={settings.partyA}
+        partyB={settings.partyB}
+        channelApiEnabled={recon.channelApiEnabled}
+        showToast={showToast}
+        onClose={() => setReceiptRecord(null)}
+        onRegisterReceipt={recon.onChannelRegisterReceipt}
+      />
     </PageContainer>
   )
 }
@@ -494,7 +564,7 @@ function mapChannelImportRow(row) {
     shareRate: Number(readAny(row, ['分成比例', '渠道分成比例']) || 30),
     taxRate: Number(readAny(row, ['税率', '税点']) || 5),
     gatewayCost: Number(readAny(row, ['通道费', '通道成本']) || 0),
-    settlementAmount: readAny(row, ['结算金额']) || ''
+    settlementAmount: readAny(row, ['渠道应收', '结算金额']) || ''
   })
 }
 
