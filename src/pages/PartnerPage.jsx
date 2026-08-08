@@ -1,6 +1,10 @@
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { useAppState } from '@/app/AppStateContext.jsx'
 import PageContainer from '@/components/layout/PageContainer.jsx'
+import {
+  consumePartnerFocus,
+  GLOBAL_SEARCH_FOCUS_EVENT
+} from '@/lib/search/globalSearchFocus.ts'
 import './PartnerPage.css'
 
 const EMPTY_PARTNER = {
@@ -34,6 +38,23 @@ function PartnerPage() {
   const [form, setForm] = useState(EMPTY_PARTNER)
   const [saving, setSaving] = useState(false)
   const [isFormOpen, setIsFormOpen] = useState(false)
+
+  useEffect(() => {
+    const applyFocus = (value) => {
+      const normalized = String(value || '').trim()
+      if (!normalized) return
+      setCategory('全部')
+      setQuery(normalized)
+    }
+
+    applyFocus(consumePartnerFocus())
+    const handleGlobalFocus = (event) => {
+      if (event?.detail?.kind !== 'partner') return
+      applyFocus(consumePartnerFocus() || event.detail.value)
+    }
+    window.addEventListener(GLOBAL_SEARCH_FOCUS_EVENT, handleGlobalFocus)
+    return () => window.removeEventListener(GLOBAL_SEARCH_FOCUS_EVENT, handleGlobalFocus)
+  }, [])
 
   const filteredPartners = useMemo(() => {
     const q = query.trim().toLowerCase()
