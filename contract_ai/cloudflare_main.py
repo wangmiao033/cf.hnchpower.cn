@@ -12,6 +12,7 @@ import base64
 import io
 import json
 import os
+import re
 from pathlib import PurePath
 from typing import Any
 
@@ -59,6 +60,8 @@ CLOUDFLARE_API_BASE = "https://api.cloudflare.com/client/v4/accounts"
 PDF_RENDER_MAX_LONG_EDGE = 1680
 PDF_RENDER_JPEG_QUALITY = 84
 PDF_MAX_PAGES_PER_REQUEST = 32
+EXTRACTION_TOOL_NAME = "submit_contract_extraction"
+_REQUIRED_RESULT_KEYS = {"contract", "confidence", "evidence", "parties", "access_items"}
 
 
 def _workers_ai_config() -> tuple[str, str]:
@@ -149,6 +152,14 @@ def _workers_ai_payload(
     content_type: str,
     body: bytes,
 ) -> tuple[dict[str, Any], int]:
+    """Build a Gemma request that forces a schema-shaped function call.
+
+    Cloudflare JSON Mode does not currently list Gemma 4 among its guaranteed
+    models, while Gemma 4 explicitly supports both Vision and Function Calling.
+    Using one required tool therefore gives us a more reliable structured
+    extraction contract than asking the model to print JSON in normal text.
+    """
+
     extension = PurePath(file_name).suffix.lower()
     user_content: list[dict[str, Any]] = [
         {
@@ -156,7 +167,7 @@ def _workers_ai_payload(
             "text": (
                 f"请识别合同文件“{file_name}”。图片按合同原始页码顺序排列。"
                 "必须阅读可见文字、印章附近文字、表格和条款；不要补全文件里没有的信息。"
-                "请严格按 response_format 的 JSON Schema 返回候选字段。"
+                f"完成识别后必须调用 {EXTRACTION_TOOL_NAME} 工具提交结果，不要用普通文本代替。"
             ),
         }
     ]
@@ -184,13 +195,28 @@ def _workers_ai_payload(
     return (
         {
             "messages": [
-                {"role": "system", "content": SYSTEM_PROMPT},
+                {
+                    "role": "system",
+                    "content": (
+                        SYSTEM_PROMPT
+                        + "\n\n你必须通过 submit_contract_extraction 工具返回最终结果；"
+                        "工具参数就是最终合同候选字段，不要额外输出 Markdown。"
+                    ),
+                },
                 {"role": "user", "content": user_content},
             ],
-            "response_format": {
-                "type": "json_schema",
-                "json_schema": CONTRACT_SCAN_SCHEMA,
-            },
+            "tools": [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": EXTRACTION_TOOL_NAME,
+                        "description": "提交从合同原件中提取并核验后的结构化候选字段。",
+                        "parameters": CONTRACT_SCAN_SCHEMA,
+                    },
+                }
+            ],
+            "tool_choice": "required",
+            "parallel_tool_calls": False,
             "temperature": 0.1,
             "max_completion_tokens": 6000,
             "stream": False,
@@ -199,51 +225,170 @@ def _workers_ai_payload(
     )
 
 
+def _looks_like_contract_result(value: Any) -> bool:
+    return isinstance(value, dict) and _REQUIRED_RESULT_KEYS.issubset(value.keys())
+
+
+def _parse_json_text(value: Any) -> dict[str, Any] | None:
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    if not text:
+        return None
+
+    # Models sometimes wrap JSON in Markdown fences even when told not to.
+    fenced = re.fullmatch(r"```(?:json)?\s*(.*?)\s*```", text, flags=re.IGNORECASE | re.DOTALL)
+    if fenced:
+        text = fenced.group(1).strip()
+
+    try:
+        parsed = json.loads(text)
+        return parsed if isinstance(parsed, dict) else None
+    except json.JSONDecodeError:
+        pass
+
+    # Last-resort compatibility: find the first valid JSON object embedded in
+    # explanatory prose without attempting regex-based brace matching.
+    decoder = json.JSONDecoder()
+    for index, character in enumerate(text):
+        if character != "{":
+            continue
+        try:
+            parsed, _ = decoder.raw_decode(text[index:])
+        except json.JSONDecodeError:
+            continue
+        if isinstance(parsed, dict):
+            return parsed
+    return None
+
+
+def _tool_arguments(call: Any) -> dict[str, Any] | None:
+    if not isinstance(call, dict):
+        return None
+
+    # OpenAI-compatible shape:
+    # {"type":"function","function":{"name":"...","arguments":"{...}"}}
+    function = call.get("function")
+    if isinstance(function, dict):
+        name = str(function.get("name") or "").strip()
+        arguments = function.get("arguments")
+        if name and name != EXTRACTION_TOOL_NAME:
+            return None
+        if isinstance(arguments, dict):
+            return arguments
+        parsed = _parse_json_text(arguments)
+        if parsed is not None:
+            return parsed
+
+    # Traditional Workers AI shape:
+    # {"name":"...","arguments": {...}}
+    name = str(call.get("name") or "").strip()
+    arguments = call.get("arguments")
+    if name and name != EXTRACTION_TOOL_NAME:
+        return None
+    if isinstance(arguments, dict):
+        return arguments
+    parsed = _parse_json_text(arguments)
+    if parsed is not None:
+        return parsed
+    return None
+
+
+def _candidate_from_tool_calls(value: Any) -> dict[str, Any] | None:
+    if not isinstance(value, list):
+        return None
+    for call in value:
+        arguments = _tool_arguments(call)
+        if arguments is not None and _looks_like_contract_result(arguments):
+            return arguments
+    return None
+
+
+def _walk_for_contract_result(value: Any, *, depth: int = 0) -> dict[str, Any] | None:
+    """Compatibility parser for Cloudflare response envelope variations."""
+
+    if depth > 8:
+        return None
+    if _looks_like_contract_result(value):
+        return value
+
+    if isinstance(value, dict):
+        tool_result = _candidate_from_tool_calls(value.get("tool_calls"))
+        if tool_result is not None:
+            return tool_result
+
+        # Prefer fields known to carry model output before generic recursion.
+        for key in ("response", "parsed", "arguments", "output_text", "content"):
+            child = value.get(key)
+            if isinstance(child, dict) and _looks_like_contract_result(child):
+                return child
+            parsed = _parse_json_text(child)
+            if parsed is not None and _looks_like_contract_result(parsed):
+                return parsed
+            nested = _walk_for_contract_result(child, depth=depth + 1)
+            if nested is not None:
+                return nested
+
+        for child in value.values():
+            nested = _walk_for_contract_result(child, depth=depth + 1)
+            if nested is not None:
+                return nested
+        return None
+
+    if isinstance(value, list):
+        tool_result = _candidate_from_tool_calls(value)
+        if tool_result is not None:
+            return tool_result
+        for child in value:
+            nested = _walk_for_contract_result(child, depth=depth + 1)
+            if nested is not None:
+                return nested
+        return None
+
+    parsed = _parse_json_text(value)
+    if parsed is not None and _looks_like_contract_result(parsed):
+        return parsed
+    return None
+
+
+def _payload_shape(value: Any, *, depth: int = 0) -> Any:
+    """Return key/type metadata only, never contract text or secret values."""
+
+    if depth >= 3:
+        return type(value).__name__
+    if isinstance(value, dict):
+        return {
+            str(key): _payload_shape(child, depth=depth + 1)
+            for key, child in list(value.items())[:20]
+        }
+    if isinstance(value, list):
+        return [
+            _payload_shape(child, depth=depth + 1)
+            for child in value[:3]
+        ]
+    return type(value).__name__
+
+
 def parse_workers_ai_result(payload: Any) -> dict[str, Any]:
-    """Extract structured JSON from Cloudflare REST or OpenAI-compatible shapes."""
+    """Extract the contract object from Workers AI/tool-call response shapes."""
 
     if not isinstance(payload, dict):
         raise ValueError("Cloudflare Workers AI 返回格式异常")
 
-    result: Any = payload.get("result", payload)
-    if isinstance(result, dict):
-        response = result.get("response")
-        if isinstance(response, dict):
-            return response
-        if isinstance(response, str) and response.strip():
-            try:
-                parsed = json.loads(response)
-            except json.JSONDecodeError as exc:
-                raise ValueError("Cloudflare Workers AI 返回的 JSON 无法解析") from exc
-            if isinstance(parsed, dict):
-                return parsed
+    parsed = _walk_for_contract_result(payload)
+    if parsed is not None:
+        return parsed
 
-        choices = result.get("choices")
-        if isinstance(choices, list) and choices:
-            first = choices[0] if isinstance(choices[0], dict) else {}
-            message = first.get("message") if isinstance(first, dict) else None
-            if isinstance(message, dict):
-                parsed = message.get("parsed")
-                if isinstance(parsed, dict):
-                    return parsed
-                content = message.get("content")
-                if isinstance(content, str) and content.strip():
-                    try:
-                        parsed_content = json.loads(content)
-                    except json.JSONDecodeError as exc:
-                        raise ValueError("Cloudflare Workers AI 返回的 JSON 无法解析") from exc
-                    if isinstance(parsed_content, dict):
-                        return parsed_content
-
-    if isinstance(result, str) and result.strip():
-        try:
-            parsed = json.loads(result)
-        except json.JSONDecodeError as exc:
-            raise ValueError("Cloudflare Workers AI 返回的 JSON 无法解析") from exc
-        if isinstance(parsed, dict):
-            return parsed
-
-    raise ValueError("Cloudflare Workers AI 没有返回结构化合同字段")
+    # Helpful for future provider changes, while deliberately avoiding logging
+    # any model text, contract content, token or image data.
+    try:
+        print(
+            "Cloudflare Workers AI unparsed response shape:",
+            json.dumps(_payload_shape(payload), ensure_ascii=False)[:4000],
+        )
+    except Exception:
+        pass
+    raise ValueError("Cloudflare Workers AI 返回了内容，但未能提取结构化合同字段，请重新扫描")
 
 
 def _cloudflare_error_message(payload: Any) -> str:
