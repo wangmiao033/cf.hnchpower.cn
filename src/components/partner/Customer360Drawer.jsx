@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { useAppState } from '@/app/AppStateContext.jsx'
 import { VIEWS } from '@/app/routes.js'
 import ContractDetailsDrawer from '@/components/contract/ContractDetailsDrawer.jsx'
+import { useAuth } from '@/features/auth/AuthContext.jsx'
 import { getCustomer360 } from '@/lib/api/customer360.ts'
 import { getGlobalSearchContract } from '@/lib/search/globalSearchDetails.ts'
 import '@/pages/contract-management.css'
@@ -48,6 +49,7 @@ function EmptyState({ children = '暂无关联数据' }) {
 
 function Customer360Drawer({ partnerId, onClose, onEdit }) {
   const { openBill360, openInvoiceEdit, setActiveView, showToast } = useAppState()
+  const { can } = useAuth()
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -112,7 +114,13 @@ function Customer360Drawer({ partnerId, onClose, onEdit }) {
 
   const openInvoice = (invoice) => {
     onClose?.()
-    openInvoiceEdit?.(invoice.id)
+    if (can?.('invoices.manage')) {
+      openInvoiceEdit?.(invoice.id)
+      return
+    }
+    setActiveView?.(
+      invoice.direction === 'input' ? VIEWS.INVOICE_INPUT : VIEWS.INVOICE_MANAGE
+    )
   }
 
   const openBank = () => {
