@@ -34,8 +34,9 @@ class ChannelReceiptListResponse(BaseModel):
 
 
 class ChannelLineItemCreate(BaseModel):
-    """单行游戏明细；金额字段与 ORM 一致（支付通道费为 gateway_cost 绝对金额）。"""
+    """单行游戏明细；每行可属于不同结算月份。"""
 
+    settlement_cycle: str | None = None
     game_name: str | None = None
     billing_flow: float = Field(default=0, ge=0)
     discount_factor: float = Field(default=1, ge=0, le=1)
@@ -58,6 +59,7 @@ class ChannelLineItemRead(BaseModel):
     id: str
     channel_record_id: str
     sort_order: int
+    settlement_cycle: str | None = None
     game_name: str | None
     billing_flow: float
     discount_factor: float = 1
