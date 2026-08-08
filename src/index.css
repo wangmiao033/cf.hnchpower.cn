@@ -68,3 +68,471 @@ samp,
 pre {
   font-family: var(--font-mono);
 }
+
+/*
+ * Desktop responsive safety layer.
+ * The business workspaces were originally tuned against the full viewport,
+ * while the real usable width is viewport - sidebar - workspace paddings.
+ * Keep wide-screen density, but move the existing responsive transitions
+ * earlier so 1280-1600px laptop/office screens work at browser zoom 100%.
+ */
+html,
+body,
+#root,
+.app,
+.app-dashboard,
+.app-main-shell,
+.app-workspace {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.app-main-shell,
+.app-workspace,
+.app-workspace > *,
+.page-container,
+.page-container-body,
+.admin-workspace,
+.admin-page-section,
+.admin-table-card,
+.admin-table-card__body {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.app-workspace :where(
+  .admin-table-card__body,
+  .core-recon-table-wrap,
+  .contract-table-wrap,
+  .qkg-table-wrap,
+  .qk-table-wrap,
+  .customer-table-wrap,
+  .ps-table-wrap,
+  .rd-quicksdk-tool__table-wrap
+) {
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+}
+
+@media (max-width: 1680px) and (min-width: 961px) {
+  :root {
+    --admin-sidebar-w: 184px;
+    --admin-workspace-pad-x: 14px;
+    --admin-page-stack-gap: 10px;
+  }
+
+  .app-workspace {
+    padding: 10px 12px 14px;
+  }
+
+  .app-admin-header__toolbar {
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+
+  .app-top-subnav--workspace .app-top-subnav__inner {
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+
+  .app-top-subnav--invoices .app-top-subnav__inner {
+    padding-right: 14px;
+    padding-left: 14px;
+  }
+
+  .sidebar-item,
+  .sidebar-group-entry {
+    padding-right: 9px;
+    padding-left: 9px;
+  }
+
+  .core-dashboard-page .page-container-body {
+    width: 100%;
+    max-width: none;
+  }
+}
+
+@media (max-width: 1500px) and (min-width: 961px) {
+  :root {
+    --admin-sidebar-w: 176px;
+    --admin-workspace-pad-x: 12px;
+  }
+
+  .app-workspace {
+    padding: 9px 10px 12px;
+  }
+
+  /* Dashboard: use the same two-column mode earlier, before the sidebar crowds it. */
+  .core-dashboard-overview__head {
+    align-items: flex-start;
+  }
+
+  .core-dashboard-primary-actions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .core-dashboard-metric-grid,
+  .core-dashboard-progress-grid,
+  .core-dashboard-module-grid,
+  .core-dashboard-todo-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  /* R&D / channel ledgers: move actions below filters instead of squeezing one row. */
+  .core-recon-page:has(.core-rd-recon-table) .core-recon-workbar,
+  .core-channel-recon-page .core-recon-workbar {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto;
+  }
+
+  .core-recon-page:has(.core-rd-recon-table) .core-recon-workbar .core-recon-filters,
+  .core-channel-recon-page .core-recon-workbar .core-recon-filters {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .core-recon-page:has(.core-rd-recon-table) .core-recon-workbar .core-recon-actions,
+  .core-channel-recon-page .core-recon-workbar .core-recon-actions {
+    grid-column: 1;
+    grid-row: 2;
+    justify-content: flex-start;
+    border-top: 1px solid #edf2f7;
+    border-left: 0;
+  }
+
+  /* Contract ledger: detach filters/actions into separate rows earlier. */
+  .contract-page .page-container-body {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto auto minmax(0, 1fr);
+    gap: 8px;
+    max-width: 100%;
+  }
+
+  .contract-page .contract-filter-card {
+    grid-column: 1;
+    grid-row: 1;
+    border-right: 1px solid var(--admin-border);
+    border-radius: 10px;
+  }
+
+  .contract-page .contract-hero {
+    grid-column: 1;
+    grid-row: 2;
+    min-height: 48px;
+    border-left: 1px solid var(--admin-border);
+    border-radius: 10px;
+  }
+
+  .contract-page .contract-stats {
+    grid-row: 3;
+  }
+
+  .contract-page .contract-table-card {
+    grid-row: 4;
+  }
+
+  /* Data center: reuse its existing narrow layout before the content becomes cramped. */
+  .quicksdk-library-page .qk-overview {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .quicksdk-library-page .qk-overview-main {
+    grid-column: span 2;
+  }
+
+  .quicksdk-library-page .qk-overview-main,
+  .quicksdk-library-page .qk-stat-card {
+    border-bottom: 1px solid #e7edf5;
+  }
+
+  .product-source-page .page-container-body {
+    grid-template-columns: 1fr;
+  }
+
+  .product-source-page .ps-toolbar,
+  .product-source-page .ps-head {
+    grid-column: 1;
+  }
+
+  .product-source-page .ps-toolbar {
+    grid-row: 1;
+    border-right: 1px solid #dbe3ef;
+    border-radius: 10px 10px 0 0;
+  }
+
+  .product-source-page .ps-head {
+    grid-row: 2;
+    justify-content: flex-start;
+    border-top: 0;
+    border-radius: 0 0 10px 10px;
+  }
+
+  .product-source-page .ps-overview,
+  .product-source-page .ps-message,
+  .product-source-page .ps-table-panel {
+    grid-column: 1;
+  }
+
+  /* Invoice advanced filters: actions get their own row at common laptop widths. */
+  .invoice-filter-primary {
+    grid-template-columns: minmax(220px, 1fr) minmax(170px, 0.9fr) minmax(140px, 0.7fr) minmax(140px, 0.7fr);
+  }
+
+  .invoice-filter-primary__actions {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+
+  .invoice-filter-advanced {
+    grid-template-columns: repeat(3, minmax(145px, 1fr));
+  }
+
+  .rd-quicksdk-tool__bar {
+    grid-template-columns: minmax(160px, 1fr) auto;
+  }
+
+  .rd-quicksdk-tool__fields {
+    grid-column: 1 / -1;
+    order: 3;
+  }
+
+  .rd-quicksdk-tool__actions {
+    justify-content: flex-start;
+  }
+
+  .rd-quicksdk-tool__summary {
+    justify-items: start;
+  }
+}
+
+@media (max-width: 1360px) and (min-width: 961px) {
+  :root {
+    --admin-sidebar-w: 164px;
+    --admin-workspace-pad-x: 10px;
+  }
+
+  .app-workspace {
+    padding: 8px 9px 11px;
+  }
+
+  .app-admin-header__toolbar,
+  .app-top-subnav--workspace .app-top-subnav__inner {
+    padding-right: 12px;
+    padding-left: 12px;
+  }
+
+  .core-recon-page:has(.core-rd-recon-table) .core-recon-workbar .core-recon-filters,
+  .core-channel-recon-page .core-recon-workbar .core-recon-filters,
+  .quicksdk-library-page .qk-toolbar,
+  .qk-grouped-page .qkg-controls,
+  .customer-library-page .customer-head,
+  .customer-library-page .customer-filters {
+    flex-wrap: wrap;
+    overflow: visible;
+  }
+
+  .core-recon-page:has(.core-rd-recon-table) .core-recon-partner-filter,
+  .core-channel-recon-page .core-recon-partner-filter {
+    flex: 1 1 220px;
+    min-width: 180px;
+    max-width: none;
+  }
+
+  .core-recon-page:has(.core-rd-recon-table) .core-recon-filter-search,
+  .core-channel-recon-page .core-recon-filter-search {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+
+  .contract-page .contract-filter-main {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .contract-page .contract-search {
+    grid-column: 1 / -1;
+  }
+
+  .quicksdk-library-page .qk-toolbar label:nth-child(2),
+  .qk-grouped-page .qkg-controls label:nth-child(2),
+  .customer-library-page .customer-filters input {
+    flex-basis: 100%;
+    max-width: none;
+  }
+
+  .qk-grouped-page .qkg-summary,
+  .customer-library-page .customer-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .customer-library-page .customer-head-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .invoice-filter-primary {
+    grid-template-columns: minmax(200px, 1fr) minmax(160px, 1fr);
+  }
+
+  .invoice-filter-primary__actions {
+    grid-column: 1 / -1;
+  }
+
+  .admin-filter-bar,
+  .admin-action-bar,
+  .rec-toolbar,
+  .rec-toolbar__primary,
+  .rec-toolbar__batch {
+    gap: 7px;
+  }
+}
+
+@media (max-width: 1180px) and (min-width: 961px) {
+  :root {
+    --admin-sidebar-w: 156px;
+  }
+
+  .contract-page .contract-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .contract-page .contract-stats article:nth-child(2),
+  .contract-page .contract-stats article:nth-child(4) {
+    border-right: 0;
+  }
+
+  .contract-page .contract-stats article:nth-child(-n + 4) {
+    border-bottom: 1px solid #e7edf5;
+  }
+
+  .contract-page .contract-stats article:last-child {
+    grid-column: 1 / -1;
+  }
+
+  .quicksdk-library-page .qk-overview,
+  .qk-grouped-page .qkg-summary,
+  .customer-library-page .customer-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .quicksdk-library-page .qk-overview-main {
+    grid-column: auto;
+  }
+}
+
+/* Laptop-height compact mode: keep the full workbench useful at 100% zoom. */
+@media (max-height: 900px) and (min-width: 961px) {
+  .app-admin-header,
+  .app-admin-header__toolbar {
+    min-height: 50px;
+  }
+
+  .app-top-subnav--workspace,
+  .app-top-subnav--workspace .app-top-subnav__inner {
+    min-height: 40px;
+  }
+
+  .app-top-subnav--workspace {
+    top: 50px;
+  }
+
+  .app-top-subnav--workspace .app-top-subnav__tab {
+    height: 31px;
+  }
+
+  .app-top-subnav--workspace .app-top-subnav__tab-main {
+    min-height: 29px;
+  }
+
+  .app-workspace {
+    padding-top: 7px;
+    padding-bottom: 9px;
+  }
+
+  .sidebar-brand {
+    min-height: 52px;
+    margin-bottom: 4px;
+  }
+
+  .sidebar-item,
+  .sidebar-group-entry {
+    min-height: 33px;
+    height: 33px;
+  }
+
+  .sidebar-item--nested {
+    min-height: 29px;
+    height: 29px;
+  }
+
+  .sidebar-group {
+    margin-bottom: 2px;
+  }
+
+  .core-dashboard-page .page-container-body {
+    gap: 7px;
+  }
+
+  .core-dashboard-overview__head {
+    min-height: 54px;
+    padding: 7px 10px 7px 13px;
+  }
+
+  .core-dashboard-metric {
+    min-height: 72px;
+    padding: 9px 12px;
+  }
+
+  .core-dashboard-attention,
+  .core-dashboard-progress,
+  .core-dashboard-modules,
+  .core-dashboard-todo-center {
+    padding: 9px 10px;
+  }
+
+  .core-dashboard-section-title {
+    min-height: 26px;
+    margin-bottom: 6px;
+  }
+
+  .core-dashboard-todo-card {
+    min-height: 132px;
+    gap: 5px;
+    padding: 9px 10px;
+  }
+
+  .core-dashboard-todo-card > small {
+    padding-top: 5px;
+  }
+
+  .core-dashboard-progress-card {
+    min-height: 66px;
+    gap: 6px;
+    padding: 8px 10px;
+  }
+
+  .core-module-card {
+    min-height: 58px;
+    padding: 7px 9px;
+  }
+
+  .core-recon-page:has(.core-rd-recon-table) .core-recon-stats > div,
+  .core-channel-recon-page .core-recon-stats > div,
+  .contract-page .contract-stats article,
+  .quicksdk-library-page .qk-overview-main,
+  .quicksdk-library-page .qk-stat-card,
+  .qk-grouped-page .qkg-summary > div {
+    min-height: 58px;
+    padding-top: 7px;
+    padding-bottom: 7px;
+  }
+
+  .core-recon-page:has(.core-rd-recon-table) .core-recon-table tbody td,
+  .core-channel-recon-page .core-recon-table tbody td,
+  .contract-page .contract-table tbody td {
+    height: 46px;
+    padding-top: 5px;
+    padding-bottom: 5px;
+  }
+}
