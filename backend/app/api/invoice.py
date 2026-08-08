@@ -6,12 +6,14 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, or_, select
+from sqlalchemy import delete, func, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_db
 from app.models.bill_invoice_allocation import BillInvoiceAllocation
 from app.models.invoice import InvoiceRecord
+from app.models.invoice_payment_link import InvoicePaymentLink
 from app.schemas.invoice import (
     InvoiceRecordCreate,
     InvoiceRecordImportRequest,
@@ -250,20 +252,40 @@ def update_invoice_record(
 def delete_invoice_record(record_id: str, db: Session = Depends(get_db)) -> None:
     row = db.get(InvoiceRecord, record_id)
     if row is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={"error": "not_found", "id": record_id},
-        )
-    linked = db.execute(
+        # DELETE is idempotent: stale browser/cache rows are already in the desired state.
+        return
+
+    active_allocation = db.execute(
         select(BillInvoiceAllocation.id).where(
             BillInvoiceAllocation.invoice_id == record_id,
             BillInvoiceAllocation.status.in_(("suggested", "confirmed")),
         ).limit(1)
     ).scalar_one_or_none()
-    if linked is not None:
+    if active_allocation is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={"error": "invoice_has_active_allocations"},
         )
-    db.delete(row)
-    db.commit()
+
+    try:
+        # Old rejected/cancelled allocation rows may still carry a DB foreign key even though
+        # the invoice is shown as unlinked in the UI. Remove only those stale rows here.
+        db.execute(
+            delete(BillInvoiceAllocation).where(
+                BillInvoiceAllocation.invoice_id == record_id
+            )
+        )
+        # This legacy relation has no DB foreign key, so clean it explicitly to avoid orphans.
+        db.execute(
+            delete(InvoicePaymentLink).where(
+                InvoicePaymentLink.invoice_id == record_id
+            )
+        )
+        db.delete(row)
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"error": "invoice_has_linked_records"},
+        ) from exc
