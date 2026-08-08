@@ -48,6 +48,11 @@ jobs:
           }
           trap cleanup EXIT
 
+          mkdir -p .vercel
+          cat > .vercel/project.json <<EOF
+          {"orgId":"${VERCEL_ORG_ID}","projectId":"${VERCEL_PROJECT_ID}"}
+          EOF
+
           echo "Checking Production environment variables..."
           npx --yes vercel@latest env ls production --token "$VERCEL_TOKEN" > "$ENV_LIST_FILE"
           if grep -q 'AI_GATEWAY_API_KEY' "$ENV_LIST_FILE"; then
