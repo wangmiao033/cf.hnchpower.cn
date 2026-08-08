@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useAppState } from '@/app/AppStateContext.jsx'
 import PageContainer from '@/components/layout/PageContainer.jsx'
+import Customer360Drawer from '@/components/partner/Customer360Drawer.jsx'
+import { partnerKey } from '@/components/shared/PartnerPicker.jsx'
 import {
   consumePartnerFocus,
   GLOBAL_SEARCH_FOCUS_EVENT
@@ -38,6 +40,8 @@ function PartnerPage() {
   const [form, setForm] = useState(EMPTY_PARTNER)
   const [saving, setSaving] = useState(false)
   const [isFormOpen, setIsFormOpen] = useState(false)
+  const [customer360Id, setCustomer360Id] = useState(null)
+  const [pendingGlobalFocus, setPendingGlobalFocus] = useState('')
 
   useEffect(() => {
     const applyFocus = (value) => {
@@ -45,6 +49,7 @@ function PartnerPage() {
       if (!normalized) return
       setCategory('全部')
       setQuery(normalized)
+      setPendingGlobalFocus(normalized)
     }
 
     applyFocus(consumePartnerFocus())
@@ -55,6 +60,21 @@ function PartnerPage() {
     window.addEventListener(GLOBAL_SEARCH_FOCUS_EVENT, handleGlobalFocus)
     return () => window.removeEventListener(GLOBAL_SEARCH_FOCUS_EVENT, handleGlobalFocus)
   }, [])
+
+  useEffect(() => {
+    const key = partnerKey(pendingGlobalFocus)
+    if (!key || !(partners || []).length) return
+    const matches = (partners || []).filter((partner) =>
+      [partner.name, partner.shortName].some((candidate) => partnerKey(candidate) === key)
+    )
+    const unique = new Map(
+      matches.map((partner) => [String(partner.id || partner.name), partner])
+    )
+    if (unique.size !== 1) return
+    const partner = [...unique.values()][0]
+    setCustomer360Id(String(partner.id || ''))
+    setPendingGlobalFocus('')
+  }, [partners, pendingGlobalFocus])
 
   const filteredPartners = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -146,17 +166,33 @@ function PartnerPage() {
   }
 
   const editPartner = (partner) => {
+    setCustomer360Id(null)
     setEditingId(partner.id)
     setForm({ ...EMPTY_PARTNER, ...partner })
     setIsFormOpen(true)
+  }
+
+  const openCustomer360 = (partner) => {
+    const id = String(partner?.id || '')
+    if (!id) {
+      showToast('该客户缺少服务器 ID，暂时无法打开 360°', 'error')
+      return
+    }
+    setCustomer360Id(id)
   }
 
   const deletePartner = async (partner) => {
     if (!window.confirm(`确定删除「${partner.name}」吗？`)) return
     const ok = await deletePartnerById(partner.id)
     if (!ok) return
+    if (String(customer360Id || '') === String(partner.id || '')) setCustomer360Id(null)
     showToast('客户已删除', 'success')
   }
+
+  const selected360Partner = useMemo(
+    () => (partners || []).find((partner) => String(partner.id || '') === String(customer360Id || '')),
+    [partners, customer360Id]
+  )
 
   return (
     <PageContainer
@@ -286,10 +322,19 @@ function PartnerPage() {
               ) : (
                 filteredPartners.map((partner) => (
                   <tr key={partner.id || partner.name}>
-                    <td><strong>{partner.shortName || '-'}</strong></td>
-                    <td>{partner.name}</td>
+                    <td>
+                      <button type="button" className="customer-name-link" onClick={() => openCustomer360(partner)}>
+                        {partner.shortName || '-'}
+                      </button>
+                    </td>
+                    <td>
+                      <button type="button" className="customer-name-link" onClick={() => openCustomer360(partner)}>
+                        {partner.name}
+                      </button>
+                    </td>
                     <td><span className="customer-category-tag">{partner.category || '-'}</span></td>
                     <td>
+                      <button type="button" className="customer-360-btn" onClick={() => openCustomer360(partner)}>360°</button>
                       <button type="button" onClick={() => editPartner(partner)}>编辑</button>
                       <button type="button" className="danger" onClick={() => deletePartner(partner)}>删除</button>
                     </td>
@@ -300,6 +345,16 @@ function PartnerPage() {
           </table>
         </div>
       </section>
+
+      {customer360Id ? (
+        <Customer360Drawer
+          partnerId={customer360Id}
+          onClose={() => setCustomer360Id(null)}
+          onEdit={() => {
+            if (selected360Partner) editPartner(selected360Partner)
+          }}
+        />
+      ) : null}
     </PageContainer>
   )
 }
