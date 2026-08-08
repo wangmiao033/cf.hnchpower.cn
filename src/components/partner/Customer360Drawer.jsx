@@ -26,6 +26,17 @@ function money(value) {
   })}`
 }
 
+function currencyMoney(value, currency) {
+  if (value === null || value === undefined || value === '') return '-'
+  const number = Number(value)
+  if (!Number.isFinite(number)) return '-'
+  const code = String(currency || 'CNY').trim().toUpperCase() || 'CNY'
+  return `${code} ${number.toLocaleString('zh-CN', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  })}`
+}
+
 function text(value, fallback = '-') {
   const raw = String(value ?? '').trim()
   return raw || fallback
@@ -229,8 +240,8 @@ function Customer360Drawer({ partnerId, onClose, onEdit }) {
                 {access.funds ? (
                   <article>
                     <span>资金流水</span>
-                    <strong>{money(summary.bank_inflow_amount)}</strong>
-                    <small>流出 {money(summary.bank_outflow_amount)} · 最近 {dateText(summary.latest_trade_date)}</small>
+                    <strong>{summary.bank_transaction_count ?? 0} 笔</strong>
+                    <small>按原币种展示 · 最近 {dateText(summary.latest_trade_date)}</small>
                   </article>
                 ) : null}
               </section>
@@ -294,7 +305,7 @@ function Customer360Drawer({ partnerId, onClose, onEdit }) {
                                   <strong>{activity.title || meta.label}</strong>
                                   <small>{[dateText(activity.date), activity.meta].filter(Boolean).join(' · ')}</small>
                                 </span>
-                                <b>{money(activity.amount)}</b>
+                                <b>{activity.kind === 'bank_transaction' ? '查看流水' : money(activity.amount)}</b>
                               </button>
                             )
                           })}
@@ -439,8 +450,8 @@ function Customer360Drawer({ partnerId, onClose, onEdit }) {
                                 <td>{text(tx.payer_name)}</td>
                                 <td>{text(tx.payee_name)}</td>
                                 <td>{text(tx.summary)}</td>
-                                <td>{tx.inflow ? money(tx.inflow) : '-'}</td>
-                                <td>{tx.outflow ? money(tx.outflow) : '-'}</td>
+                                <td>{tx.inflow ? currencyMoney(tx.inflow, tx.currency) : '-'}</td>
+                                <td>{tx.outflow ? currencyMoney(tx.outflow, tx.currency) : '-'}</td>
                                 <td>{text(tx.currency, 'CNY')}</td>
                                 <td>{text(tx.reconciliation_no)}</td>
                               </tr>
