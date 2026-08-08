@@ -26,7 +26,7 @@
     },
     "contract_ai": {
       "root": "contract_ai/",
-      "entrypoint": "main:app",
+      "entrypoint": "cloudflare_main:app",
       "framework": "fastapi"
     }
   },
