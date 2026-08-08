@@ -42,14 +42,9 @@ class ChannelRecord(Base):
     channel_fee_rate: Mapped[float | None] = mapped_column(Numeric(10, 4), nullable=True)
     dev_share_rate: Mapped[float | None] = mapped_column(Numeric(10, 4), nullable=True)
     profit_rate: Mapped[float | None] = mapped_column(Numeric(10, 4), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        onupdate=func.now(),
-        nullable=False,
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
     line_items: Mapped[list["ChannelRecordLineItem"]] = relationship(
@@ -73,6 +68,7 @@ class ChannelRecordLineItem(Base):
         String, ForeignKey("channel_records.id", ondelete="CASCADE"), nullable=False, index=True
     )
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    settlement_cycle: Mapped[str | None] = mapped_column(String(16), nullable=True, index=True)
     game_name: Mapped[str | None] = mapped_column(String, nullable=True)
     billing_flow: Mapped[float] = mapped_column(Numeric(18, 2), nullable=False, default=0)
     discount_factor: Mapped[float] = mapped_column(Numeric(12, 6), nullable=False, default=1)
@@ -87,14 +83,9 @@ class ChannelRecordLineItem(Base):
     tax_rate: Mapped[float] = mapped_column(Numeric(10, 4), nullable=False, default=0)
     gateway_cost: Mapped[float] = mapped_column(Numeric(18, 2), nullable=False, default=0)
     settlement_amount: Mapped[float] = mapped_column(Numeric(18, 2), nullable=False, default=0)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        onupdate=func.now(),
-        nullable=False,
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
     parent: Mapped[ChannelRecord] = relationship("ChannelRecord", back_populates="line_items")
@@ -114,8 +105,6 @@ class ChannelReceipt(Base):
     bank_account: Mapped[str | None] = mapped_column(String(512), nullable=True)
     remark: Mapped[str | None] = mapped_column(Text, nullable=True)
     attachment_url: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     channel_record: Mapped[ChannelRecord] = relationship("ChannelRecord", back_populates="receipts")
