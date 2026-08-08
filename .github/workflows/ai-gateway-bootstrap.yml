@@ -1,0 +1,115 @@
+name: AI Gateway Credential Bootstrap
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/ai-gateway-bootstrap.yml'
+      - 'contract_ai/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  VERCEL_ORG_ID: team_YfsD5pM9JFtkqXnJIUdbF2eI
+  VERCEL_PROJECT_ID: prj_eMuMpXX2hUKvy7lSQ1deDIzoQDRN
+
+jobs:
+  bootstrap:
+    name: Ensure Production AI Gateway key
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Confirm VERCEL_TOKEN
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          if [ -z "${VERCEL_TOKEN:-}" ]; then
+            echo "::error::VERCEL_TOKEN is not configured."
+            exit 1
+          fi
+          echo "VERCEL_TOKEN is configured."
+
+      - name: Ensure project-scoped AI Gateway key
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          export NO_COLOR=1
+
+          ENV_LIST_FILE="$(mktemp)"
+          KEY_RESPONSE_FILE="$(mktemp)"
+          cleanup() {
+            rm -f "$ENV_LIST_FILE" "$KEY_RESPONSE_FILE"
+          }
+          trap cleanup EXIT
+
+          echo "Checking Production environment variables..."
+          npx --yes vercel@latest env ls production --token "$VERCEL_TOKEN" > "$ENV_LIST_FILE"
+          if grep -q 'AI_GATEWAY_API_KEY' "$ENV_LIST_FILE"; then
+            echo "AI_GATEWAY_API_KEY already exists in Production."
+            exit 0
+          fi
+
+          echo "Creating a project-scoped AI Gateway key..."
+          HTTP_CODE="$(curl -sS \
+            -o "$KEY_RESPONSE_FILE" \
+            -w '%{http_code}' \
+            -X POST "https://api.vercel.com/v1/api-keys?teamId=${VERCEL_ORG_ID}" \
+            -H "Authorization: Bearer ${VERCEL_TOKEN}" \
+            -H 'Content-Type: application/json' \
+            --data "{\"purpose\":\"ai-gateway\",\"name\":\"cf-hnchpower Production AI Gateway\",\"projectId\":\"${VERCEL_PROJECT_ID}\"}")"
+
+          if [ "$HTTP_CODE" != "200" ] && [ "$HTTP_CODE" != "201" ]; then
+            echo "::error::Vercel API refused AI Gateway key creation (HTTP $HTTP_CODE)."
+            python - "$KEY_RESPONSE_FILE" <<'PY'
+          import json
+          import sys
+
+          try:
+              with open(sys.argv[1], 'r', encoding='utf-8') as handle:
+                  payload = json.load(handle)
+          except Exception:
+              print('Vercel API returned a non-JSON error response.')
+              raise SystemExit(0)
+
+          error = payload.get('error') if isinstance(payload, dict) else None
+          if isinstance(error, dict):
+              print('Vercel error code:', error.get('code') or 'unknown')
+              print('Vercel error message:', error.get('message') or 'unknown')
+          else:
+              print('Vercel error:', str(error or payload)[:500])
+          PY
+            exit 1
+          fi
+
+          AI_GATEWAY_KEY="$(python - "$KEY_RESPONSE_FILE" <<'PY'
+          import json
+          import sys
+
+          with open(sys.argv[1], 'r', encoding='utf-8') as handle:
+              payload = json.load(handle)
+          print(str(payload.get('apiKeyString') or '').strip())
+          PY
+          )"
+
+          if [ -z "$AI_GATEWAY_KEY" ]; then
+            echo "::error::Vercel API succeeded but did not return apiKeyString."
+            exit 1
+          fi
+
+          echo "::add-mask::$AI_GATEWAY_KEY"
+          printf '%s\n' "$AI_GATEWAY_KEY" \
+            | npx --yes vercel@latest env add AI_GATEWAY_API_KEY production --sensitive --force --token "$VERCEL_TOKEN"
+
+          npx --yes vercel@latest env ls production --token "$VERCEL_TOKEN" > "$ENV_LIST_FILE"
+          if ! grep -q 'AI_GATEWAY_API_KEY' "$ENV_LIST_FILE"; then
+            echo "::error::AI_GATEWAY_API_KEY was created but was not found in Production env list."
+            exit 1
+          fi
+
+          echo "AI_GATEWAY_API_KEY is configured for Production."
