@@ -4,11 +4,9 @@ import { VIEWS } from '@/app/routes.js'
 import ContractDetailsDrawer from '@/components/contract/ContractDetailsDrawer.jsx'
 import { useAuth } from '@/features/auth/AuthContext.jsx'
 import { globalSearch } from '@/lib/api/globalSearch.ts'
-import {
-  stashBankTransactionFocus,
-  stashPartnerFocus
-} from '@/lib/search/globalSearchFocus.ts'
+import { stashPartnerFocus } from '@/lib/search/globalSearchFocus.ts'
 import { getGlobalSearchContract } from '@/lib/search/globalSearchDetails.ts'
+import '@/pages/contract-management.css'
 import './GlobalSearch.css'
 
 const KIND_META = {
@@ -146,9 +144,7 @@ function GlobalSearch() {
       return
     }
     if (target.action === 'bank_detail') {
-      if (setActiveView?.(VIEWS.BANK_TRANSACTIONS_LEDGER) !== false) {
-        stashBankTransactionFocus(target.entity_id)
-      }
+      setActiveView?.(VIEWS.BANK_TRANSACTIONS_LEDGER)
       return
     }
     showToast?.('这个搜索结果暂时没有可打开的目标', 'info')
@@ -307,7 +303,13 @@ function GlobalSearch() {
           setActiveView?.(VIEWS.CONTRACTS)
           showToast?.('已打开合同台账，可继续编辑合同资料', 'info')
         }}
-        onAttachmentUploaded={(contract) => setSelectedContract(contract)}
+        onAttachmentUploaded={(contract) =>
+          setSelectedContract((current) => ({
+            ...contract,
+            internal_contract_no:
+              contract?.internal_contract_no || current?.internal_contract_no || ''
+          }))
+        }
         onToast={showToast}
       />
     </>
