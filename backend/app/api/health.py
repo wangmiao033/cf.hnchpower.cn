@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import logging
 import os
@@ -48,11 +49,16 @@ def health_db():
     )
 
 
-def _require_current_vercel_deployment(request: Request) -> None:
-    """Temporary internal operation: only allow this deployment's generated Vercel hostname."""
-    expected = (os.environ.get("VERCEL_URL") or "").strip().lower()
+def _require_temporary_import_key(request: Request, key: str) -> None:
+    """Temporary operation key changes with every Vercel deployment and is never stored in source."""
+    deployment_host = (os.environ.get("VERCEL_URL") or "").strip().lower()
     host = (request.headers.get("host") or "").split(":", 1)[0].strip().lower()
-    if not expected or host != expected:
+    if not deployment_host or host not in {deployment_host, "cf.hnchpower.cn"}:
+        raise HTTPException(status_code=404, detail="Not found")
+    expected = hashlib.sha256(
+        f"{deployment_host}|invoice-import|2026-08-08".encode("utf-8")
+    ).hexdigest()
+    if key != expected:
         raise HTTPException(status_code=404, detail="Not found")
 
 
@@ -102,10 +108,11 @@ def _import_summary(db: Session) -> dict:
 @router.get("/health/internal/invoice-import")
 def internal_invoice_import(
     request: Request,
+    key: str = Query(..., min_length=64, max_length=64),
     payload: str | None = Query(None, max_length=24000),
 ) -> dict:
-    """Temporary, deployment-host-only importer for the approved 2026-06/07 invoice batch."""
-    _require_current_vercel_deployment(request)
+    """Temporary importer for the explicitly approved 2026-06/07 invoice batch."""
+    _require_temporary_import_key(request, key)
     with Session(get_engine()) as db:
         if not payload:
             return {"ok": True, "summary": _import_summary(db)}
@@ -198,8 +205,8 @@ def internal_invoice_import(
                 db.add(row)
                 created += 1
             else:
-                for key, value in fields.items():
-                    setattr(row, key, value)
+                for field_name, value in fields.items():
+                    setattr(row, field_name, value)
                 updated += 1
 
         db.commit()
