@@ -34,6 +34,7 @@ from app.api.reconciliation_period import router as reconciliation_period_router
 from app.api.contract import router as contract_router
 from app.api.quicksdk import router as quicksdk_router
 from app.api.product_source import router as product_source_router
+from app.api.workbench import router as workbench_router
 from app.core.migrations import run_schema_migrations
 from app.core.runtime_paths import ensure_upload_root
 from app.services.permissions import require_module_access
@@ -191,6 +192,7 @@ audit_access = Depends(require_module_access("audit.view"))
 
 app.include_router(health_router)
 app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
+app.include_router(workbench_router, prefix="/api/workbench", tags=["workbench"])
 app.include_router(reconciliation_router, prefix="/api/reconciliation", tags=["reconciliation"], dependencies=[reconciliation_access])
 app.include_router(reconciliation_period_router, prefix="/api/reconciliation-periods", tags=["reconciliation-periods"], dependencies=[reconciliation_access])
 app.include_router(channel_router, prefix="/api/channel-records", tags=["channel-records"], dependencies=[reconciliation_access])
