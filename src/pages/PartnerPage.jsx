@@ -5,6 +5,7 @@ import Customer360Drawer from '@/components/partner/Customer360Drawer.jsx'
 import { partnerKey } from '@/components/shared/PartnerPicker.jsx'
 import {
   consumePartnerFocus,
+  consumePartnerFocusId,
   GLOBAL_SEARCH_FOCUS_EVENT
 } from '@/lib/search/globalSearchFocus.ts'
 import './PartnerPage.css'
@@ -44,18 +45,27 @@ function PartnerPage() {
   const [pendingGlobalFocus, setPendingGlobalFocus] = useState('')
 
   useEffect(() => {
-    const applyFocus = (value) => {
+    const applyFocus = (value, partnerId = '') => {
       const normalized = String(value || '').trim()
-      if (!normalized) return
+      const normalizedId = String(partnerId || '').trim()
+      if (!normalized && !normalizedId) return
       setCategory('全部')
-      setQuery(normalized)
-      setPendingGlobalFocus(normalized)
+      if (normalized) setQuery(normalized)
+      if (normalizedId) {
+        setCustomer360Id(normalizedId)
+        setPendingGlobalFocus('')
+      } else if (normalized) {
+        setPendingGlobalFocus(normalized)
+      }
     }
 
-    applyFocus(consumePartnerFocus())
+    applyFocus(consumePartnerFocus(), consumePartnerFocusId())
     const handleGlobalFocus = (event) => {
       if (event?.detail?.kind !== 'partner') return
-      applyFocus(consumePartnerFocus() || event.detail.value)
+      applyFocus(
+        consumePartnerFocus() || event.detail.value,
+        consumePartnerFocusId()
+      )
     }
     window.addEventListener(GLOBAL_SEARCH_FOCUS_EVENT, handleGlobalFocus)
     return () => window.removeEventListener(GLOBAL_SEARCH_FOCUS_EVENT, handleGlobalFocus)
