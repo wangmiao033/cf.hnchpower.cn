@@ -9,7 +9,7 @@ import { getPageMeta, SIDEBAR_GROUPS, VIEWS } from '@/app/routes.js'
 import { useAuth } from '@/features/auth/AuthContext.jsx'
 import './Header.css'
 
-function Header({ activeView, onNavigate, onSettingsChange, onGlobalSearchSelect }) {
+function Header({ activeView, onNavigate, onSettingsChange }) {
   const { user, signOut } = useAuth()
   const pageMeta = getPageMeta(activeView)
   const [showUserMenu, setShowUserMenu] = useState(false)
@@ -73,7 +73,7 @@ function Header({ activeView, onNavigate, onSettingsChange, onGlobalSearchSelect
           </div>
         </div>
         <div className="app-admin-header__right">
-          <GlobalSearch onSelect={onGlobalSearchSelect} />
+          <GlobalSearch />
           <div className="app-admin-header__utility-group" role="group" aria-label="工作区工具">
             <NotificationCenter />
             <HelpTooltip />
