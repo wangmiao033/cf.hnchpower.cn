@@ -1,9 +1,9 @@
 """Cloudflare Workers AI-backed contract smart intake entrypoint.
 
 The existing contract service remains the source of truth for authentication,
-internal contract numbering and database access. This entrypoint only replaces
-/api/contracts/smart-scan so the provider can be changed without touching the
-rest of the contract ledger.
+internal contract numbering and database access. This entrypoint creates an
+explicit FastAPI app for Vercel's Python handler discovery, copies the stable
+contract routes, and only replaces /api/contracts/smart-scan.
 """
 
 from __future__ import annotations
@@ -17,15 +17,39 @@ from typing import Any
 
 import httpx
 import pypdfium2 as pdfium
-from fastapi import HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request
 from PIL import Image
 
 try:
     from .extraction import CONTRACT_SCAN_SCHEMA, SYSTEM_PROMPT, normalize_contract_scan_result
-    from .main import SCAN_EXTENSIONS, SCAN_MAX_BYTES, _require_contract_manage, _safe_filename, app
+    from .main import (
+        SCAN_EXTENSIONS,
+        SCAN_MAX_BYTES,
+        _require_contract_manage,
+        _safe_filename,
+        app as _base_app,
+    )
 except ImportError:  # Vercel service root loads this module as a top-level module.
     from extraction import CONTRACT_SCAN_SCHEMA, SYSTEM_PROMPT, normalize_contract_scan_result
-    from main import SCAN_EXTENSIONS, SCAN_MAX_BYTES, _require_contract_manage, _safe_filename, app
+    from main import (
+        SCAN_EXTENSIONS,
+        SCAN_MAX_BYTES,
+        _require_contract_manage,
+        _safe_filename,
+        app as _base_app,
+    )
+
+# Vercel's Python builder discovers handlers statically. Keep an explicit
+# top-level FastAPI assignment here instead of only importing ``app`` from
+# another module. Stable contract routes are copied below, then smart-scan is
+# replaced with the Cloudflare implementation.
+app = FastAPI(
+    title="contract-smart-intake-cloudflare",
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
+)
+app.router.routes.extend(list(_base_app.router.routes))
 
 CLOUDFLARE_WORKERS_AI_MODEL = (
     os.environ.get("CLOUDFLARE_WORKERS_AI_MODEL", "@cf/google/gemma-4-26b-a4b-it").strip()
