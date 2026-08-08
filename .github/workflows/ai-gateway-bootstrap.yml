@@ -1,9 +1,10 @@
-name: AI Gateway Credential Bootstrap
+name: AI Gateway Credential Preflight
 
 on:
   pull_request:
     paths:
       - '.github/workflows/ai-gateway-bootstrap.yml'
+      - '.github/workflows/production-deploy.yml'
       - 'contract_ai/**'
   workflow_dispatch:
 
@@ -15,60 +16,35 @@ env:
   VERCEL_PROJECT_ID: prj_eMuMpXX2hUKvy7lSQ1deDIzoQDRN
 
 jobs:
-  bootstrap:
-    name: Ensure Production AI Gateway key
+  preflight:
+    name: Verify Production AI Gateway key
     runs-on: ubuntu-latest
     steps:
-      - name: Confirm VERCEL_TOKEN
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: |
-          if [ -z "${VERCEL_TOKEN:-}" ]; then
-            echo "::error::VERCEL_TOKEN is not configured."
-            exit 1
-          fi
-          echo "VERCEL_TOKEN is configured."
-
-      - name: Ensure project-scoped AI Gateway key
+      - name: Check AI_GATEWAY_API_KEY exists in Vercel Production
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         shell: bash
         run: |
           set -euo pipefail
+          if [ -z "${VERCEL_TOKEN:-}" ]; then
+            echo "::error::VERCEL_TOKEN is not configured."
+            exit 1
+          fi
 
           ENV_RESPONSE_FILE="$(mktemp)"
-          KEY_RESPONSE_FILE="$(mktemp)"
-          WRITE_RESPONSE_FILE="$(mktemp)"
-          cleanup() {
-            rm -f "$ENV_RESPONSE_FILE" "$KEY_RESPONSE_FILE" "$WRITE_RESPONSE_FILE"
-          }
-          trap cleanup EXIT
+          trap 'rm -f "$ENV_RESPONSE_FILE"' EXIT
+          HTTP_CODE="$(curl -sS \
+            -o "$ENV_RESPONSE_FILE" \
+            -w '%{http_code}' \
+            "https://api.vercel.com/v10/projects/${VERCEL_PROJECT_ID}/env?teamId=${VERCEL_ORG_ID}" \
+            -H "Authorization: Bearer ${VERCEL_TOKEN}")"
 
-          print_vercel_error() {
-            local file="$1"
-            python - "$file" <<'PY'
-          import json
-          import sys
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "::error::Unable to read Vercel Production environment variables (HTTP $HTTP_CODE)."
+            exit 1
+          fi
 
-          try:
-              with open(sys.argv[1], 'r', encoding='utf-8') as handle:
-                  payload = json.load(handle)
-          except Exception:
-              print('Vercel API returned a non-JSON error response.')
-              raise SystemExit(0)
-
-          error = payload.get('error') if isinstance(payload, dict) else None
-          if isinstance(error, dict):
-              print('Vercel error code:', error.get('code') or 'unknown')
-              print('Vercel error message:', error.get('message') or 'unknown')
-          else:
-              print('Vercel error:', str(error or payload)[:500])
-          PY
-          }
-
-          has_gateway_key() {
-            local file="$1"
-            python - "$file" <<'PY'
+          python - "$ENV_RESPONSE_FILE" <<'PY'
           import json
           import sys
 
@@ -84,82 +60,9 @@ jobs:
                   return any(walk(item) for item in value)
               return False
 
-          raise SystemExit(0 if walk(payload) else 1)
+          if not walk(payload):
+              print('::error::AI_GATEWAY_API_KEY is missing from cf-hnchpower-cn Production. Create a Vercel AI Gateway API key and add it as a Sensitive Production environment variable, then rerun this check.')
+              raise SystemExit(1)
+
+          print('AI_GATEWAY_API_KEY is configured for cf-hnchpower-cn Production.')
           PY
-          }
-
-          echo "Checking Production environment variables through Vercel REST API..."
-          ENV_HTTP_CODE="$(curl -sS \
-            -o "$ENV_RESPONSE_FILE" \
-            -w '%{http_code}' \
-            "https://api.vercel.com/v10/projects/${VERCEL_PROJECT_ID}/env?teamId=${VERCEL_ORG_ID}" \
-            -H "Authorization: Bearer ${VERCEL_TOKEN}")"
-
-          if [ "$ENV_HTTP_CODE" != "200" ]; then
-            echo "::error::Unable to read Vercel project environment variables (HTTP $ENV_HTTP_CODE)."
-            print_vercel_error "$ENV_RESPONSE_FILE"
-            exit 1
-          fi
-
-          if has_gateway_key "$ENV_RESPONSE_FILE"; then
-            echo "AI_GATEWAY_API_KEY already exists in Production."
-            exit 0
-          fi
-
-          echo "Creating a project-scoped AI Gateway key..."
-          KEY_HTTP_CODE="$(curl -sS \
-            -o "$KEY_RESPONSE_FILE" \
-            -w '%{http_code}' \
-            -X POST "https://api.vercel.com/v1/api-keys?teamId=${VERCEL_ORG_ID}" \
-            -H "Authorization: Bearer ${VERCEL_TOKEN}" \
-            -H 'Content-Type: application/json' \
-            --data "{\"purpose\":\"ai-gateway\",\"name\":\"cf-hnchpower Production AI Gateway\",\"projectId\":\"${VERCEL_PROJECT_ID}\"}")"
-
-          if [ "$KEY_HTTP_CODE" != "200" ] && [ "$KEY_HTTP_CODE" != "201" ]; then
-            echo "::error::Vercel API refused AI Gateway key creation (HTTP $KEY_HTTP_CODE)."
-            print_vercel_error "$KEY_RESPONSE_FILE"
-            exit 1
-          fi
-
-          AI_GATEWAY_KEY="$(python - "$KEY_RESPONSE_FILE" <<'PY'
-          import json
-          import sys
-
-          with open(sys.argv[1], 'r', encoding='utf-8') as handle:
-              payload = json.load(handle)
-          print(str(payload.get('apiKeyString') or '').strip())
-          PY
-          )"
-
-          if [ -z "$AI_GATEWAY_KEY" ]; then
-            echo "::error::Vercel API succeeded but did not return apiKeyString."
-            exit 1
-          fi
-          echo "::add-mask::$AI_GATEWAY_KEY"
-
-          echo "Writing AI_GATEWAY_API_KEY to Production as a sensitive environment variable..."
-          WRITE_HTTP_CODE="$(curl -sS \
-            -o "$WRITE_RESPONSE_FILE" \
-            -w '%{http_code}' \
-            -X POST "https://api.vercel.com/v10/projects/${VERCEL_PROJECT_ID}/env?teamId=${VERCEL_ORG_ID}&upsert=true" \
-            -H "Authorization: Bearer ${VERCEL_TOKEN}" \
-            -H 'Content-Type: application/json' \
-            --data "[{\"key\":\"AI_GATEWAY_API_KEY\",\"value\":\"${AI_GATEWAY_KEY}\",\"type\":\"sensitive\",\"target\":[\"production\"],\"comment\":\"Contract smart scan via Vercel AI Gateway\"}]")"
-
-          if [ "$WRITE_HTTP_CODE" != "200" ] && [ "$WRITE_HTTP_CODE" != "201" ]; then
-            echo "::error::Unable to write AI_GATEWAY_API_KEY to Production (HTTP $WRITE_HTTP_CODE)."
-            print_vercel_error "$WRITE_RESPONSE_FILE"
-            exit 1
-          fi
-
-          ENV_HTTP_CODE="$(curl -sS \
-            -o "$ENV_RESPONSE_FILE" \
-            -w '%{http_code}' \
-            "https://api.vercel.com/v10/projects/${VERCEL_PROJECT_ID}/env?teamId=${VERCEL_ORG_ID}" \
-            -H "Authorization: Bearer ${VERCEL_TOKEN}")"
-          if [ "$ENV_HTTP_CODE" != "200" ] || ! has_gateway_key "$ENV_RESPONSE_FILE"; then
-            echo "::error::AI_GATEWAY_API_KEY write returned success but verification failed."
-            exit 1
-          fi
-
-          echo "AI_GATEWAY_API_KEY is configured for Production."
