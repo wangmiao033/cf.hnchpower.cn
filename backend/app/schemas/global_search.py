@@ -43,7 +43,7 @@ class GlobalSearchResult(BaseModel):
     amount: float | None = None
     status: str | None = None
     score: int = Field(ge=0, le=100)
-    matched_fields: list[str] = []
+    matched_fields: list[str] = Field(default_factory=list)
     target: GlobalSearchTarget
 
 
