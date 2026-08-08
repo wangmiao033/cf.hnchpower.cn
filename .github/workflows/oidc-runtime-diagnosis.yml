@@ -1,0 +1,103 @@
+name: OIDC Runtime Diagnosis
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/oidc-runtime-diagnosis.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  VERCEL_ORG_ID: team_YfsD5pM9JFtkqXnJIUdbF2eI
+  VERCEL_PROJECT_ID: prj_eMuMpXX2hUKvy7lSQ1deDIzoQDRN
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Inspect project OIDC config and generate project token
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${VERCEL_TOKEN:-}" ]; then
+            echo "::error::VERCEL_TOKEN is missing"
+            exit 1
+          fi
+
+          PROJECT_JSON="$(mktemp)"
+          TOKEN_JSON="$(mktemp)"
+          trap 'rm -f "$PROJECT_JSON" "$TOKEN_JSON"' EXIT
+
+          PROJECT_CODE="$(curl -sS -o "$PROJECT_JSON" -w '%{http_code}' \
+            "https://api.vercel.com/v9/projects/${VERCEL_PROJECT_ID}?teamId=${VERCEL_ORG_ID}" \
+            -H "Authorization: Bearer ${VERCEL_TOKEN}")"
+          echo "Project API HTTP: $PROJECT_CODE"
+          if [ "$PROJECT_CODE" != "200" ]; then
+            python - "$PROJECT_JSON" <<'PY'
+import json, sys
+try:
+    data=json.load(open(sys.argv[1], encoding='utf-8'))
+except Exception:
+    print('Project API returned non-JSON')
+    raise SystemExit(1)
+print('Project API error:', data.get('error', data))
+raise SystemExit(1)
+PY
+          fi
+
+          python - "$PROJECT_JSON" <<'PY'
+import json, sys
+p=json.load(open(sys.argv[1], encoding='utf-8'))
+cfg=p.get('oidcTokenConfig') or {}
+print('oidcTokenConfig.enabled =', cfg.get('enabled'))
+print('oidcTokenConfig.issuerMode =', cfg.get('issuerMode'))
+PY
+
+          TOKEN_CODE="$(curl -sS -o "$TOKEN_JSON" -w '%{http_code}' \
+            -X POST "https://api.vercel.com/v1/projects/${VERCEL_PROJECT_ID}/token?teamId=${VERCEL_ORG_ID}" \
+            -H "Authorization: Bearer ${VERCEL_TOKEN}" \
+            -H 'Content-Type: application/json' \
+            --data '{"source":"cf-hnchpower-oidc-diagnosis"}')"
+          echo "Project token API HTTP: $TOKEN_CODE"
+          if [ "$TOKEN_CODE" != "200" ]; then
+            python - "$TOKEN_JSON" <<'PY'
+import json, sys
+try:
+    data=json.load(open(sys.argv[1], encoding='utf-8'))
+except Exception:
+    print('Project token API returned non-JSON')
+    raise SystemExit(1)
+err=data.get('error', data)
+if isinstance(err, dict):
+    print('Project token error code:', err.get('code'))
+    print('Project token error message:', err.get('message'))
+else:
+    print('Project token error:', err)
+raise SystemExit(1)
+PY
+          fi
+
+          python - "$TOKEN_JSON" <<'PY'
+import base64, json, sys, time
+obj=json.load(open(sys.argv[1], encoding='utf-8'))
+token=str(obj.get('token') or '')
+if not token:
+    print('::error::Project token response has no token')
+    raise SystemExit(1)
+parts=token.split('.')
+if len(parts) < 2:
+    print('::error::Project token is not a JWT')
+    raise SystemExit(1)
+payload=parts[1] + '=' * (-len(parts[1]) % 4)
+claims=json.loads(base64.urlsafe_b64decode(payload.encode()))
+print('OIDC token generated successfully')
+for key in ('iss','aud','sub','scope','iat','nbf','exp'):
+    print(f'{key} =', claims.get(key))
+exp=claims.get('exp')
+if isinstance(exp,(int,float)):
+    print('ttl_seconds =', int(exp-time.time()))
+PY
