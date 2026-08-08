@@ -42,18 +42,61 @@ export function initialLineItem() {
   }
 }
 
+export function normalizeChannelSettlementCycle(value) {
+  const raw = String(value || '').trim()
+  if (!raw) return ''
+  let match = raw.match(/^(20\d{2})[-/.](0?[1-9]|1[0-2])$/)
+  if (!match) match = raw.match(/^(20\d{2})年\s*(0?[1-9]|1[0-2])月?$/)
+  if (!match) return raw
+  return `${match[1]}-${String(Number(match[2])).padStart(2, '0')}`
+}
+
+function monthDateRange(month) {
+  const normalized = normalizeChannelSettlementCycle(month)
+  const match = normalized.match(/^(20\d{2})-(\d{2})$/)
+  if (!match) return { startDate: '', endDate: '' }
+  const year = Number(match[1])
+  const monthNumber = Number(match[2])
+  const lastDay = new Date(year, monthNumber, 0).getDate()
+  return {
+    startDate: `${match[1]}-${match[2]}-01`,
+    endDate: `${match[1]}-${match[2]}-${String(lastDay).padStart(2, '0')}`
+  }
+}
+
+export function channelSettlementPeriodFromLines(lines, fallbackMonth = '') {
+  const months = [...new Set(
+    (lines || [])
+      .map((line) => normalizeChannelSettlementCycle(line?.settlementCycle))
+      .filter((value) => /^(20\d{2})-(\d{2})$/.test(value))
+  )].sort()
+  const fallback = normalizeChannelSettlementCycle(fallbackMonth)
+  if (months.length === 0 && /^(20\d{2})-(\d{2})$/.test(fallback)) months.push(fallback)
+  if (months.length === 0) {
+    return { months: [], firstMonth: '', lastMonth: '', settlementMonth: '', startDate: '', endDate: '' }
+  }
+  const firstMonth = months[0]
+  const lastMonth = months[months.length - 1]
+  return {
+    months,
+    firstMonth,
+    lastMonth,
+    settlementMonth: lastMonth,
+    startDate: monthDateRange(firstMonth).startDate,
+    endDate: monthDateRange(lastMonth).endDate
+  }
+}
+
 export function channelStatusForSubmit(currentStatus, intent) {
   if (intent === 'confirm') return 'confirmed'
   return currentStatus || 'pending'
 }
 
-/** Excel 单游戏行映射仍使用扁平 initialForm */
 export const initialForm = {
   ...initialHeaderForm,
   ...initialLineItem()
 }
 
-/** 折扣系数：空/非法/≤0 时按 1 */
 export function resolveDiscountFactor(data) {
   const raw = data.discountFactor
   if (raw === '' || raw === undefined || raw === null) return 1
@@ -62,7 +105,6 @@ export function resolveDiscountFactor(data) {
   return n
 }
 
-/** 总流水 = 后台流水 × 折扣系数（2 位小数） */
 export function effectiveLineFlowFromFormData(data) {
   const raw = parseFloat(data.flow || 0)
   const fac = resolveDiscountFactor(data)
@@ -109,7 +151,6 @@ function resolveSettlementAmount(fd) {
   return Math.round(parsed * 100) / 100
 }
 
-/** 单行游戏明细（数值化 + 计费/分成/结算），公式与历史单游戏一致 */
 export function buildLineRecordFromForm(fd) {
   const discountFactor = resolveDiscountFactor(fd)
   const effectiveFlow = effectiveLineFlowFromFormData(fd)
@@ -117,7 +158,7 @@ export function buildLineRecordFromForm(fd) {
   const shareAmount = calculateShareAmount(fd)
   const settlementAmount = resolveSettlementAmount(fd)
   return {
-    settlementCycle: fd.settlementCycle != null ? String(fd.settlementCycle) : '',
+    settlementCycle: normalizeChannelSettlementCycle(fd.settlementCycle || fd.settlementMonth),
     gameName: fd.gameName != null ? String(fd.gameName) : '',
     flow: parseFloat(fd.flow || 0),
     discountFactor,
@@ -145,18 +186,18 @@ function parseOptionalNum(v) {
   return Number.isFinite(n) ? n : null
 }
 
-/** 整单：公共字段 + items[] + 主表汇总字段（sum） */
 export function buildFullChannelRecord(headerForm, lineFormList) {
   const items = lineFormList.map((row) => buildLineRecordFromForm(row))
   const sum = (getter) => items.reduce((s, it) => s + (getter(it) || 0), 0)
+  const period = channelSettlementPeriodFromLines(items, headerForm.settlementMonth)
   return {
     channelName: headerForm.channelName,
     partnerName: headerForm.partnerName || '',
-    settlementMonth: headerForm.settlementMonth || '',
+    settlementMonth: period.settlementMonth || normalizeChannelSettlementCycle(headerForm.settlementMonth),
     invoiceStatus: headerForm.invoiceStatus || 'pending_invoice',
     invoice_status: headerForm.invoiceStatus || 'pending_invoice',
-    startDate: headerForm.startDate || '',
-    endDate: headerForm.endDate || '',
+    startDate: period.startDate || headerForm.startDate || '',
+    endDate: period.endDate || headerForm.endDate || '',
     remark: headerForm.remark || '',
     status: headerForm.status || 'pending',
     serverCost: parseOptionalNum(headerForm.serverCost),
@@ -183,13 +224,13 @@ export function buildFullChannelRecord(headerForm, lineFormList) {
   }
 }
 
-/** Excel / 单游戏导入：一单一行游戏 */
 export function buildChannelBillFromSingleGameForm(fd) {
+  const cycle = normalizeChannelSettlementCycle(fd.settlementCycle || fd.settlementMonth)
   return buildFullChannelRecord(
     {
       channelName: fd.channelName,
       partnerName: fd.partnerName || '',
-      settlementMonth: fd.settlementMonth || '',
+      settlementMonth: cycle,
       invoiceStatus: fd.invoiceStatus || 'pending_invoice',
       startDate: fd.startDate || '',
       endDate: fd.endDate || '',
@@ -201,11 +242,10 @@ export function buildChannelBillFromSingleGameForm(fd) {
       devShareRate: '',
       profitRate: ''
     },
-    [fd]
+    [{ ...fd, settlementCycle: cycle }]
   )
 }
 
-/** @deprecated 单游戏；请用 buildChannelBillFromSingleGameForm或 buildLineRecordFromForm */
 export function buildRecordFromForm(fd) {
   const line = buildLineRecordFromForm(fd)
   return {
@@ -230,8 +270,7 @@ export function recordToHeaderForm(record) {
     status: record.status || 'pending',
     serverCost: record.serverCost != null && record.serverCost !== '' ? String(record.serverCost) : '',
     discountType: record.discountType != null ? String(record.discountType) : '',
-    channelFeeRate:
-      record.channelFeeRate != null && record.channelFeeRate !== '' ? String(record.channelFeeRate) : '',
+    channelFeeRate: record.channelFeeRate != null && record.channelFeeRate !== '' ? String(record.channelFeeRate) : '',
     devShareRate: record.devShareRate != null && record.devShareRate !== '' ? String(record.devShareRate) : '',
     profitRate: record.profitRate != null && record.profitRate !== '' ? String(record.profitRate) : ''
   }
@@ -240,14 +279,10 @@ export function recordToHeaderForm(record) {
 export function recordToLineForms(record) {
   return getChannelLineItems(record).map((line) => ({
     id: line.id != null ? String(line.id) : '',
-    settlementCycle:
-      line.settlementCycle != null && String(line.settlementCycle).trim() !== ''
-        ? String(line.settlementCycle)
-        : record.settlementMonth || '',
+    settlementCycle: normalizeChannelSettlementCycle(line.settlementCycle || record.settlementMonth),
     gameName: line.gameName || '',
     flow: String(line.flow ?? ''),
-    discountFactor:
-      line.discountFactor !== undefined && line.discountFactor !== null ? String(line.discountFactor) : '1',
+    discountFactor: line.discountFactor !== undefined && line.discountFactor !== null ? String(line.discountFactor) : '1',
     voucherCost: String(line.voucherCost ?? ''),
     noWorryCost: String(line.noWorryCost ?? ''),
     refundCost: String(line.refundCost ?? ''),
@@ -263,7 +298,6 @@ export function recordToLineForms(record) {
   }))
 }
 
-/** 兼容旧代码：首行与表头合并为扁平表单 */
 export function recordToFormData(record) {
   const h = recordToHeaderForm(record)
   const lines = recordToLineForms(record)
