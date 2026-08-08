@@ -229,6 +229,11 @@
   color: var(--admin-text-tertiary) !important;
 }
 
+/* ContractDetailsDrawer is rendered after Customer360Drawer; keep it above the 360 backdrop. */
+.customer360-backdrop ~ .contract-drawer-mask {
+  z-index: 1380;
+}
+
 @media (max-width: 1120px) {
   .customer-form-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
