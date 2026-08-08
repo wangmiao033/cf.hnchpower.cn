@@ -5,7 +5,10 @@ import {
   createContractAccessItem,
   uploadContractAttachment
 } from '@/lib/api/contract.ts'
-import { scanContractFile } from '@/lib/api/contractSmartScan.ts'
+import {
+  CONTRACT_SMART_SCAN_MAX_FILE_BYTES,
+  scanContractFile
+} from '@/lib/api/contractSmartScan.ts'
 import './ContractSmartIntakeModal.css'
 
 const CONTRACT_FIELDS = [
@@ -100,6 +103,7 @@ export default function ContractSmartIntakeModal({ onClose, onSaved }) {
   const [scanning, setScanning] = useState(false)
   const [saving, setSaving] = useState(false)
   const [scanError, setScanError] = useState('')
+  const [scanProgress, setScanProgress] = useState(null)
   const [dragging, setDragging] = useState(false)
 
   useEffect(() => {
@@ -117,6 +121,15 @@ export default function ContractSmartIntakeModal({ onClose, onSaved }) {
     return CONTRACT_FIELDS.filter(([key]) => Number(scanResult.confidence?.[key] || 0) < 0.85).length
   }, [scanResult])
 
+  const resetSelectedFile = () => {
+    setFile(null)
+    setScanResult(null)
+    setContractForm(null)
+    setAccessRows([])
+    setScanError('')
+    setScanProgress(null)
+  }
+
   const startScan = async (nextFile) => {
     if (!nextFile) return
     const allowed = /\.(pdf|jpe?g|png|webp)$/i.test(nextFile.name)
@@ -124,8 +137,8 @@ export default function ContractSmartIntakeModal({ onClose, onSaved }) {
       showToast('智能录入支持 PDF、JPG、PNG、WEBP 文件', 'error')
       return
     }
-    if (nextFile.size > 4 * 1024 * 1024) {
-      showToast('智能识别文件不能超过 4MB', 'error')
+    if (nextFile.size > CONTRACT_SMART_SCAN_MAX_FILE_BYTES) {
+      showToast('智能识别单个合同最大支持 50MB', 'error')
       return
     }
     setFile(nextFile)
@@ -133,9 +146,10 @@ export default function ContractSmartIntakeModal({ onClose, onSaved }) {
     setContractForm(null)
     setAccessRows([])
     setScanError('')
+    setScanProgress({ phase: 'preparing', current: 0, total: 0, message: '正在准备合同…' })
     setScanning(true)
     try {
-      const result = await scanContractFile(nextFile)
+      const result = await scanContractFile(nextFile, setScanProgress)
       setScanResult(result)
       setContractForm(initialContractForm(result))
       setAccessRows(initialAccessRows(result))
@@ -167,6 +181,8 @@ export default function ContractSmartIntakeModal({ onClose, onSaved }) {
       showToast('请确认合同签约方', 'error')
       return
     }
+
+    const archiveFiles = scanResult?.archive_files?.length ? scanResult.archive_files : [file]
     setSaving(true)
     let created = null
     try {
@@ -176,15 +192,17 @@ export default function ContractSmartIntakeModal({ onClose, onSaved }) {
         signing_date: contractForm.signing_date || null,
         effective_date: contractForm.effective_date || null,
         end_date: contractForm.end_date || null,
-        attachments: [file.name]
+        attachments: archiveFiles.map((item) => item.name)
       })
 
-      let attachmentSaved = true
-      try {
-        await uploadContractAttachment(created.id, file, file.name)
-      } catch (attachmentError) {
-        attachmentSaved = false
-        console.error(attachmentError)
+      let attachmentFailures = 0
+      for (const archiveFile of archiveFiles) {
+        try {
+          await uploadContractAttachment(created.id, archiveFile, archiveFile.name)
+        } catch (attachmentError) {
+          attachmentFailures += 1
+          console.error(attachmentError)
+        }
       }
 
       let accessCreated = 0
@@ -207,10 +225,14 @@ export default function ContractSmartIntakeModal({ onClose, onSaved }) {
       }
 
       const pieces = ['合同已保存', '我司合同编号已自动生成']
-      pieces.push(attachmentSaved ? '原文件已归档' : '原文件归档失败，可在合同详情补传')
+      if (attachmentFailures === 0) {
+        pieces.push(archiveFiles.length > 1 ? `大文件已按 ${archiveFiles.length} 个分页附件归档` : '原文件已归档')
+      } else {
+        pieces.push(`${attachmentFailures} 个附件归档失败，可在合同详情补传`)
+      }
       if (accessCreated) pieces.push(`已创建 ${accessCreated} 条游戏接入清单`)
       if (accessFailed) pieces.push(`${accessFailed} 条接入清单需手工补录`)
-      showToast(pieces.join(' · '), attachmentSaved && accessFailed === 0 ? 'success' : 'info')
+      showToast(pieces.join(' · '), attachmentFailures === 0 && accessFailed === 0 ? 'success' : 'info')
       onSaved?.(created)
     } catch (error) {
       console.error(error)
@@ -222,6 +244,7 @@ export default function ContractSmartIntakeModal({ onClose, onSaved }) {
 
   const hasResult = Boolean(scanResult && contractForm)
   const isImage = file && /^image\//.test(file.type)
+  const progressMessage = scanProgress?.message || '正在识别标题、双方主体、有效期、结算方式、金额和游戏合作信息。'
 
   return (
     <div className="contract-ai-mask" role="dialog" aria-modal="true" aria-label="智能录入合同">
@@ -230,7 +253,7 @@ export default function ContractSmartIntakeModal({ onClose, onSaved }) {
           <div>
             <span>AI CONTRACT INTAKE</span>
             <h2>上传合同，自动扫描填表</h2>
-            <p>支持扫描版 PDF 和图片。系统只生成候选字段，确认后才写入合同台账。</p>
+            <p>支持扫描版 PDF 和图片；大文件会自动按页拆分，不需要手工压缩。</p>
           </div>
           <button type="button" className="contract-ai-close" onClick={onClose} disabled={saving}>×</button>
         </header>
@@ -249,9 +272,9 @@ export default function ContractSmartIntakeModal({ onClose, onSaved }) {
           >
             <div className="contract-ai-upload-icon" aria-hidden="true">⇧</div>
             <h3>拖一份合同到这里</h3>
-            <p>PDF / JPG / PNG / WEBP · 最大 4MB</p>
+            <p>PDF / JPG / PNG / WEBP · 最大 50MB</p>
             <button type="button" onClick={() => inputRef.current?.click()}>选择合同文件</button>
-            <small>扫描件也可以直接识别，不要求 PDF 有文字层。</small>
+            <small>超过单次识别限制时会自动按页分段，扫描件无需自己压缩。</small>
             <input
               ref={inputRef}
               type="file"
@@ -266,29 +289,32 @@ export default function ContractSmartIntakeModal({ onClose, onSaved }) {
               <div className="contract-ai-filebar">
                 <div>
                   <strong>{file.name}</strong>
-                  <span>{bytes(file.size)}</span>
+                  <span>
+                    {bytes(file.size)}
+                    {scanResult?.scan_parts > 1 ? ` · 已自动分 ${scanResult.scan_parts} 段识别` : ''}
+                  </span>
                 </div>
-                <button type="button" disabled={scanning || saving} onClick={() => {
-                  setFile(null)
-                  setScanResult(null)
-                  setContractForm(null)
-                  setAccessRows([])
-                  setScanError('')
-                }}>换一份</button>
+                <button type="button" disabled={scanning || saving} onClick={resetSelectedFile}>换一份</button>
               </div>
               <div className="contract-ai-preview">
                 {isImage ? <img src={previewUrl} alt="合同原件预览" /> : <iframe src={previewUrl} title="合同原件预览" />}
               </div>
-              <div className="contract-ai-privacy">文件用于本次智能识别；识别结果不会自动写库，只有点击“确认并保存”才创建合同。</div>
+              <div className="contract-ai-privacy">
+                原文件只在浏览器中预览；大 PDF 会生成分页识别副本。识别结果不会自动写库，点击“确认并保存”后才创建合同。
+              </div>
             </section>
 
             <section className="contract-ai-result-panel">
               {scanning ? (
                 <div className="contract-ai-scanning">
                   <span className="contract-ai-spinner" />
-                  <h3>正在扫描合同…</h3>
-                  <p>正在识别标题、双方主体、有效期、结算方式、金额和游戏合作信息。</p>
-                  <small>扫描件通常需要几十秒，请不要关闭窗口。</small>
+                  <h3>{scanProgress?.phase === 'preparing' ? '正在整理大合同…' : '正在扫描合同…'}</h3>
+                  <p>{progressMessage}</p>
+                  <small>
+                    {scanProgress?.total > 1
+                      ? `当前进度 ${scanProgress.current}/${scanProgress.total}`
+                      : '扫描件可能需要几十秒，请不要关闭窗口。'}
+                  </small>
                 </div>
               ) : scanError ? (
                 <div className="contract-ai-error">
@@ -308,6 +334,12 @@ export default function ContractSmartIntakeModal({ onClose, onSaved }) {
                       <span>项需确认</span>
                     </div>
                   </div>
+
+                  {scanResult.scan_parts > 1 ? (
+                    <div className="contract-ai-warnings">
+                      <span>大文件已自动分为 {scanResult.scan_parts} 段识别并合并；保存时会按分页附件完整归档。</span>
+                    </div>
+                  ) : null}
 
                   {scanResult.warnings?.length ? (
                     <div className="contract-ai-warnings">
@@ -380,7 +412,13 @@ export default function ContractSmartIntakeModal({ onClose, onSaved }) {
 
         <footer className="contract-ai-footer">
           <div>
-            {scanResult ? <span>模型：{scanResult.model} · 低置信字段请人工确认</span> : <span>不会自动覆盖已有合同</span>}
+            {scanResult ? (
+              <span>
+                模型：{scanResult.model}
+                {scanResult.scan_parts > 1 ? ` · ${scanResult.scan_parts} 段自动合并` : ''}
+                {' · '}低置信字段请人工确认
+              </span>
+            ) : <span>不会自动覆盖已有合同</span>}
           </div>
           <div>
             <button type="button" onClick={onClose} disabled={saving}>取消</button>
