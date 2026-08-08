@@ -229,7 +229,12 @@
   color: var(--admin-text-tertiary) !important;
 }
 
-/* ContractDetailsDrawer is rendered after Customer360Drawer; keep it above the 360 backdrop. */
+/* Customer 360 sits below the existing Bill 360 (1200), so bill drill-down remains visible. */
+.customer360-backdrop {
+  z-index: 1100 !important;
+}
+
+/* ContractDetailsDrawer is rendered after Customer360Drawer; keep it above both workspaces. */
 .customer360-backdrop ~ .contract-drawer-mask {
   z-index: 1380;
 }
