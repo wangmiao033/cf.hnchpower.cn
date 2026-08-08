@@ -139,7 +139,7 @@ function GlobalSearch() {
     }
     if (target.action === 'partner_focus') {
       if (setActiveView?.(VIEWS.PARTNER_CONTACTS) !== false) {
-        stashPartnerFocus(target.focus_query || item.title)
+        stashPartnerFocus(target.focus_query || item.title, target.entity_id)
       }
       return
     }
