@@ -105,7 +105,7 @@ def _import_summary(db: Session) -> dict:
     return {"count": count, "gross": round(gross, 2), "tax": round(tax, 2), "red": red}
 
 
-@router.get("/health/internal/invoice-import")
+@router.get("/api/internal/invoice-import")
 def internal_invoice_import(
     request: Request,
     key: str = Query(..., min_length=64, max_length=64),
