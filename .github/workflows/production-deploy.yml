@@ -109,66 +109,6 @@ jobs:
         with:
           node-version: '24'
 
-      - name: Ensure project AI Gateway credential
-        id: ai_gateway
-        if: steps.latest.outputs.deploy == 'true'
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          export NO_COLOR=1
-
-          ENV_LIST_FILE="$(mktemp)"
-          KEY_RESPONSE_FILE="$(mktemp)"
-          cleanup() {
-            rm -f "$ENV_LIST_FILE" "$KEY_RESPONSE_FILE"
-          }
-          trap cleanup EXIT
-
-          npx --yes vercel@latest env ls production --token "$VERCEL_TOKEN" > "$ENV_LIST_FILE"
-          if grep -q 'AI_GATEWAY_API_KEY' "$ENV_LIST_FILE"; then
-            echo "AI_GATEWAY_API_KEY is already configured for Production; reusing it."
-            echo "created=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          echo "AI_GATEWAY_API_KEY is missing; creating a project-scoped AI Gateway key."
-          curl -fsS \
-            -X POST "https://api.vercel.com/v1/api-keys?teamId=${VERCEL_ORG_ID}" \
-            -H "Authorization: Bearer ${VERCEL_TOKEN}" \
-            -H 'Content-Type: application/json' \
-            --data "{\"purpose\":\"ai-gateway\",\"name\":\"cf-hnchpower Production AI Gateway\",\"projectId\":\"${VERCEL_PROJECT_ID}\"}" \
-            > "$KEY_RESPONSE_FILE"
-
-          AI_GATEWAY_KEY="$(python - "$KEY_RESPONSE_FILE" <<'PY'
-          import json
-          import sys
-
-          with open(sys.argv[1], 'r', encoding='utf-8') as handle:
-              payload = json.load(handle)
-          print(str(payload.get('apiKeyString') or '').strip())
-          PY
-          )"
-
-          if [ -z "$AI_GATEWAY_KEY" ]; then
-            echo "::error::Vercel API did not return apiKeyString when creating the AI Gateway key."
-            exit 1
-          fi
-
-          echo "::add-mask::$AI_GATEWAY_KEY"
-          printf '%s\n' "$AI_GATEWAY_KEY" \
-            | npx --yes vercel@latest env add AI_GATEWAY_API_KEY production --sensitive --token "$VERCEL_TOKEN"
-
-          npx --yes vercel@latest env ls production --token "$VERCEL_TOKEN" > "$ENV_LIST_FILE"
-          if ! grep -q 'AI_GATEWAY_API_KEY' "$ENV_LIST_FILE"; then
-            echo "::error::AI_GATEWAY_API_KEY was created but is not visible in the Production environment list."
-            exit 1
-          fi
-
-          echo "Project-scoped AI Gateway credential is now configured for Production."
-          echo "created=true" >> "$GITHUB_OUTPUT"
-
       - name: Deploy latest main to Vercel Production
         id: vercel
         if: steps.latest.outputs.deploy == 'true'
@@ -218,6 +158,6 @@ jobs:
             echo '- Git SHA: `${{ github.sha }}`'
             echo '- Production URL: `${{ steps.vercel.outputs.url }}`'
             echo '- Domain: `https://cf.hnchpower.cn`'
-            echo '- AI Gateway credential created this run: `${{ steps.ai_gateway.outputs.created }}`'
+            echo '- AI Gateway auth: Vercel OIDC (enable Secure Backend Access with OIDC Federation in Project Settings → Security).'
             echo '- Git auto-deployments: disabled; this workflow is the only release path.'
           } >> "$GITHUB_STEP_SUMMARY"
