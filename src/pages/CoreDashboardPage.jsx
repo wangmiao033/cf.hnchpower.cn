@@ -7,6 +7,7 @@ import { useAuth } from '@/features/auth/AuthContext.jsx'
 import { listContracts } from '@/lib/api/contract.ts'
 import { getWorkbenchTodos } from '@/lib/api/workbench.ts'
 import './CoreDashboardPage.css'
+import './CoreDashboardTodo.css'
 
 const TODO_TARGETS = Object.freeze({
   'recon-rd': VIEWS.RECON_RD,
