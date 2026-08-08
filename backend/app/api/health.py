@@ -145,7 +145,6 @@ def internal_input_invoice_import(
                 not number
                 or not seller_name
                 or not seller_tax_no
-                or buyer_name != _BUYER_NAME
                 or buyer_tax_no != _BUYER_TAX_NO
                 or source_file not in _SOURCE_FILES
             ):
