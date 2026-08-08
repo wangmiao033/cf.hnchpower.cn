@@ -4,11 +4,12 @@ import Settings from '@/components/Settings.jsx'
 import HelpTooltip from '@/components/HelpTooltip.jsx'
 import MobileMenu from '@/components/MobileMenu.jsx'
 import ConfirmDialog from '@/components/ConfirmDialog.jsx'
+import GlobalSearch from '@/components/search/GlobalSearch.jsx'
 import { getPageMeta, SIDEBAR_GROUPS, VIEWS } from '@/app/routes.js'
 import { useAuth } from '@/features/auth/AuthContext.jsx'
 import './Header.css'
 
-function Header({ activeView, onNavigate, onSettingsChange }) {
+function Header({ activeView, onNavigate, onSettingsChange, onGlobalSearchSelect }) {
   const { user, signOut } = useAuth()
   const pageMeta = getPageMeta(activeView)
   const [showUserMenu, setShowUserMenu] = useState(false)
@@ -72,6 +73,7 @@ function Header({ activeView, onNavigate, onSettingsChange }) {
           </div>
         </div>
         <div className="app-admin-header__right">
+          <GlobalSearch onSelect={onGlobalSearchSelect} />
           <div className="app-admin-header__utility-group" role="group" aria-label="工作区工具">
             <NotificationCenter />
             <HelpTooltip />
