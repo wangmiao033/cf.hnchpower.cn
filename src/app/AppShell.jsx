@@ -16,6 +16,7 @@ function AppShell({
   openTabs,
   onCloseTab,
   onSettingsChange,
+  onGlobalSearchSelect,
   children
 }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(
@@ -56,7 +57,12 @@ function AppShell({
           </button>
         </div>
         <div className="app-main-shell">
-          <Header activeView={activeView} onNavigate={onNavigate} onSettingsChange={onSettingsChange} />
+          <Header
+            activeView={activeView}
+            onNavigate={onNavigate}
+            onSettingsChange={onSettingsChange}
+            onGlobalSearchSelect={onGlobalSearchSelect}
+          />
           <TopSubnav
             activeView={activeView}
             onNavigate={onNavigate}
