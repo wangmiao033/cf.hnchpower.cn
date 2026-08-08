@@ -29,15 +29,17 @@ export function bill360Lines(billType, record) {
   if (items.length > 0) {
     return items.map((item, index) => {
       if (billType === 'channel') {
+        const rawDiscount = number(item.discountFactor ?? 1)
+        const discount = rawDiscount > 0 ? rawDiscount : 1
         return {
           key: String(item.id || index),
           month: normalizeBillMonth(item.settlementCycle || record?.settlementMonth),
           game: String(item.gameName || record?.gameName || '').trim(),
-          flow: number(item.flow ?? item.billingFlow ?? item.revenue),
+          flow: number(item.flow ?? item.billingFlow ?? item.revenue) * discount,
           shareRate: number(item.shareRate),
           shareAmount: number(item.shareAmount),
           settlementAmount: number(item.settlementAmount),
-          discount: number(item.discountFactor ?? 1),
+          discount,
           taxRate: number(item.taxRate),
           extraAmount: number(item.refundCost ?? item.extraFee)
         }
@@ -88,14 +90,19 @@ export function bill360QuickSdkKeys(billType, record) {
 }
 
 export function summarizeBill360({ billType, record, invoiceSummary, quickSdkRows = [] }) {
-  const settlementAmount = Math.abs(number(record?.settlementAmount))
+  const lines = bill360Lines(billType, record)
+  const settlementAmount = Math.abs(
+    billType === 'channel'
+      ? lines.reduce((sum, line) => sum + number(line.settlementAmount), 0)
+      : number(record?.settlementAmount)
+  )
   const paidAmount = Math.abs(
     number(billType === 'channel' ? record?.receivedAmount ?? record?.paidAmount : record?.paidAmount)
   )
   const unpaidAmount = Math.max(0, settlementAmount - paidAmount)
   const invoiceAllocated = Math.abs(number(invoiceSummary?.allocated_amount))
   const invoiceRemaining = Math.max(0, number(invoiceSummary?.remaining_amount ?? settlementAmount))
-  const billFlow = bill360Lines(billType, record).reduce((sum, line) => sum + number(line.flow), 0)
+  const billFlow = lines.reduce((sum, line) => sum + number(line.flow), 0)
   const databaseFlow = quickSdkRows.reduce((sum, row) => sum + number(row?.total_flow), 0)
   const flowDifference = billType === 'rd' && quickSdkRows.length > 0 ? databaseFlow - billFlow : null
 
