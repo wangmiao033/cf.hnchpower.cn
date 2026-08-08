@@ -37,11 +37,11 @@ export default function LockedBillEditNotice({
       } else {
         await recon.refetchChannelFromApi?.()
       }
-      showToast('已退回“待核对”，现在可以继续修改账单', 'success')
+      showToast('已退回修改，现在可以继续编辑账单', 'success')
     } catch (error) {
       const message = error instanceof Error && error.message
         ? error.message
-        : '退回待核对失败，请稍后重试。'
+        : '退回修改失败，请稍后重试。'
       showToast(message, 'error')
     } finally {
       setSubmitting(false)
@@ -56,14 +56,14 @@ export default function LockedBillEditNotice({
           <span className="locked-bill-edit-eyebrow">账单已核对并锁定</span>
           <h1>当前状态：{billStatusLabel(record?.status)}</h1>
           <p>
-            该账单已经完成核对，金额、分成、产品、账期等业务字段不能直接修改。
-            如确需调整，请先退回“待核对”，填写原因后系统会解锁业务字段，并把本次退回写入操作日志。
+            这张账单已经核对，金额、分成、产品和账期等业务字段已锁定。
+            如果发现需要调整，点“退回修改”并填写原因即可，不需要理解其他状态流转。
           </p>
 
           {showReturnForm ? (
             <div className="locked-bill-return-form">
               <label htmlFor={`locked-bill-return-reason-${billId}`}>
-                <span>退回原因</span>
+                <span>为什么要退回修改？</span>
                 <textarea
                   id={`locked-bill-return-reason-${billId}`}
                   value={reason}
@@ -82,7 +82,7 @@ export default function LockedBillEditNotice({
                   onClick={() => void returnToPending()}
                   disabled={submitting || reason.trim().length < 2}
                 >
-                  {submitting ? '正在退回…' : '确认退回待核对'}
+                  {submitting ? '正在退回…' : '确认退回修改'}
                 </button>
                 <button
                   type="button"
@@ -101,13 +101,13 @@ export default function LockedBillEditNotice({
           <div className="locked-bill-edit-actions">
             {!showReturnForm ? (
               <button type="button" className="primary" onClick={() => setShowReturnForm(true)}>
-                退回待核对后修改
+                退回修改
               </button>
             ) : null}
-            <button type="button" onClick={onOpen360}>打开账单 360°</button>
+            <button type="button" onClick={onOpen360}>查看核对结果</button>
             <button type="button" onClick={onBack}>返回列表</button>
           </div>
-          <small>{billName} · 退回、重新打开以及后续再次核对都会保留审计记录。</small>
+          <small>{billName} · 退回原因和再次核对都会自动写入操作日志。</small>
         </div>
       </section>
     </PageContainer>

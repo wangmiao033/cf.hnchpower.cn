@@ -10,6 +10,7 @@ import {
   getReconciliationRecord,
   getReconciliationRecordId
 } from '@/lib/api/reconciliation.ts'
+import { transitionBillLifecycle } from '@/lib/api/billLifecycle.ts'
 import {
   getCachedEditRecord,
   invalidateEditRecord,
@@ -22,12 +23,23 @@ import {
 import { useBillFormSafety } from '@/hooks/useBillFormSafety.js'
 import './CoreBillFormPages.css'
 import '@/components/reconciliation/reconciliation-admin.css'
+import '@/styles/SimplifiedBillReview.css'
 
 const FORM_ID = 'core-rd-bill-form'
 
 function money(value) {
   const n = Number(value || 0)
   return `¥ ${n.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+}
+
+function reviewValidation(record) {
+  if (!String(record?.partnerId || '').trim()) return '请先从客户库选择合作方。'
+  const items = Array.isArray(record?.items) ? record.items : []
+  const validItems = items.filter((item) => String(item?.gameName || '').trim())
+  if (!validItems.length) return '请至少填写一条游戏明细。'
+  if (validItems.some((item) => Number(item?.revenue || 0) <= 0)) return '游戏后台流水必须大于 0。'
+  if (Number(record?.settlementAmount || 0) <= 0) return '结算金额必须大于 0 才能确认核对。'
+  return ''
 }
 
 function CoreRdBillFormPage({ mode }) {
@@ -49,6 +61,7 @@ function CoreRdBillFormPage({ mode }) {
   const [loading, setLoading] = useState(isEdit)
   const [loadError, setLoadError] = useState('')
   const [loadAttempt, setLoadAttempt] = useState(0)
+  const [reviewing, setReviewing] = useState(false)
 
   useEffect(() => {
     if (!isEdit) return
@@ -156,6 +169,43 @@ function CoreRdBillFormPage({ mode }) {
     goList()
   }
 
+  const confirmReview = async () => {
+    if (!isEdit || !reconEditRecordId || reviewing) return
+    const candidate = safety.currentRecord || safety.draftRecord || stableEditRecord
+    const validationMessage = reviewValidation(candidate)
+    if (validationMessage) {
+      showToast(validationMessage, 'error')
+      return
+    }
+    const confirmed = window.confirm(
+      `确认核对这张研发账单吗？\n\n结算金额：${money(candidate?.settlementAmount || previewAmount)}\n\n确认后账单会自动锁定；如需再修改，可点击“退回修改”。`
+    )
+    if (!confirmed) return
+
+    setReviewing(true)
+    const billId = String(reconEditRecordId)
+    try {
+      const saved = await recon.updateRecord(billId, {
+        ...stableEditRecord,
+        ...candidate,
+        id: billId,
+        status: stableEditRecord?.status || 'pending'
+      })
+      if (saved === false) return
+      safety.clearAfterSubmit()
+      invalidateEditRecord('rd', billId)
+
+      await transitionBillLifecycle('rd', billId, 'confirmed', '')
+      await recon.refetchReconciliationFromApi?.()
+      showToast('核对完成，账单已锁定', 'success')
+      goList()
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : '账单已保存，但确认核对失败，请稍后重试。', 'error')
+    } finally {
+      setReviewing(false)
+    }
+  }
+
   const discardDraft = () => {
     const confirmed = window.confirm('确定清除当前本机草稿并恢复为空白/服务器版本吗？')
     if (confirmed) safety.discardDraft()
@@ -191,11 +241,12 @@ function CoreRdBillFormPage({ mode }) {
           <div className="core-bill-form-title-row">
             <span className="core-bill-form-kind">研发账单</span>
             <h1>{isEdit ? '编辑研发账单' : '新增研发账单'}</h1>
-            <span className="core-bill-state-tag">{isEdit ? '编辑模式' : '新建账单'}</span>
+            <span className={`core-bill-state-tag ${isEdit ? 'is-pending' : ''}`}>{isEdit ? '待核对' : '新建账单'}</span>
           </div>
           <span className="core-bill-form-tip">
-            {isEdit ? '修改基础信息或游戏明细后保存。' : '先确认合作方和账期，再录入游戏流水。'}
+            {isEdit ? '修改完成后可直接“保存并确认核对”，确认后系统自动锁定账单。' : '先确认合作方和账期，再录入游戏流水。保存后账单进入待核对。'}
           </span>
+          {isEdit ? <span className="core-bill-review-hint">日常只需要“确认核对”与“退回修改”两个动作</span> : null}
           <div className={`core-bill-draft-state ${safety.dirty ? 'is-dirty' : 'is-clean'}`}>
             <span aria-hidden="true" />
             <strong>{safety.statusText}</strong>
@@ -257,7 +308,7 @@ function CoreRdBillFormPage({ mode }) {
               清除草稿
             </button>
           ) : null}
-          <button type="button" onClick={goList}>返回列表</button>
+          <button type="button" onClick={goList} disabled={reviewing}>返回列表</button>
           {!isEdit ? (
             <button
               type="button"
@@ -271,7 +322,8 @@ function CoreRdBillFormPage({ mode }) {
           ) : null}
           <button
             type="button"
-            className="primary"
+            className={isEdit ? '' : 'primary'}
+            disabled={reviewing}
             onClick={() => {
               submitIntentRef.current = 'back'
               document.getElementById(FORM_ID)?.requestSubmit()
@@ -279,6 +331,11 @@ function CoreRdBillFormPage({ mode }) {
           >
             {isEdit ? '保存修改' : '保存账单'}
           </button>
+          {isEdit ? (
+            <button type="button" className="confirm-review" disabled={reviewing} onClick={() => void confirmReview()}>
+              {reviewing ? '正在确认…' : '保存并确认核对'}
+            </button>
+          ) : null}
         </div>
       </section>
     </PageContainer>

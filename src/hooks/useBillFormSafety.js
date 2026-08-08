@@ -168,6 +168,7 @@ export function useBillFormSafety({
   }, [dirty, mode, restored, savedAt])
 
   return {
+    currentRecord,
     draftRecord,
     dirty,
     savedAt,

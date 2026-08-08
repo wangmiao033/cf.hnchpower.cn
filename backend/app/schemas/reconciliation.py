@@ -14,13 +14,13 @@ class ReconciliationLineItemIn(BaseModel):
 
     settlement_cycle: str | None = None
     game_name: str | None = None
-    revenue: float = 0
-    discount_rate: float = 1
+    revenue: float = Field(default=0, ge=0)
+    discount_rate: float = Field(default=1, ge=0, le=1)
     coupon_amount: float = 0
     test_fee: float = 0
     extra_fee: float = 0
-    share_ratio: float = 0
-    tax_rate: float = 0
+    share_ratio: float = Field(default=0, ge=0, le=100)
+    tax_rate: float = Field(default=0, ge=0, le=100)
     sort_order: int = 0
 
 
@@ -57,10 +57,10 @@ class ReconciliationCreate(BaseModel):
     game_flow: float = 0
     test_cost: float = 0
     voucher_cost: float = 0
-    channel_fee_rate: float = 0
-    tax_rate: float = 0
-    revenue_share_rate: float = 0
-    discount_value: float = 1
+    channel_fee_rate: float = Field(default=0, ge=0, le=100)
+    tax_rate: float = Field(default=0, ge=0, le=100)
+    revenue_share_rate: float = Field(default=0, ge=0, le=100)
+    discount_value: float = Field(default=1, ge=0, le=1)
     refund_amount: float = 0
     settlement_amount: float = 0
     status: str | None = "pending"
@@ -77,10 +77,10 @@ class ReconciliationUpdate(BaseModel):
     game_flow: float | None = None
     test_cost: float | None = None
     voucher_cost: float | None = None
-    channel_fee_rate: float | None = None
-    tax_rate: float | None = None
-    revenue_share_rate: float | None = None
-    discount_value: float | None = None
+    channel_fee_rate: float | None = Field(default=None, ge=0, le=100)
+    tax_rate: float | None = Field(default=None, ge=0, le=100)
+    revenue_share_rate: float | None = Field(default=None, ge=0, le=100)
+    discount_value: float | None = Field(default=None, ge=0, le=1)
     refund_amount: float | None = None
     settlement_amount: float | None = None
     status: str | None = None

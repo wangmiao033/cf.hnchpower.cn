@@ -86,17 +86,17 @@ export default function BillOperationTimeline({ billType, billId }) {
 
       <section className="bill360-card bill360-card--table">
         <div className="bill360-card-head">
-          <div><span>审计轨迹</span><h3>状态流转与操作日志</h3></div>
+          <div><span>审计轨迹</span><h3>核对与修改记录</h3></div>
           <span className="bill360-card-meta">{loading ? '读取中…' : `${ordered.length} 条`}</span>
         </div>
         <div className="bill360-operation-note">
-          已核对及后续状态会自动锁定账单金额与业务字段；需要修改时必须先通过上方状态流转退回“待核对”，原因会写入审计记录。
+          日常只需要“确认核对”和“退回修改”。确认核对后账单自动锁定；退回原因、再次保存和重新核对都会自动记录在这里。
         </div>
 
         {error ? <div className="bill360-history-empty">{error}</div> : null}
         {!error && loading ? <div className="bill360-history-empty">正在读取操作日志…</div> : null}
         {!error && !loading && ordered.length === 0 ? (
-          <div className="bill360-history-empty">当前账单暂无操作日志。历史数据不会反向伪造日志，新操作会从 V2.1-2 开始记录。</div>
+          <div className="bill360-history-empty">当前账单暂无操作日志。历史数据不会反向伪造日志，新操作会自动开始记录。</div>
         ) : null}
 
         {!error && ordered.length > 0 ? (
