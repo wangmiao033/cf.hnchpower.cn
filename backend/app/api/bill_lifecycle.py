@@ -22,6 +22,24 @@ from app.services.bill_lifecycle import (
 router = APIRouter()
 
 
+def _prefer_channel_line_item_settlement(bill_type: str, bill) -> None:
+    """渠道账单以游戏明细结算额为权威口径，修正历史主表缓存为 0 的情况。"""
+    if bill_type != "channel":
+        return
+    items = list(getattr(bill, "line_items", None) or [])
+    if not items:
+        return
+    total = round(
+        sum(float(getattr(item, "settlement_amount", 0) or 0) for item in items),
+        2,
+    )
+    if abs(total) <= 0.01:
+        return
+    current = round(float(getattr(bill, "settlement_amount", 0) or 0), 2)
+    if abs(current - total) > 0.01:
+        bill.settlement_amount = total
+
+
 def _apply_cross_link_guards(snapshot: dict) -> dict:
     """Prevent cancellation while money or invoice allocations still point at the bill."""
     paid_amount = float(snapshot.get("paid_amount") or 0)
@@ -41,6 +59,7 @@ def _apply_cross_link_guards(snapshot: dict) -> dict:
 
 
 def _snapshot(db: Session, bill_type: str, bill, user: AuthUser) -> dict:
+    _prefer_channel_line_item_settlement(bill_type, bill)
     return _apply_cross_link_guards(
         build_lifecycle_snapshot(db, bill_type, bill, user)
     )
