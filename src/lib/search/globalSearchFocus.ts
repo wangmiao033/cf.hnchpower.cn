@@ -29,12 +29,21 @@ export function consumeContractFocus() {
   return consume('contractId')
 }
 
-export function stashPartnerFocus(query: string) {
+export function stashPartnerFocus(query: string, partnerId = '') {
+  if (typeof window !== 'undefined') {
+    const id = String(partnerId || '').trim()
+    if (id) sessionStorage.setItem(`${PREFIX}partnerId`, id)
+    else sessionStorage.removeItem(`${PREFIX}partnerId`)
+  }
   stash('partnerQuery', query, 'partner')
 }
 
 export function consumePartnerFocus() {
   return consume('partnerQuery')
+}
+
+export function consumePartnerFocusId() {
+  return consume('partnerId')
 }
 
 export function stashBankTransactionFocus(id: string) {
