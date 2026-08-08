@@ -1,5 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { useAppState } from '@/app/AppStateContext.jsx'
+import { VIEWS } from '@/app/routes.js'
 import { globalSearch } from '@/lib/api/globalSearch.ts'
+import { stashInvoiceFocus } from '@/lib/exceptions/navFocus.ts'
+import {
+  stashBankTransactionFocus,
+  stashContractFocus,
+  stashPartnerFocus
+} from '@/lib/search/globalSearchFocus.ts'
 import './GlobalSearch.css'
 
 const KIND_META = {
@@ -20,7 +28,8 @@ function formatMoney(value) {
   return `¥${number.toLocaleString('zh-CN', { maximumFractionDigits: 2 })}`
 }
 
-function GlobalSearch({ onSelect }) {
+function GlobalSearch() {
+  const { setActiveView, openBill360, showToast } = useAppState()
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [response, setResponse] = useState({ results: [], groups: [], total: 0 })
@@ -100,10 +109,42 @@ function GlobalSearch({ onSelect }) {
     setError('')
   }
 
+  const navigateToResult = (item) => {
+    const target = item?.target
+    if (!target?.action || !target.entity_id) return
+
+    if (target.action === 'bill360') {
+      openBill360?.(target.bill_type === 'channel' ? 'channel' : 'rd', target.entity_id)
+      return
+    }
+    if (target.action === 'contract_detail') {
+      if (setActiveView?.(VIEWS.CONTRACTS) !== false) stashContractFocus(target.entity_id)
+      return
+    }
+    if (target.action === 'invoice_detail') {
+      const view = target.direction === 'input' ? VIEWS.INVOICE_INPUT : VIEWS.INVOICE_MANAGE
+      if (setActiveView?.(view) !== false) stashInvoiceFocus(target.entity_id)
+      return
+    }
+    if (target.action === 'partner_focus') {
+      if (setActiveView?.(VIEWS.PARTNER_CONTACTS) !== false) {
+        stashPartnerFocus(target.focus_query || item.title)
+      }
+      return
+    }
+    if (target.action === 'bank_detail') {
+      if (setActiveView?.(VIEWS.BANK_TRANSACTIONS_LEDGER) !== false) {
+        stashBankTransactionFocus(target.entity_id)
+      }
+      return
+    }
+    showToast?.('这个搜索结果暂时没有可打开的目标', 'info')
+  }
+
   const choose = (item) => {
     if (!item) return
     close()
-    onSelect?.(item)
+    navigateToResult(item)
   }
 
   const handleInputKeyDown = (event) => {
