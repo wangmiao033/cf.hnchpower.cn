@@ -66,10 +66,6 @@ def _num(value: Any) -> float:
     return parsed if parsed == parsed else 0.0
 
 
-def _money(value: Any) -> float:
-    return round(max(0.0, _num(value)), 2)
-
-
 def _status(value: Any) -> str:
     return str(value or "pending").strip().lower()
 
@@ -176,6 +172,23 @@ def _as_date(value: Any) -> date | None:
         return None
 
 
+def _contract_risk_flags(
+    end_date: Any,
+    performance_status: Any,
+    today: date,
+) -> tuple[bool, bool]:
+    """Return (expiring_within_30_days, expired_but_still_active)."""
+    resolved_end = _as_date(end_date)
+    if resolved_end is None:
+        return False, False
+    performance = str(performance_status or "").strip().lower()
+    if today <= resolved_end <= today + timedelta(days=30):
+        return performance not in CONTRACT_TERMINAL_STATUSES, False
+    if resolved_end < today and performance in CONTRACT_ACTIVE_STATUSES:
+        return False, True
+    return False, False
+
+
 def _load_contract_risk(db: Session, today: date) -> dict[str, int]:
     """读取真实合同台账；老项目没有该表时保持工作台可用。"""
     try:
@@ -198,18 +211,16 @@ def _load_contract_risk(db: Session, today: date) -> dict[str, int]:
     except Exception:
         return {"expiring_30": 0, "expired_active": 0}
 
-    deadline = today + timedelta(days=30)
     expiring = 0
     expired_active = 0
     for row in rows:
-        end_date = _as_date(row.get("end_date"))
-        if end_date is None:
-            continue
-        performance = str(row.get("performance_status") or "").strip().lower()
-        if today <= end_date <= deadline and performance not in CONTRACT_TERMINAL_STATUSES:
-            expiring += 1
-        elif end_date < today and performance in CONTRACT_ACTIVE_STATUSES:
-            expired_active += 1
+        is_expiring, is_expired_active = _contract_risk_flags(
+            row.get("end_date"),
+            row.get("performance_status"),
+            today,
+        )
+        expiring += int(is_expiring)
+        expired_active += int(is_expired_active)
     return {"expiring_30": expiring, "expired_active": expired_active}
 
 
@@ -266,6 +277,8 @@ def build_workbench_todos(
     active_channel = [row for row in channel_rows if _active_bill(row)]
     pending_rd = [row for row in active_rd if _review_pending(row)]
     pending_channel = [row for row in active_channel if _review_pending(row)]
+    post_review_rd = [row for row in active_rd if _post_review(row)]
+    post_review_channel = [row for row in active_channel if _post_review(row)]
 
     if can_recon:
         visible_modules.append("reconciliation")
@@ -300,26 +313,30 @@ def build_workbench_todos(
                 )
             )
 
-    rd_payment_map = {}
+    # 资金待办只针对已完成核对的账单，避免同一张待核对账单同时出现“去核对”和“去付款”。
+    rd_payment_states: list[tuple[ReconciliationRecord, float, float, float]] = []
+    channel_payment_states: list[tuple[ChannelRecord, float, float, float]] = []
     rd_outstanding_rows: list[tuple[ReconciliationRecord, float, float]] = []
     channel_outstanding_rows: list[tuple[ChannelRecord, float, float]] = []
-    if can_funds or can_anomalies:
-        rd_payment_map = aggregate_rd_payments_for_ids(db, [str(row.id) for row in active_rd])
-        for row in active_rd:
+    if can_funds:
+        rd_payment_map = aggregate_rd_payments_for_ids(db, [str(row.id) for row in post_review_rd])
+        for row in post_review_rd:
             bill_amount = abs(_num(row.settlement_amount))
             payment = fill_payable_for_row(rd_payment_map.get(str(row.id)), bill_amount)
-            outstanding = max(0.0, float(payment.unpaid_amount))
             paid = max(0.0, float(payment.paid_amount))
+            outstanding = max(0.0, float(payment.unpaid_amount))
+            rd_payment_states.append((row, bill_amount, paid, outstanding))
             if outstanding > EPS:
                 rd_outstanding_rows.append((row, outstanding, paid))
-        for row in active_channel:
+
+        for row in post_review_channel:
             bill_amount = abs(_num(row.settlement_amount))
             received = max(0.0, _num(row.received_amount))
             outstanding = max(0.0, bill_amount - received)
+            channel_payment_states.append((row, bill_amount, received, outstanding))
             if outstanding > EPS:
                 channel_outstanding_rows.append((row, outstanding, received))
 
-    if can_funds:
         visible_modules.append("funds")
         rd_payable = sum(item[1] for item in rd_outstanding_rows)
         channel_receivable = sum(item[1] for item in channel_outstanding_rows)
@@ -331,7 +348,7 @@ def build_workbench_todos(
                     len(rd_outstanding_rows),
                     amount=rd_payable,
                     severity="warning",
-                    description="已产生结算金额但仍有未付余额。",
+                    description="已核对研发账单仍有未付余额。",
                     detail="进入银行核销后可优先处理高置信付款匹配。",
                     target="bank-reconciliation",
                     action_label="去付款核销",
@@ -345,7 +362,7 @@ def build_workbench_todos(
                     len(channel_outstanding_rows),
                     amount=channel_receivable,
                     severity="warning",
-                    description="渠道账单仍有未收余额。",
+                    description="已核对渠道账单仍有未收余额。",
                     detail="银行流水匹配后会自动更新已收金额。",
                     target="bank-reconciliation",
                     action_label="去回款核销",
@@ -356,23 +373,29 @@ def build_workbench_todos(
             bank_dashboard = build_bank_dashboard(db, limit=500)
         except Exception:
             bank_dashboard = {"stats": {}, "suggestions": []}
-        bank_stats = bank_dashboard.get("stats") or {}
-        high_confidence = int(bank_stats.get("high_confidence") or 0)
-        high_amount = sum(
-            _num(row.get("amount"))
-            for row in bank_dashboard.get("suggestions") or []
-            if row.get("confidence_level") == "high"
-        )
-        if high_confidence:
+        reviewed_refs = {
+            *(('rd', str(row.id)) for row in post_review_rd),
+            *(('channel', str(row.id)) for row in post_review_channel),
+        }
+        high_suggestions = []
+        for suggestion in bank_dashboard.get("suggestions") or []:
+            if suggestion.get("confidence_level") != "high":
+                continue
+            candidates = suggestion.get("candidates") or []
+            top_candidate = candidates[0] if candidates and isinstance(candidates[0], dict) else {}
+            top_ref = (str(top_candidate.get("bill_type") or ""), str(top_candidate.get("bill_id") or ""))
+            if top_ref in reviewed_refs:
+                high_suggestions.append(suggestion)
+        if high_suggestions:
             items.append(
                 _item(
                     "bank_auto_ready",
                     "银行高置信待核销",
-                    high_confidence,
-                    amount=high_amount,
+                    len(high_suggestions),
+                    amount=sum(_num(row.get("amount")) for row in high_suggestions),
                     severity="info",
-                    description="系统已找到高置信账单匹配，可直接人工确认。",
-                    detail="只统计高置信建议，低置信流水仍需人工判断。",
+                    description="系统已找到已核对账单的高置信匹配，可直接人工确认。",
+                    detail="只展示最近导入流水中的高置信建议；低置信流水仍需人工判断。",
                     target="bank-reconciliation",
                     action_label="去确认核销",
                 )
@@ -382,8 +405,6 @@ def build_workbench_todos(
     input_gap_count = output_gap_count = 0
     input_gap_amount = output_gap_amount = 0.0
     if can_invoices or can_anomalies:
-        post_review_rd = [row for row in active_rd if _post_review(row)]
-        post_review_channel = [row for row in active_channel if _post_review(row)]
         refs = [
             *(('rd', str(row.id)) for row in post_review_rd),
             *(('channel', str(row.id)) for row in post_review_channel),
@@ -440,7 +461,7 @@ def build_workbench_todos(
             )
 
     contract_risk = {"expiring_30": 0, "expired_active": 0}
-    if can_contracts or can_anomalies:
+    if can_contracts or (can_anomalies and can_contracts):
         contract_risk = _load_contract_risk(db, today)
     if can_contracts:
         visible_modules.append("contracts")
@@ -465,16 +486,14 @@ def build_workbench_todos(
     if can_anomalies:
         visible_modules.append("anomalies")
         if can_funds:
-            for row, outstanding, paid in rd_outstanding_rows:
-                bill_amount = abs(_num(row.settlement_amount))
+            for row, bill_amount, paid, outstanding in rd_payment_states:
                 if _status(row.status) in FINAL_BILL_STATUSES and outstanding > EPS:
                     risk_keys.add(f"final-unpaid:rd:{row.id}")
                     risk_exposure += outstanding
                 if paid > bill_amount + EPS:
                     risk_keys.add(f"payment-over:rd:{row.id}")
                     risk_exposure += paid - bill_amount
-            for row, outstanding, received in channel_outstanding_rows:
-                bill_amount = abs(_num(row.settlement_amount))
+            for row, bill_amount, received, outstanding in channel_payment_states:
                 if _status(row.status) in FINAL_BILL_STATUSES and outstanding > EPS:
                     risk_keys.add(f"final-unpaid:channel:{row.id}")
                     risk_exposure += outstanding
@@ -501,10 +520,9 @@ def build_workbench_todos(
                 ),
             )
 
-    # 仅统计真实业务动作；风险卡是同一批业务的优先级提示，不重复加到总待办数。
+    # 风险卡是同一批业务的优先级提示，不重复计入“今日待办”总数。
     action_items = [item for item in items if item["key"] != "risk_alerts"]
     total_count = sum(int(item["count"]) for item in action_items)
-    urgent_count = len(risk_keys) + contract_risk.get("expired_active", 0)
     review_count = len(pending_rd) + len(pending_channel) if can_recon else 0
     receivable_amount = sum(item[1] for item in channel_outstanding_rows) if can_funds else 0
     payable_amount = sum(item[1] for item in rd_outstanding_rows) if can_funds else 0
@@ -514,7 +532,7 @@ def build_workbench_todos(
         "generated_at": generated_at,
         "summary": {
             "total_count": total_count,
-            "urgent_count": urgent_count,
+            "urgent_count": len(risk_keys) if can_anomalies else 0,
             "review_count": review_count,
             "receivable_amount": round(receivable_amount, 2),
             "payable_amount": round(payable_amount, 2),
