@@ -1,13 +1,14 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useAppState } from '@/app/AppStateContext.jsx'
 import { VIEWS } from '@/app/routes.js'
+import ContractDetailsDrawer from '@/components/contract/ContractDetailsDrawer.jsx'
+import { useAuth } from '@/features/auth/AuthContext.jsx'
 import { globalSearch } from '@/lib/api/globalSearch.ts'
-import { stashInvoiceFocus } from '@/lib/exceptions/navFocus.ts'
 import {
   stashBankTransactionFocus,
-  stashContractFocus,
   stashPartnerFocus
 } from '@/lib/search/globalSearchFocus.ts'
+import { getGlobalSearchContract } from '@/lib/search/globalSearchDetails.ts'
 import './GlobalSearch.css'
 
 const KIND_META = {
@@ -29,13 +30,15 @@ function formatMoney(value) {
 }
 
 function GlobalSearch() {
-  const { setActiveView, openBill360, showToast } = useAppState()
+  const { setActiveView, openBill360, openInvoiceEdit, showToast } = useAppState()
+  const { can } = useAuth()
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [response, setResponse] = useState({ results: [], groups: [], total: 0 })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [activeIndex, setActiveIndex] = useState(0)
+  const [selectedContract, setSelectedContract] = useState(null)
   const inputRef = useRef(null)
   const requestVersionRef = useRef(0)
 
@@ -109,7 +112,7 @@ function GlobalSearch() {
     setError('')
   }
 
-  const navigateToResult = (item) => {
+  const navigateToResult = async (item) => {
     const target = item?.target
     if (!target?.action || !target.entity_id) return
 
@@ -118,12 +121,22 @@ function GlobalSearch() {
       return
     }
     if (target.action === 'contract_detail') {
-      if (setActiveView?.(VIEWS.CONTRACTS) !== false) stashContractFocus(target.entity_id)
+      try {
+        const contract = await getGlobalSearchContract(target.entity_id)
+        setSelectedContract(contract)
+      } catch (detailError) {
+        console.error(detailError)
+        showToast?.(detailError?.message || '合同详情读取失败，请稍后重试', 'error')
+      }
       return
     }
     if (target.action === 'invoice_detail') {
       const view = target.direction === 'input' ? VIEWS.INVOICE_INPUT : VIEWS.INVOICE_MANAGE
-      if (setActiveView?.(view) !== false) stashInvoiceFocus(target.entity_id)
+      if (can?.('invoices.manage')) {
+        openInvoiceEdit?.(target.entity_id)
+      } else {
+        setActiveView?.(view)
+      }
       return
     }
     if (target.action === 'partner_focus') {
@@ -144,7 +157,7 @@ function GlobalSearch() {
   const choose = (item) => {
     if (!item) return
     close()
-    navigateToResult(item)
+    void navigateToResult(item)
   }
 
   const handleInputKeyDown = (event) => {
@@ -285,6 +298,18 @@ function GlobalSearch() {
           </section>
         </div>
       ) : null}
+
+      <ContractDetailsDrawer
+        contract={selectedContract}
+        onClose={() => setSelectedContract(null)}
+        onEdit={() => {
+          setSelectedContract(null)
+          setActiveView?.(VIEWS.CONTRACTS)
+          showToast?.('已打开合同台账，可继续编辑合同资料', 'info')
+        }}
+        onAttachmentUploaded={(contract) => setSelectedContract(contract)}
+        onToast={showToast}
+      />
     </>
   )
 }
