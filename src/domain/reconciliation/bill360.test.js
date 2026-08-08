@@ -47,6 +47,25 @@ describe('bill360 helpers', () => {
     expect(bill360QuickSdkKeys('channel', record)).toEqual([])
   })
 
+  it('uses channel game lines as the receivable source even when the legacy header is stale', () => {
+    const record = {
+      settlementMonth: '2026-06',
+      settlementAmount: 0,
+      receivedAmount: 50,
+      items: [
+        { id: 'g1', gameName: '游戏A', flow: 1000, discountFactor: 0.5, settlementAmount: 100 },
+        { id: 'g2', gameName: '游戏B', flow: 2000, discountFactor: 1, settlementAmount: 200 }
+      ]
+    }
+    expect(summarizeBill360({ billType: 'channel', record, invoiceSummary: null })).toMatchObject({
+      settlementAmount: 300,
+      paidAmount: 50,
+      unpaidAmount: 250,
+      billFlow: 2500,
+      paymentPercent: 50 / 3
+    })
+  })
+
   it('matches contracts by partner id or normalized company name', () => {
     const contracts = [
       { id: 'c1', partner_id: 'p1', partner_name: '甲公司有限公司' },
