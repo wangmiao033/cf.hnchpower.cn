@@ -7,7 +7,7 @@ import AdminStatsRow from '@/components/admin/AdminStatsRow.jsx'
 import AdminTableCard from '@/components/admin/AdminTableCard.jsx'
 import InvoiceLightDrawer from '@/components/invoice/InvoiceLightDrawer.jsx'
 import '@/components/reconciliation/reconciliation-admin.css'
-import { getInvoiceRecordId } from '@/lib/api/invoice.ts'
+import { deleteInvoiceRecord, getInvoiceRecordId } from '@/lib/api/invoice.ts'
 import {
   autoMatchInvoices,
   listInvoiceAllocationOverviews
@@ -26,6 +26,20 @@ const COVERAGE_TEXT = {
   complete: '已关联',
   over: '超额'
 }
+
+const LEDGER_GRID_COLUMNS = [
+  '36px',
+  '44px',
+  'minmax(170px, 1.35fr)',
+  'minmax(180px, 1.45fr)',
+  'minmax(110px, 0.85fr)',
+  'minmax(110px, 0.85fr)',
+  'minmax(118px, 0.9fr)',
+  '90px',
+  'minmax(190px, 1.45fr)',
+  'minmax(120px, 0.9fr)',
+  'minmax(150px, 1.05fr)'
+].join(' ')
 
 function invoiceGross(item) {
   return parseFloat(
@@ -65,6 +79,22 @@ function findInvoicePartner(item, direction, partners) {
   )
 }
 
+async function deleteInvoicesInChunks(ids, chunkSize = 8) {
+  const results = []
+  for (let start = 0; start < ids.length; start += chunkSize) {
+    const chunk = ids.slice(start, start + chunkSize)
+    const settled = await Promise.allSettled(chunk.map((id) => deleteInvoiceRecord(id)))
+    settled.forEach((entry, index) => {
+      results.push({
+        id: chunk[index],
+        ok: entry.status === 'fulfilled',
+        error: entry.status === 'rejected' ? entry.reason : null
+      })
+    })
+  }
+  return results
+}
+
 function InvoiceManageWorkspace({ variant = 'manage', direction = 'output' }) {
   const {
     invoice,
@@ -84,6 +114,8 @@ function InvoiceManageWorkspace({ variant = 'manage', direction = 'output' }) {
     setInvoiceForm,
     invoiceFileInputRef,
     invoiceApiEnabled,
+    setInvoiceRecords,
+    refetchInvoiceFromApi,
     handleDeleteInvoice,
     handleExportInvoiceCSV,
     handleImportInvoiceFile,
@@ -98,6 +130,8 @@ function InvoiceManageWorkspace({ variant = 'manage', direction = 'output' }) {
   const [allocationRevision, setAllocationRevision] = useState(0)
   const [autoMatchBusy, setAutoMatchBusy] = useState(false)
   const [autoMatchPreview, setAutoMatchPreview] = useState(null)
+  const [selectedInvoiceIds, setSelectedInvoiceIds] = useState(() => new Set())
+  const [bulkDeleteBusy, setBulkDeleteBusy] = useState(false)
   const [searchKeyword, setSearchKeyword] = useState(
     () => invoiceFilter.companyKeyword || invoiceFilter.numberKeyword || ''
   )
@@ -113,6 +147,10 @@ function InvoiceManageWorkspace({ variant = 'manage', direction = 'output' }) {
     if (invoiceFilter.direction === direction) return
     setInvoiceFilter((prev) => ({ ...prev, direction }))
   }, [direction, invoiceFilter.direction, setInvoiceFilter])
+
+  useEffect(() => {
+    setSelectedInvoiceIds(new Set())
+  }, [direction])
 
   const partners = settings?.partners || []
   const invoicePartnerMap = useMemo(() => {
@@ -156,6 +194,20 @@ function InvoiceManageWorkspace({ variant = 'manage', direction = 'output' }) {
     () => visibleInvoices.map((item) => getInvoiceRecordId(item)).filter(Boolean).join(','),
     [visibleInvoices]
   )
+
+  useEffect(() => {
+    const allowedIds = new Set(
+      visibleInvoices
+        .map((item) => getInvoiceRecordId(item) || item.id)
+        .filter(Boolean)
+        .map(String)
+    )
+    setSelectedInvoiceIds((current) => {
+      const next = new Set([...current].filter((id) => allowedIds.has(id)))
+      if (next.size === current.size && [...next].every((id) => current.has(id))) return current
+      return next
+    })
+  }, [invoiceIdsKey, visibleInvoices])
 
   useEffect(() => {
     let cancelled = false
@@ -229,6 +281,94 @@ function InvoiceManageWorkspace({ variant = 'manage', direction = 'output' }) {
     const start = (page - 1) * pageSize
     return visibleInvoices.slice(start, start + pageSize)
   }, [visibleInvoices, page, pageSize])
+
+  const pagedInvoiceIds = useMemo(
+    () =>
+      pagedInvoices
+        .map((item) => getInvoiceRecordId(item) || item.id)
+        .filter(Boolean)
+        .map(String),
+    [pagedInvoices]
+  )
+
+  const selectedCount = selectedInvoiceIds.size
+  const selectedOnPage = pagedInvoiceIds.filter((id) => selectedInvoiceIds.has(id)).length
+  const allPageSelected = pagedInvoiceIds.length > 0 && selectedOnPage === pagedInvoiceIds.length
+
+  const toggleInvoiceSelection = (rawId) => {
+    const id = String(rawId || '')
+    if (!id) return
+    setSelectedInvoiceIds((current) => {
+      const next = new Set(current)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const toggleCurrentPage = () => {
+    if (!pagedInvoiceIds.length) return
+    setSelectedInvoiceIds((current) => {
+      const next = new Set(current)
+      if (allPageSelected) pagedInvoiceIds.forEach((id) => next.delete(id))
+      else pagedInvoiceIds.forEach((id) => next.add(id))
+      return next
+    })
+  }
+
+  const runBulkDelete = async () => {
+    const ids = [...selectedInvoiceIds]
+    if (variant !== 'manage' || ids.length === 0 || bulkDeleteBusy) return
+    const confirmed = window.confirm(
+      `确定删除选中的 ${ids.length} 张发票吗？\n\n已关联账单的发票会自动跳过；其他成功删除的记录无法撤销。`
+    )
+    if (!confirmed) return
+
+    setBulkDeleteBusy(true)
+    try {
+      if (!invoiceApiEnabled) {
+        const idSet = new Set(ids)
+        setInvoiceRecords((current) =>
+          current.filter((item) => !idSet.has(String(getInvoiceRecordId(item) || item.id || '')))
+        )
+        setSelectedInvoiceIds(new Set())
+        showToast(`已批量删除 ${ids.length} 张发票`, 'success')
+        return
+      }
+
+      const results = await deleteInvoicesInChunks(ids)
+      const deleted = results.filter((item) => item.ok)
+      const blocked = results.filter((item) => !item.ok && Number(item.error?.status) === 409)
+      const failed = results.filter((item) => !item.ok && Number(item.error?.status) !== 409)
+
+      await refetchInvoiceFromApi()
+      setSelectedInvoiceIds(new Set())
+      setAllocationRevision((value) => value + 1)
+
+      if (deleted.length > 0 && blocked.length === 0 && failed.length === 0) {
+        showToast(`已批量删除 ${deleted.length} 张发票`, 'success')
+      } else if (deleted.length > 0) {
+        showToast(
+          `批量删除完成：成功 ${deleted.length} 张，已关联账单跳过 ${blocked.length} 张${
+            failed.length ? `，其他失败 ${failed.length} 张` : ''
+          }`,
+          blocked.length || failed.length ? 'info' : 'success'
+        )
+      } else if (blocked.length > 0 && failed.length === 0) {
+        showToast(`未删除：选中的 ${blocked.length} 张发票均已关联账单，请先解除关联`, 'info')
+      } else {
+        showToast(
+          `批量删除失败：已关联账单 ${blocked.length} 张，其他失败 ${failed.length} 张`,
+          'error'
+        )
+      }
+    } catch (error) {
+      console.error(error)
+      showToast('批量删除发票失败，请刷新后重试', 'error')
+    } finally {
+      setBulkDeleteBusy(false)
+    }
+  }
 
   const wrapImport = (e) => {
     const file = e.target.files?.[0]
@@ -356,6 +496,29 @@ function InvoiceManageWorkspace({ variant = 'manage', direction = 'output' }) {
                 >
                   新增发票
                 </button>
+                <button
+                  type="button"
+                  className="rec-btn rec-btn--secondary"
+                  disabled={selectedCount === 0 || bulkDeleteBusy}
+                  onClick={() => void runBulkDelete()}
+                  style={{
+                    borderColor: selectedCount ? '#fecaca' : undefined,
+                    background: selectedCount ? '#fff1f2' : undefined,
+                    color: selectedCount ? '#be123c' : undefined
+                  }}
+                >
+                  {bulkDeleteBusy ? '正在删除…' : `批量删除${selectedCount ? ` ${selectedCount} 张` : ''}`}
+                </button>
+                {selectedCount > 0 ? (
+                  <button
+                    type="button"
+                    className="rec-btn rec-btn--secondary"
+                    onClick={() => setSelectedInvoiceIds(new Set())}
+                    disabled={bulkDeleteBusy}
+                  >
+                    清空选择
+                  </button>
+                ) : null}
                 <button type="button" className="rec-btn rec-btn--secondary" onClick={handleExportInvoiceCSV}>
                   导出 CSV
                 </button>
@@ -431,8 +594,22 @@ function InvoiceManageWorkspace({ variant = 'manage', direction = 'output' }) {
       </AdminStatsRow>
 
       <AdminTableCard className="invoice-rd__table-card">
-        <div className="invoice-table invoice-table--workspace invoice-table--ledger">
-          <div className="invoice-table-head">
+        <div
+          className="invoice-table invoice-table--workspace invoice-table--ledger"
+          style={{ minWidth: '1280px' }}
+        >
+          <div className="invoice-table-head" style={{ gridTemplateColumns: LEDGER_GRID_COLUMNS }}>
+            <span style={{ display: 'grid', placeItems: 'center' }}>
+              {variant === 'manage' ? (
+                <input
+                  type="checkbox"
+                  checked={allPageSelected}
+                  onChange={toggleCurrentPage}
+                  aria-label={`全选当前页 ${pagedInvoiceIds.length} 张发票`}
+                  title={`全选当前页 ${pagedInvoiceIds.length} 张`}
+                />
+              ) : null}
+            </span>
             <span>序号</span>
             <span>发票信息</span>
             <span>{direction === 'output' ? '购买方' : '销售方'}</span>
@@ -445,12 +622,16 @@ function InvoiceManageWorkspace({ variant = 'manage', direction = 'output' }) {
             <span>操作</span>
           </div>
           {visibleInvoices.length === 0 ? (
-            <div className="invoice-table-row invoice-table-row--empty">
+            <div
+              className="invoice-table-row invoice-table-row--empty"
+              style={{ gridTemplateColumns: LEDGER_GRID_COLUMNS }}
+            >
               <span className="invoice-table-empty-text">暂无发票数据，当前筛选无匹配记录</span>
             </div>
           ) : (
             pagedInvoices.map((item, idx) => {
               const rid = getInvoiceRecordId(item) || item.id
+              const sid = String(rid || '')
               const counterpartyName = direction === 'output' ? item.buyerName || item.title : item.sellerName
               const counterpartyTaxNo = direction === 'output' ? item.buyerTaxNo || item.taxNo : item.sellerTaxNo
               const matchedPartner = rid != null ? invoicePartnerMap.get(String(rid)) : null
@@ -458,7 +639,24 @@ function InvoiceManageWorkspace({ variant = 'manage', direction = 'output' }) {
               const coverageStatus = overview?.coverage_status || 'none'
               const grossAmount = invoiceGross(item)
               return (
-                <div className="invoice-table-row" key={rid}>
+                <div
+                  className="invoice-table-row"
+                  key={rid}
+                  style={{
+                    gridTemplateColumns: LEDGER_GRID_COLUMNS,
+                    background: selectedInvoiceIds.has(sid) ? '#f5f9ff' : undefined
+                  }}
+                >
+                  <span style={{ display: 'grid', placeItems: 'center' }}>
+                    {variant === 'manage' ? (
+                      <input
+                        type="checkbox"
+                        checked={selectedInvoiceIds.has(sid)}
+                        onChange={() => toggleInvoiceSelection(sid)}
+                        aria-label={`选择发票 ${invoiceNumber(item)}`}
+                      />
+                    ) : null}
+                  </span>
                   <span>{(page - 1) * pageSize + idx + 1}</span>
                   <span className="invoice-ledger-cell invoice-ledger-cell--invoice" title={invoiceNumber(item)}>
                     <strong>{invoiceNumber(item)}</strong>
@@ -522,6 +720,7 @@ function InvoiceManageWorkspace({ variant = 'manage', direction = 'output' }) {
         <div className="channel-table__pagination">
           <div className="channel-table__pagination-info">
             第 {page}/{totalPages} 页，共 {visibleInvoices.length} 条
+            {selectedCount > 0 ? ` · 已选 ${selectedCount} 张` : ''}
           </div>
           <div className="channel-table__pagination-actions">
             <label className="channel-table__pagination-size">
