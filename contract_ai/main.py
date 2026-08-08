@@ -52,12 +52,15 @@ def _safe_filename(request: Request) -> str:
     return PurePath(raw.replace("\\", "/")).name.strip()[:500]
 
 
-def _gateway_token(request: Request) -> str:
-    return (
-        AI_GATEWAY_API_KEY
-        or request.headers.get("x-vercel-oidc-token", "").strip()
-        or os.environ.get("VERCEL_OIDC_TOKEN", "").strip()
-    )
+def _gateway_token() -> str:
+    """Use only trusted server-side credentials for Vercel AI Gateway.
+
+    Vercel documents VERCEL_OIDC_TOKEN as the automatic credential for
+    deployments with OIDC Federation enabled. Never accept an OIDC bearer
+    token from the browser request headers: those headers are client-controlled
+    and may also contain a token with a different audience.
+    """
+    return AI_GATEWAY_API_KEY or os.environ.get("VERCEL_OIDC_TOKEN", "").strip()
 
 
 def _require_contract_permission(request: Request, permission: str) -> str:
@@ -333,9 +336,9 @@ async def smart_scan_contract(request: Request) -> dict:
     if len(body) > SCAN_MAX_BYTES:
         raise HTTPException(status_code=413, detail="智能识别单个文件不能超过 4MB")
 
-    gateway_token = _gateway_token(request)
+    gateway_token = _gateway_token()
     if not gateway_token:
-        raise HTTPException(status_code=503, detail="智能合同识别暂不可用，请稍后重试")
+        raise HTTPException(status_code=503, detail="AI Gateway OIDC 凭证不可用，请重新部署后重试")
 
     headers = {
         "Authorization": f"Bearer {gateway_token}",
@@ -366,7 +369,7 @@ async def smart_scan_contract(request: Request) -> dict:
         if response.status_code == 429:
             raise HTTPException(status_code=429, detail="智能识别当前繁忙，请稍后再试")
         if response.status_code in {401, 403}:
-            raise HTTPException(status_code=503, detail="AI Gateway 身份认证失败，请检查项目配置")
+            raise HTTPException(status_code=503, detail="AI Gateway OIDC 鉴权失败，请检查 Vercel OIDC 配置")
         if response.status_code in {402, 409}:
             raise HTTPException(status_code=503, detail="AI Gateway 可用额度不足，请稍后再试")
         raise HTTPException(
