@@ -15,15 +15,8 @@ from app.models.channel import ChannelReceipt, ChannelRecord
 from app.models.reconciliation import ReconciliationRecord
 
 _BLOCKED_STATUSES = {
-    "cancelled",
-    "canceled",
-    "deleted",
-    "void",
-    "archived",
-    "作废",
-    "已取消",
-    "已删除",
-    "已归档",
+    "cancelled", "canceled", "deleted", "void", "archived",
+    "作废", "已取消", "已删除", "已归档",
 }
 _FINAL_STATUSES = {"completed", "settled", "reconciled", "verified"}
 
@@ -118,11 +111,9 @@ def _add_rd_records(
                 if _completed(record):
                     bucket.rd_completed_ids.add(str(record.id))
                 seen_months.add(month)
-
                 game = games_by_month[month][_clean_game(line.game_name or record.game_name)]
                 game.rd_settlement += settlement
                 game.rd_flow += flow
-            # Legacy rows can have line items but no usable cycle; keep the main row from disappearing.
             if not seen_months:
                 month = month_key(record.settlement_month)
                 if month:
@@ -159,6 +150,37 @@ def _add_channel_records(
     for record in records:
         if not _active(record):
             continue
+
+        items = list(record.line_items or [])
+        usable = []
+        for line in items:
+            month = month_key(getattr(line, "settlement_cycle", None) or record.settlement_month)
+            if month:
+                usable.append((line, month))
+
+        if usable:
+            month_settlements: dict[str, float] = defaultdict(float)
+            for line, month in usable:
+                settlement = abs(_num(line.settlement_amount))
+                month_settlements[month] += settlement
+                game = games_by_month[month][_clean_game(line.game_name or record.game_name)]
+                game.channel_settlement += settlement
+                game.channel_flow += _num(line.billing_flow)
+
+            total_settlement = sum(month_settlements.values())
+            received = max(0.0, abs(_num(record.received_amount)))
+            server_cost = max(0.0, _num(record.server_cost))
+            for month, settlement in month_settlements.items():
+                ratio = settlement / total_settlement if total_settlement > 0.005 else 0.0
+                bucket = buckets[month]
+                bucket.channel_settlement += settlement
+                bucket.server_cost += server_cost * ratio
+                bucket.channel_outstanding += max(0.0, settlement - received * ratio)
+                bucket.channel_bill_ids.add(str(record.id))
+                if _completed(record):
+                    bucket.channel_completed_ids.add(str(record.id))
+            continue
+
         month = month_key(record.settlement_month)
         if not month:
             continue
@@ -170,23 +192,12 @@ def _add_channel_records(
         bucket.channel_bill_ids.add(str(record.id))
         if _completed(record):
             bucket.channel_completed_ids.add(str(record.id))
-
-        items = list(record.line_items or [])
-        if items:
-            for line in items:
-                game = games_by_month[month][_clean_game(line.game_name or record.game_name)]
-                game.channel_settlement += abs(_num(line.settlement_amount))
-                game.channel_flow += _num(line.billing_flow)
-        else:
-            game = games_by_month[month][_clean_game(record.game_name)]
-            game.channel_settlement += settlement
-            game.channel_flow += _num(record.billing_flow)
+        game = games_by_month[month][_clean_game(record.game_name)]
+        game.channel_settlement += settlement
+        game.channel_flow += _num(record.billing_flow)
 
 
-def _add_channel_receipts(
-    buckets: dict[str, MonthBucket],
-    receipts: list[ChannelReceipt],
-) -> None:
+def _add_channel_receipts(buckets: dict[str, MonthBucket], receipts: list[ChannelReceipt]) -> None:
     for receipt in receipts:
         month = month_key(receipt.receipt_date)
         if month:
@@ -201,12 +212,7 @@ def _rd_payment_amount(row: BankTransaction) -> float:
     return 0.0
 
 
-def _add_rd_payments(
-    buckets: dict[str, MonthBucket],
-    transactions: list[BankTransaction],
-) -> None:
-    # One bank transaction is counted once. transaction_no is not used for dedupe because
-    # some legitimate records have no bank serial or share one instruction number.
+def _add_rd_payments(buckets: dict[str, MonthBucket], transactions: list[BankTransaction]) -> None:
     for transaction in transactions:
         if transaction.type != "payment_register":
             continue
@@ -259,9 +265,7 @@ def build_monthly_business_dashboard(
         .options(selectinload(ChannelRecord.line_items))
         .order_by(ChannelRecord.created_at.asc())
     ).scalars().all()
-    channel_receipts = db.execute(
-        select(ChannelReceipt).order_by(ChannelReceipt.created_at.asc())
-    ).scalars().all()
+    channel_receipts = db.execute(select(ChannelReceipt).order_by(ChannelReceipt.created_at.asc())).scalars().all()
     rd_transactions = db.execute(
         select(BankTransaction).where(
             BankTransaction.type == "payment_register",
@@ -292,47 +296,35 @@ def build_monthly_business_dashboard(
     for month in month_window(selected, trend_months):
         bucket = buckets[month]
         derived = _derived(bucket)
-        trend.append(
-            {
-                "month": month,
-                "channel_settlement": round(bucket.channel_settlement, 2),
-                "rd_settlement": round(bucket.rd_settlement, 2),
-                "server_cost": round(bucket.server_cost, 2),
-                "contribution": derived["contribution"],
-                "contribution_margin": derived["contribution_margin"],
-                "channel_receipts": round(bucket.channel_receipts, 2),
-                "rd_payments": round(bucket.rd_payments, 2),
-                "cash_net": derived["cash_net"],
-            }
-        )
+        trend.append({
+            "month": month,
+            "channel_settlement": round(bucket.channel_settlement, 2),
+            "rd_settlement": round(bucket.rd_settlement, 2),
+            "server_cost": round(bucket.server_cost, 2),
+            "contribution": derived["contribution"],
+            "contribution_margin": derived["contribution_margin"],
+            "channel_receipts": round(bucket.channel_receipts, 2),
+            "rd_payments": round(bucket.rd_payments, 2),
+            "cash_net": derived["cash_net"],
+        })
 
     game_rows = []
     for game_name, game in games_by_month[selected].items():
         contribution = game.channel_settlement - game.rd_settlement
         if (
-            abs(game.channel_settlement) <= 0.005
-            and abs(game.rd_settlement) <= 0.005
-            and abs(game.channel_flow) <= 0.005
-            and abs(game.rd_flow) <= 0.005
+            abs(game.channel_settlement) <= 0.005 and abs(game.rd_settlement) <= 0.005
+            and abs(game.channel_flow) <= 0.005 and abs(game.rd_flow) <= 0.005
         ):
             continue
-        game_rows.append(
-            {
-                "game_name": game_name,
-                "channel_settlement": round(game.channel_settlement, 2),
-                "rd_settlement": round(game.rd_settlement, 2),
-                "contribution_before_server": round(contribution, 2),
-                "channel_flow": round(game.channel_flow, 2),
-                "rd_flow": round(game.rd_flow, 2),
-            }
-        )
-    game_rows.sort(
-        key=lambda item: (
-            item["contribution_before_server"],
-            item["channel_settlement"],
-        ),
-        reverse=True,
-    )
+        game_rows.append({
+            "game_name": game_name,
+            "channel_settlement": round(game.channel_settlement, 2),
+            "rd_settlement": round(game.rd_settlement, 2),
+            "contribution_before_server": round(contribution, 2),
+            "channel_flow": round(game.channel_flow, 2),
+            "rd_flow": round(game.rd_flow, 2),
+        })
+    game_rows.sort(key=lambda item: (item["contribution_before_server"], item["channel_settlement"]), reverse=True)
 
     return {
         "month": selected,
@@ -343,10 +335,7 @@ def build_monthly_business_dashboard(
         "rd_settlement": metric(current.rd_settlement, previous.rd_settlement),
         "server_cost": metric(current.server_cost, previous.server_cost),
         "contribution": metric(current_derived["contribution"], previous_derived["contribution"]),
-        "contribution_margin": metric(
-            current_derived["contribution_margin"],
-            previous_derived["contribution_margin"],
-        ),
+        "contribution_margin": metric(current_derived["contribution_margin"], previous_derived["contribution_margin"]),
         "channel_receipts": metric(current.channel_receipts, previous.channel_receipts),
         "rd_payments": metric(current.rd_payments, previous.rd_payments),
         "cash_net": metric(current_derived["cash_net"], previous_derived["cash_net"]),
@@ -358,7 +347,8 @@ def build_monthly_business_dashboard(
         "trend": trend,
         "games": game_rows[:50],
         "notes": [
-            "渠道应收与研发应付按账单结算月份统计；研发多周期主账单按明细 settlement_cycle 拆分。",
+            "渠道应收与研发应付均按游戏明细 settlement_cycle 拆分到实际结算月份；历史无明细周期时回退主账单月份。",
+            "跨月渠道账单的服务器成本与当前未收余额按各月结算金额占比分摊，仅用于经营分析口径。",
             "渠道已收按收款日期统计；研发已付按已关联研发账单的银行付款登记交易日期统计。",
             "结算贡献 = 渠道结算金额 - 研发结算金额 - 已录入服务器成本，不等同于会计净利润。",
             "当前未收为所选账期渠道账单截至现在的未收余额，不代表该月月末历史余额。",
