@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from datetime import datetime
-
 from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -38,17 +37,17 @@ class ChannelLineItemCreate(BaseModel):
     """单行游戏明细；金额字段与 ORM 一致（支付通道费为 gateway_cost 绝对金额）。"""
 
     game_name: str | None = None
-    billing_flow: float = 0
-    discount_factor: float = 1
+    billing_flow: float = Field(default=0, ge=0)
+    discount_factor: float = Field(default=1, ge=0, le=1)
     voucher_cost: float = 0
     no_worry_cost: float = 0
     refund_cost: float = 0
     test_cost: float = 0
     welfare_cost: float = 0
-    share_rate: float = 0
+    share_rate: float = Field(default=0, ge=0, le=100)
     billing_amount: float = 0
     share_amount: float = 0
-    tax_rate: float = 0
+    tax_rate: float = Field(default=0, ge=0, le=100)
     gateway_cost: float = 0
     settlement_amount: float = 0
 
@@ -88,9 +87,9 @@ class ChannelRecordCreate(BaseModel):
     status: str | None = "pending"
     server_cost: float | None = None
     discount_type: str | None = None
-    channel_fee_rate: float | None = None
-    dev_share_rate: float | None = None
-    profit_rate: float | None = None
+    channel_fee_rate: float | None = Field(default=None, ge=0, le=100)
+    dev_share_rate: float | None = Field(default=None, ge=0, le=100)
+    profit_rate: float | None = Field(default=None, ge=0, le=100)
     items: Annotated[list[ChannelLineItemCreate], Field(min_length=1)]
 
 
@@ -105,9 +104,9 @@ class ChannelRecordUpdate(BaseModel):
     status: str | None = None
     server_cost: float | None = None
     discount_type: str | None = None
-    channel_fee_rate: float | None = None
-    dev_share_rate: float | None = None
-    profit_rate: float | None = None
+    channel_fee_rate: float | None = Field(default=None, ge=0, le=100)
+    dev_share_rate: float | None = Field(default=None, ge=0, le=100)
+    profit_rate: float | None = Field(default=None, ge=0, le=100)
     items: list[ChannelLineItemCreate] | None = None
 
 
