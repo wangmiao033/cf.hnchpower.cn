@@ -1,9 +1,16 @@
 const PREFIX = 'duizhang.globalSearchFocus.'
+export const GLOBAL_SEARCH_FOCUS_EVENT = 'duizhang-global-search-focus'
 
-function stash(key: string, value: string | null | undefined) {
+function stash(key: string, value: string | null | undefined, kind: string) {
   if (typeof window === 'undefined') return
   const normalized = String(value || '').trim()
-  if (normalized) sessionStorage.setItem(`${PREFIX}${key}`, normalized)
+  if (!normalized) return
+  sessionStorage.setItem(`${PREFIX}${key}`, normalized)
+  window.dispatchEvent(
+    new CustomEvent(GLOBAL_SEARCH_FOCUS_EVENT, {
+      detail: { kind, value: normalized }
+    })
+  )
 }
 
 function consume(key: string): string | null {
@@ -15,7 +22,7 @@ function consume(key: string): string | null {
 }
 
 export function stashContractFocus(id: string) {
-  stash('contractId', id)
+  stash('contractId', id, 'contract')
 }
 
 export function consumeContractFocus() {
@@ -23,7 +30,7 @@ export function consumeContractFocus() {
 }
 
 export function stashPartnerFocus(query: string) {
-  stash('partnerQuery', query)
+  stash('partnerQuery', query, 'partner')
 }
 
 export function consumePartnerFocus() {
@@ -31,7 +38,7 @@ export function consumePartnerFocus() {
 }
 
 export function stashBankTransactionFocus(id: string) {
-  stash('bankTransactionId', id)
+  stash('bankTransactionId', id, 'bank_transaction')
 }
 
 export function consumeBankTransactionFocus() {
