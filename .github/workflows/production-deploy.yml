@@ -36,6 +36,108 @@ jobs:
           fi
           echo "VERCEL_TOKEN is configured."
 
+      - name: Diagnose project OIDC and AI Gateway
+        if: github.event_name == 'pull_request'
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          PROJECT_JSON="$(mktemp)"
+          TOKEN_JSON="$(mktemp)"
+          AI_JSON="$(mktemp)"
+          trap 'rm -f "$PROJECT_JSON" "$TOKEN_JSON" "$AI_JSON"' EXIT
+
+          PROJECT_CODE="$(curl -sS -o "$PROJECT_JSON" -w '%{http_code}' \
+            "https://api.vercel.com/v9/projects/${VERCEL_PROJECT_ID}?teamId=${VERCEL_ORG_ID}" \
+            -H "Authorization: Bearer ${VERCEL_TOKEN}")"
+          echo "Project API HTTP: $PROJECT_CODE"
+          if [ "$PROJECT_CODE" != "200" ]; then
+            cat "$PROJECT_JSON"
+            exit 1
+          fi
+
+          python - "$PROJECT_JSON" <<'PY'
+          import json, sys
+          p=json.load(open(sys.argv[1], encoding='utf-8'))
+          cfg=p.get('oidcTokenConfig') or {}
+          print('oidcTokenConfig.enabled =', cfg.get('enabled'))
+          print('oidcTokenConfig.issuerMode =', cfg.get('issuerMode'))
+          PY
+
+          TOKEN_CODE="$(curl -sS -o "$TOKEN_JSON" -w '%{http_code}' \
+            -X POST "https://api.vercel.com/v1/projects/${VERCEL_PROJECT_ID}/token?teamId=${VERCEL_ORG_ID}" \
+            -H "Authorization: Bearer ${VERCEL_TOKEN}" \
+            -H 'Content-Type: application/json' \
+            --data '{"source":"cf-hnchpower-oidc-diagnosis"}')"
+          echo "Project token API HTTP: $TOKEN_CODE"
+          if [ "$TOKEN_CODE" != "200" ]; then
+            python - "$TOKEN_JSON" <<'PY'
+          import json, sys
+          try:
+              data=json.load(open(sys.argv[1], encoding='utf-8'))
+          except Exception:
+              print('Project token API returned non-JSON')
+              raise SystemExit(1)
+          err=data.get('error', data)
+          if isinstance(err, dict):
+              print('Project token error code:', err.get('code'))
+              print('Project token error message:', err.get('message'))
+          else:
+              print('Project token error:', err)
+          raise SystemExit(1)
+          PY
+          fi
+
+          OIDC_TOKEN="$(python - "$TOKEN_JSON" <<'PY'
+          import json, sys
+          print(str(json.load(open(sys.argv[1], encoding='utf-8')).get('token') or '').strip())
+          PY
+          )"
+          if [ -z "$OIDC_TOKEN" ]; then
+            echo "::error::Project token response has no token"
+            exit 1
+          fi
+          echo "::add-mask::$OIDC_TOKEN"
+
+          OIDC_TOKEN="$OIDC_TOKEN" python - <<'PY'
+          import base64, json, os, time
+          token=os.environ['OIDC_TOKEN']
+          parts=token.split('.')
+          payload=parts[1] + '=' * (-len(parts[1]) % 4)
+          claims=json.loads(base64.urlsafe_b64decode(payload.encode()))
+          for key in ('iss','aud','sub','scope','iat','nbf','exp'):
+              print(f'{key} =', claims.get(key))
+          exp=claims.get('exp')
+          if isinstance(exp,(int,float)):
+              print('ttl_seconds =', int(exp-time.time()))
+          PY
+
+          AI_CODE="$(curl -sS -o "$AI_JSON" -w '%{http_code}' \
+            -X POST 'https://ai-gateway.vercel.sh/v1/responses' \
+            -H "Authorization: Bearer ${OIDC_TOKEN}" \
+            -H 'Content-Type: application/json' \
+            --data '{"model":"openai/gpt-5.4-mini","input":"Reply with exactly OK","max_output_tokens":8,"store":false}')"
+          echo "AI Gateway OIDC test HTTP: $AI_CODE"
+          if [ "$AI_CODE" != "200" ]; then
+            python - "$AI_JSON" <<'PY'
+          import json, sys
+          try:
+              data=json.load(open(sys.argv[1], encoding='utf-8'))
+          except Exception:
+              print('AI Gateway returned non-JSON')
+              raise SystemExit(1)
+          err=data.get('error', data)
+          if isinstance(err, dict):
+              print('AI Gateway error code:', err.get('code'))
+              print('AI Gateway error message:', err.get('message'))
+          else:
+              print('AI Gateway error:', str(err)[:500])
+          raise SystemExit(1)
+          PY
+          fi
+          echo "Project OIDC token is accepted by AI Gateway."
+
   frontend:
     name: Frontend tests and build
     if: github.event_name != 'pull_request'
