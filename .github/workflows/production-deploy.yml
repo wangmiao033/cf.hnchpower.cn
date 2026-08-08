@@ -85,7 +85,7 @@ jobs:
           PY
 
   contract-ai-preflight:
-    name: Contract AI dependency smoke test
+    name: Contract AI dependency and structured-output tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -111,6 +111,10 @@ jobs:
           assert '/api/contracts/internal-numbers' in routes, routes
           print('Cloudflare contract service import OK.')
           PY
+      - name: Run Cloudflare structured-output regression tests
+        env:
+          PYTHONPATH: contract_ai:.
+        run: python -m unittest discover -s contract_ai -p 'test_*.py' -v
 
   frontend:
     name: Frontend tests and build
