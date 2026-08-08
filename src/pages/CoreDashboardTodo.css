@@ -1,0 +1,310 @@
+.core-dashboard-metric-grid--todo {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.core-dashboard-metric--danger::before {
+  background: #dc2626;
+}
+
+.core-dashboard-metric:disabled {
+  cursor: default;
+}
+
+.core-dashboard-metric:disabled:hover {
+  background: #fff;
+}
+
+.core-dashboard-todo-center {
+  padding: 14px;
+}
+
+.core-dashboard-todo-title {
+  align-items: center;
+}
+
+.core-dashboard-todo-tools {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-end;
+  gap: 7px !important;
+  flex: 0 0 auto;
+}
+
+.core-dashboard-todo-tools > button,
+.core-dashboard-inline-action {
+  min-height: 28px;
+  padding: 0 9px;
+  border: 1px solid #d7e1ee;
+  border-radius: 7px;
+  background: #fff;
+  color: #4b5f77;
+  font-size: 10.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.core-dashboard-todo-tools > button:hover:not(:disabled),
+.core-dashboard-inline-action:hover {
+  border-color: #a9c2e8;
+  background: #f6f9fe;
+  color: #1d5ed6;
+}
+
+.core-dashboard-todo-tools > button:disabled {
+  opacity: .55;
+  cursor: wait;
+}
+
+.core-dashboard-todo-error {
+  max-width: 260px;
+  color: #b45309 !important;
+  font-size: 10px !important;
+}
+
+.core-dashboard-todo-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.core-dashboard-todo-card {
+  position: relative;
+  min-width: 0;
+  min-height: 164px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 7px;
+  padding: 12px 13px;
+  text-align: left;
+  background: #fff;
+  border: 1px solid #e0e7f0;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: transform 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.core-dashboard-todo-card::before {
+  position: absolute;
+  top: 0;
+  right: 12px;
+  left: 12px;
+  height: 3px;
+  border-radius: 0 0 4px 4px;
+  background: #3b82f6;
+  content: '';
+}
+
+.core-dashboard-todo-card.is-warning::before {
+  background: #f59e0b;
+}
+
+.core-dashboard-todo-card.is-critical::before {
+  background: #dc2626;
+}
+
+.core-dashboard-todo-card.is-clear::before {
+  background: #16a34a;
+}
+
+.core-dashboard-todo-card:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: #b5c9e6;
+  box-shadow: 0 8px 22px rgb(30 64 175 / 8%);
+}
+
+.core-dashboard-todo-card:disabled {
+  cursor: default;
+}
+
+.core-dashboard-todo-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 22px;
+  padding-top: 2px;
+  color: #6b7b90;
+  font-size: 10px;
+}
+
+.core-dashboard-todo-card__head > span:last-child {
+  color: #4f6f9e;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.core-dashboard-todo-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #2563eb;
+  font-weight: 800;
+}
+
+.is-warning .core-dashboard-todo-badge {
+  background: #fff7ed;
+  color: #b45309;
+}
+
+.is-critical .core-dashboard-todo-badge {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.core-dashboard-todo-card__value {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.core-dashboard-todo-card__value > strong {
+  color: #102a4c;
+  font-size: 26px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.core-dashboard-todo-card__value > span {
+  overflow: hidden;
+  color: #65758a;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.core-dashboard-todo-card__label {
+  color: #20364f;
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.core-dashboard-todo-card__description {
+  color: #6c7b8e;
+  font-size: 10.5px;
+  line-height: 1.45;
+}
+
+.core-dashboard-todo-card > small {
+  margin-top: auto;
+  padding-top: 7px;
+  border-top: 1px dashed #e5eaf1;
+  color: #929dad;
+  font-size: 9.5px;
+  line-height: 1.4;
+}
+
+.core-dashboard-todo-loading {
+  min-height: 92px;
+  display: grid;
+  grid-template-columns: 28px auto;
+  align-items: center;
+  justify-content: center;
+  column-gap: 10px;
+  color: #4f647e;
+}
+
+.core-dashboard-todo-loading > span {
+  grid-row: 1 / span 2;
+  width: 24px;
+  height: 24px;
+  border: 3px solid #dce8f7;
+  border-top-color: #2563eb;
+  border-radius: 50%;
+  animation: core-dashboard-todo-spin .8s linear infinite;
+}
+
+.core-dashboard-todo-loading > strong {
+  align-self: end;
+  font-size: 12px;
+}
+
+.core-dashboard-todo-loading > small {
+  align-self: start;
+  color: #8c9aac;
+  font-size: 10px;
+}
+
+@keyframes core-dashboard-todo-spin {
+  to { transform: rotate(360deg); }
+}
+
+.core-dashboard-clear-state--todo {
+  cursor: default;
+}
+
+.core-dashboard-inline-action {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 1180px) {
+  .core-dashboard-todo-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .core-dashboard-overview__head {
+    align-items: flex-start;
+  }
+
+  .core-dashboard-primary-actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .core-dashboard-primary-actions button {
+    flex: 1 1 140px;
+  }
+
+  .core-dashboard-metric-grid--todo,
+  .core-dashboard-progress-grid,
+  .core-dashboard-module-grid,
+  .core-dashboard-todo-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .core-dashboard-todo-title {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .core-dashboard-todo-title > div:first-child {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .core-dashboard-todo-title > div:first-child span {
+    white-space: normal;
+  }
+
+  .core-dashboard-todo-tools {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .core-dashboard-todo-error {
+    max-width: 180px;
+    white-space: normal !important;
+  }
+
+  .core-dashboard-todo-card {
+    min-height: 142px;
+  }
+
+  .core-dashboard-clear-state--todo {
+    grid-template-columns: 30px minmax(0, 1fr);
+  }
+
+  .core-dashboard-clear-state--todo > small,
+  .core-dashboard-clear-state--todo > i {
+    grid-column: 2;
+    white-space: normal;
+  }
+}
