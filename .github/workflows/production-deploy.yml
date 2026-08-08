@@ -109,7 +109,7 @@ jobs:
         with:
           node-version: '24'
 
-      - name: Ensure project AI Gateway credential
+      - name: Verify Production AI Gateway credential
         id: ai_gateway
         if: steps.latest.outputs.deploy == 'true'
         env:
@@ -117,57 +117,42 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          export NO_COLOR=1
+          ENV_RESPONSE_FILE="$(mktemp)"
+          trap 'rm -f "$ENV_RESPONSE_FILE"' EXIT
 
-          ENV_LIST_FILE="$(mktemp)"
-          KEY_RESPONSE_FILE="$(mktemp)"
-          cleanup() {
-            rm -f "$ENV_LIST_FILE" "$KEY_RESPONSE_FILE"
-          }
-          trap cleanup EXIT
+          HTTP_CODE="$(curl -sS \
+            -o "$ENV_RESPONSE_FILE" \
+            -w '%{http_code}' \
+            "https://api.vercel.com/v10/projects/${VERCEL_PROJECT_ID}/env?teamId=${VERCEL_ORG_ID}" \
+            -H "Authorization: Bearer ${VERCEL_TOKEN}")"
 
-          npx --yes vercel@latest env ls production --token "$VERCEL_TOKEN" > "$ENV_LIST_FILE"
-          if grep -q 'AI_GATEWAY_API_KEY' "$ENV_LIST_FILE"; then
-            echo "AI_GATEWAY_API_KEY is already configured for Production; reusing it."
-            echo "created=false" >> "$GITHUB_OUTPUT"
-            exit 0
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "::error::Unable to verify Vercel Production environment variables (HTTP $HTTP_CODE)."
+            exit 1
           fi
 
-          echo "AI_GATEWAY_API_KEY is missing; creating a project-scoped AI Gateway key."
-          curl -fsS \
-            -X POST "https://api.vercel.com/v1/api-keys?teamId=${VERCEL_ORG_ID}" \
-            -H "Authorization: Bearer ${VERCEL_TOKEN}" \
-            -H 'Content-Type: application/json' \
-            --data "{\"purpose\":\"ai-gateway\",\"name\":\"cf-hnchpower Production AI Gateway\",\"projectId\":\"${VERCEL_PROJECT_ID}\"}" \
-            > "$KEY_RESPONSE_FILE"
-
-          AI_GATEWAY_KEY="$(python - "$KEY_RESPONSE_FILE" <<'PY'
+          python - "$ENV_RESPONSE_FILE" <<'PY'
           import json
           import sys
 
           with open(sys.argv[1], 'r', encoding='utf-8') as handle:
               payload = json.load(handle)
-          print(str(payload.get('apiKeyString') or '').strip())
+
+          def walk(value):
+              if isinstance(value, dict):
+                  if value.get('key') == 'AI_GATEWAY_API_KEY':
+                      return True
+                  return any(walk(item) for item in value.values())
+              if isinstance(value, list):
+                  return any(walk(item) for item in value)
+              return False
+
+          if not walk(payload):
+              print('::error::AI_GATEWAY_API_KEY is missing from Vercel Production. Create an AI Gateway API key in Vercel and add it to the project Production environment before deploying.')
+              raise SystemExit(1)
+          print('AI_GATEWAY_API_KEY is configured for Production.')
           PY
-          )"
-
-          if [ -z "$AI_GATEWAY_KEY" ]; then
-            echo "::error::Vercel API did not return apiKeyString when creating the AI Gateway key."
-            exit 1
-          fi
-
-          echo "::add-mask::$AI_GATEWAY_KEY"
-          printf '%s\n' "$AI_GATEWAY_KEY" \
-            | npx --yes vercel@latest env add AI_GATEWAY_API_KEY production --sensitive --token "$VERCEL_TOKEN"
-
-          npx --yes vercel@latest env ls production --token "$VERCEL_TOKEN" > "$ENV_LIST_FILE"
-          if ! grep -q 'AI_GATEWAY_API_KEY' "$ENV_LIST_FILE"; then
-            echo "::error::AI_GATEWAY_API_KEY was created but is not visible in the Production environment list."
-            exit 1
-          fi
-
-          echo "Project-scoped AI Gateway credential is now configured for Production."
-          echo "created=true" >> "$GITHUB_OUTPUT"
+          echo "configured=true" >> "$GITHUB_OUTPUT"
 
       - name: Deploy latest main to Vercel Production
         id: vercel
@@ -218,6 +203,6 @@ jobs:
             echo '- Git SHA: `${{ github.sha }}`'
             echo '- Production URL: `${{ steps.vercel.outputs.url }}`'
             echo '- Domain: `https://cf.hnchpower.cn`'
-            echo '- AI Gateway credential created this run: `${{ steps.ai_gateway.outputs.created }}`'
+            echo '- AI Gateway credential verified: `${{ steps.ai_gateway.outputs.configured }}`'
             echo '- Git auto-deployments: disabled; this workflow is the only release path.'
           } >> "$GITHUB_STEP_SUMMARY"
