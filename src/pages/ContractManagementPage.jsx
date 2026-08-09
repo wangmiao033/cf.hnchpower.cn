@@ -14,6 +14,7 @@ import ContractStatusTag from '@/components/contract/ContractStatusTag.jsx'
 import ContractDetailsDrawer from '@/components/contract/ContractDetailsDrawer.jsx'
 import ContractAccessEditor from '@/components/contract/ContractAccessEditor.jsx'
 import './contract-management.css'
+import './ContractManagementUpgrade.css'
 
 const PAGE_SIZE_OPTIONS = [20, 50, 100]
 const QUICK_TABS = ['全部', '生效中', '即将到期', '已过期', '未关联客户', '编号重复']
@@ -208,6 +209,7 @@ function exportCsv(records) {
 function ContractManagementPage() {
   const { showToast } = useAppState()
   const fileInputRef = useRef(null)
+  const contractSubmitIntentRef = useRef('close')
   const [records, setRecords] = useState([])
   const [summary, setSummary] = useState(EMPTY_SUMMARY)
   const [loading, setLoading] = useState(true)
@@ -287,7 +289,8 @@ function ContractManagementPage() {
           item.channel_name,
           item.product_name,
           item.app_id,
-          item.platform_record_id
+          item.platform_record_id,
+          item.remarks
         ]),
         ...(record.attachments || [])
       ]
@@ -344,16 +347,19 @@ function ContractManagementPage() {
   }
 
   const openCreateForm = () => {
+    contractSubmitIntentRef.current = 'close'
     setEditingId(null)
     setForm(EMPTY_FORM)
   }
 
   const openEditForm = (contract) => {
+    contractSubmitIntentRef.current = 'close'
     setEditingId(contract.id)
     setForm(contractToForm(contract))
   }
 
   const closeEditor = () => {
+    contractSubmitIntentRef.current = 'close'
     setEditingId(null)
     setForm(EMPTY_FORM)
   }
@@ -364,19 +370,44 @@ function ContractManagementPage() {
       showToast('请填写合同名称', 'error')
       return
     }
+    const submitIntent = contractSubmitIntentRef.current
     setSaving(true)
     try {
       const payload = formToPayload(form)
+      let savedContract
       if (editingId === 'new') {
-        await createContract(payload)
-        showToast('合同已新增，我司合同编号将自动生成', 'success')
+        savedContract = await createContract(payload)
+        showToast(
+          submitIntent === 'access'
+            ? '合同已新增，继续录入合作清单'
+            : '合同已新增，我司合同编号将自动生成',
+          'success'
+        )
       } else {
-        await updateContract(editingId, payload)
-        showToast('合同资料已更新', 'success')
+        savedContract = await updateContract(editingId, payload)
+        showToast(
+          submitIntent === 'access' ? '合同资料已更新，继续维护合作清单' : '合同资料已更新',
+          'success'
+        )
       }
+
+      const previous = records.find((record) => String(record.id) === String(savedContract?.id))
+      const enrichedContract = savedContract
+        ? {
+            ...savedContract,
+            internal_contract_no:
+              savedContract.internal_contract_no || previous?.internal_contract_no || ''
+          }
+        : null
+
       closeEditor()
       setSelectedContract(null)
       await loadContracts()
+
+      if (submitIntent === 'access' && enrichedContract) {
+        setAccessEditor({ contract: enrichedContract, item: null })
+        setExpandedContracts((current) => new Set(current).add(enrichedContract.id))
+      }
     } catch (saveError) {
       console.error(saveError)
       showToast(saveError?.message || '合同保存失败', 'error')
@@ -441,16 +472,21 @@ function ContractManagementPage() {
   }
 
   const removeAccessItem = async (contract, item) => {
-    if (!window.confirm(`确定删除游戏接入清单「${item.product_name}」吗？`)) return
+    if (!window.confirm(`确定删除合作清单「${item.product_name}」吗？`)) return
     try {
       await deleteContractAccessItem(contract.id, item.id)
-      showToast('游戏接入清单已删除', 'success')
+      showToast('合同合作清单已删除', 'success')
       await loadContracts()
     } catch (deleteError) {
       console.error(deleteError)
-      showToast(deleteError?.message || '游戏接入清单删除失败', 'error')
+      showToast(deleteError?.message || '合同合作清单删除失败', 'error')
     }
   }
+
+  const editingContract =
+    editingId && editingId !== 'new'
+      ? records.find((record) => String(record.id) === String(editingId)) || null
+      : null
 
   return (
     <PageContainer hideHeader className="contract-page">
@@ -511,7 +547,7 @@ function ContractManagementPage() {
           <small>共 {Math.max(summary.total - summary.linked, 0)} 条待补充关联</small>
         </article>
         <article className="is-cyan">
-          <span>游戏接入清单</span>
+          <span>合作清单</span>
           <strong>{summary.access_item_total}</strong>
           <small>30 天内到期 {summary.access_expiring_30} 条</small>
         </article>
@@ -535,7 +571,7 @@ function ContractManagementPage() {
               type="search"
               value={keyword}
               onChange={(event) => setKeyword(event.target.value)}
-              placeholder="搜索我司编号、客户原编号、合同名称、签约方或附件"
+              placeholder="搜索我司编号、原编号、合同、签约方、游戏、渠道或条款备注"
             />
           </label>
           <select value={contractType} onChange={(event) => setContractType(event.target.value)}>
@@ -573,7 +609,7 @@ function ContractManagementPage() {
             <span>显示 {filteredRecords.length} / {records.length} 条</span>
           </div>
           <p>
-            当前展示第 {rangeStart}–{rangeEnd} 条 · 点击合同查看详情和附件
+            当前展示第 {rangeStart}–{rangeEnd} 条 · 展开左侧箭头可直接维护合作清单
           </p>
         </div>
 
@@ -607,7 +643,7 @@ function ContractManagementPage() {
                     <th>状态</th>
                     <th>账款</th>
                     <th>附件</th>
-                    <th>游戏接入</th>
+                    <th>合作清单</th>
                     <th className="col-sticky-right">操作</th>
                   </tr>
                 </thead>
@@ -625,7 +661,7 @@ function ContractManagementPage() {
                         <button
                           type="button"
                           className={`contract-expand-btn ${expanded ? 'is-open' : ''}`}
-                          aria-label={expanded ? '收起游戏接入清单' : '展开游戏接入清单'}
+                          aria-label={expanded ? '收起合同合作清单' : '展开合同合作清单'}
                           aria-expanded={expanded}
                           onClick={(event) => {
                             event.stopPropagation()
@@ -702,13 +738,13 @@ function ContractManagementPage() {
                           }}
                         >
                           <strong>{accessItems.length}</strong>
-                          <span>个游戏</span>
+                          <span>条</span>
                         </button>
                       </td>
                       <td className="col-sticky-right" onClick={(event) => event.stopPropagation()}>
                         <div className="contract-row-actions">
                           <button type="button" onClick={() => setSelectedContract(contract)}>查看</button>
-                          <button type="button" onClick={() => openAccessEditor(contract)}>接入</button>
+                          <button type="button" onClick={() => openAccessEditor(contract)}>清单</button>
                           <button type="button" onClick={() => openEditForm(contract)}>编辑</button>
                           <button type="button" className="danger" onClick={() => removeContract(contract)}>删除</button>
                         </div>
@@ -720,11 +756,11 @@ function ContractManagementPage() {
                           <div className="contract-access-panel">
                             <div className="contract-access-panel__head">
                               <div>
-                                <strong>游戏接入清单</strong>
-                                <span>每个游戏独立维护渠道、授权期、应用 ID 和分成规则</span>
+                                <strong>合同合作清单</strong>
+                                <span>一个主合同可维护多个游戏 / 项目；分别记录渠道、授权期、分成和特殊结算条款。</span>
                               </div>
                               <button type="button" onClick={() => openAccessEditor(contract)}>
-                                + 新增接入清单
+                                + 新增 / 批量录入清单
                               </button>
                             </div>
                             {accessItems.length ? (
@@ -742,11 +778,11 @@ function ContractManagementPage() {
                                   <div className="contract-access-list__row" key={item.id}>
                                     <span>
                                       <strong>{item.product_name}</strong>
-                                      <small>{item.channel_name || '合同渠道未填写'}</small>
+                                      <small>{item.channel_name || '合作渠道未填写'}</small>
                                     </span>
                                     <span>
                                       <strong>{item.app_id || '-'}</strong>
-                                      <small>{item.platform_record_id ? `记录 ${item.platform_record_id}` : '无平台记录号'}</small>
+                                      <small>{item.platform_record_id ? `记录 ${item.platform_record_id}` : '可选资料未填'}</small>
                                     </span>
                                     <span>
                                       <strong>{item.agreement_type || '-'}</strong>
@@ -762,7 +798,7 @@ function ContractManagementPage() {
                                     </span>
                                     <span>
                                       <ContractStatusTag status={item.timeline_status} />
-                                      <small>{item.agreement_status || item.game_status || '状态未填写'}</small>
+                                      <small title={item.remarks || ''}>{item.remarks || item.agreement_status || item.game_status || '条款备注未填'}</small>
                                     </span>
                                     <span className="contract-access-list__actions">
                                       <button type="button" onClick={() => openAccessEditor(contract, item)}>编辑</button>
@@ -773,9 +809,9 @@ function ContractManagementPage() {
                               </div>
                             ) : (
                               <div className="contract-access-empty">
-                                <strong>这份主合同还没有游戏接入清单</strong>
-                                <span>适合录入小米、火烈鸟等渠道下的应用 ID、授权期限和协议状态。</span>
-                                <button type="button" onClick={() => openAccessEditor(contract)}>新增第一条</button>
+                                <strong>这份合同还没有合作清单</strong>
+                                <span>日常只需先录游戏、渠道、授权期、分成/渠道费和特殊条款；App ID、软著等可以以后补。</span>
+                                <button type="button" onClick={() => openAccessEditor(contract)}>打开清单工作台</button>
                               </div>
                             )}
                           </div>
@@ -820,43 +856,109 @@ function ContractManagementPage() {
 
       {editingId ? (
         <div className="contract-editor-mask" onClick={closeEditor}>
-          <form className="contract-editor" onSubmit={saveContract} onClick={(event) => event.stopPropagation()}>
-            <div className="contract-editor-head">
+          <form className="contract-editor contract-master-editor" onSubmit={saveContract} onClick={(event) => event.stopPropagation()}>
+            <div className="contract-editor-head contract-master-editor__head">
               <div>
                 <p>{editingId === 'new' ? '新增合同' : '编辑合同'}</p>
                 <h3>{editingId === 'new' ? '录入合同资料' : form.contract_name}</h3>
+                <span>先保存主合同，再用合作清单记录每个游戏的渠道、授权期、分成和结算条款。</span>
               </div>
               <button type="button" onClick={closeEditor}>关闭</button>
             </div>
-            <div className="contract-form-grid">
-              <Field label="合同名称" required value={form.contract_name} onChange={(value) => setForm({ ...form, contract_name: value })} wide />
-              <Field label="客户/原合同编号" value={form.contract_no} onChange={(value) => setForm({ ...form, contract_no: value })} placeholder="合同原件有编号就填写，没有可留空" />
-              <Field label="合同类型" value={form.contract_type} onChange={(value) => setForm({ ...form, contract_type: value })} />
-              <SelectField
-                label="档案角色"
-                value={form.document_type}
-                options={['master', 'supplement', 'transfer', 'other']}
-                optionLabels={{ master: '主合同', supplement: '补充协议', transfer: '权利义务转让', other: '其他文件' }}
-                onChange={(value) => setForm({ ...form, document_type: value })}
-              />
-              <Field label="平台记录 ID" value={form.platform_record_id} onChange={(value) => setForm({ ...form, platform_record_id: value })} />
-              <Field label="合同总额" value={form.amount} onChange={(value) => setForm({ ...form, amount: value })} inputMode="decimal" />
-              <Field label="合同签约方" value={form.counterparty} onChange={(value) => setForm({ ...form, counterparty: value })} wide />
-              <Field label="签订日期" type="date" value={form.signing_date} onChange={(value) => setForm({ ...form, signing_date: value })} />
-              <Field label="生效日期" type="date" value={form.effective_date} onChange={(value) => setForm({ ...form, effective_date: value })} />
-              <Field label="终止日期" type="date" value={form.end_date} onChange={(value) => setForm({ ...form, end_date: value })} />
-              <SelectField label="签订状态" value={form.signing_status} options={['', '签约中', '已签约']} onChange={(value) => setForm({ ...form, signing_status: value })} />
-              <SelectField label="履约状态" value={form.performance_status} options={['', '履约中', '已履约']} onChange={(value) => setForm({ ...form, performance_status: value })} />
-              <SelectField label="账款类型" value={form.payment_type} options={['', '收款', '付款']} onChange={(value) => setForm({ ...form, payment_type: value })} />
-              <Field label="合同附件名称" value={form.attachments} onChange={(value) => setForm({ ...form, attachments: value })} placeholder="多个附件用分号分隔" wide />
+
+            <div className="contract-master-editor__scroll">
+              <div className="contract-editor-guide">
+                <div className="is-active"><strong>1</strong><span>合同主体</span><small>名称、签约方、类型</small></div>
+                <div><strong>2</strong><span>有效期与履约</span><small>日期、状态、账款</small></div>
+                <div><strong>3</strong><span>合作清单</span><small>游戏、分成、特殊条款</small></div>
+              </div>
+
+              <section className="contract-edit-section">
+                <div className="contract-edit-section__head">
+                  <div>
+                    <span>01</span>
+                    <div><strong>合同基础资料</strong><small>主合同只保留稳定的档案信息，不把每个游戏的条款都挤在这里。</small></div>
+                  </div>
+                  <em>合同名称必填</em>
+                </div>
+                <div className="contract-form-grid">
+                  <Field label="合同名称" required value={form.contract_name} onChange={(value) => setForm({ ...form, contract_name: value })} wide />
+                  <Field label="合同签约方" value={form.counterparty} onChange={(value) => setForm({ ...form, counterparty: value })} wide placeholder="填写合同另一方公司全称，可自动关联客户库" />
+                  <Field label="客户/原合同编号" value={form.contract_no} onChange={(value) => setForm({ ...form, contract_no: value })} placeholder="原件有编号就填，没有可留空" />
+                  <SelectField
+                    label="档案角色"
+                    value={form.document_type}
+                    options={['master', 'supplement', 'transfer', 'other']}
+                    optionLabels={{ master: '主合同', supplement: '补充协议', transfer: '权利义务转让', other: '其他文件' }}
+                    onChange={(value) => setForm({ ...form, document_type: value })}
+                  />
+                  <Field label="合同类型" value={form.contract_type} onChange={(value) => setForm({ ...form, contract_type: value })} placeholder="例如：无固定总价合同、分成合同" />
+                  <Field label="固定合同总额" value={form.amount} onChange={(value) => setForm({ ...form, amount: value })} inputMode="decimal" placeholder="按流水/分成结算可留空" />
+                </div>
+              </section>
+
+              <section className="contract-edit-section">
+                <div className="contract-edit-section__head">
+                  <div>
+                    <span>02</span>
+                    <div><strong>有效期与履约信息</strong><small>用于到期提醒、合同风险和后续对账判断。</small></div>
+                  </div>
+                </div>
+                <div className="contract-form-grid">
+                  <Field label="签订日期" type="date" value={form.signing_date} onChange={(value) => setForm({ ...form, signing_date: value })} />
+                  <Field label="生效日期" type="date" value={form.effective_date} onChange={(value) => setForm({ ...form, effective_date: value })} />
+                  <Field label="终止日期" type="date" value={form.end_date} onChange={(value) => setForm({ ...form, end_date: value })} />
+                  <SelectField label="签订状态" value={form.signing_status} options={['', '签约中', '已签约']} onChange={(value) => setForm({ ...form, signing_status: value })} />
+                  <SelectField label="履约状态" value={form.performance_status} options={['', '履约中', '已履约']} onChange={(value) => setForm({ ...form, performance_status: value })} />
+                  <SelectField label="账款类型" value={form.payment_type} options={['', '收款', '付款']} onChange={(value) => setForm({ ...form, payment_type: value })} />
+                  <Field label="平台记录 ID（可选）" value={form.platform_record_id} onChange={(value) => setForm({ ...form, platform_record_id: value })} placeholder="WPS/外部系统记录号，可留空" />
+                  <Field label="附件名称 / 待归档（可选）" value={form.attachments} onChange={(value) => setForm({ ...form, attachments: value })} placeholder="多个名称用分号分隔；真实文件保存后在详情里上传" wide />
+                </div>
+              </section>
+
+              <section className="contract-edit-access-cta">
+                <div>
+                  <span>03 · 合同内容重点</span>
+                  <strong>{editingId === 'new' ? '保存主合同后，直接连续录入合作清单' : `当前已有 ${editingContract?.access_items?.length || 0} 条合作清单`}</strong>
+                  <p>每个游戏 / 项目单独记录合作渠道、授权期限、我方分成、支付渠道成本，以及 CPA、结算周期、发票、测试费/退款等特殊条款。</p>
+                </div>
+                {editingContract ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const target = editingContract
+                      closeEditor()
+                      openAccessEditor(target)
+                    }}
+                  >
+                    打开合作清单工作台
+                  </button>
+                ) : (
+                  <span className="contract-edit-access-cta__tip">底部点击“保存并录入清单”即可无缝继续</span>
+                )}
+              </section>
             </div>
-            <div className="contract-form-actions">
-              <span style={{ marginRight: 'auto', color: '#7b8798', fontSize: 12 }}>
-                我司合同编号由系统保存后自动生成，例如 HT-202608-0001
+
+            <div className="contract-form-actions contract-master-editor__footer">
+              <span>
+                我司合同编号保存后自动生成，例如 HT-202608-0001；无固定总价合同不要为了必填而填写 0。
               </span>
               <button type="button" className="contract-cancel-btn" onClick={closeEditor}>取消</button>
-              <button type="submit" className="contract-save-btn" disabled={saving}>
+              <button
+                type="submit"
+                className="contract-save-secondary-btn"
+                disabled={saving}
+                onClick={() => { contractSubmitIntentRef.current = 'close' }}
+              >
                 {saving ? '正在保存…' : '保存合同'}
+              </button>
+              <button
+                type="submit"
+                className="contract-save-btn"
+                disabled={saving}
+                onClick={() => { contractSubmitIntentRef.current = 'access' }}
+              >
+                {saving ? '正在保存…' : editingId === 'new' ? '保存并录入清单' : '保存并打开清单'}
               </button>
             </div>
           </form>
