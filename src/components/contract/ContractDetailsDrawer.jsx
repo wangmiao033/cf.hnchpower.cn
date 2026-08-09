@@ -1,5 +1,7 @@
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
+import { useAuth } from '@/features/auth/AuthContext.jsx'
 import { uploadContractAttachment } from '@/lib/api/contract.ts'
+import { listContractAccessTerms } from '@/lib/api/contractTerms.ts'
 import ContractStatusTag from './ContractStatusTag.jsx'
 
 function DetailRow({ label, value }) {
@@ -39,6 +41,20 @@ function fileIcon(fileName) {
   return '件'
 }
 
+function termSummary(terms) {
+  if (!terms) return '结构化结算条款未填写'
+  const pieces = [
+    terms.settlement_mode,
+    terms.settlement_basis,
+    terms.unit_price ? `${terms.currency || 'CNY'} ${terms.unit_price}/单位` : '',
+    terms.settlement_cycle,
+    terms.payment_terms,
+    terms.invoice_tax_rate ? `税率 ${Number(terms.invoice_tax_rate)}%` : '',
+    terms.invoice_type
+  ].filter(Boolean)
+  return pieces.length ? pieces.join(' · ') : '结构化结算条款未填写'
+}
+
 function ContractDetailsDrawer({
   contract,
   onClose,
@@ -46,8 +62,35 @@ function ContractDetailsDrawer({
   onAttachmentUploaded,
   onToast
 }) {
+  const { can } = useAuth()
+  const canManage = can('contracts.manage')
   const [uploadingNames, setUploadingNames] = useState([])
   const [bulkUploading, setBulkUploading] = useState(false)
+  const [termsById, setTermsById] = useState({})
+
+  useEffect(() => {
+    if (!contract?.id) {
+      setTermsById({})
+      return undefined
+    }
+    let cancelled = false
+    listContractAccessTerms({ contractId: String(contract.id) })
+      .then((response) => {
+        if (cancelled) return
+        setTermsById(
+          Object.fromEntries(
+            (response.items || []).map((item) => [String(item.access_item_id), item])
+          )
+        )
+      })
+      .catch((error) => {
+        console.error(error)
+        if (!cancelled) setTermsById({})
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [contract?.id])
 
   const filesByExpectedName = useMemo(() => {
     const map = new Map()
@@ -68,6 +111,10 @@ function ContractDetailsDrawer({
   const importedCount = contract.attachment_files?.length || 0
 
   const uploadOne = async (file, expectedName, { quiet = false } = {}) => {
+    if (!canManage) {
+      onToast?.('当前账号只有合同查看权限，不能上传附件', 'error')
+      return false
+    }
     const key = expectedName || file.name
     setUploadingNames((items) => [...items, key])
     try {
@@ -91,7 +138,7 @@ function ContractDetailsDrawer({
   const handleBulkFiles = async (event) => {
     const files = Array.from(event.target.files || [])
     event.target.value = ''
-    if (!files.length) return
+    if (!files.length || !canManage) return
     setBulkUploading(true)
     let matched = 0
     let succeeded = 0
@@ -132,6 +179,7 @@ function ContractDetailsDrawer({
               {contract.contract_no_duplicate ? (
                 <span className="contract-duplicate-badge">客户/原编号重复待核验</span>
               ) : null}
+              {!canManage ? <span className="contract-type-badge">只读权限</span> : null}
             </div>
           </div>
           <button type="button" onClick={onClose}>关闭</button>
@@ -169,27 +217,36 @@ function ContractDetailsDrawer({
 
         <div className="contract-drawer-section">
           <div className="contract-drawer-section__title">
-            <h4>游戏接入清单</h4>
-            <span>{contract.access_items?.length || 0} 个游戏</span>
+            <h4>合同合作清单</h4>
+            <span>{contract.access_items?.length || 0} 个游戏 / 项目</span>
           </div>
           {contract.access_items?.length ? (
             <div className="contract-drawer-access-list">
-              {contract.access_items.map((item) => (
-                <div key={item.id}>
-                  <span>
-                    <strong>{item.product_name}</strong>
-                    <small>{item.channel_name || '渠道未填写'} · {item.agreement_type || '业务类型未填写'}</small>
-                  </span>
-                  <span>
-                    <strong>{item.app_id || item.platform_record_id || '-'}</strong>
-                    <small>{item.authorization_start || '-'} 至 {item.authorization_end || '-'}</small>
-                  </span>
-                  <ContractStatusTag status={item.timeline_status} />
-                </div>
-              ))}
+              {contract.access_items.map((item) => {
+                const terms = termsById[String(item.id)]
+                return (
+                  <div key={item.id}>
+                    <span>
+                      <strong>{item.product_name}</strong>
+                      <small>{item.channel_name || '渠道未填写'} · {item.agreement_type || '业务类型未填写'}</small>
+                      <small title={termSummary(terms)}>{termSummary(terms)}</small>
+                    </span>
+                    <span>
+                      <strong>
+                        {item.share_rate == null || item.share_rate === '' ? '分成未填' : `我方 ${Number(item.share_rate)}%`}
+                      </strong>
+                      <small>{item.authorization_start || '-'} 至 {item.authorization_end || '-'}</small>
+                      <small>
+                        {terms?.server_cost_bearer || terms?.refund_rule || terms?.deduction_rule || '费用承担/退款规则未填'}
+                      </small>
+                    </span>
+                    <ContractStatusTag status={item.timeline_status} />
+                  </div>
+                )
+              })}
             </div>
           ) : (
-            <p className="contract-placeholder">尚未建立游戏接入清单</p>
+            <p className="contract-placeholder">尚未建立合同合作清单</p>
           )}
         </div>
 
@@ -201,16 +258,18 @@ function ContractDetailsDrawer({
                 已导入 {importedCount} / {expectedAttachments.length} 个真实文件
               </span>
             </div>
-            <label className={`contract-bulk-upload ${bulkUploading ? 'is-loading' : ''}`}>
-              <input
-                type="file"
-                multiple
-                accept=".pdf,.doc,.docx,.xls,.xlsx,.wps,.et,.ofd,.txt,.jpg,.jpeg,.png,.zip,.rar,.7z"
-                onChange={handleBulkFiles}
-                disabled={bulkUploading}
-              />
-              {bulkUploading ? '正在匹配…' : '批量选择文件'}
-            </label>
+            {canManage ? (
+              <label className={`contract-bulk-upload ${bulkUploading ? 'is-loading' : ''}`}>
+                <input
+                  type="file"
+                  multiple
+                  accept=".pdf,.doc,.docx,.xls,.xlsx,.wps,.et,.ofd,.txt,.jpg,.jpeg,.png,.zip,.rar,.7z"
+                  onChange={handleBulkFiles}
+                  disabled={bulkUploading}
+                />
+                {bulkUploading ? '正在匹配…' : '批量选择文件'}
+              </label>
+            ) : null}
           </div>
 
           {expectedAttachments.length ? (
@@ -246,7 +305,7 @@ function ContractDetailsDrawer({
                           </a>
                           <a href={importedFile.download_url}>下载</a>
                         </>
-                      ) : (
+                      ) : canManage ? (
                         <label className={uploading ? 'is-loading' : ''}>
                           <input
                             type="file"
@@ -260,6 +319,8 @@ function ContractDetailsDrawer({
                           />
                           {uploading ? '导入中…' : '选择文件'}
                         </label>
+                      ) : (
+                        <span>只读</span>
                       )}
                     </span>
                   </li>
@@ -272,9 +333,11 @@ function ContractDetailsDrawer({
         </div>
 
         <div className="contract-drawer-actions">
-          <button type="button" className="is-primary" onClick={() => onEdit?.(contract)}>
-            编辑合同
-          </button>
+          {canManage ? (
+            <button type="button" className="is-primary" onClick={() => onEdit?.(contract)}>
+              编辑合同
+            </button>
+          ) : null}
           <button type="button" onClick={onClose}>返回列表</button>
         </div>
       </aside>
