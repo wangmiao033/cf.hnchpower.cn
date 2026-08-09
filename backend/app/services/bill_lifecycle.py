@@ -235,8 +235,14 @@ def _coverage_status(allocated: float, bill_amount: float) -> str:
     return "complete"
 
 
+def _settlement_amount(bill) -> float:
+    """Return the signed amount at the same precision shown to users."""
+    return round(float(getattr(bill, "settlement_amount", 0) or 0), 2)
+
+
 def bill_financial_state(db: Session, bill_type: str, bill) -> BillFinancialState:
-    bill_amount = round(abs(float(getattr(bill, "settlement_amount", 0) or 0)), 2)
+    raw_amount = _settlement_amount(bill)
+    bill_amount = abs(raw_amount) if bill_type == "rd" else raw_amount
     allocated = _effective_invoice_allocation(db, bill_type, str(bill.id))
     remaining = round(max(0, bill_amount - allocated), 2)
     coverage = _coverage_status(allocated, bill_amount)
@@ -255,13 +261,18 @@ def bill_financial_state(db: Session, bill_type: str, bill) -> BillFinancialStat
         label = {"unpaid": "未付款", "partial": "部分付款", "paid": "已付款"}[phase]
     else:
         paid = round(abs(float(getattr(bill, "received_amount", 0) or 0)), 2)
-        if paid <= 0.01:
+        if bill_amount == 0 and paid <= 0.01:
+            phase = "paid"
+            label = "无需收款"
+        elif paid <= 0.01:
             phase = "unpaid"
+            label = "未收款"
         elif paid + 0.01 < bill_amount:
             phase = "partial"
+            label = "部分收款"
         else:
             phase = "paid"
-        label = {"unpaid": "未收款", "partial": "部分收款", "paid": "已收款"}[phase]
+            label = "已收款"
 
     return BillFinancialState(
         bill_amount=bill_amount,
@@ -277,7 +288,11 @@ def bill_financial_state(db: Session, bill_type: str, bill) -> BillFinancialStat
 
 
 def _base_bill_is_complete(bill_type: str, bill) -> tuple[bool, str | None]:
-    if abs(float(getattr(bill, "settlement_amount", 0) or 0)) <= 0.01:
+    settlement_amount = _settlement_amount(bill)
+    if bill_type == "channel":
+        if settlement_amount < 0:
+            return False, "结算金额为负，请先检查退款、冲抵或费用配置；负数账单不能按普通应收流程确认。"
+    elif settlement_amount <= 0:
         return False, "结算金额必须大于 0 才能完成核对。"
     if not str(getattr(bill, "settlement_month", None) or "").strip():
         return False, "请先补齐结算月份。"
@@ -315,6 +330,7 @@ def _transition_guard(
         return None if ok else reason
 
     financial = bill_financial_state(db, bill_type, bill)
+    settlement_amount = _settlement_amount(bill)
 
     if target == "invoiced":
         if financial.invoice_coverage_status == "over":
@@ -324,6 +340,10 @@ def _transition_guard(
 
     if target in {"completed", "reconciled"}:
         if target == "completed":
+            if bill_type == "channel" and settlement_amount < 0:
+                return "负数渠道账单不能按普通应收流程结清，请先按退款、冲抵或反向结算业务处理。"
+            if bill_type == "channel" and settlement_amount == 0:
+                return None
             if financial.invoice_coverage_status == "over":
                 return "发票分配金额超过账单金额，请先修正发票关联。"
             if financial.invoice_coverage_status != "complete":
