@@ -5,6 +5,7 @@ import {
   createContractAccessItem,
   uploadContractAttachment
 } from '@/lib/api/contract.ts'
+import { upsertContractAccessTerms } from '@/lib/api/contractTerms.ts'
 import {
   CONTRACT_SMART_SCAN_MAX_FILE_BYTES,
   scanContractFile
@@ -30,6 +31,23 @@ const DOCUMENT_TYPE_OPTIONS = [
   ['supplement', '补充协议'],
   ['transfer', '主体变更 / 转让'],
   ['other', '其他']
+]
+
+const STRUCTURED_TERM_KEYS = [
+  'settlement_mode',
+  'settlement_basis',
+  'unit_price',
+  'currency',
+  'settlement_cycle',
+  'payment_terms',
+  'invoice_tax_rate',
+  'invoice_type',
+  'refund_rule',
+  'testing_fee',
+  'server_cost_bearer',
+  'prepayment_amount',
+  'minimum_guarantee_amount',
+  'deduction_rule'
 ]
 
 function confidenceTone(value) {
@@ -85,11 +103,62 @@ function initialAccessRows(result) {
       isbn: '',
       territory: '',
       status: item.values.status || '生效',
-      remarks: item.values.remarks || ''
+      remarks: item.values.remarks || '',
+      settlement_mode: item.values.settlement_mode || '',
+      settlement_basis: item.values.settlement_basis || '',
+      unit_price: item.values.unit_price || '',
+      currency: item.values.currency || 'CNY',
+      settlement_cycle: item.values.settlement_cycle || '',
+      payment_terms: item.values.payment_terms || '',
+      invoice_tax_rate: item.values.invoice_tax_rate || '',
+      invoice_type: item.values.invoice_type || '',
+      refund_rule: item.values.refund_rule || '',
+      testing_fee: item.values.testing_fee || '',
+      server_cost_bearer: item.values.server_cost_bearer || '',
+      prepayment_amount: item.values.prepayment_amount || '',
+      minimum_guarantee_amount: item.values.minimum_guarantee_amount || '',
+      deduction_rule: item.values.deduction_rule || ''
     },
     confidence: item.confidence || {},
     evidence: item.evidence || {}
   }))
+}
+
+function accessPayload(values) {
+  return {
+    channel_name: values.channel_name,
+    agreement_type: values.agreement_type,
+    platform_record_id: values.platform_record_id,
+    product_name: values.product_name,
+    app_id: values.app_id,
+    platform: values.platform,
+    language: values.language,
+    category: values.category,
+    rights_source: values.rights_source,
+    game_status: values.game_status,
+    agreement_status: values.agreement_status,
+    authorization_start: values.authorization_start || null,
+    authorization_end: values.authorization_end || null,
+    share_rate: values.share_rate === '' ? null : values.share_rate,
+    channel_fee_rate: values.channel_fee_rate === '' ? null : values.channel_fee_rate,
+    software_copyright_no: values.software_copyright_no,
+    isbn: values.isbn,
+    territory: values.territory,
+    status: values.status,
+    remarks: values.remarks
+  }
+}
+
+function termPayload(values, contractId) {
+  const result = { contract_id: contractId }
+  STRUCTURED_TERM_KEYS.forEach((key) => {
+    const value = values[key]
+    result[key] = ['unit_price', 'invoice_tax_rate', 'testing_fee', 'prepayment_amount', 'minimum_guarantee_amount'].includes(key)
+      ? (String(value ?? '').trim() === '' ? null : value)
+      : value || ''
+  })
+  if (!result.currency) result.currency = 'CNY'
+  return result
 }
 
 export default function ContractSmartIntakeModal({ onClose, onSaved }) {
@@ -207,17 +276,21 @@ export default function ContractSmartIntakeModal({ onClose, onSaved }) {
 
       let accessCreated = 0
       let accessFailed = 0
+      let termFailed = 0
       for (const row of accessRows) {
         if (!row.enabled || !String(row.values.product_name || '').trim()) continue
         try {
-          await createContractAccessItem(created.id, {
-            ...row.values,
-            authorization_start: row.values.authorization_start || null,
-            authorization_end: row.values.authorization_end || null,
-            share_rate: row.values.share_rate === '' ? null : row.values.share_rate,
-            channel_fee_rate: row.values.channel_fee_rate === '' ? null : row.values.channel_fee_rate
-          })
+          const savedAccess = await createContractAccessItem(created.id, accessPayload(row.values))
           accessCreated += 1
+          try {
+            await upsertContractAccessTerms(
+              String(savedAccess.id),
+              termPayload(row.values, String(created.id))
+            )
+          } catch (termError) {
+            termFailed += 1
+            console.error(termError)
+          }
         } catch (accessError) {
           console.error(accessError)
           accessFailed += 1
@@ -230,9 +303,13 @@ export default function ContractSmartIntakeModal({ onClose, onSaved }) {
       } else {
         pieces.push(`${attachmentFailures} 个附件归档失败，可在合同详情补传`)
       }
-      if (accessCreated) pieces.push(`已创建 ${accessCreated} 条游戏接入清单`)
-      if (accessFailed) pieces.push(`${accessFailed} 条接入清单需手工补录`)
-      showToast(pieces.join(' · '), attachmentFailures === 0 && accessFailed === 0 ? 'success' : 'info')
+      if (accessCreated) pieces.push(`已创建 ${accessCreated} 条合同合作清单`)
+      if (termFailed) pieces.push(`${termFailed} 条结构化结算条款需补录`)
+      if (accessFailed) pieces.push(`${accessFailed} 条合作清单需手工补录`)
+      showToast(
+        pieces.join(' · '),
+        attachmentFailures === 0 && accessFailed === 0 && termFailed === 0 ? 'success' : 'info'
+      )
       onSaved?.(created)
     } catch (error) {
       console.error(error)
@@ -253,7 +330,7 @@ export default function ContractSmartIntakeModal({ onClose, onSaved }) {
           <div>
             <span>AI CONTRACT INTAKE</span>
             <h2>上传合同，自动扫描填表</h2>
-            <p>支持扫描版 PDF 和图片；大文件会自动按页拆分，不需要手工压缩。</p>
+            <p>支持扫描版 PDF 和图片；同时提取分成、CPA、账期、发票、退款和费用承担等结算条款。</p>
           </div>
           <button type="button" className="contract-ai-close" onClick={onClose} disabled={saving}>×</button>
         </header>
@@ -382,13 +459,13 @@ export default function ContractSmartIntakeModal({ onClose, onSaved }) {
                   {accessRows.length ? (
                     <div className="contract-ai-access-section">
                       <div className="contract-ai-section-title">
-                        <div><strong>检测到游戏合作信息</strong><span>勾选后会随主合同一起创建游戏接入清单。</span></div>
+                        <div><strong>检测到合同合作及结算条款</strong><span>勾选后会创建合作清单，并保存结构化财务条款。</span></div>
                       </div>
                       {accessRows.map((row) => (
                         <div className="contract-ai-access-card" key={row.id}>
                           <label className="contract-ai-check">
                             <input type="checkbox" checked={row.enabled} onChange={(event) => setAccessRows((rows) => rows.map((item) => item.id === row.id ? { ...item, enabled: event.target.checked } : item))} />
-                            <strong>同时创建接入清单</strong>
+                            <strong>同时创建合作清单</strong>
                           </label>
                           <div className="contract-ai-access-grid">
                             <Field label="游戏名称" value={row.values.product_name} onChange={(value) => updateAccessField(row.id, 'product_name', value)} />
@@ -398,7 +475,15 @@ export default function ContractSmartIntakeModal({ onClose, onSaved }) {
                             <Field label="授权结束" type="date" value={row.values.authorization_end} onChange={(value) => updateAccessField(row.id, 'authorization_end', value)} />
                             <Field label="我方分成（%）" value={row.values.share_rate} onChange={(value) => updateAccessField(row.id, 'share_rate', value)} />
                             <Field label="支付渠道成本（%）" value={row.values.channel_fee_rate} onChange={(value) => updateAccessField(row.id, 'channel_fee_rate', value)} />
-                            <Field label="结算/特殊条款" wide value={row.values.remarks} onChange={(value) => updateAccessField(row.id, 'remarks', value)} />
+                            <Field label="结算方式" value={row.values.settlement_mode} onChange={(value) => updateAccessField(row.id, 'settlement_mode', value)} />
+                            <Field label="计费口径" value={row.values.settlement_basis} onChange={(value) => updateAccessField(row.id, 'settlement_basis', value)} />
+                            <Field label="单价" value={row.values.unit_price} onChange={(value) => updateAccessField(row.id, 'unit_price', value)} />
+                            <Field label="结算周期" value={row.values.settlement_cycle} onChange={(value) => updateAccessField(row.id, 'settlement_cycle', value)} />
+                            <Field label="账期" value={row.values.payment_terms} onChange={(value) => updateAccessField(row.id, 'payment_terms', value)} />
+                            <Field label="发票税率（%）" value={row.values.invoice_tax_rate} onChange={(value) => updateAccessField(row.id, 'invoice_tax_rate', value)} />
+                            <Field label="发票类型" value={row.values.invoice_type} onChange={(value) => updateAccessField(row.id, 'invoice_type', value)} />
+                            <Field label="服务器承担" value={row.values.server_cost_bearer} onChange={(value) => updateAccessField(row.id, 'server_cost_bearer', value)} />
+                            <Field label="退款/扣除/其他条款" wide value={[row.values.refund_rule, row.values.deduction_rule, row.values.remarks].filter(Boolean).join('；')} onChange={(value) => updateAccessField(row.id, 'remarks', value)} />
                           </div>
                         </div>
                       ))}
