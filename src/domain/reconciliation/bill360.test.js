@@ -62,7 +62,8 @@ describe('bill360 helpers', () => {
         { id: 'g2', gameName: '游戏B', flow: 2000, discountFactor: 1, settlementAmount: 200 }
       ]
     }
-    expect(summarizeBill360({ billType: 'channel', record, invoiceSummary: null })).toMatchObject({
+    const summary = summarizeBill360({ billType: 'channel', record, invoiceSummary: null })
+    expect(summary).toMatchObject({
       settlementAmount: 300,
       settlementMagnitude: 300,
       settlementKind: 'normal',
@@ -71,9 +72,9 @@ describe('bill360 helpers', () => {
       paidLabel: '已收款',
       paidAmount: 50,
       unpaidAmount: 250,
-      billFlow: 2500,
-      paymentPercent: 50 / 3
+      billFlow: 2500
     })
+    expect(summary.paymentPercent).toBeCloseTo(50 / 3, 10)
   })
 
   it('treats zero settlement as completed without requiring cash or invoice actions', () => {
