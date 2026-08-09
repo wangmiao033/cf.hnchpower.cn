@@ -165,7 +165,8 @@ function ContractAccessEditor({ contract, item, onClose, onSaved, onToast }) {
   const isEditing = Boolean(selectedItem)
 
   const setValue = (key, value) => {
-    setForm((current) => ({ ...current, [key]: value }))
+    const normalizedValue = value?.target ? value.target.value : value
+    setForm((current) => ({ ...current, [key]: normalizedValue }))
     setErrors((current) => ({ ...current, [key]: '' }))
     setDirty(true)
   }
@@ -260,11 +261,12 @@ function ContractAccessEditor({ contract, item, onClose, onSaved, onToast }) {
     setDeletingId(String(entry.id))
     try {
       await deleteContractAccessItem(contract.id, entry.id)
-      setItems((current) => current.filter((row) => String(row.id) !== String(entry.id)))
+      const remaining = items.filter((row) => String(row.id) !== String(entry.id))
+      setItems(remaining)
       setChanged(true)
       if (String(entry.id) === selectedId) {
         setSelectedId('')
-        setForm(newFormForContract({ ...contract, access_items: items.filter((row) => String(row.id) !== String(entry.id)) }))
+        setForm(newFormForContract({ ...contract, access_items: remaining }))
         setDirty(false)
         setErrors({})
       }
@@ -525,21 +527,26 @@ function ContractAccessEditor({ contract, item, onClose, onSaved, onToast }) {
   )
 }
 
-function Field({ label, required, wide, error, autoFocus, ...props }) {
+function Field({ label, required, wide, error, autoFocus, value, onChange, ...props }) {
   return (
     <label className={`contract-access-field ${wide ? 'is-wide' : ''} ${error ? 'has-error' : ''}`}>
       <span>{label}{required ? ' *' : ''}</span>
-      <input autoFocus={autoFocus} {...props} />
+      <input
+        autoFocus={autoFocus}
+        value={value}
+        onChange={(event) => onChange?.(event.target.value)}
+        {...props}
+      />
       {error ? <small>{error}</small> : null}
     </label>
   )
 }
 
-function SelectField({ label, options, ...props }) {
+function SelectField({ label, options, value, onChange, ...props }) {
   return (
     <label className="contract-access-field">
       <span>{label}</span>
-      <select {...props}>
+      <select value={value} onChange={(event) => onChange?.(event.target.value)} {...props}>
         {options.map((option) => (
           <option key={option || 'empty'} value={option}>{option || '未设置'}</option>
         ))}
@@ -548,11 +555,16 @@ function SelectField({ label, options, ...props }) {
   )
 }
 
-function TextareaField({ label, wide, ...props }) {
+function TextareaField({ label, wide, value, onChange, ...props }) {
   return (
     <label className={`contract-access-field ${wide ? 'is-wide' : ''}`}>
       <span>{label}</span>
-      <textarea rows={4} {...props} />
+      <textarea
+        rows={4}
+        value={value}
+        onChange={(event) => onChange?.(event.target.value)}
+        {...props}
+      />
     </label>
   )
 }
