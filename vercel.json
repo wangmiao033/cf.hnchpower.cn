@@ -16,7 +16,7 @@
     },
     "backend": {
       "root": "proxy/",
-      "entrypoint": "main:app",
+      "entrypoint": "secured_main:app",
       "framework": "fastapi"
     },
     "core": {
@@ -26,7 +26,12 @@
     },
     "contract_ai": {
       "root": "contract_ai/",
-      "entrypoint": "cloudflare_main:app",
+      "entrypoint": "secured_main:app",
+      "framework": "fastapi"
+    },
+    "contract_terms": {
+      "root": "contract_terms/",
+      "entrypoint": "main:app",
       "framework": "fastapi"
     }
   },
@@ -134,6 +139,18 @@
       "source": "/api/contracts/(.*)",
       "destination": {
         "service": "backend"
+      }
+    },
+    {
+      "source": "/api/contract-terms",
+      "destination": {
+        "service": "contract_terms"
+      }
+    },
+    {
+      "source": "/api/contract-terms/(.*)",
+      "destination": {
+        "service": "contract_terms"
       }
     },
     {
