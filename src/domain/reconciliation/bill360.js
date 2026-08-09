@@ -1,3 +1,5 @@
+const EPS = 0.01
+
 function number(value) {
   const parsed = Number(value || 0)
   return Number.isFinite(parsed) ? parsed : 0
@@ -89,35 +91,77 @@ export function bill360QuickSdkKeys(billType, record) {
   return out
 }
 
+function settlementDirection(billType, settlementAmount) {
+  if (Math.abs(settlementAmount) <= EPS) return 'none'
+  const normalDirection = billType === 'channel' ? 'receivable' : 'payable'
+  if (settlementAmount > 0) return normalDirection
+  return normalDirection === 'receivable' ? 'payable' : 'receivable'
+}
+
 export function summarizeBill360({ billType, record, invoiceSummary, quickSdkRows = [] }) {
   const lines = bill360Lines(billType, record)
-  const settlementAmount = Math.abs(
-    billType === 'channel'
-      ? lines.reduce((sum, line) => sum + number(line.settlementAmount), 0)
-      : number(record?.settlementAmount)
-  )
+  const settlementAmount = billType === 'channel'
+    ? lines.reduce((sum, line) => sum + number(line.settlementAmount), 0)
+    : number(record?.settlementAmount)
+  const settlementMagnitude = Math.abs(settlementAmount)
+  const isZeroSettlement = settlementMagnitude <= EPS
+  const isReverseSettlement = settlementAmount < -EPS
+  const cashDirection = settlementDirection(billType, settlementAmount)
+
   const paidAmount = Math.abs(
     number(billType === 'channel' ? record?.receivedAmount ?? record?.paidAmount : record?.paidAmount)
   )
-  const unpaidAmount = Math.max(0, settlementAmount - paidAmount)
+  const unpaidAmount = isZeroSettlement
+    ? 0
+    : Math.max(0, settlementMagnitude - paidAmount)
+  const paymentPercent = isZeroSettlement
+    ? 100
+    : Math.min(100, (paidAmount / settlementMagnitude) * 100)
+
   const invoiceAllocated = Math.abs(number(invoiceSummary?.allocated_amount))
-  const invoiceRemaining = Math.max(0, number(invoiceSummary?.remaining_amount ?? settlementAmount))
+  const invoiceRemaining = isZeroSettlement
+    ? 0
+    : Math.max(0, Math.abs(number(invoiceSummary?.remaining_amount ?? settlementMagnitude)))
+  const invoicePercent = isZeroSettlement
+    ? 100
+    : Math.min(999.9, (invoiceAllocated / settlementMagnitude) * 100)
+
   const billFlow = lines.reduce((sum, line) => sum + number(line.flow), 0)
   const databaseFlow = quickSdkRows.reduce((sum, row) => sum + number(row?.total_flow), 0)
   const flowDifference = billType === 'rd' && quickSdkRows.length > 0 ? databaseFlow - billFlow : null
 
+  const settlementKind = isZeroSettlement ? 'zero' : isReverseSettlement ? 'reverse' : 'normal'
+  const cashLabel = isZeroSettlement
+    ? '无需收付款'
+    : cashDirection === 'receivable'
+      ? (isReverseSettlement ? '反向应收' : '应收')
+      : (isReverseSettlement ? '反向应付' : '应付')
+  const paidLabel = isZeroSettlement
+    ? '无需资金动作'
+    : cashDirection === 'receivable'
+      ? '已收款'
+      : '已付款'
+
   return {
     settlementAmount,
+    settlementMagnitude,
+    settlementKind,
+    cashDirection,
+    cashLabel,
+    paidLabel,
+    isZeroSettlement,
+    isReverseSettlement,
     paidAmount,
     unpaidAmount,
-    paymentPercent: settlementAmount > 0 ? Math.min(100, (paidAmount / settlementAmount) * 100) : 0,
+    paymentPercent,
     invoiceAllocated,
     invoiceRemaining,
-    invoicePercent: settlementAmount > 0 ? Math.min(999.9, (invoiceAllocated / settlementAmount) * 100) : 0,
+    invoicePercent,
+    invoiceRequired: !isZeroSettlement,
     billFlow,
     databaseFlow,
     flowDifference,
-    flowMatched: flowDifference == null ? null : Math.abs(flowDifference) <= 0.01
+    flowMatched: flowDifference == null ? null : Math.abs(flowDifference) <= EPS
   }
 }
 

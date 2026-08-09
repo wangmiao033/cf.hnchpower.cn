@@ -1,0 +1,96 @@
+.contract-access-core-grid > label,
+.contract-access-advanced-grid > label {
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: 5px;
+}
+
+.contract-access-core-grid > label.is-wide,
+.contract-access-advanced-grid > label.is-wide {
+  grid-column: 1 / -1;
+}
+
+.contract-access-core-grid > label > span,
+.contract-access-advanced-grid > label > span {
+  color: #55647a;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.contract-access-core-grid > label input,
+.contract-access-core-grid > label select,
+.contract-access-core-grid > label textarea,
+.contract-access-advanced-grid > label input,
+.contract-access-advanced-grid > label select,
+.contract-access-advanced-grid > label textarea {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #d6e0ec;
+  border-radius: 8px;
+  background: #fbfcfe;
+  color: #26364f;
+  font: inherit;
+  font-size: 11px;
+  outline: none;
+  transition: border-color 140ms ease, background 140ms ease, box-shadow 140ms ease;
+}
+
+.contract-access-core-grid > label input,
+.contract-access-core-grid > label select,
+.contract-access-advanced-grid > label input,
+.contract-access-advanced-grid > label select {
+  height: 35px;
+  padding: 0 9px;
+}
+
+.contract-access-core-grid > label textarea,
+.contract-access-advanced-grid > label textarea {
+  min-height: 76px;
+  resize: vertical;
+  padding: 8px 9px;
+  line-height: 1.5;
+}
+
+.contract-access-core-grid > label input:focus,
+.contract-access-core-grid > label select:focus,
+.contract-access-core-grid > label textarea:focus,
+.contract-access-advanced-grid > label input:focus,
+.contract-access-advanced-grid > label select:focus,
+.contract-access-advanced-grid > label textarea:focus {
+  border-color: #76a4eb;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, .08);
+}
+
+.contract-access-core-grid > label.has-error input,
+.contract-access-core-grid > label.has-error select,
+.contract-access-core-grid > label.has-error textarea,
+.contract-access-advanced-grid > label.has-error input,
+.contract-access-advanced-grid > label.has-error select,
+.contract-access-advanced-grid > label.has-error textarea {
+  border-color: #e28c8c;
+  background: #fff9f9;
+}
+
+.contract-access-core-grid > label > small,
+.contract-access-advanced-grid > label > small {
+  color: #c23e3e;
+  font-size: 9px;
+}
+
+.contract-access-form-section + .contract-access-form-section {
+  margin-top: 10px;
+}
+
+@media (max-width: 720px) {
+  .contract-access-core-grid,
+  .contract-access-advanced-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .contract-access-core-grid > label.is-wide,
+  .contract-access-advanced-grid > label.is-wide {
+    grid-column: auto;
+  }
+}

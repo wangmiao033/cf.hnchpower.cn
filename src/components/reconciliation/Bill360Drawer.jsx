@@ -235,12 +235,24 @@ function Bill360Drawer({ target, onClose }) {
     setActiveView(view)
   }
 
-  const invoiceTone = invoiceSummary?.coverage_status === 'complete'
+  const invoiceTone = summary.isZeroSettlement
     ? 'good'
-    : invoiceSummary?.coverage_status === 'over'
-      ? 'danger'
-      : 'warning'
+    : invoiceSummary?.coverage_status === 'complete'
+      ? 'good'
+      : invoiceSummary?.coverage_status === 'over'
+        ? 'danger'
+        : 'warning'
   const paymentTone = summary.unpaidAmount <= 0.01 ? 'good' : summary.paidAmount > 0 ? 'warning' : 'muted'
+  const settlementHint = summary.isZeroSettlement
+    ? '零结算 · 无需收付款、无需开票'
+    : summary.isReverseSettlement
+      ? `${summary.cashLabel} · 金额方向已按负结算保留`
+      : `${summary.cashLabel} ${money(summary.settlementMagnitude)}`
+  const paymentProgressLabel = summary.isZeroSettlement
+    ? '无需资金动作'
+    : summary.cashDirection === 'receivable'
+      ? '收款进度'
+      : '付款进度'
 
   return (
     <div className="bill360-backdrop" role="presentation" onMouseDown={(event) => {
@@ -260,6 +272,8 @@ function Bill360Drawer({ target, onClose }) {
             <span className={`bill360-status is-${String(record?.status || 'pending')}`}>
               {STATUS_TEXT[record?.status] || record?.status || '待处理'}
             </span>
+            {summary.isZeroSettlement ? <span className="bill360-status is-completed">零结算</span> : null}
+            {summary.isReverseSettlement ? <span className="bill360-status is-cancelled">反向结算</span> : null}
             <button type="button" onClick={editBill}>编辑账单</button>
             <button type="button" className="bill360-close" onClick={onClose} aria-label="关闭">×</button>
           </div>
@@ -277,18 +291,32 @@ function Bill360Drawer({ target, onClose }) {
               <article>
                 <span>结算金额</span>
                 <strong>{money(summary.settlementAmount)}</strong>
-                <small>{billType === 'rd' ? `账单流水 ${money(summary.billFlow)}` : `计费流水 ${money(summary.billFlow)}`}</small>
+                <small>{settlementHint}</small>
               </article>
               <article>
-                <span>{billType === 'rd' ? '已付款' : '已收款'}</span>
-                <strong>{money(summary.paidAmount)}</strong>
-                <small>剩余 {money(summary.unpaidAmount)}</small>
+                <span>{summary.paidLabel}</span>
+                <strong>{summary.isZeroSettlement ? '无需资金动作' : money(summary.paidAmount)}</strong>
+                <small>
+                  {summary.isZeroSettlement
+                    ? '本期无需产生收付款记录'
+                    : `剩余 ${money(summary.unpaidAmount)} · ${summary.cashLabel}`}
+                </small>
                 <ProgressBar value={summary.paymentPercent} tone={paymentTone} />
               </article>
               <article>
                 <span>发票覆盖</span>
-                <strong>{invoiceSummary ? percent(summary.invoicePercent) : loading ? '读取中…' : '-'}</strong>
-                <small>已关联 {money(summary.invoiceAllocated)} · 缺口 {money(summary.invoiceRemaining)}</small>
+                <strong>
+                  {summary.isZeroSettlement
+                    ? '无需开票'
+                    : invoiceSummary
+                      ? percent(summary.invoicePercent)
+                      : loading ? '读取中…' : '-'}
+                </strong>
+                <small>
+                  {summary.isZeroSettlement
+                    ? '零结算不形成发票缺口'
+                    : `已关联 ${money(summary.invoiceAllocated)} · 缺口 ${money(summary.invoiceRemaining)}`}
+                </small>
                 <ProgressBar value={summary.invoicePercent} tone={invoiceTone} />
               </article>
               <article>
@@ -345,14 +373,24 @@ function Bill360Drawer({ target, onClose }) {
                         </div>
                       )}
                       <div className={summary.unpaidAmount <= 0.01 ? 'is-good' : 'is-warning'}>
-                        <span>{billType === 'rd' ? '付款进度' : '收款进度'}</span>
-                        <strong>{percent(summary.paymentPercent)}</strong>
-                        <small>{summary.unpaidAmount <= 0.01 ? '资金已结清' : `仍有 ${money(summary.unpaidAmount)} 未结`}</small>
+                        <span>{paymentProgressLabel}</span>
+                        <strong>{summary.isZeroSettlement ? '已跳过' : percent(summary.paymentPercent)}</strong>
+                        <small>
+                          {summary.isZeroSettlement
+                            ? '零结算无需资金动作'
+                            : summary.unpaidAmount <= 0.01
+                              ? `${summary.cashLabel}已结清`
+                              : `仍有 ${money(summary.unpaidAmount)} 未结`}
+                        </small>
                       </div>
-                      <div className={invoiceTone === 'good' ? 'is-good' : invoiceTone === 'danger' ? 'is-danger' : 'is-warning'}>
+                      <div className={summary.isZeroSettlement ? 'is-good' : invoiceTone === 'good' ? 'is-good' : invoiceTone === 'danger' ? 'is-danger' : 'is-warning'}>
                         <span>发票覆盖</span>
-                        <strong>{invoiceSummary ? percent(summary.invoicePercent) : '-'}</strong>
-                        <small>{invoiceSummary ? `剩余缺口 ${money(summary.invoiceRemaining)}` : '未读取到发票关联'}</small>
+                        <strong>{summary.isZeroSettlement ? '无需开票' : invoiceSummary ? percent(summary.invoicePercent) : '-'}</strong>
+                        <small>
+                          {summary.isZeroSettlement
+                            ? '零结算自动跳过发票环节'
+                            : invoiceSummary ? `剩余缺口 ${money(summary.invoiceRemaining)}` : '未读取到发票关联'}
+                        </small>
                       </div>
                       <div className={contracts.some((item) => item.timeline_status === '生效中') ? 'is-good' : contracts.length ? 'is-warning' : 'is-neutral'}>
                         <span>合同</span>
@@ -360,6 +398,11 @@ function Bill360Drawer({ target, onClose }) {
                         <small>{contracts.some((item) => item.timeline_status === '生效中') ? '存在生效中合同' : contracts.length ? '当前合同需核对有效期' : '未匹配合同'}</small>
                       </div>
                     </div>
+                    {summary.isReverseSettlement ? (
+                      <div className="bill360-empty-block">
+                        当前为反向结算：原始结算金额 {money(summary.settlementAmount)}，资金方向按“{summary.cashLabel}”处理，不再把负数取绝对值当成普通账款。
+                      </div>
+                    ) : null}
                   </section>
 
                   <section className="bill360-card">
@@ -370,6 +413,7 @@ function Bill360Drawer({ target, onClose }) {
                       {billType === 'channel' ? <div><dt>渠道</dt><dd>{text(record?.channelName)}</dd></div> : null}
                       <div><dt>结算周期</dt><dd>{months.length ? months.map(monthText).join(' / ') : '-'}</dd></div>
                       <div><dt>产品</dt><dd>{gameNames.join('、') || '-'}</dd></div>
+                      <div><dt>资金方向</dt><dd>{summary.cashLabel}</dd></div>
                       <div><dt>创建时间</dt><dd>{dateText(record?.createdAt || record?.created_at)}</dd></div>
                       <div><dt>备注</dt><dd>{text(record?.memo || record?.remark)}</dd></div>
                     </dl>
@@ -378,7 +422,7 @@ function Bill360Drawer({ target, onClose }) {
                   <section className="bill360-card">
                     <div className="bill360-card-head"><div><span>快捷处理</span><h3>关联模块</h3></div></div>
                     <div className="bill360-jump-list">
-                      <button type="button" onClick={() => navigate(billType === 'rd' ? VIEWS.INVOICE_INPUT : VIEWS.INVOICE_MANAGE)}><span>票</span><div><strong>发票中心</strong><small>查看与调整发票覆盖</small></div></button>
+                      <button type="button" onClick={() => navigate(billType === 'rd' ? VIEWS.INVOICE_INPUT : VIEWS.INVOICE_MANAGE)}><span>票</span><div><strong>发票中心</strong><small>{summary.isZeroSettlement ? '零结算无需开票' : '查看与调整发票覆盖'}</small></div></button>
                       <button type="button" onClick={() => navigate(VIEWS.CONTRACTS)}><span>合</span><div><strong>合同中心</strong><small>查看合作方合同与有效期</small></div></button>
                       {billType === 'rd' ? <button type="button" onClick={() => navigate(VIEWS.QUICKSDK_LIBRARY)}><span>流</span><div><strong>数据库</strong><small>核对 QuickSDK 原始流水</small></div></button> : null}
                       <button type="button" onClick={editBill}><span>编</span><div><strong>编辑账单</strong><small>进入完整账单编辑表单</small></div></button>
@@ -407,27 +451,40 @@ function Bill360Drawer({ target, onClose }) {
 
               {activeTab === 'invoice' && (
                 <section className="bill360-card bill360-card--table">
-                  <div className="bill360-card-head"><div><span>发票闭环</span><h3>{invoiceSummary ? `${percent(summary.invoicePercent)} 已覆盖` : '暂无关联摘要'}</h3></div><button type="button" onClick={() => navigate(billType === 'rd' ? VIEWS.INVOICE_INPUT : VIEWS.INVOICE_MANAGE)}>进入发票中心</button></div>
-                  <div className="bill360-invoice-summary"><div><span>账单金额</span><strong>{money(summary.settlementAmount)}</strong></div><div><span>已分配</span><strong>{money(summary.invoiceAllocated)}</strong></div><div><span>剩余</span><strong>{money(summary.invoiceRemaining)}</strong></div></div>
-                  <div className="bill360-table-wrap">
-                    <table><thead><tr><th>发票号码</th><th>往来单位</th><th>开票日期</th><th className="is-right">发票金额</th><th className="is-right">本账单分配</th><th>匹配方式</th></tr></thead><tbody>
-                      {(invoiceSummary?.allocations || []).length === 0 ? <tr><td colSpan={6} className="bill360-empty-cell">暂无已关联发票</td></tr> : (invoiceSummary.allocations || []).map((allocation) => <tr key={allocation.id}><td>{allocation.invoice?.number || '-'}</td><td>{allocation.invoice?.counterparty_name || '-'}</td><td>{allocation.invoice?.issue_date || '-'}</td><td className="is-right">{money(allocation.invoice?.gross_amount)}</td><td className="is-right is-strong">{money(allocation.allocated_gross_amount)}</td><td>{allocation.match_type || 'manual'}</td></tr>)}
-                    </tbody></table>
+                  <div className="bill360-card-head">
+                    <div><span>发票闭环</span><h3>{summary.isZeroSettlement ? '零结算无需开票' : invoiceSummary ? `${percent(summary.invoicePercent)} 已覆盖` : '暂无关联摘要'}</h3></div>
+                    <button type="button" onClick={() => navigate(billType === 'rd' ? VIEWS.INVOICE_INPUT : VIEWS.INVOICE_MANAGE)}>进入发票中心</button>
                   </div>
+                  <div className="bill360-invoice-summary"><div><span>账单金额</span><strong>{money(summary.settlementAmount)}</strong></div><div><span>已分配</span><strong>{money(summary.invoiceAllocated)}</strong></div><div><span>剩余</span><strong>{money(summary.invoiceRemaining)}</strong></div></div>
+                  {summary.isZeroSettlement ? (
+                    <div className="bill360-empty-block">本期结算金额为 ¥0.00，发票环节已自动视为无需处理，不形成发票缺口。</div>
+                  ) : (
+                    <div className="bill360-table-wrap">
+                      <table><thead><tr><th>发票号码</th><th>往来单位</th><th>开票日期</th><th className="is-right">发票金额</th><th className="is-right">本账单分配</th><th>匹配方式</th></tr></thead><tbody>
+                        {(invoiceSummary?.allocations || []).length === 0 ? <tr><td colSpan={6} className="bill360-empty-cell">暂无已关联发票</td></tr> : (invoiceSummary.allocations || []).map((allocation) => <tr key={allocation.id}><td>{allocation.invoice?.number || '-'}</td><td>{allocation.invoice?.counterparty_name || '-'}</td><td>{allocation.invoice?.issue_date || '-'}</td><td className="is-right">{money(allocation.invoice?.gross_amount)}</td><td className="is-right is-strong">{money(allocation.allocated_gross_amount)}</td><td>{allocation.match_type || 'manual'}</td></tr>)}
+                      </tbody></table>
+                    </div>
+                  )}
                 </section>
               )}
 
               {activeTab === 'payment' && (
                 <section className="bill360-card bill360-card--table">
-                  <div className="bill360-card-head"><div><span>资金闭环</span><h3>{billType === 'rd' ? '付款记录' : '收款记录'}</h3></div><span className="bill360-card-meta">{payments.length} 笔</span></div>
-                  {billType === 'rd' && bankInstruction ? (
-                    <div className="bill360-bank-instruction"><div><span>付款指令</span><strong>{bankInstruction.transaction_serial || '未填写流水号'}</strong></div><div><span>指令金额</span><strong>{money(bankInstruction.remittance_amount)}</strong></div><div><span>付款日期</span><strong>{bankInstruction.payment_date || '-'}</strong></div><div><span>状态</span><strong>{bankInstruction.transfer_status || '-'}</strong></div></div>
-                  ) : null}
-                  <div className="bill360-table-wrap">
-                    <table><thead><tr><th>日期</th><th>{billType === 'rd' ? '付款方 / 收款方' : '银行账户'}</th><th>流水号 / 备注</th><th className="is-right">金额</th><th>状态</th></tr></thead><tbody>
-                      {payments.length === 0 ? <tr><td colSpan={5} className="bill360-empty-cell">暂无{billType === 'rd' ? '付款' : '收款'}记录</td></tr> : payments.map((payment) => billType === 'rd' ? <tr key={payment.id}><td>{payment.trade_date || '-'}</td><td>{[payment.payer_name, payment.payee_name].filter(Boolean).join(' → ') || '-'}</td><td>{payment.transaction_no || payment.summary || payment.remark || '-'}</td><td className="is-right is-strong">{money(payment.linked_amount ?? payment.expense_amount ?? payment.amount)}</td><td>{payment.status || '-'}</td></tr> : <tr key={payment.id}><td>{payment.receipt_date || '-'}</td><td>{payment.bank_account || '-'}</td><td>{payment.remark || '-'}</td><td className="is-right is-strong">{money(payment.amount)}</td><td>已登记</td></tr>)}
-                    </tbody></table>
-                  </div>
+                  <div className="bill360-card-head"><div><span>资金闭环</span><h3>{summary.isZeroSettlement ? '无需收付款' : `${summary.paidLabel}记录`}</h3></div><span className="bill360-card-meta">{payments.length} 笔</span></div>
+                  {summary.isZeroSettlement ? (
+                    <div className="bill360-empty-block">本期为零结算，系统不会要求补录 0 元收款或付款记录。</div>
+                  ) : (
+                    <>
+                      {billType === 'rd' && bankInstruction ? (
+                        <div className="bill360-bank-instruction"><div><span>付款指令</span><strong>{bankInstruction.transaction_serial || '未填写流水号'}</strong></div><div><span>指令金额</span><strong>{money(bankInstruction.remittance_amount)}</strong></div><div><span>付款日期</span><strong>{bankInstruction.payment_date || '-'}</strong></div><div><span>状态</span><strong>{bankInstruction.transfer_status || '-'}</strong></div></div>
+                      ) : null}
+                      <div className="bill360-table-wrap">
+                        <table><thead><tr><th>日期</th><th>{summary.cashDirection === 'payable' ? '付款方 / 收款方' : '银行账户 / 往来方'}</th><th>流水号 / 备注</th><th className="is-right">金额</th><th>状态</th></tr></thead><tbody>
+                          {payments.length === 0 ? <tr><td colSpan={5} className="bill360-empty-cell">暂无{summary.paidLabel}记录</td></tr> : payments.map((payment) => billType === 'rd' ? <tr key={payment.id}><td>{payment.trade_date || '-'}</td><td>{[payment.payer_name, payment.payee_name].filter(Boolean).join(' → ') || '-'}</td><td>{payment.transaction_no || payment.summary || payment.remark || '-'}</td><td className="is-right is-strong">{money(payment.linked_amount ?? payment.expense_amount ?? payment.amount)}</td><td>{payment.status || '-'}</td></tr> : <tr key={payment.id}><td>{payment.receipt_date || '-'}</td><td>{payment.bank_account || '-'}</td><td>{payment.remark || '-'}</td><td className="is-right is-strong">{money(payment.amount)}</td><td>已登记</td></tr>)}
+                        </tbody></table>
+                      </div>
+                    </>
+                  )}
                 </section>
               )}
 

@@ -32,9 +32,32 @@ ACCESS_FIELDS = (
     "platform",
     "status",
     "remarks",
+    "settlement_mode",
+    "settlement_basis",
+    "unit_price",
+    "currency",
+    "settlement_cycle",
+    "payment_terms",
+    "invoice_tax_rate",
+    "invoice_type",
+    "refund_rule",
+    "testing_fee",
+    "server_cost_bearer",
+    "prepayment_amount",
+    "minimum_guarantee_amount",
+    "deduction_rule",
 )
 
 DATE_FIELDS = {"signing_date", "effective_date", "end_date", "authorization_start", "authorization_end"}
+ACCESS_NUMBER_FIELDS = {
+    "share_rate",
+    "channel_fee_rate",
+    "unit_price",
+    "invoice_tax_rate",
+    "testing_fee",
+    "prepayment_amount",
+    "minimum_guarantee_amount",
+}
 DOCUMENT_TYPES = {"master", "supplement", "transfer", "other"}
 
 SYSTEM_PROMPT = """
@@ -51,7 +74,22 @@ SYSTEM_PROMPT = """
 6. signing_status：有双方签字/盖章可写“已签署”；无明确签署证据留空。
 7. performance_status：仍在有效期内且已签署可建议“履行中”；不能从文件确认则留空。
 8. payment_type：从“广州熊动科技有限公司”的角度判断，钱流入我方填“收款”，我方向对方支付填“付款”，双向或无法判断留空。
-9. access_items：若合同明确涉及游戏/产品、渠道/合作平台、授权期、分成/费率等，则提取为游戏接入清单。不要把 CPA 单价误写为 share_rate；这类信息写进 remarks。
+9. access_items：合同涉及一个或多个游戏/项目时，每个游戏/项目独立生成一条合作清单。除游戏、渠道、授权期、分成外，尽量把财务条款拆成结构化字段：
+   - settlement_mode：分成、CPA、CPS、CPI、固定金额、混合或其他；
+   - settlement_basis：实付流水、后台流水、新增注册、激活、付费用户、广告收益等真实计费口径；
+   - unit_price：CPA/CPI/固定单价等，仅填纯数字；
+   - currency：CNY、USD 等币种；未写明就留空；
+   - settlement_cycle：自然月、月结、周结、季度、按项目等；
+   - payment_terms：T+30、次月15日前等账期/回款周期；
+   - invoice_tax_rate：合同明确的发票税率，仅填数字；
+   - invoice_type：增值税专用发票、普通发票、不开票等；
+   - refund_rule：玩家退款、退费、坏账的扣除/冲抵规则；
+   - testing_fee：合同明确约定的测试费，仅填纯数字；
+   - server_cost_bearer：服务器成本由我方、对方、双方或其他方式承担；
+   - prepayment_amount：明确预付款金额，仅填纯数字；
+   - minimum_guarantee_amount：明确保底/最低保证金额，仅填纯数字；
+   - deduction_rule：渠道费、手续费、税费等其他扣除规则。
+   不要把 CPA 单价误写为 share_rate，也不要把税率误写为分成比例。无法明确拆分的信息再放 remarks。
 10. evidence：必须是简短的原文依据或所在条款摘要，用于人工复核。没有依据就留空。
 11. confidence：0~1。明确写在合同中的字段应高；通过上下文推断的字段应低于 0.8；无法确认则字段值留空且置信度低。
 12. warnings：列出需要人工确认的歧义、缺失字段或可能识别错误。
@@ -183,6 +221,10 @@ def normalize_contract_scan_result(raw: Any) -> dict[str, Any]:
             value = clean_text(values_raw.get(key), limit=1000)
             if key in DATE_FIELDS:
                 value = normalize_date(value)
+            if key in ACCESS_NUMBER_FIELDS:
+                value = re.sub(r"[^0-9.\-]", "", value)
+            if key == "currency":
+                value = value.upper()[:12]
             values[key] = value
             confidences[key] = normalize_confidence(item_confidence.get(key))
             evidences[key] = clean_text(item_evidence.get(key), limit=500)

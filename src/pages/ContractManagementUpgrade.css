@@ -1,3 +1,5 @@
+@import './ContractTermsCompat.css';
+
 .contract-master-editor {
   width: min(1040px, calc(100vw - 40px));
   max-height: calc(100vh - 44px);

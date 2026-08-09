@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAppState } from '@/app/AppStateContext.jsx'
 import PageContainer from '@/components/layout/PageContainer.jsx'
+import { useAuth } from '@/features/auth/AuthContext.jsx'
 import {
   createContract,
   deleteContractAccessItem,
@@ -208,6 +209,8 @@ function exportCsv(records) {
 
 function ContractManagementPage() {
   const { showToast } = useAppState()
+  const { can } = useAuth()
+  const canManage = can('contracts.manage')
   const fileInputRef = useRef(null)
   const contractSubmitIntentRef = useRef('close')
   const [records, setRecords] = useState([])
@@ -227,6 +230,12 @@ function ContractManagementPage() {
   const [saving, setSaving] = useState(false)
   const [expandedContracts, setExpandedContracts] = useState(() => new Set())
   const [accessEditor, setAccessEditor] = useState(null)
+
+  const requireManage = () => {
+    if (canManage) return true
+    showToast('当前账号只有合同查看权限，不能修改合同资料', 'error')
+    return false
+  }
 
   const loadContracts = useCallback(async () => {
     setLoading(true)
@@ -319,7 +328,7 @@ function ContractManagementPage() {
 
   const handleImportFile = async (event) => {
     const file = event.target.files?.[0]
-    if (!file) return
+    if (!file || !requireManage()) return
     setImporting(true)
     try {
       const rows = parseCsv(await file.text())
@@ -347,12 +356,14 @@ function ContractManagementPage() {
   }
 
   const openCreateForm = () => {
+    if (!requireManage()) return
     contractSubmitIntentRef.current = 'close'
     setEditingId(null)
     setForm(EMPTY_FORM)
   }
 
   const openEditForm = (contract) => {
+    if (!requireManage()) return
     contractSubmitIntentRef.current = 'close'
     setEditingId(contract.id)
     setForm(contractToForm(contract))
@@ -366,6 +377,7 @@ function ContractManagementPage() {
 
   const saveContract = async (event) => {
     event.preventDefault()
+    if (!requireManage()) return
     if (!form.contract_name.trim()) {
       showToast('请填写合同名称', 'error')
       return
@@ -417,6 +429,7 @@ function ContractManagementPage() {
   }
 
   const removeContract = async (contract) => {
+    if (!requireManage()) return
     if (!window.confirm(`确定删除合同「${contract.contract_name}」吗？`)) return
     try {
       await deleteContract(contract.id)
@@ -429,6 +442,7 @@ function ContractManagementPage() {
   }
 
   const relinkCustomers = async () => {
+    if (!requireManage()) return
     try {
       const result = await relinkContracts()
       showToast(
@@ -467,11 +481,13 @@ function ContractManagementPage() {
   }
 
   const openAccessEditor = (contract, item = null) => {
+    if (!requireManage()) return
     setAccessEditor({ contract, item })
     setExpandedContracts((current) => new Set(current).add(contract.id))
   }
 
   const removeAccessItem = async (contract, item) => {
+    if (!requireManage()) return
     if (!window.confirm(`确定删除合作清单「${item.product_name}」吗？`)) return
     try {
       await deleteContractAccessItem(contract.id, item.id)
@@ -499,39 +515,45 @@ function ContractManagementPage() {
         <div className="contract-hero__status">
           <span className="contract-sync-dot" aria-hidden="true" />
           <div>
-            <strong>WPS 台账已接入</strong>
+            <strong>{canManage ? '合同管理权限' : '合同只读权限'}</strong>
             <small>{summary.total ? `服务器现有 ${summary.total} 份合同` : '等待首次同步'}</small>
           </div>
         </div>
         <div className="contract-toolbar__actions">
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".csv,text/csv"
-            onChange={handleImportFile}
-            hidden
-          />
-          <button
-            type="button"
-            className="btn-primary"
-            disabled={importing}
-            onClick={() => fileInputRef.current?.click()}
-          >
-            {importing ? '正在同步…' : '导入 WPS 台账'}
-          </button>
+          {canManage ? (
+            <>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".csv,text/csv"
+                onChange={handleImportFile}
+                hidden
+              />
+              <button
+                type="button"
+                className="btn-primary"
+                disabled={importing}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                {importing ? '正在同步…' : '导入 WPS 台账'}
+              </button>
+            </>
+          ) : null}
           <button type="button" className="btn-secondary" onClick={() => exportCsv(filteredRecords)}>
             导出当前结果
           </button>
-          <button
-            type="button"
-            className="btn-secondary"
-            onClick={() => {
-              openCreateForm()
-              setEditingId('new')
-            }}
-          >
-            新增合同
-          </button>
+          {canManage ? (
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => {
+                openCreateForm()
+                setEditingId('new')
+              }}
+            >
+              新增合同
+            </button>
+          ) : null}
         </div>
       </section>
 
@@ -584,7 +606,11 @@ function ContractManagementPage() {
               <option key={item} value={item}>{item === '全部' ? '全部账款类型' : item}</option>
             ))}
           </select>
-          <button type="button" className="btn-reset" onClick={relinkCustomers}>刷新客户关联</button>
+          {canManage ? (
+            <button type="button" className="btn-reset" onClick={relinkCustomers}>刷新客户关联</button>
+          ) : (
+            <span className="btn-reset" aria-label="只读模式">只读模式</span>
+          )}
         </div>
         <div className="contract-quick-tabs" role="tablist" aria-label="合同状态筛选">
           {QUICK_TABS.map((tab) => (
@@ -609,7 +635,7 @@ function ContractManagementPage() {
             <span>显示 {filteredRecords.length} / {records.length} 条</span>
           </div>
           <p>
-            当前展示第 {rangeStart}–{rangeEnd} 条 · 展开左侧箭头可直接维护合作清单
+            当前展示第 {rangeStart}–{rangeEnd} 条 · {canManage ? '展开左侧箭头可直接维护合作清单' : '当前账号为只读模式'}
           </p>
         </div>
 
@@ -744,9 +770,9 @@ function ContractManagementPage() {
                       <td className="col-sticky-right" onClick={(event) => event.stopPropagation()}>
                         <div className="contract-row-actions">
                           <button type="button" onClick={() => setSelectedContract(contract)}>查看</button>
-                          <button type="button" onClick={() => openAccessEditor(contract)}>清单</button>
-                          <button type="button" onClick={() => openEditForm(contract)}>编辑</button>
-                          <button type="button" className="danger" onClick={() => removeContract(contract)}>删除</button>
+                          {canManage ? <button type="button" onClick={() => openAccessEditor(contract)}>清单</button> : null}
+                          {canManage ? <button type="button" onClick={() => openEditForm(contract)}>编辑</button> : null}
+                          {canManage ? <button type="button" className="danger" onClick={() => removeContract(contract)}>删除</button> : null}
                         </div>
                       </td>
                     </tr>
@@ -757,11 +783,13 @@ function ContractManagementPage() {
                             <div className="contract-access-panel__head">
                               <div>
                                 <strong>合同合作清单</strong>
-                                <span>一个主合同可维护多个游戏 / 项目；分别记录渠道、授权期、分成和特殊结算条款。</span>
+                                <span>一个主合同可维护多个游戏 / 项目；分别记录渠道、授权期、分成和结构化结算条款。</span>
                               </div>
-                              <button type="button" onClick={() => openAccessEditor(contract)}>
-                                + 新增 / 批量录入清单
-                              </button>
+                              {canManage ? (
+                                <button type="button" onClick={() => openAccessEditor(contract)}>
+                                  + 新增 / 批量录入清单
+                                </button>
+                              ) : null}
                             </div>
                             {accessItems.length ? (
                               <div className="contract-access-list">
@@ -801,8 +829,8 @@ function ContractManagementPage() {
                                       <small title={item.remarks || ''}>{item.remarks || item.agreement_status || item.game_status || '条款备注未填'}</small>
                                     </span>
                                     <span className="contract-access-list__actions">
-                                      <button type="button" onClick={() => openAccessEditor(contract, item)}>编辑</button>
-                                      <button type="button" className="danger" onClick={() => removeAccessItem(contract, item)}>删除</button>
+                                      {canManage ? <button type="button" onClick={() => openAccessEditor(contract, item)}>编辑</button> : <span>只读</span>}
+                                      {canManage ? <button type="button" className="danger" onClick={() => removeAccessItem(contract, item)}>删除</button> : null}
                                     </span>
                                   </div>
                                 ))}
@@ -810,8 +838,8 @@ function ContractManagementPage() {
                             ) : (
                               <div className="contract-access-empty">
                                 <strong>这份合同还没有合作清单</strong>
-                                <span>日常只需先录游戏、渠道、授权期、分成/渠道费和特殊条款；App ID、软著等可以以后补。</span>
-                                <button type="button" onClick={() => openAccessEditor(contract)}>打开清单工作台</button>
+                                <span>{canManage ? '可以录入游戏、渠道、授权期、分成和结构化结算条款。' : '当前账号只有查看权限。'}</span>
+                                {canManage ? <button type="button" onClick={() => openAccessEditor(contract)}>打开清单工作台</button> : null}
                               </div>
                             )}
                           </div>
@@ -854,7 +882,7 @@ function ContractManagementPage() {
         )}
       </section>
 
-      {editingId ? (
+      {editingId && canManage ? (
         <div className="contract-editor-mask" onClick={closeEditor}>
           <form className="contract-editor contract-master-editor" onSubmit={saveContract} onClick={(event) => event.stopPropagation()}>
             <div className="contract-editor-head contract-master-editor__head">
@@ -870,7 +898,7 @@ function ContractManagementPage() {
               <div className="contract-editor-guide">
                 <div className="is-active"><strong>1</strong><span>合同主体</span><small>名称、签约方、类型</small></div>
                 <div><strong>2</strong><span>有效期与履约</span><small>日期、状态、账款</small></div>
-                <div><strong>3</strong><span>合作清单</span><small>游戏、分成、特殊条款</small></div>
+                <div><strong>3</strong><span>合作清单</span><small>游戏、分成、结算条款</small></div>
               </div>
 
               <section className="contract-edit-section">
@@ -920,7 +948,7 @@ function ContractManagementPage() {
                 <div>
                   <span>03 · 合同内容重点</span>
                   <strong>{editingId === 'new' ? '保存主合同后，直接连续录入合作清单' : `当前已有 ${editingContract?.access_items?.length || 0} 条合作清单`}</strong>
-                  <p>每个游戏 / 项目单独记录合作渠道、授权期限、我方分成、支付渠道成本，以及 CPA、结算周期、发票、测试费/退款等特殊条款。</p>
+                  <p>每个游戏 / 项目单独记录合作渠道、授权期限、我方分成、支付渠道成本，以及 CPA、结算周期、发票、测试费/退款等结构化条款。</p>
                 </div>
                 {editingContract ? (
                   <button
@@ -975,7 +1003,7 @@ function ContractManagementPage() {
         onAttachmentUploaded={handleAttachmentUploaded}
         onToast={showToast}
       />
-      {accessEditor ? (
+      {accessEditor && canManage ? (
         <ContractAccessEditor
           contract={accessEditor.contract}
           item={accessEditor.item}
