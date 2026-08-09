@@ -28,13 +28,24 @@ function money(value) {
   return `¥ ${n.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
+function normalizedAmount(value) {
+  const amount = Number(value || 0)
+  return Number.isFinite(amount) ? Math.round(amount * 100) / 100 : 0
+}
+
+function isZeroSettlement(value) {
+  return normalizedAmount(value) === 0
+}
+
 function reviewValidation(record) {
   if (!String(record?.partnerName || record?.channelName || '').trim()) return '请先选择合作方。'
   if (!String(record?.settlementMonth || '').trim()) return '请先选择账单月份。'
   const items = Array.isArray(record?.items) ? record.items : []
   const validItems = items.filter((item) => String(item?.gameName || '').trim())
   if (!validItems.length) return '请至少填写一条游戏明细。'
-  if (Number(record?.settlementAmount || 0) <= 0) return '结算金额必须大于 0 才能确认核对。'
+  if (normalizedAmount(record?.settlementAmount) < 0) {
+    return '结算金额为负，请先检查退款、冲抵或费用配置；负数账单不能按普通应收流程确认。'
+  }
   return ''
 }
 
@@ -168,8 +179,13 @@ function CoreChannelBillFormPage({ mode }) {
       showToast(validationMessage, 'error')
       return
     }
+
+    const settlementAmount = normalizedAmount(candidate?.settlementAmount ?? previewAmount)
+    const zeroSettlement = isZeroSettlement(settlementAmount)
     const confirmed = window.confirm(
-      `确认核对这张渠道账单吗？\n\n结算金额：${money(candidate?.settlementAmount || previewAmount)}\n\n确认后账单会自动锁定；如需再修改，可点击“退回修改”。`
+      zeroSettlement
+        ? `确认核对并结清这张零结算账单吗？\n\n结算金额：${money(settlementAmount)}\n\n本期无需开票和收款，确认后账单将直接完成并锁定。`
+        : `确认核对这张渠道账单吗？\n\n结算金额：${money(settlementAmount)}\n\n确认后账单会自动锁定；如需再修改，可点击“退回修改”。`
     )
     if (!confirmed) return
 
@@ -187,8 +203,11 @@ function CoreChannelBillFormPage({ mode }) {
       invalidateEditRecord('channel', billId)
 
       await transitionBillLifecycle('channel', billId, 'confirmed', '')
+      if (zeroSettlement) {
+        await transitionBillLifecycle('channel', billId, 'completed', '')
+      }
       await recon.refetchChannelFromApi?.()
-      showToast('核对完成，账单已锁定', 'success')
+      showToast(zeroSettlement ? '零结算账单已核对并结清' : '核对完成，账单已锁定', 'success')
       goList()
     } catch (error) {
       showToast(error instanceof Error ? error.message : '账单已保存，但确认核对失败，请稍后重试。', 'error')
@@ -222,6 +241,8 @@ function CoreChannelBillFormPage({ mode }) {
     return <EmptyState title="未找到渠道账单" onBack={goList} />
   }
 
+  const zeroSettlementPreview = isZeroSettlement(previewAmount)
+
   return (
     <PageContainer
       hideHeader
@@ -238,7 +259,9 @@ function CoreChannelBillFormPage({ mode }) {
           </div>
           <span className="core-bill-form-tip">
             {isEdit
-              ? '修改完成后可直接“保存并确认核对”，确认后系统自动锁定账单。'
+              ? zeroSettlementPreview
+                ? '当前为零结算账单，可直接“确认核对并结清”，系统会跳过开票与收款环节。'
+                : '修改完成后可直接“保存并确认核对”，确认后系统自动锁定账单。'
               : '先选择合作方和账期，再录入游戏明细。保存后账单进入待核对。'}
           </span>
           {isEdit ? <span className="core-bill-review-hint">日常只需要“确认核对”与“退回修改”两个动作</span> : null}
@@ -249,7 +272,7 @@ function CoreChannelBillFormPage({ mode }) {
           </div>
         </div>
         <div className="core-bill-form-total" aria-live="polite">
-          <span>预估结算</span>
+          <span>{zeroSettlementPreview ? '零结算' : '预估结算'}</span>
           <strong>{money(previewAmount)}</strong>
         </div>
       </section>
@@ -290,7 +313,7 @@ function CoreChannelBillFormPage({ mode }) {
 
       <section className="core-bill-footer">
         <div className="core-bill-footer-summary">
-          <span>当前结算</span>
+          <span>{zeroSettlementPreview ? '零结算' : '当前结算'}</span>
           <strong>{money(previewAmount)}</strong>
         </div>
         <div className="core-bill-footer-actions">
@@ -324,7 +347,7 @@ function CoreChannelBillFormPage({ mode }) {
           </button>
           {isEdit ? (
             <button type="button" className="confirm-review" disabled={reviewing} onClick={() => void confirmReview()}>
-              {reviewing ? '正在确认…' : '保存并确认核对'}
+              {reviewing ? '正在确认…' : zeroSettlementPreview ? '确认核对并结清' : '保存并确认核对'}
             </button>
           ) : null}
         </div>
