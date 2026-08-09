@@ -30,6 +30,32 @@ class ContractSmartScanTest(unittest.TestCase):
             "performance_status": "履行中",
             "payment_type": "收款",
         }
+        access_values = {
+            "product_name": "魔法启示录",
+            "channel_name": "快手直播",
+            "agreement_type": "联合运营",
+            "authorization_start": "2026-04-16",
+            "authorization_end": "2027-04-15",
+            "share_rate": "83%",
+            "channel_fee_rate": "5%",
+            "platform": "Android",
+            "status": "生效",
+            "remarks": "其他约定",
+            "settlement_mode": "CPA",
+            "settlement_basis": "新增注册用户",
+            "unit_price": "10元/人",
+            "currency": "cny",
+            "settlement_cycle": "自然月",
+            "payment_terms": "T+30",
+            "invoice_tax_rate": "6%",
+            "invoice_type": "增值税专用发票",
+            "refund_rule": "玩家退款次月冲抵",
+            "testing_fee": "500元",
+            "server_cost_bearer": "对方承担",
+            "prepayment_amount": "40000元",
+            "minimum_guarantee_amount": "100000元",
+            "deduction_rule": "先扣渠道费再计算分成",
+        }
         raw = {
             "contract": fields,
             "confidence": {key: 0.95 for key in fields},
@@ -41,35 +67,9 @@ class ContractSmartScanTest(unittest.TestCase):
             },
             "access_items": [
                 {
-                    "values": {
-                        "product_name": "魔法启示录",
-                        "channel_name": "快手直播",
-                        "agreement_type": "联合运营",
-                        "authorization_start": "2026-04-16",
-                        "authorization_end": "2027-04-15",
-                        "share_rate": "",
-                        "channel_fee_rate": "",
-                        "platform": "",
-                        "status": "生效",
-                        "remarks": "CPA 10元/新增注册用户；自然月结算；6%增值税专票",
-                    },
-                    "confidence": {
-                        "product_name": 0.99,
-                        "channel_name": 0.92,
-                        "agreement_type": 0.9,
-                        "authorization_start": 0.99,
-                        "authorization_end": 0.99,
-                        "share_rate": 0.1,
-                        "channel_fee_rate": 0.1,
-                        "platform": 0.2,
-                        "status": 0.8,
-                        "remarks": 0.95,
-                    },
-                    "evidence": {key: "合同原文" for key in (
-                        "product_name", "channel_name", "agreement_type",
-                        "authorization_start", "authorization_end", "share_rate",
-                        "channel_fee_rate", "platform", "status", "remarks"
-                    )},
+                    "values": access_values,
+                    "confidence": {key: 0.95 for key in access_values},
+                    "evidence": {key: "合同原文" for key in access_values},
                 }
             ],
             "summary": "按新增注册用户结算的合作协议",
@@ -79,7 +79,16 @@ class ContractSmartScanTest(unittest.TestCase):
         self.assertEqual(result["contract"]["amount"], "")
         self.assertEqual(result["contract"]["effective_date"], "2026-04-16")
         self.assertEqual(result["contract"]["end_date"], "2027-04-15")
-        self.assertEqual(result["access_items"][0]["values"]["product_name"], "魔法启示录")
+        access = result["access_items"][0]["values"]
+        self.assertEqual(access["product_name"], "魔法启示录")
+        self.assertEqual(access["share_rate"], "83")
+        self.assertEqual(access["unit_price"], "10")
+        self.assertEqual(access["currency"], "CNY")
+        self.assertEqual(access["invoice_tax_rate"], "6")
+        self.assertEqual(access["testing_fee"], "500")
+        self.assertEqual(access["prepayment_amount"], "40000")
+        self.assertEqual(access["minimum_guarantee_amount"], "100000")
+        self.assertEqual(access["server_cost_bearer"], "对方承担")
 
     def test_smart_scan_requires_authentication(self):
         client = TestClient(contract_ai_app)
