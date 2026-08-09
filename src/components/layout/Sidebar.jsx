@@ -4,23 +4,6 @@ import { canOpenView } from '@/app/viewPermissions.js'
 import { useAuth } from '@/features/auth/AuthContext.jsx'
 import './Sidebar.css'
 
-const EXPANDED_GROUPS_STORAGE_KEY = 'core-sidebar-expanded-groups-v2'
-const EXPANDABLE_GROUP_IDS = new Set(
-  SIDEBAR_GROUPS.filter((group) => group.items.length > 1).map((group) => group.id)
-)
-
-function readExpandedGroups() {
-  if (typeof window === 'undefined') return new Set()
-
-  try {
-    const stored = JSON.parse(window.localStorage.getItem(EXPANDED_GROUPS_STORAGE_KEY) || '[]')
-    if (!Array.isArray(stored)) return new Set()
-    return new Set(stored.filter((groupId) => EXPANDABLE_GROUP_IDS.has(groupId)))
-  } catch {
-    return new Set()
-  }
-}
-
 function Sidebar({ activeView, onNavigate, collapsed = false }) {
   const { can } = useAuth()
   const accessibleGroups = useMemo(
@@ -35,35 +18,20 @@ function Sidebar({ activeView, onNavigate, collapsed = false }) {
   const activeGroup = useMemo(() => getGroupForView(activeView), [activeView])
   const activeGroupId = activeGroup?.id
   const activeTabView = getTabView(activeView)
-  const [expandedGroups, setExpandedGroups] = useState(readExpandedGroups)
-
-  useEffect(() => {
+  const activeExpandableGroupId = useMemo(() => {
     const visibleActiveGroup = accessibleGroups.find((group) => group.id === activeGroupId)
-    if (!visibleActiveGroup || visibleActiveGroup.items.length <= 1) return
-
-    setExpandedGroups((current) => {
-      if (current.has(activeGroupId)) return current
-      const next = new Set(current)
-      next.add(activeGroupId)
-      return next
-    })
+    return visibleActiveGroup && visibleActiveGroup.items.length > 1
+      ? visibleActiveGroup.id
+      : null
   }, [accessibleGroups, activeGroupId])
+  const [expandedGroupId, setExpandedGroupId] = useState(activeExpandableGroupId)
 
   useEffect(() => {
-    if (typeof window === 'undefined') return
-    window.localStorage.setItem(
-      EXPANDED_GROUPS_STORAGE_KEY,
-      JSON.stringify([...expandedGroups])
-    )
-  }, [expandedGroups])
+    setExpandedGroupId(activeExpandableGroupId)
+  }, [activeExpandableGroupId])
 
   const toggleGroup = (groupId) => {
-    setExpandedGroups((current) => {
-      const next = new Set(current)
-      if (next.has(groupId)) next.delete(groupId)
-      else next.add(groupId)
-      return next
-    })
+    setExpandedGroupId((current) => (current === groupId ? null : groupId))
   }
 
   const renderItems = (group, nested = false) => (
@@ -102,7 +70,7 @@ function Sidebar({ activeView, onNavigate, collapsed = false }) {
             const isSingleton = group.items.length === 1
             const groupActive = activeGroupId === group.id
             const firstItem = group.items[0]
-            const isExpanded = expandedGroups.has(group.id)
+            const isExpanded = expandedGroupId === group.id
 
             if (isSingleton) {
               const isActive = firstItem.view === activeTabView
