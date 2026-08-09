@@ -1,8 +1,7 @@
-"""Upload and manage stamped bill scans."""
+"""Upload and manage bill attachments."""
 
 from __future__ import annotations
 
-import re
 import uuid
 from pathlib import Path
 
@@ -23,13 +22,20 @@ from app.models.reconciliation import ReconciliationRecord
 
 router = APIRouter()
 
-ALLOWED_TYPES = {
-    "image/jpeg",
-    "image/png",
-    "image/gif",
-    "image/webp",
-    "application/pdf",
+SUPPORTED_FILE_TYPES = {
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+    ".pdf": "application/pdf",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".xls": "application/vnd.ms-excel",
+    ".csv": "text/csv",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".doc": "application/msword",
 }
+SUPPORTED_FILE_LABEL = "JPG、PNG、GIF、WebP、PDF、Excel、CSV 或 Word"
 PARENT_MODELS = {"rd": ReconciliationRecord, "channel": ChannelRecord}
 
 
@@ -60,6 +66,15 @@ def _get_attachment(db: Session, bill_type: str, bill_id: str, attachment_id: st
     return item
 
 
+def _upload_metadata(file: UploadFile) -> tuple[str, str, str]:
+    original_name = Path(file.filename or "attachment").name.strip() or "attachment"
+    suffix = Path(original_name).suffix.lower()
+    content_type = SUPPORTED_FILE_TYPES.get(suffix)
+    if not content_type:
+        raise HTTPException(status_code=400, detail=f"仅支持 {SUPPORTED_FILE_LABEL}")
+    return original_name, suffix, content_type
+
+
 @router.get("/{bill_type}/{bill_id}")
 def list_attachments(bill_type: str, bill_id: str, db: Session = Depends(get_db)):
     _require_parent(db, bill_type, bill_id)
@@ -79,9 +94,8 @@ async def upload_attachment(
     db: Session = Depends(get_db),
 ):
     _require_parent(db, bill_type, bill_id)
-    content_type = (file.content_type or "").lower()
-    if content_type not in ALLOWED_TYPES:
-        raise HTTPException(status_code=400, detail="仅支持 JPG、PNG、GIF、WebP 或 PDF")
+    original_name, suffix, content_type = _upload_metadata(file)
+
     body = await file.read()
     if not body:
         raise HTTPException(status_code=400, detail="附件内容为空")
@@ -89,8 +103,6 @@ async def upload_attachment(
         raise HTTPException(status_code=413, detail="单个附件不能超过 4 MB")
 
     attachment_id = uuid.uuid4().hex
-    original_name = Path(file.filename or "scan").name
-    suffix = re.sub(r"[^.a-zA-Z0-9]", "", Path(original_name).suffix.lower())[:10]
     pathname = f"bill-scans/{bill_type}/{bill_id}/{attachment_id}{suffix}"
     file_url = await upload_private_blob(pathname, body, content_type)
     item = BillAttachment(
