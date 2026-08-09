@@ -27,6 +27,11 @@ describe('bill360 helpers', () => {
       quickSdkRows: [{ total_flow: 1000 }, { total_flow: 1250 }]
     })).toMatchObject({
       settlementAmount: 450,
+      settlementMagnitude: 450,
+      settlementKind: 'normal',
+      cashDirection: 'payable',
+      cashLabel: '应付',
+      paidLabel: '已付款',
       paidAmount: 300,
       unpaidAmount: 150,
       invoiceAllocated: 400,
@@ -59,10 +64,71 @@ describe('bill360 helpers', () => {
     }
     expect(summarizeBill360({ billType: 'channel', record, invoiceSummary: null })).toMatchObject({
       settlementAmount: 300,
+      settlementMagnitude: 300,
+      settlementKind: 'normal',
+      cashDirection: 'receivable',
+      cashLabel: '应收',
+      paidLabel: '已收款',
       paidAmount: 50,
       unpaidAmount: 250,
       billFlow: 2500,
       paymentPercent: 50 / 3
+    })
+  })
+
+  it('treats zero settlement as completed without requiring cash or invoice actions', () => {
+    const record = {
+      settlementMonth: '2026-06',
+      receivedAmount: 0,
+      items: [
+        { id: 'g1', gameName: '游戏A', flow: 100, settlementAmount: 0 },
+        { id: 'g2', gameName: '游戏B', flow: 200, settlementAmount: 0 }
+      ]
+    }
+    expect(summarizeBill360({ billType: 'channel', record, invoiceSummary: null })).toMatchObject({
+      settlementAmount: 0,
+      settlementMagnitude: 0,
+      settlementKind: 'zero',
+      cashDirection: 'none',
+      cashLabel: '无需收付款',
+      paidLabel: '无需资金动作',
+      unpaidAmount: 0,
+      paymentPercent: 100,
+      invoiceRemaining: 0,
+      invoicePercent: 100,
+      invoiceRequired: false
+    })
+  })
+
+  it('preserves negative channel settlement as reverse payable instead of taking absolute value', () => {
+    const record = {
+      settlementMonth: '2026-06',
+      receivedAmount: 0,
+      items: [
+        { id: 'g1', gameName: '游戏A', flow: 1000, settlementAmount: -500 }
+      ]
+    }
+    expect(summarizeBill360({ billType: 'channel', record, invoiceSummary: null })).toMatchObject({
+      settlementAmount: -500,
+      settlementMagnitude: 500,
+      settlementKind: 'reverse',
+      cashDirection: 'payable',
+      cashLabel: '反向应付',
+      paidLabel: '已付款',
+      unpaidAmount: 500
+    })
+  })
+
+  it('preserves negative RD settlement as reverse receivable', () => {
+    const record = { settlementAmount: -200, paidAmount: 0, items: [] }
+    expect(summarizeBill360({ billType: 'rd', record, invoiceSummary: null })).toMatchObject({
+      settlementAmount: -200,
+      settlementMagnitude: 200,
+      settlementKind: 'reverse',
+      cashDirection: 'receivable',
+      cashLabel: '反向应收',
+      paidLabel: '已收款',
+      unpaidAmount: 200
     })
   })
 
