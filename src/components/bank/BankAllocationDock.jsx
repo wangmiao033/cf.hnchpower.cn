@@ -29,6 +29,12 @@ function newLine(candidate, amount) {
   }
 }
 
+function initialLines(item) {
+  const first = item?.candidates?.[0]
+  if (!first) return []
+  return [newLine(first, Math.min(Number(first.recommended_amount || 0), Number(item.remaining_amount || 0)))]
+}
+
 export default function BankAllocationDock({ onChanged }) {
   const { showToast, openBill360 } = useAppState()
   const { can } = useAuth()
@@ -42,6 +48,11 @@ export default function BankAllocationDock({ onChanged }) {
   const [saving, setSaving] = useState(false)
   const [query, setQuery] = useState('')
 
+  const selectItem = (item) => {
+    setSelectedId(item?.transaction_id || '')
+    setLines(initialLines(item))
+  }
+
   const load = async (keepSelected = true) => {
     setLoading(true)
     setError('')
@@ -49,10 +60,10 @@ export default function BankAllocationDock({ onChanged }) {
       const result = await getBankMultiAllocationDashboard(500)
       setDashboard(result)
       const suggestions = result.suggestions || []
-      const nextSelected = keepSelected && suggestions.some((item) => item.transaction_id === selectedId)
-        ? selectedId
-        : suggestions[0]?.transaction_id || ''
-      setSelectedId(nextSelected)
+      const next = keepSelected
+        ? suggestions.find((item) => item.transaction_id === selectedId) || suggestions[0] || null
+        : suggestions[0] || null
+      selectItem(next)
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : '多对多核销数据读取失败')
     } finally {
@@ -63,6 +74,7 @@ export default function BankAllocationDock({ onChanged }) {
   useEffect(() => {
     if (!open) return
     void load(false)
+  // load is intentionally event-scoped; opening always fetches fresh server facts.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
@@ -84,15 +96,6 @@ export default function BankAllocationDock({ onChanged }) {
     () => new Map(candidates.map((item) => [candidateKey(item), item])),
     [candidates]
   )
-
-  useEffect(() => {
-    if (!selected) {
-      setLines([])
-      return
-    }
-    const first = selected.candidates?.[0]
-    setLines(first ? [newLine(first, Math.min(Number(first.recommended_amount || 0), Number(selected.remaining_amount || 0)))] : [])
-  }, [selectedId])
 
   const selectedTotal = lines.reduce((sum, line) => sum + (Number(line.amount) || 0), 0)
   const afterAmount = Math.max(0, Number(selected?.remaining_amount || 0) - selectedTotal)
@@ -157,6 +160,7 @@ export default function BankAllocationDock({ onChanged }) {
     try {
       const result = await allocateBankTransaction(selected.transaction_id, allocations)
       showToast?.(result.message || '多对多核销完成', 'success')
+      setLines([])
       await load(false)
       onChanged?.()
     } catch (saveError) {
@@ -179,6 +183,7 @@ export default function BankAllocationDock({ onChanged }) {
     try {
       await reverseBankAutoReconciliation(allocation.match_id, reason.trim())
       showToast?.('该条资金分配已撤销', 'success')
+      setLines([])
       await load(false)
       onChanged?.()
     } catch (reverseError) {
@@ -215,7 +220,7 @@ export default function BankAllocationDock({ onChanged }) {
                 <div className="bank-allocation-queue-list">
                   {!loading && filtered.length === 0 ? <div className="bank-allocation-empty">没有待分配流水。</div> : null}
                   {filtered.map((item) => (
-                    <button key={item.transaction_id} type="button" className={selectedId === item.transaction_id ? 'is-active' : ''} onClick={() => setSelectedId(item.transaction_id)}>
+                    <button key={item.transaction_id} type="button" className={selectedId === item.transaction_id ? 'is-active' : ''} onClick={() => selectItem(item)}>
                       <span><strong>{item.trade_date || '-'}</strong><em className={`is-${item.direction}`}>{item.direction_label}</em></span>
                       <b>{item.counterparty_name || '未识别对方'}</b>
                       <small>{item.transaction_no || item.summary || '无流水号'}</small>
