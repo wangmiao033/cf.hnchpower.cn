@@ -9,6 +9,7 @@ import {
   upsertContractAccessTerms
 } from '@/lib/api/contractTerms.ts'
 import './ContractAccessEditor.css'
+import './ContractAccessListSimple.css'
 
 const EMPTY_FORM = {
   channel_name: '',
@@ -48,22 +49,17 @@ const EMPTY_FORM = {
 }
 
 const FORM_KEYS = Object.keys(EMPTY_FORM)
-const TERMS_KEYS = [
-  'settlement_mode',
-  'settlement_basis',
-  'unit_price',
-  'currency',
-  'settlement_cycle',
-  'payment_terms',
-  'invoice_tax_rate',
-  'invoice_type',
-  'refund_rule',
-  'testing_fee',
-  'server_cost_bearer',
-  'prepayment_amount',
-  'minimum_guarantee_amount',
-  'deduction_rule'
-]
+const PLATFORM_OPTIONS = ['', 'Android', 'iOS', 'Android / iOS', 'H5', '小游戏', 'PC', '其他']
+const PLATFORM_LABELS = {
+  '': '未设置',
+  Android: '安卓',
+  iOS: 'iOS',
+  'Android / iOS': '安卓 / iOS',
+  H5: 'H5',
+  小游戏: '小游戏',
+  PC: 'PC',
+  其他: '其他'
+}
 
 function firstCommonValue(items, key) {
   const values = Array.from(
@@ -97,10 +93,8 @@ function newFormForContract(contract, template = null, existingItems = []) {
     channel_name: inherited('channel_name'),
     agreement_type: inherited('agreement_type', '联合运营'),
     platform: inherited('platform'),
-    authorization_start:
-      inherited('authorization_start') || contract?.effective_date || '',
-    authorization_end:
-      inherited('authorization_end') || contract?.end_date || '',
+    authorization_start: inherited('authorization_start') || contract?.effective_date || '',
+    authorization_end: inherited('authorization_end') || contract?.end_date || '',
     share_rate: inherited('share_rate'),
     channel_fee_rate: inherited('channel_fee_rate'),
     rights_source: inherited('rights_source', '授权获得'),
@@ -200,7 +194,7 @@ function buildTermsPayload(form, contractId) {
 
 function validateForm(form) {
   const errors = {}
-  if (!String(form.product_name || '').trim()) errors.product_name = '请填写游戏 / 项目名称'
+  if (!String(form.product_name || '').trim()) errors.product_name = '请填写合作游戏名称'
 
   if (form.authorization_start && form.authorization_end && form.authorization_start > form.authorization_end) {
     errors.authorization_end = '授权结束日期不能早于开始日期'
@@ -214,6 +208,7 @@ function validateForm(form) {
       errors[key] = `${label}请输入 0–100 之间的数字`
     }
   }
+
   const validateMoney = (key, label) => {
     const raw = String(form[key] ?? '').trim()
     if (!raw) return
@@ -224,13 +219,33 @@ function validateForm(form) {
   }
 
   validateRate('share_rate', '我方分成')
-  validateRate('channel_fee_rate', '渠道费')
+  validateRate('channel_fee_rate', '支付通道费率')
   validateRate('invoice_tax_rate', '发票税率')
   validateMoney('unit_price', '结算单价')
   validateMoney('testing_fee', '测试费')
   validateMoney('prepayment_amount', '预付款')
   validateMoney('minimum_guarantee_amount', '保底金额')
   return errors
+}
+
+function formatRate(value) {
+  const raw = String(value ?? '').trim()
+  if (!raw) return '-'
+  const number = Number(raw)
+  if (!Number.isFinite(number)) return '-'
+  return `${Number(number.toFixed(2))}%`
+}
+
+function counterpartyRate(value) {
+  const raw = String(value ?? '').trim()
+  if (!raw) return ''
+  const number = Number(raw)
+  if (!Number.isFinite(number)) return ''
+  return String(Number(Math.max(0, 100 - number).toFixed(2)))
+}
+
+function platformLabel(value) {
+  return PLATFORM_LABELS[value] || value || '未设置版本'
 }
 
 function ContractAccessEditor({ contract, item, onClose, onSaved, onToast }) {
@@ -271,7 +286,7 @@ function ContractAccessEditor({ contract, item, onClose, onSaved, onToast }) {
       })
       .catch((error) => {
         console.error(error)
-        onToast?.('结构化财务条款暂时读取失败，基础合作清单仍可使用', 'info')
+        onToast?.('扩展条款暂时读取失败，基础合作清单仍可正常使用', 'info')
       })
       .finally(() => {
         if (!cancelled) setTermsLoading(false)
@@ -285,10 +300,12 @@ function ContractAccessEditor({ contract, item, onClose, onSaved, onToast }) {
     () => items.map((entry) => mergeEntryTerms(entry, termsById)),
     [items, termsById]
   )
+
   const selectedItem = selectedId
     ? mergedItems.find((entry) => String(entry.id) === selectedId) || null
     : null
   const isEditing = Boolean(selectedItem)
+  const otherShareRate = counterpartyRate(form.share_rate)
 
   const setValue = (key, value) => {
     const normalizedValue = value?.target ? value.target.value : value
@@ -299,7 +316,7 @@ function ContractAccessEditor({ contract, item, onClose, onSaved, onToast }) {
 
   const confirmDiscard = () => {
     if (!dirty) return true
-    return window.confirm('当前清单还有未保存的修改，确定放弃并切换吗？')
+    return window.confirm('当前清单还有未保存修改，确定放弃并切换吗？')
   }
 
   const selectItem = (entry) => {
@@ -336,7 +353,7 @@ function ContractAccessEditor({ contract, item, onClose, onSaved, onToast }) {
     const nextErrors = validateForm(form)
     setErrors(nextErrors)
     if (Object.keys(nextErrors).length) {
-      onToast?.('清单还有必填项或格式需要检查', 'error')
+      onToast?.('请先检查必填项和数字格式', 'error')
       return
     }
 
@@ -355,7 +372,7 @@ function ContractAccessEditor({ contract, item, onClose, onSaved, onToast }) {
         )
       } catch (termsError) {
         console.error(termsError)
-        onToast?.('合作清单基础信息已保存，但结构化财务条款保存失败，请再次点击保存重试', 'error')
+        onToast?.('基础合作信息已保存，但扩展条款保存失败，请再次保存重试', 'error')
         setSelectedId(String(savedAccess.id))
         setItems((current) => {
           const exists = current.some((entry) => String(entry.id) === String(savedAccess.id))
@@ -382,7 +399,7 @@ function ContractAccessEditor({ contract, item, onClose, onSaved, onToast }) {
       if (!isEditing) setCreatedCount((count) => count + 1)
 
       onToast?.(
-        isEditing ? `「${saved.product_name}」清单及结算条款已更新` : `已新增「${saved.product_name}」并保存结算条款`,
+        isEditing ? `「${saved.product_name}」合作信息已更新` : `已新增「${saved.product_name}」`,
         'success'
       )
 
@@ -409,7 +426,7 @@ function ContractAccessEditor({ contract, item, onClose, onSaved, onToast }) {
 
   const removeItem = async (entry) => {
     if (!entry?.id || deletingId) return
-    if (!window.confirm(`确定删除「${entry.product_name || '未命名'}」这条合同合作清单吗？`)) return
+    if (!window.confirm(`确定删除「${entry.product_name || '未命名'}」这条合作清单吗？`)) return
     setDeletingId(String(entry.id))
     try {
       await deleteContractAccessItem(contract.id, entry.id)
@@ -427,10 +444,10 @@ function ContractAccessEditor({ contract, item, onClose, onSaved, onToast }) {
         setDirty(false)
         setErrors({})
       }
-      onToast?.('合同合作清单已删除', 'success')
+      onToast?.('合作清单已删除', 'success')
     } catch (error) {
       console.error(error)
-      onToast?.(error?.message || '合同合作清单删除失败', 'error')
+      onToast?.(error?.message || '合作清单删除失败', 'error')
     } finally {
       setDeletingId('')
     }
@@ -449,20 +466,18 @@ function ContractAccessEditor({ contract, item, onClose, onSaved, onToast }) {
         className="contract-editor contract-access-workbench"
         role="dialog"
         aria-modal="true"
-        aria-label="合同合作清单工作台"
+        aria-label="合同合作清单"
         onClick={(event) => event.stopPropagation()}
       >
         <header className="contract-access-workbench__head">
           <div className="contract-access-workbench__title">
-            <span className="contract-access-workbench__eyebrow">CONTRACT ITEMS</span>
             <div>
-              <h3>合同合作清单</h3>
+              <h3>合作清单</h3>
               <p>{contract?.contract_name || '未命名合同'}</p>
             </div>
           </div>
           <div className="contract-access-workbench__head-actions">
-            <span className="contract-access-workbench__count">{items.length} 条</span>
-            {termsLoading ? <span className="contract-access-workbench__created">条款读取中</span> : null}
+            <span className="contract-access-workbench__count">共 {items.length} 条</span>
             {createdCount ? <span className="contract-access-workbench__created">本次新增 {createdCount}</span> : null}
             <button type="button" onClick={() => void finish()} disabled={saving}>关闭</button>
           </div>
@@ -470,23 +485,13 @@ function ContractAccessEditor({ contract, item, onClose, onSaved, onToast }) {
 
         <div className="contract-access-workbench__body">
           <aside className="contract-access-workbench__sidebar">
-            <div className="contract-access-context">
-              <span>归属合同</span>
-              <strong>{contract?.internal_contract_no || contract?.contract_no || '系统合同'}</strong>
-              <small>{contract?.partner_short_name || contract?.counterparty || '签约方未填写'}</small>
-              <small>
-                {contract?.effective_date || '未填生效日'} → {contract?.end_date || '未填终止日'}
-              </small>
-            </div>
-
             <button type="button" className="contract-access-new-btn" onClick={() => startNew()}>
-              <span>＋</span>
-              新增一条清单
+              ＋ 添加合作游戏
             </button>
 
             <div className="contract-access-side-title">
-              <span>已录入清单</span>
-              <small>点击可直接编辑</small>
+              <span>已录入</span>
+              <small>{termsLoading ? '读取中…' : '点击即可编辑'}</small>
             </div>
 
             <div className="contract-access-side-list">
@@ -497,19 +502,15 @@ function ContractAccessEditor({ contract, item, onClose, onSaved, onToast }) {
                     <button type="button" className="contract-access-side-main" onClick={() => selectItem(entry)}>
                       <span className="contract-access-side-index">{index + 1}</span>
                       <span className="contract-access-side-copy">
-                        <strong>{entry.product_name || '未命名项目'}</strong>
-                        <small>{entry.channel_name || '未填写渠道 / 平台'}</small>
-                        <em>
-                          {entry.settlement_mode || (entry.share_rate == null || entry.share_rate === '' ? '结算方式未填' : `分成 ${Number(entry.share_rate)}%`)}
-                          {' · '}
-                          {entry.timeline_status || entry.status || '状态未填'}
-                        </em>
+                        <strong>{entry.product_name || '未命名游戏'}</strong>
+                        <small>{entry.channel_name || '未填写渠道'} · {platformLabel(entry.platform)}</small>
+                        <em>{formatRate(entry.share_rate) === '-' ? '分成未填' : `我方 ${formatRate(entry.share_rate)}`}</em>
                       </span>
                     </button>
                     <button
                       type="button"
                       className="contract-access-side-delete"
-                      title="删除此清单"
+                      title="删除"
                       disabled={deletingId === String(entry.id)}
                       onClick={() => void removeItem(entry)}
                     >
@@ -519,8 +520,8 @@ function ContractAccessEditor({ contract, item, onClose, onSaved, onToast }) {
                 )
               }) : (
                 <div className="contract-access-side-empty">
-                  <strong>还没有合作清单</strong>
-                  <span>先录游戏、渠道和结算规则即可；应用资质资料可以以后补。</span>
+                  <strong>还没有合作游戏</strong>
+                  <span>点击上方按钮录入第一条。</span>
                 </div>
               )}
             </div>
@@ -535,77 +536,59 @@ function ContractAccessEditor({ contract, item, onClose, onSaved, onToast }) {
             onKeyDown={handleShortcut}
           >
             <div className="contract-access-workbench__scroll">
-              <section className="contract-access-form-intro">
-                <div>
-                  <span>{isEditing ? '正在编辑' : '快速新增'}</span>
-                  <h4>{isEditing ? selectedItem.product_name || '未命名清单' : '把合同条款录成真正可计算的数据'}</h4>
-                  <p>结算方式、单价、账期、发票、退款和费用承担已经拆成结构化字段，后续可直接用于账单自动核验。</p>
-                </div>
-                <div className="contract-access-form-hint">
-                  <strong>⌘ / Ctrl + Enter</strong>
-                  <span>快速保存当前清单</span>
-                </div>
-              </section>
-
-              <section className="contract-access-form-section">
-                <div className="contract-access-form-section__head">
+              <section className="contract-access-simple-card">
+                <div className="contract-access-simple-card__head">
                   <div>
-                    <span>01</span>
-                    <div>
-                      <h5>核心合作信息</h5>
-                      <p>游戏、渠道、授权期限和分成是合同匹配的基础维度。</p>
-                    </div>
+                    <span>{isEditing ? '编辑合作游戏' : '新增合作游戏'}</span>
+                    <h4>{isEditing ? selectedItem.product_name || '未命名游戏' : '只填合同里真正关键的信息'}</h4>
                   </div>
-                  <em>游戏名称必填</em>
+                  <small>游戏名称必填，其余可按合同实际情况填写</small>
                 </div>
 
-                <div className="contract-access-core-grid">
+                <div className="contract-access-simple-grid">
                   <Field
-                    label="游戏 / 项目名称"
+                    label="合作游戏"
                     required
                     wide
                     autoFocus={!isEditing}
                     value={form.product_name}
                     error={errors.product_name}
                     onChange={(value) => setValue('product_name', value)}
-                    placeholder="例如：云上征途、魔力契约"
+                    placeholder="例如：仙帝神兵"
                   />
                   <Field
-                    label="合作渠道 / 平台"
+                    label="合作渠道"
                     value={form.channel_name}
                     onChange={(value) => setValue('channel_name', value)}
-                    placeholder="例如：TapTap、小米、火烈鸟、快手直播"
+                    placeholder="没有可留空"
                   />
                   <SelectField
-                    label="合作模式"
-                    value={form.agreement_type}
-                    onChange={(value) => setValue('agreement_type', value)}
-                    options={['联合运营', '联运SDK', '广告投放', '小游戏广告', '发行代理', '授权', '其他']}
-                  />
-                  <SelectField
-                    label="运行平台"
+                    label="版本"
                     value={form.platform}
                     onChange={(value) => setValue('platform', value)}
-                    options={['', 'Android', 'iOS', 'Android / iOS', 'H5', '小游戏', 'PC', '其他']}
-                  />
-                  <SelectField
-                    label="清单状态"
-                    value={form.status}
-                    onChange={(value) => setValue('status', value)}
-                    options={['生效', '待生效', '已终止']}
+                    options={PLATFORM_OPTIONS}
+                    optionLabels={PLATFORM_LABELS}
                   />
                   <Field
-                    label="授权开始日期"
+                    label="授权开始"
                     type="date"
                     value={form.authorization_start}
                     onChange={(value) => setValue('authorization_start', value)}
                   />
                   <Field
-                    label="授权结束日期"
+                    label="授权结束"
                     type="date"
                     value={form.authorization_end}
                     error={errors.authorization_end}
                     onChange={(value) => setValue('authorization_end', value)}
+                  />
+                  <Field
+                    label="支付通道费率（%）"
+                    inputMode="decimal"
+                    value={form.channel_fee_rate}
+                    error={errors.channel_fee_rate}
+                    onChange={(value) => setValue('channel_fee_rate', value)}
+                    placeholder="例如：5"
                   />
                   <Field
                     label="我方分成（%）"
@@ -616,149 +599,70 @@ function ContractAccessEditor({ contract, item, onClose, onSaved, onToast }) {
                     placeholder="例如：83"
                   />
                   <Field
-                    label="支付渠道成本（%）"
-                    inputMode="decimal"
-                    value={form.channel_fee_rate}
-                    error={errors.channel_fee_rate}
-                    onChange={(value) => setValue('channel_fee_rate', value)}
-                    placeholder="例如：5"
+                    label="对方分成（自动）"
+                    value={otherShareRate}
+                    readOnly
+                    placeholder="根据我方分成自动计算"
+                  />
+                  <SelectField
+                    label="状态"
+                    value={form.status}
+                    onChange={(value) => setValue('status', value)}
+                    options={['生效', '待生效', '已终止']}
                   />
                   <TextareaField
-                    label="其他特殊条款"
+                    label="备注"
                     wide
                     value={form.remarks}
                     onChange={(value) => setValue('remarks', value)}
-                    placeholder="结构化字段之外的补充约定写这里。"
+                    placeholder="只写特殊约定；没有可留空。"
                   />
                 </div>
               </section>
 
-              <section className="contract-access-form-section">
-                <div className="contract-access-form-section__head">
-                  <div>
-                    <span>02</span>
-                    <div>
-                      <h5>结算与财务条款</h5>
-                      <p>这些字段会作为后续自动对账、发票判断和异常检查的合同依据。</p>
-                    </div>
-                  </div>
-                  <em>建议尽量填写</em>
-                </div>
-
-                <div className="contract-access-core-grid">
-                  <SelectField
-                    label="结算方式"
-                    value={form.settlement_mode}
-                    onChange={(value) => setValue('settlement_mode', value)}
-                    options={['', '分成', 'CPA', 'CPS', 'CPI', '固定金额', '混合', '其他']}
-                  />
-                  <Field
-                    label="计费口径"
-                    value={form.settlement_basis}
-                    onChange={(value) => setValue('settlement_basis', value)}
-                    placeholder="例如：实付流水、后台流水、新增注册、激活"
-                  />
-                  <Field
-                    label="结算单价"
-                    inputMode="decimal"
-                    value={form.unit_price}
-                    error={errors.unit_price}
-                    onChange={(value) => setValue('unit_price', value)}
-                    placeholder="CPA/CPI/固定单价时填写"
-                  />
-                  <SelectField
-                    label="币种"
-                    value={form.currency}
-                    onChange={(value) => setValue('currency', value)}
-                    options={['CNY', 'USD', 'SGD', 'HKD', 'EUR', 'JPY', 'KRW', '其他']}
-                  />
-                  <SelectField
-                    label="结算周期"
-                    value={form.settlement_cycle}
-                    onChange={(value) => setValue('settlement_cycle', value)}
-                    options={['', '自然月', '月结', '周结', '季度', '按项目', '其他']}
-                  />
-                  <Field
-                    label="账期 / 回款周期"
-                    value={form.payment_terms}
-                    onChange={(value) => setValue('payment_terms', value)}
-                    placeholder="例如：T+30、次月15日前"
-                  />
-                  <Field
-                    label="发票税率（%）"
-                    inputMode="decimal"
-                    value={form.invoice_tax_rate}
-                    error={errors.invoice_tax_rate}
-                    onChange={(value) => setValue('invoice_tax_rate', value)}
-                    placeholder="例如：6"
-                  />
-                  <SelectField
-                    label="发票类型"
-                    value={form.invoice_type}
-                    onChange={(value) => setValue('invoice_type', value)}
-                    options={['', '增值税专用发票', '增值税普通发票', '不开票', '其他']}
-                  />
-                  <Field
-                    label="测试费"
-                    inputMode="decimal"
-                    value={form.testing_fee}
-                    error={errors.testing_fee}
-                    onChange={(value) => setValue('testing_fee', value)}
-                    placeholder="没有可留空"
-                  />
-                  <SelectField
-                    label="服务器成本承担"
-                    value={form.server_cost_bearer}
-                    onChange={(value) => setValue('server_cost_bearer', value)}
-                    options={['', '我方承担', '对方承担', '双方分摊', '按项目约定', '其他']}
-                  />
-                  <Field
-                    label="预付款"
-                    inputMode="decimal"
-                    value={form.prepayment_amount}
-                    error={errors.prepayment_amount}
-                    onChange={(value) => setValue('prepayment_amount', value)}
-                  />
-                  <Field
-                    label="保底 / 最低保证"
-                    inputMode="decimal"
-                    value={form.minimum_guarantee_amount}
-                    error={errors.minimum_guarantee_amount}
-                    onChange={(value) => setValue('minimum_guarantee_amount', value)}
-                  />
-                  <TextareaField
-                    label="退款 / 退费规则"
-                    wide
-                    value={form.refund_rule}
-                    onChange={(value) => setValue('refund_rule', value)}
-                    placeholder="例如：玩家退款在当月流水中扣除；跨月退款次月冲抵。"
-                  />
-                  <TextareaField
-                    label="其他扣除规则"
-                    wide
-                    value={form.deduction_rule}
-                    onChange={(value) => setValue('deduction_rule', value)}
-                    placeholder="例如：测试费、渠道费、手续费、坏账、税费等扣除顺序与口径。"
-                  />
-                </div>
-              </section>
-
-              <details className="contract-access-advanced">
+              <details className="contract-access-more">
                 <summary>
                   <span>
-                    <strong>03 · 应用 / 资质等可选信息</strong>
-                    <small>App ID、平台记录号、软著、ISBN、区域等，不需要时可以完全不填</small>
+                    <strong>更多结算条款（可选）</strong>
+                    <small>CPA、账期、发票、测试费、预付款等需要时再展开</small>
                   </span>
                   <em>展开</em>
                 </summary>
-                <div className="contract-access-advanced-grid">
-                  <Field label="应用 ID / App ID" value={form.app_id} onChange={(value) => setValue('app_id', value)} placeholder="渠道应用标识，可留空" />
-                  <Field label="平台记录 ID" value={form.platform_record_id} onChange={(value) => setValue('platform_record_id', value)} placeholder="平台后台记录号，可留空" />
-                  <Field label="接入分类" value={form.category} onChange={(value) => setValue('category', value)} placeholder="例如：A 类、第二类" />
-                  <Field label="语言" value={form.language} onChange={(value) => setValue('language', value)} placeholder="例如：简体中文" />
+                <div className="contract-access-more-grid">
+                  <SelectField label="合作模式" value={form.agreement_type} onChange={(value) => setValue('agreement_type', value)} options={['联合运营', '联运SDK', '广告投放', '小游戏广告', '发行代理', '授权', '其他']} />
+                  <SelectField label="结算方式" value={form.settlement_mode} onChange={(value) => setValue('settlement_mode', value)} options={['', '分成', 'CPA', 'CPS', 'CPI', '固定金额', '混合', '其他']} />
+                  <Field label="计费口径" value={form.settlement_basis} onChange={(value) => setValue('settlement_basis', value)} placeholder="例如：实付流水、注册、激活" />
+                  <Field label="结算单价" inputMode="decimal" value={form.unit_price} error={errors.unit_price} onChange={(value) => setValue('unit_price', value)} />
+                  <SelectField label="币种" value={form.currency} onChange={(value) => setValue('currency', value)} options={['CNY', 'USD', 'SGD', 'HKD', 'EUR', 'JPY', 'KRW', '其他']} />
+                  <SelectField label="结算周期" value={form.settlement_cycle} onChange={(value) => setValue('settlement_cycle', value)} options={['', '自然月', '月结', '周结', '季度', '按项目', '其他']} />
+                  <Field label="账期 / 回款周期" value={form.payment_terms} onChange={(value) => setValue('payment_terms', value)} placeholder="例如：T+30" />
+                  <Field label="发票税率（%）" inputMode="decimal" value={form.invoice_tax_rate} error={errors.invoice_tax_rate} onChange={(value) => setValue('invoice_tax_rate', value)} />
+                  <SelectField label="发票类型" value={form.invoice_type} onChange={(value) => setValue('invoice_type', value)} options={['', '增值税专用发票', '增值税普通发票', '不开票', '其他']} />
+                  <Field label="测试费" inputMode="decimal" value={form.testing_fee} error={errors.testing_fee} onChange={(value) => setValue('testing_fee', value)} />
+                  <SelectField label="服务器成本承担" value={form.server_cost_bearer} onChange={(value) => setValue('server_cost_bearer', value)} options={['', '我方承担', '对方承担', '双方分摊', '按项目约定', '其他']} />
+                  <Field label="预付款" inputMode="decimal" value={form.prepayment_amount} error={errors.prepayment_amount} onChange={(value) => setValue('prepayment_amount', value)} />
+                  <Field label="保底 / 最低保证" inputMode="decimal" value={form.minimum_guarantee_amount} error={errors.minimum_guarantee_amount} onChange={(value) => setValue('minimum_guarantee_amount', value)} />
+                  <TextareaField label="退款 / 退费规则" wide value={form.refund_rule} onChange={(value) => setValue('refund_rule', value)} />
+                  <TextareaField label="其他扣除规则" wide value={form.deduction_rule} onChange={(value) => setValue('deduction_rule', value)} />
+                </div>
+              </details>
+
+              <details className="contract-access-more contract-access-more--secondary">
+                <summary>
+                  <span>
+                    <strong>应用与资质（可选）</strong>
+                    <small>App ID、软著、ISBN、区域等资料，不需要可以不填</small>
+                  </span>
+                  <em>展开</em>
+                </summary>
+                <div className="contract-access-more-grid">
+                  <Field label="应用 ID / App ID" value={form.app_id} onChange={(value) => setValue('app_id', value)} />
+                  <Field label="平台记录 ID" value={form.platform_record_id} onChange={(value) => setValue('platform_record_id', value)} />
+                  <Field label="接入分类" value={form.category} onChange={(value) => setValue('category', value)} />
+                  <Field label="语言" value={form.language} onChange={(value) => setValue('language', value)} />
                   <Field label="权限来源" value={form.rights_source} onChange={(value) => setValue('rights_source', value)} />
                   <SelectField label="游戏状态" value={form.game_status} onChange={(value) => setValue('game_status', value)} options={['', '上架', '下架', '测试', '未上线']} />
-                  <Field label="协议状态" value={form.agreement_status} onChange={(value) => setValue('agreement_status', value)} placeholder="例如：已签约、续签中" />
+                  <Field label="协议状态" value={form.agreement_status} onChange={(value) => setValue('agreement_status', value)} />
                   <Field label="软件著作权登记号" value={form.software_copyright_no} onChange={(value) => setValue('software_copyright_no', value)} />
                   <Field label="ISBN / 版号" value={form.isbn} onChange={(value) => setValue('isbn', value)} />
                   <Field label="授权区域" wide value={form.territory} onChange={(value) => setValue('territory', value)} />
@@ -768,23 +672,21 @@ function ContractAccessEditor({ contract, item, onClose, onSaved, onToast }) {
 
             <footer className="contract-access-workbench__footer">
               <div>
-                <strong>{isEditing ? `编辑：${selectedItem.product_name || '未命名'}` : '新增清单'}</strong>
-                <span>{dirty ? '有未保存修改' : changed ? '本次修改已保存到服务器' : '尚未修改'}</span>
+                <strong>{isEditing ? `编辑：${selectedItem.product_name || '未命名'}` : '新增合作游戏'}</strong>
+                <span>{dirty ? '有未保存修改' : changed ? '已保存到服务器' : '尚未修改'}</span>
               </div>
               <div className="contract-access-workbench__footer-actions">
-                <button type="button" className="contract-access-done-btn" onClick={() => void finish()} disabled={saving}>
-                  完成并关闭
-                </button>
+                <button type="button" className="contract-access-done-btn" onClick={() => void finish()} disabled={saving}>完成</button>
                 {!isEditing ? (
                   <button type="button" className="contract-access-next-btn" onClick={() => void persist({ continueAdding: true })} disabled={saving}>
                     {saving ? '保存中…' : '保存并新增下一条'}
                   </button>
                 ) : null}
                 <button type="button" className="contract-access-save-btn" onClick={() => void persist()} disabled={saving}>
-                  {saving ? '正在保存…' : isEditing ? '保存修改' : '保存当前'}
+                  {saving ? '保存中…' : isEditing ? '保存修改' : '保存当前'}
                 </button>
                 <button type="button" className="contract-access-save-close-btn" onClick={() => void persist({ closeAfter: true })} disabled={saving}>
-                  {saving ? '正在保存…' : '保存并关闭'}
+                  {saving ? '保存中…' : '保存并关闭'}
                 </button>
               </div>
             </footer>
@@ -795,23 +697,24 @@ function ContractAccessEditor({ contract, item, onClose, onSaved, onToast }) {
   )
 }
 
-function Field({ label, required, wide, error, onChange, ...props }) {
+function Field({ label, required, wide, error, onChange, readOnly, ...props }) {
   return (
-    <label className={`${wide ? 'is-wide' : ''} ${error ? 'has-error' : ''}`}>
+    <label className={`contract-access-field ${wide ? 'is-wide' : ''} ${error ? 'has-error' : ''} ${readOnly ? 'is-readonly' : ''}`}>
       <span>{label}{required ? ' *' : ''}</span>
       <input
         required={required}
+        readOnly={readOnly}
         {...props}
         onChange={(event) => onChange?.(event.target.value)}
       />
-      {error ? <small className="contract-access-field-error">{error}</small> : null}
+      {error ? <small>{error}</small> : null}
     </label>
   )
 }
 
 function TextareaField({ label, wide, value, onChange, placeholder }) {
   return (
-    <label className={wide ? 'is-wide' : ''}>
+    <label className={`contract-access-field ${wide ? 'is-wide' : ''}`}>
       <span>{label}</span>
       <textarea
         value={value}
@@ -823,13 +726,13 @@ function TextareaField({ label, wide, value, onChange, placeholder }) {
   )
 }
 
-function SelectField({ label, options, value, onChange }) {
+function SelectField({ label, options, value, onChange, optionLabels }) {
   return (
-    <label>
+    <label className="contract-access-field">
       <span>{label}</span>
       <select value={value} onChange={(event) => onChange?.(event.target.value)}>
         {options.map((option) => (
-          <option key={option || 'empty'} value={option}>{option || '未设置'}</option>
+          <option key={option || 'empty'} value={option}>{optionLabels?.[option] || option || '未设置'}</option>
         ))}
       </select>
     </label>
