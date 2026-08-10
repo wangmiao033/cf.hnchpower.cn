@@ -18,6 +18,7 @@ from app.api.business_dashboard import router as business_dashboard_router
 from app.api.channel import router as channel_router
 from app.api.bill_attachment import router as bill_attachment_router
 from app.api.bill_invoice_allocation import router as bill_invoice_allocation_router
+from app.api.finance_invoice_task import router as finance_invoice_task_router
 from app.api.health import router as health_router
 from app.api.auth import router as auth_router
 from app.api.invoice import router as invoice_router
@@ -195,6 +196,7 @@ app.include_router(health_router)
 app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
 app.include_router(workbench_router, prefix="/api/workbench", tags=["workbench"])
 app.include_router(global_search_router, prefix="/api/global-search", tags=["global-search"])
+app.include_router(finance_invoice_task_router, prefix="/api/finance-tasks", tags=["finance-tasks"])
 app.include_router(reconciliation_router, prefix="/api/reconciliation", tags=["reconciliation"], dependencies=[reconciliation_access])
 app.include_router(reconciliation_period_router, prefix="/api/reconciliation-periods", tags=["reconciliation-periods"], dependencies=[reconciliation_access])
 app.include_router(channel_router, prefix="/api/channel-records", tags=["channel-records"], dependencies=[reconciliation_access])
