@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react'
 import Bill360DrawerBase from './Bill360DrawerBase.jsx'
 import BillContractCheckPanel from './BillContractCheckPanel.jsx'
+import Bill360FundingPanel from './Bill360FundingPanel.jsx'
 import { getContractBillReconciliation } from '@/lib/api/contractTerms.ts'
 import './Bill360ContractAware.css'
+import './Bill360FundingPanel.css'
 
 function launcherText(summary, loading, unavailable) {
   if (loading) return '正在核验合同…'
@@ -15,6 +17,7 @@ function launcherText(summary, loading, unavailable) {
 
 function Bill360Drawer({ target, onClose }) {
   const [checkOpen, setCheckOpen] = useState(false)
+  const [fundingOpen, setFundingOpen] = useState(false)
   const [checkSummary, setCheckSummary] = useState(null)
   const [checkLoading, setCheckLoading] = useState(false)
   const [checkUnavailable, setCheckUnavailable] = useState(false)
@@ -38,13 +41,12 @@ function Bill360Drawer({ target, onClose }) {
       .finally(() => {
         if (active) setCheckLoading(false)
       })
-    return () => {
-      active = false
-    }
+    return () => { active = false }
   }, [billId, billType])
 
   useEffect(() => {
     setCheckOpen(false)
+    setFundingOpen(false)
   }, [billId, billType])
 
   const tone = checkSummary?.fail_count
@@ -58,6 +60,18 @@ function Bill360Drawer({ target, onClose }) {
   return (
     <>
       <Bill360DrawerBase target={target} onClose={onClose} />
+
+      <button
+        type="button"
+        className="bill360-funding-launcher"
+        onClick={() => setFundingOpen(true)}
+        title="查看银行流水、核销分配、累计已收/已付与剩余未结"
+      >
+        <span aria-hidden>银</span>
+        <span><strong>银行资金闭环</strong><small>多笔流水 · 部分核销 · 剩余未结</small></span>
+        <em aria-hidden>›</em>
+      </button>
+
       <button
         type="button"
         className={`bill360-contract-launcher is-${tone}`}
@@ -71,6 +85,20 @@ function Bill360Drawer({ target, onClose }) {
         </span>
         <em aria-hidden>›</em>
       </button>
+
+      {fundingOpen ? (
+        <div className="bill360-funding-overlay" role="presentation" onMouseDown={(event) => {
+          if (event.target === event.currentTarget) setFundingOpen(false)
+        }}>
+          <aside className="bill360-funding-panel" role="dialog" aria-modal="true" aria-label="银行资金闭环">
+            <header>
+              <div><span>账单 360° · P2</span><h2>银行资金闭环</h2><p>以银行核销 allocation 为资金事实，反向汇总当前账单的每一笔真实银行分配。</p></div>
+              <button type="button" onClick={() => setFundingOpen(false)} aria-label="关闭资金闭环">×</button>
+            </header>
+            <main><Bill360FundingPanel billType={billType} billId={billId} /></main>
+          </aside>
+        </div>
+      ) : null}
 
       {checkOpen ? (
         <div
