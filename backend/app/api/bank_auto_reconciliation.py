@@ -32,6 +32,7 @@ from app.services.bank_multi_allocation import (
     build_p2_dashboard,
     transaction_summaries,
 )
+from app.services.permissions import require_permission
 
 router = APIRouter()
 
@@ -87,7 +88,7 @@ def p2_allocate_bank_transaction(
     transaction_id: str,
     payload: P2AllocateRequest,
     db: Session = Depends(get_db),
-    user: AuthUser = Depends(require_current_user),
+    user: AuthUser = Depends(require_permission("funds.manage")),
 ) -> P2AllocateResponse:
     return P2AllocateResponse.model_validate(
         allocate_transaction(
@@ -104,7 +105,7 @@ def confirm_bank_match(
     transaction_id: str,
     payload: BankMatchConfirmRequest,
     db: Session = Depends(get_db),
-    user: AuthUser = Depends(require_current_user),
+    user: AuthUser = Depends(require_permission("funds.manage")),
 ) -> BankMatchConfirmResponse:
     return BankMatchConfirmResponse.model_validate(
         confirm_match(db, transaction_id, payload.bill_type, payload.bill_id, user)
@@ -116,7 +117,7 @@ def reverse_bank_match(
     match_id: str,
     payload: BankMatchReverseRequest,
     db: Session = Depends(get_db),
-    user: AuthUser = Depends(require_current_user),
+    user: AuthUser = Depends(require_permission("funds.manage")),
 ) -> BankMatchConfirmResponse:
     return BankMatchConfirmResponse.model_validate(
         reverse_confirmed_match(db, match_id, payload.reason, user)
