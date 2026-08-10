@@ -27,7 +27,7 @@ function optionalNumber(value) { if (value === '' || value == null) return null;
 
 export function detectChannelRulePreset(name) {
   const text = String(name || '').replace(/\s/g, '').toLowerCase()
-  return text.includes('小米') || text.includes('xiaomi') ? 'xiaomi_percent_fee' : ''
+  return text.includes('小米') || text.includes('xiaomi') || text.includes('瓦力') ? 'xiaomi_percent_fee' : ''
 }
 
 export function applyChannelRulePreset(header, code) {
