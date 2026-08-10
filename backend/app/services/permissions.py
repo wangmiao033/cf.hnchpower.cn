@@ -24,6 +24,9 @@ PERMISSION_CATALOG: tuple[dict[str, str], ...] = (
     {"code": "anomalies.manage", "group": "异常中心", "label": "处理异常", "description": "标记解决、忽略或重新打开异常。"},
     {"code": "reconciliation.view", "group": "核心对账", "label": "查看账单", "description": "查看研发/渠道账单、360详情、附件和状态。"},
     {"code": "reconciliation.manage", "group": "核心对账", "label": "管理账单", "description": "新增、编辑、删除账单及执行状态流转。"},
+    {"code": "invoice_requests.submit", "group": "财务协作", "label": "提交开票申请", "description": "将已经核对完成的渠道账单提交给财务开票。"},
+    {"code": "finance_tasks.view", "group": "财务协作", "label": "查看财务任务", "description": "查看财务工作台和开票任务进度。"},
+    {"code": "finance_tasks.manage", "group": "财务协作", "label": "处理财务任务", "description": "领取、驳回、完成开票任务并关联真实发票。"},
     {"code": "funds.view", "group": "资金管理", "label": "查看资金", "description": "查看银行流水、收付款和核销关系。"},
     {"code": "funds.manage", "group": "资金管理", "label": "管理资金", "description": "录入流水、确认/撤销核销及维护收付款。"},
     {"code": "invoices.view", "group": "发票中心", "label": "查看发票", "description": "查看进销项发票和账单覆盖。"},
@@ -52,18 +55,20 @@ ROLE_PRESETS: dict[str, frozenset[str]] = {
     "finance": frozenset({
         "analytics.view", "analytics.manage",
         "anomalies.view", "anomalies.manage",
-        "reconciliation.view", "reconciliation.manage",
+        "reconciliation.view",
+        "finance_tasks.view", "finance_tasks.manage",
         "funds.view", "funds.manage",
         "invoices.view", "invoices.manage",
-        "contracts.view", "contracts.manage",
+        "contracts.view",
         "data.view",
-        "partners.view", "partners.manage",
+        "partners.view",
         "audit.view",
     }),
     "operator": frozenset({
         "analytics.view",
         "anomalies.view",
         "reconciliation.view", "reconciliation.manage",
+        "invoice_requests.submit",
         "invoices.view",
         "contracts.view",
         "data.view", "data.manage",
@@ -214,11 +219,7 @@ def _path_override_permission(
         if normalized_path != normalized_prefix and not normalized_path.startswith(f"{normalized_prefix}/"):
             continue
         view_permission, manage_permission = path_overrides[prefix]
-        return (
-            manage_permission
-            if method.upper() in UNSAFE_METHODS and manage_permission
-            else view_permission
-        )
+        return manage_permission if method.upper() in UNSAFE_METHODS and manage_permission else view_permission
     return None
 
 
@@ -244,14 +245,8 @@ def require_module_access(
         user: AuthUser = Depends(require_current_user),
         db: Session = Depends(get_db),
     ) -> AuthUser:
-        permission = _path_override_permission(
-            request.url.path,
-            request.method,
-            path_overrides,
-        ) or (
-            manage_permission
-            if request.method.upper() in UNSAFE_METHODS and manage_permission
-            else view_permission
+        permission = _path_override_permission(request.url.path, request.method, path_overrides) or (
+            manage_permission if request.method.upper() in UNSAFE_METHODS and manage_permission else view_permission
         )
         if not has_permission(db, user, permission):
             raise HTTPException(
@@ -270,11 +265,7 @@ def require_module_access(
 def permission_catalog_payload() -> dict:
     return {
         "roles": [
-            {
-                "role": role,
-                "label": ROLE_LABELS[role],
-                "permissions": sorted(permissions),
-            }
+            {"role": role, "label": ROLE_LABELS[role], "permissions": sorted(permissions)}
             for role, permissions in ROLE_PRESETS.items()
         ],
         "permissions": list(PERMISSION_CATALOG),
