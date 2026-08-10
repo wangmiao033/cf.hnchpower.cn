@@ -95,7 +95,7 @@ def aggregate_rd_payments_for_ids(
             BankReconciliationMatch.bank_transaction_id == BankTransaction.id,
             BankReconciliationMatch.status == "confirmed",
         )
-    )
+    ).correlate(BankTransaction)
     paid_expr = func.coalesce(BankTransaction.linked_amount, BankTransaction.amount, 0)
     manual_rows = db.execute(
         select(
