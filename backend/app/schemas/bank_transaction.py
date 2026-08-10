@@ -107,6 +107,7 @@ class BankTransactionRead(BaseModel):
     source_file_name: str | None = None
     source_row_no: int | None = None
     dedupe_key: str | None = None
+    import_batch_id: str | None = None
     reconciliation_id: str | None = None
     reconciliation_type: str | None = None
     reconciliation_no: str | None = None
@@ -123,14 +124,58 @@ class BankTransactionListResponse(BaseModel):
 class BankTransactionBulkImportRequest(BaseModel):
     source_bank: str | None = Field(default="ICBC", max_length=64)
     source_file_name: str | None = Field(default=None, max_length=500)
+    source_sheet_name: str | None = Field(default=None, max_length=500)
     bank_account: str | None = Field(default=None, max_length=200)
+    source_total_rows: int | None = Field(default=None, ge=1, le=10000)
+    source_invalid_row_nos: list[int] = Field(default_factory=list, max_length=5000)
     items: list[BankTransactionCreate] = Field(min_length=1, max_length=5000)
 
 
 class BankTransactionBulkImportResponse(BaseModel):
+    batch_id: str
     total: int
     inserted: int
     duplicates: int
     invalid: int
     duplicate_row_nos: list[int] = Field(default_factory=list)
     invalid_row_nos: list[int] = Field(default_factory=list)
+
+
+class BankImportBatchRead(BaseModel):
+    id: str
+    source_bank: str | None = None
+    source_file_name: str | None = None
+    source_sheet_name: str | None = None
+    bank_account: str | None = None
+    total: int
+    inserted: int
+    duplicates: int
+    invalid: int
+    income_total: Decimal = Decimal("0")
+    expense_total: Decimal = Decimal("0")
+    date_from: str | None = None
+    date_to: str | None = None
+    duplicate_row_nos: list[int] = Field(default_factory=list)
+    invalid_row_nos: list[int] = Field(default_factory=list)
+    legacy_backfill: bool = False
+    created_at: datetime
+
+
+class BankImportBatchListResponse(BaseModel):
+    items: list[BankImportBatchRead]
+    total: int
+
+
+class BankAccountSummaryRead(BaseModel):
+    source_bank: str | None = None
+    bank_account: str
+    transaction_count: int
+    latest_trade_date: str | None = None
+    latest_balance: Decimal | None = None
+    latest_file_name: str | None = None
+    latest_import_batch_id: str | None = None
+    last_imported_at: datetime | None = None
+
+
+class BankAccountSummaryListResponse(BaseModel):
+    items: list[BankAccountSummaryRead]
