@@ -1,9 +1,4 @@
-"""Parse text-bearing electronic VAT invoice files (PDF/OFD/XML).
-
-The parser intentionally does not OCR image-only invoices. Chinese electronic VAT invoices
-normally carry either a PDF text layer or structured XML/OFD content, which is more reliable
-than OCR for accounting fields.
-"""
+"""Parse text-bearing electronic VAT invoice files (PDF/OFD/XML)."""
 
 from __future__ import annotations
 
@@ -22,7 +17,7 @@ SUPPORTED_ELECTRONIC_INVOICE_TYPES = {
     ".xml": "application/xml",
 }
 
-_MONEY = r"([0-9][0-9,]*\(?:\.\d{1,2}\)?)"
+_MONEY = r"([0-9][0-9,]*(?:\.\d{1,2})?)"
 
 
 def normalize_date(value: str | None) -> str:
@@ -65,8 +60,6 @@ def _xml_text(body: bytes) -> str:
     except ET.ParseError:
         return body.decode("utf-8", errors="ignore")
     values = [str(value).strip() for value in root.itertext() if str(value).strip()]
-    # Also surface tag names alongside values. Many e-invoice XML formats encode semantic
-    # meaning in element names rather than visible label text.
     tagged: list[str] = []
     for node in root.iter():
         if node.text and node.text.strip():
@@ -103,15 +96,10 @@ def extract_electronic_invoice_text(file_name: str, body: bytes) -> tuple[str, s
     if not content_type:
         raise ValueError("unsupported_file_type")
     if suffix == ".pdf":
-        text = _pdf_text(body)
-        parser = "pdf_text"
-    elif suffix == ".ofd":
-        text = _ofd_text(body)
-        parser = "ofd_xml"
-    else:
-        text = _xml_text(body)
-        parser = "xml"
-    return text, parser, content_type
+        return _pdf_text(body), "pdf_text", content_type
+    if suffix == ".ofd":
+        return _ofd_text(body), "ofd_xml", content_type
+    return _xml_text(body), "xml", content_type
 
 
 def _party_section(text: str, start_label: str, end_label: str | None) -> str:
@@ -149,8 +137,8 @@ def _xml_semantic_value(text: str, keys: tuple[str, ...]) -> str:
 
 
 def parse_electronic_invoice_text(text: str, *, direction: str = "output") -> dict[str, Any]:
-    raw = str(text or "").replace("\u3000", " ")
-    compact = re.sub(r"[ \t]+", " ", raw)
+    compact = str(text or "").replace("\u3000", " ")
+    compact = re.sub(r"[ \t]+", " ", compact)
     compact = re.sub(r"\n{3,}", "\n\n", compact)
 
     invoice_type = ""
@@ -169,36 +157,27 @@ def parse_electronic_invoice_text(text: str, *, direction: str = "output") -> di
         r"发票代码\s*[:：]\s*([0-9A-Z]{8,20})",
         r"(?:InvoiceCode|Fpdm)\s*[:：]\s*([0-9A-Z]{8,20})",
     ], compact, re.I)
-
-    invoice_date_raw = _first([
+    invoice_date = normalize_date(_first([
         r"开票日期\s*[:：]\s*([^\n\r]{6,30})",
         r"(?:IssueDate|InvoiceDate|Kprq)\s*[:：]\s*([^\n\r]{6,30})",
-    ], compact, re.I)
-    invoice_date = normalize_date(invoice_date_raw)
+    ], compact, re.I))
 
-    buyer_section = _party_section(compact, r"购买方(?:信息)?", r"销售方(?:信息)?")
-    seller_section = _party_section(compact, r"销售方(?:信息)?", r"项目名称|合\s*计|价税合计|备\s*注")
-    buyer_name, buyer_tax_no = _party(buyer_section)
-    seller_name, seller_tax_no = _party(seller_section)
+    buyer_name, buyer_tax_no = _party(
+        _party_section(compact, r"购买方(?:信息)?", r"销售方(?:信息)?")
+    )
+    seller_name, seller_tax_no = _party(
+        _party_section(compact, r"销售方(?:信息)?", r"项目名称|合\s*计|价税合计|备\s*注")
+    )
 
     if not buyer_name:
-        buyer_name = _xml_semantic_value(compact, (
-            "BuyerName", "PurchaserName", "GmfMc", "GhfMc", "BuyerTaxpayerName"
-        ))
+        buyer_name = _xml_semantic_value(compact, ("BuyerName", "PurchaserName", "GmfMc", "GhfMc", "BuyerTaxpayerName"))
     if not buyer_tax_no:
-        buyer_tax_no = _xml_semantic_value(compact, (
-            "BuyerTaxNo", "PurchaserTaxNo", "GmfNsrsbh", "GhfNsrsbh", "BuyerTaxpayerId"
-        )).upper()
+        buyer_tax_no = _xml_semantic_value(compact, ("BuyerTaxNo", "PurchaserTaxNo", "GmfNsrsbh", "GhfNsrsbh", "BuyerTaxpayerId")).upper()
     if not seller_name:
-        seller_name = _xml_semantic_value(compact, (
-            "SellerName", "XsfMc", "XhfMc", "SellerTaxpayerName"
-        ))
+        seller_name = _xml_semantic_value(compact, ("SellerName", "XsfMc", "XhfMc", "SellerTaxpayerName"))
     if not seller_tax_no:
-        seller_tax_no = _xml_semantic_value(compact, (
-            "SellerTaxNo", "XsfNsrsbh", "XhfNsrsbh", "SellerTaxpayerId"
-        )).upper()
+        seller_tax_no = _xml_semantic_value(compact, ("SellerTaxNo", "XsfNsrsbh", "XhfNsrsbh", "SellerTaxpayerId")).upper()
 
-    # Fallback for standard PDF layouts where two generic name/tax labels are emitted in order.
     if not (buyer_name and seller_name):
         names = re.findall(
             r"名\s*称\s*[:：]\s*([^\n\r]{2,100}?)(?=\s*(?:统一社会信用代码|纳税人识别号|统一社会信用代码/纳税人识别号))",
@@ -218,20 +197,15 @@ def parse_electronic_invoice_text(text: str, *, direction: str = "output") -> di
             buyer_tax_no = buyer_tax_no or tax_ids[0].upper()
             seller_tax_no = seller_tax_no or tax_ids[1].upper()
 
-    gross_raw = _first([
+    gross = _money(_first([
         rf"[（(]\s*小写\s*[）)]\s*[:：]?\s*[¥￥]?\s*{_MONEY}",
         rf"价税合计(?:\s*[（(]小写[）)])?\s*[:：]?\s*[¥￥]?\s*{_MONEY}",
         rf"(?:TotalAmount|AmountWithTax|Jshj|JshjJe)\s*[:：]\s*{_MONEY}",
-    ], compact, re.I)
-    gross = _money(gross_raw)
+    ], compact, re.I))
 
     net: float | None = None
     tax: float | None = None
-    total_match = re.search(
-        rf"合\s*计\s*[¥￥]?\s*{_MONEY}\s*[¥￥]?\s*{_MONEY}",
-        compact,
-        re.I,
-    )
+    total_match = re.search(rf"合\s*计\s*[¥￥]?\s*{_MONEY}\s*[¥￥]?\s*{_MONEY}", compact, re.I)
     if total_match:
         net = _money(total_match.group(1))
         tax = _money(total_match.group(2))
@@ -248,7 +222,7 @@ def parse_electronic_invoice_text(text: str, *, direction: str = "output") -> di
         float(item)
         for item in re.findall(r"(?<![0-9.])(0|1|3|5|6|9|10|11|13)(?:\.0+)?\s*%", compact)
     ]
-    tax_rate = rate_values[0] if rate_values and len(set(rate_values)) == 1 else (rate_values[0] if rate_values else None)
+    tax_rate = rate_values[0] if rate_values else None
 
     if gross is None and net is not None and tax is not None:
         gross = round(net + tax, 2)
