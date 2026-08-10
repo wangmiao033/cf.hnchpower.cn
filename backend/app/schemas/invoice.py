@@ -23,9 +23,14 @@ class InvoiceRecordCreate(BaseModel):
     invoice_amount: float = 0
     tax_amount: float = 0
     amount_with_tax: float = 0
+    tax_rate: float | None = None
     invoice_date: str | None = None
     issuer: str | None = None
     invoice_source: str | None = None
+    source_file_name: str | None = None
+    source_file_url: str | None = None
+    source_file_type: str | None = None
+    source_file_size: int | None = None
     tax_status: str = "normal"
     original_invoice_id: str | None = None
     status: str | None = "未开"
@@ -51,9 +56,14 @@ class InvoiceRecordUpdate(BaseModel):
     invoice_amount: float | None = None
     tax_amount: float | None = None
     amount_with_tax: float | None = None
+    tax_rate: float | None = None
     invoice_date: str | None = None
     issuer: str | None = None
     invoice_source: str | None = None
+    source_file_name: str | None = None
+    source_file_url: str | None = None
+    source_file_type: str | None = None
+    source_file_size: int | None = None
     tax_status: str | None = None
     original_invoice_id: str | None = None
     status: str | None = None
@@ -82,9 +92,14 @@ class InvoiceRecordRead(BaseModel):
     invoice_amount: float
     tax_amount: float
     amount_with_tax: float
+    tax_rate: float | None
     invoice_date: str | None
     issuer: str | None
     invoice_source: str | None
+    source_file_name: str | None
+    source_file_url: str | None
+    source_file_type: str | None
+    source_file_size: int | None
     tax_status: str
     original_invoice_id: str | None
     status: str | None
