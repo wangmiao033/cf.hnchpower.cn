@@ -18,6 +18,7 @@ from app.api.business_dashboard import router as business_dashboard_router
 from app.api.channel import router as channel_router
 from app.api.bill_attachment import router as bill_attachment_router
 from app.api.bill_invoice_allocation import router as bill_invoice_allocation_router
+from app.api.electronic_invoice import router as electronic_invoice_router
 from app.api.finance_invoice_task import router as finance_invoice_task_router
 from app.api.health import router as health_router
 from app.api.auth import router as auth_router
@@ -94,10 +95,8 @@ def get_cors_origins() -> list[str]:
     out = list(PRODUCTION_CORS_ORIGINS)
     if not _is_production_env():
         out.extend(origin for origin in DEVELOPMENT_CORS_ORIGINS if origin not in out)
-
     for env_name in ("VERCEL_URL", "VERCEL_BRANCH_URL", "VERCEL_PROJECT_PRODUCTION_URL"):
         _append_origin(out, os.environ.get(env_name))
-
     _append_origin(out, os.environ.get("CORS_ORIGIN"))
     extra = os.environ.get("CORS_EXTRA_ORIGINS", "").strip()
     if extra:
@@ -125,11 +124,7 @@ def _apply_common_response_headers(response, path: str) -> None:
         response.headers["Pragma"] = "no-cache"
 
 
-def _is_idempotent_reconciliation_delete_miss(
-    method: str,
-    path: str,
-    status_code: int,
-) -> bool:
+def _is_idempotent_reconciliation_delete_miss(method: str, path: str, status_code: int) -> bool:
     return (
         method.upper() == "DELETE"
         and status_code == 404
@@ -138,7 +133,6 @@ def _is_idempotent_reconciliation_delete_miss(
 
 
 _cors_allowed = get_cors_origins()
-
 app = FastAPI(title="caiwuapi", version="0.1.0")
 
 
@@ -169,7 +163,6 @@ async def enforce_origin_and_response_policy(request: Request, call_next):
         response = JSONResponse(status_code=403, content={"detail": "请求来源不受信任"})
         _apply_common_response_headers(response, path)
         return response
-
     response = await call_next(request)
     if _is_idempotent_reconciliation_delete_miss(request.method, path, response.status_code):
         response = Response(status_code=204, headers=_cors_headers_for_request(request, _cors_allowed))
@@ -205,6 +198,7 @@ app.include_router(business_dashboard_router, prefix="/api/business-dashboard", 
 app.include_router(profit_analysis_router, prefix="/api/profit-analysis", tags=["profit-analysis"], dependencies=[analytics_access])
 app.include_router(operating_expense_router, prefix="/api/operating-expenses", tags=["operating-expenses"], dependencies=[analytics_access])
 app.include_router(invoice_router, prefix="/api/invoices", tags=["invoices"], dependencies=[invoice_access])
+app.include_router(electronic_invoice_router, prefix="/api/electronic-invoices", tags=["electronic-invoices"], dependencies=[invoice_access])
 app.include_router(payment_router, prefix="/api/payments", tags=["payments"], dependencies=[funds_access])
 app.include_router(invoice_payment_link_router, prefix="/api/invoice-payment-links", tags=["invoice-payment-links"], dependencies=[invoice_access])
 app.include_router(exception_status_router, prefix="/api/exception-statuses", tags=["exception-statuses"], dependencies=[anomaly_access])
