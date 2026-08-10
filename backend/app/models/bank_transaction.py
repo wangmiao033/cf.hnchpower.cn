@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, Numeric, String, Text, func
+from sqlalchemy import DateTime, Integer, Numeric, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.base import Base
@@ -26,6 +26,7 @@ class BankTransaction(Base):
     amount: Mapped[float | None] = mapped_column(Numeric(18, 2), nullable=True)
     income_amount: Mapped[float | None] = mapped_column(Numeric(18, 2), nullable=True)
     expense_amount: Mapped[float | None] = mapped_column(Numeric(18, 2), nullable=True)
+    balance: Mapped[float | None] = mapped_column(Numeric(18, 2), nullable=True)
     currency: Mapped[str | None] = mapped_column(String, nullable=True)
     transaction_no: Mapped[str | None] = mapped_column(String, nullable=True)
     instruction_no: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -35,6 +36,10 @@ class BankTransaction(Base):
     status: Mapped[str | None] = mapped_column(String, nullable=True)
     raw_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     attachment_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source_bank: Mapped[str | None] = mapped_column(String, nullable=True)
+    source_file_name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source_row_no: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    dedupe_key: Mapped[str | None] = mapped_column(String, nullable=True)
     reconciliation_id: Mapped[str | None] = mapped_column(String, nullable=True)
     reconciliation_type: Mapped[str | None] = mapped_column(String, nullable=True)
     reconciliation_no: Mapped[str | None] = mapped_column(String, nullable=True)
