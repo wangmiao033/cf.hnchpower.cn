@@ -9,7 +9,7 @@ from app.core.deps import get_db
 from app.core.security import require_current_user
 from app.models.user import AuthUser
 from app.schemas.bill_lifecycle import BillLifecycleRead, BillTransitionRequest
-from app.services import bill_lock_guard as _bill_lock_guard  # noqa: F401
+from app.services import bill_lock_guard as _bill_lock_guard  # noqa: F401  注册 SQLAlchemy 锁单守卫
 from app.services.bill_lifecycle import build_lifecycle_snapshot, load_bill, transition_bill
 
 router = APIRouter()
@@ -45,47 +45,68 @@ def _apply_cross_link_guards(snapshot: dict) -> dict:
     return snapshot
 
 
-def _apply_channel_validation_guard(snapshot: dict, bill_type: str, bill) -> dict:
+def _channel_validation_reason(bill_type: str, bill) -> str | None:
     if bill_type != "channel" or str(getattr(bill, "validation_status", "unvalidated")) != "fail":
-        return snapshot
-    difference = getattr(bill, "settlement_difference", None)
-    detail = f"系统计算与平台账单存在差异 {float(difference or 0):+.2f} 元，请先修正结算规则或平台金额。"
-    for option in snapshot.get("transitions") or []:
-        if option.get("status") == "confirmed":
-            option["available"] = False
-            option["blocked_reason"] = detail
-    return snapshot
+        return None
+    difference = float(getattr(bill, "settlement_difference", 0) or 0)
+    return f"系统计算与平台账单存在差异 {difference:+.2f} 元，请先修正结算规则或平台金额。"
 
 
 def _snapshot(db: Session, bill_type: str, bill, user: AuthUser) -> dict:
     _prefer_channel_line_item_settlement(bill_type, bill)
-    snapshot = build_lifecycle_snapshot(db, bill_type, bill, user)
-    snapshot = _apply_cross_link_guards(snapshot)
-    return _apply_channel_validation_guard(snapshot, bill_type, bill)
+    snapshot = _apply_cross_link_guards(build_lifecycle_snapshot(db, bill_type, bill, user))
+    reason = _channel_validation_reason(bill_type, bill)
+    if reason:
+        for option in snapshot.get("transitions") or []:
+            if option.get("status") == "confirmed":
+                option["available"] = False
+                option["blocked_reason"] = reason
+    return snapshot
 
 
 @router.get("/{bill_type}/{bill_id}", response_model=BillLifecycleRead)
-def get_bill_lifecycle(bill_type: str, bill_id: str, db: Session = Depends(get_db), user: AuthUser = Depends(require_current_user)) -> BillLifecycleRead:
+def get_bill_lifecycle(
+    bill_type: str,
+    bill_id: str,
+    db: Session = Depends(get_db),
+    user: AuthUser = Depends(require_current_user),
+) -> BillLifecycleRead:
     bill = load_bill(db, bill_type, bill_id)
     return BillLifecycleRead.model_validate(_snapshot(db, bill_type, bill, user))
 
 
 @router.post("/{bill_type}/{bill_id}/transition", response_model=BillLifecycleRead)
-def transition_bill_status(bill_type: str, bill_id: str, payload: BillTransitionRequest, db: Session = Depends(get_db), user: AuthUser = Depends(require_current_user)) -> BillLifecycleRead:
+def transition_bill_status(
+    bill_type: str,
+    bill_id: str,
+    payload: BillTransitionRequest,
+    db: Session = Depends(get_db),
+    user: AuthUser = Depends(require_current_user),
+) -> BillLifecycleRead:
     bill = load_bill(db, bill_type, bill_id)
     before = _snapshot(db, bill_type, bill, user)
     target = str(payload.to_status or "").strip().lower()
-    target_option = next((option for option in before.get("transitions") or [] if option.get("status") == target), None)
-    if target_option is not None and not target_option.get("available", False):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={
-                "error": "transition_blocked",
-                "message": target_option.get("blocked_reason") or "当前账单不能执行此状态变更。",
-                "current_status": before.get("status"),
-                "target_status": target,
-            },
-        )
+
+    if target == "confirmed":
+        reason = _channel_validation_reason(bill_type, bill)
+        if reason:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"error": "settlement_validation_failed", "message": reason},
+            )
+
+    if target == "cancelled":
+        cancel_option = next((option for option in before.get("transitions") or [] if option.get("status") == "cancelled"), None)
+        if cancel_option is not None and not cancel_option.get("available", False):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "error": "transition_blocked",
+                    "message": cancel_option.get("blocked_reason") or "当前账单不能取消。",
+                    "current_status": before.get("status"),
+                    "target_status": "cancelled",
+                },
+            )
 
     db.info["allow_lifecycle_transition"] = True
     try:
