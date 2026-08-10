@@ -1,0 +1,240 @@
+.bank-center-account-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 10px;
+  margin: 0 30px 14px;
+}
+
+.bank-center-account-card {
+  display: grid;
+  gap: 5px;
+  min-height: 92px;
+  padding: 15px 16px;
+  border: 1px solid #e1e7ef;
+  border-radius: 12px;
+  background: #fff;
+  color: #435168;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: 0 3px 12px rgba(31, 49, 78, .025);
+}
+
+.bank-center-account-card:hover,
+.bank-center-account-card.is-active {
+  border-color: #8fa8c5;
+  background: #f5f8fc;
+}
+
+.bank-center-account-card > span {
+  color: #8290a3;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.bank-center-account-card > strong {
+  color: #29374b;
+  font-size: 18px;
+}
+
+.bank-center-account-card > small {
+  color: #8b97a7;
+  font-size: 9px;
+}
+
+.bank-center-account-card.is-all > strong {
+  font-size: 14px;
+}
+
+.bank-center-advanced--p1 {
+  grid-template-columns: repeat(6, minmax(130px, 1fr)) auto;
+}
+
+.bank-center-advanced--p1 select {
+  width: 100%;
+  height: 34px;
+  border: 1px solid #dce3ec;
+  border-radius: 7px;
+  background: #fff;
+  color: #4f5e73;
+  font: inherit;
+  font-size: 10px;
+}
+
+.bank-center-active-source {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 18px 12px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #eef4fb;
+  color: #617189;
+  font-size: 10px;
+}
+
+.bank-center-active-source strong {
+  overflow: hidden;
+  max-width: 55vw;
+  color: #315f91;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bank-center-active-source button {
+  margin-left: auto;
+  border: 0;
+  background: transparent;
+  color: #6c7b8f;
+  font-size: 9px;
+  cursor: pointer;
+}
+
+.bank-center-table--ledger-p1 {
+  min-width: 1260px;
+}
+
+.bank-center-source-cell {
+  max-width: 210px;
+}
+
+.bank-center-source-cell strong,
+.bank-center-source-cell small,
+.bank-center-import-file strong,
+.bank-center-import-file small {
+  display: block;
+}
+
+.bank-center-source-cell strong {
+  color: #516177;
+  font-size: 9px;
+}
+
+.bank-center-source-cell small,
+.bank-center-import-file small {
+  margin-top: 3px;
+  overflow: hidden;
+  max-width: 210px;
+  color: #939eac;
+  font-size: 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bank-center-imports-head > button {
+  height: 32px;
+  padding: 0 11px;
+  border: 1px solid #dce3ec;
+  border-radius: 7px;
+  background: #fff;
+  color: #536177;
+  font-size: 9px;
+  cursor: pointer;
+}
+
+.bank-center-table--imports {
+  min-width: 1160px;
+}
+
+.bank-center-table--imports td {
+  vertical-align: top;
+}
+
+.bank-center-table--imports td > small,
+.bank-center-table--imports td > strong + small {
+  display: block;
+  margin-top: 4px;
+  color: #909baa;
+  font-size: 8px;
+}
+
+.bank-center-import-file {
+  max-width: 260px;
+}
+
+.bank-center-import-file strong {
+  overflow: hidden;
+  max-width: 250px;
+  color: #45546a;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bank-center-legacy-tag {
+  display: inline-flex !important;
+  width: fit-content;
+  padding: 2px 5px;
+  border-radius: 99px;
+  background: #f0f2f5;
+  color: #7b8797 !important;
+}
+
+.bank-center-batch-result {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.bank-center-batch-result span,
+.bank-center-batch-result strong,
+.bank-center-batch-result em {
+  display: inline-flex;
+  padding: 2px 5px;
+  border-radius: 5px;
+  font-size: 8px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.bank-center-batch-result span {
+  background: #f1f3f6;
+  color: #6c7889;
+}
+
+.bank-center-batch-result strong {
+  background: #e8f5ef;
+  color: #39745c;
+}
+
+.bank-center-batch-result em {
+  background: #fff5df;
+  color: #926b2c;
+}
+
+.bank-center-import__filebar > div > small {
+  display: block;
+  margin-top: 3px;
+  color: #929dac;
+  font-size: 9px;
+}
+
+.bank-center-import__result--audited {
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.bank-center-import__result--audited small {
+  width: 100%;
+  margin-top: 3px;
+  color: #7f8b9b;
+  font-size: 8px;
+  word-break: break-all;
+}
+
+@media (max-width: 1180px) {
+  .bank-center-advanced--p1 {
+    grid-template-columns: repeat(3, minmax(140px, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .bank-center-account-strip {
+    grid-template-columns: 1fr;
+    margin-left: 14px;
+    margin-right: 14px;
+  }
+
+  .bank-center-advanced--p1 {
+    grid-template-columns: 1fr 1fr;
+  }
+}
