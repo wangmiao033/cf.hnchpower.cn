@@ -1,0 +1,191 @@
+.contract-page .contract-access-panel {
+  margin: 0 14px 12px 58px;
+  border-color: #cfd9e6;
+  border-radius: 8px;
+  box-shadow: none;
+}
+
+.contract-page .contract-access-panel__head {
+  min-height: 44px;
+  padding: 8px 11px;
+  background: #fbfcfe;
+}
+
+.contract-page .contract-access-panel__head > div {
+  gap: 0;
+}
+
+.contract-page .contract-access-panel__head > div > span {
+  display: none;
+}
+
+.contract-page .contract-access-panel__head > div > strong {
+  color: #26364f;
+  font-size: 12px;
+}
+
+.contract-page .contract-access-panel__head > button {
+  min-height: 30px;
+  font-size: 0;
+}
+
+.contract-page .contract-access-panel__head > button::after {
+  content: '+ 添加合作游戏';
+  font-size: 11px;
+}
+
+.contract-page .contract-access-list {
+  min-width: 860px;
+}
+
+.contract-page .contract-access-list__header,
+.contract-page .contract-access-list__row {
+  grid-template-columns: minmax(210px, 1.45fr) 112px minmax(180px, 1fr) 175px 88px;
+  gap: 0;
+  padding: 0;
+}
+
+.contract-page .contract-access-list__header {
+  min-height: 42px;
+  border-top: 1px solid #e5eaf1;
+  border-bottom: 1px solid #dce3ec;
+  background: #f6f8fb;
+  color: #55647a;
+}
+
+.contract-page .contract-access-list__header > span,
+.contract-page .contract-access-list__row > span {
+  min-width: 0;
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  border-right: 1px solid #e4e9f0;
+}
+
+.contract-page .contract-access-list__header > span {
+  color: #5d6d84;
+  font-size: 0;
+  font-weight: 800;
+}
+
+.contract-page .contract-access-list__header > span:nth-child(1)::after { content: '合作游戏 / 渠道'; font-size: 10px; }
+.contract-page .contract-access-list__header > span:nth-child(3)::after { content: '版本'; font-size: 10px; }
+.contract-page .contract-access-list__header > span:nth-child(4)::after { content: '授权期限'; font-size: 10px; }
+.contract-page .contract-access-list__header > span:nth-child(5)::after { content: '分成 / 支付费率'; font-size: 10px; }
+.contract-page .contract-access-list__header > span:nth-child(7)::after { content: '操作'; font-size: 10px; }
+
+.contract-page .contract-access-list__header > span:nth-child(2),
+.contract-page .contract-access-list__header > span:nth-child(6),
+.contract-page .contract-access-list__row > span:nth-child(2),
+.contract-page .contract-access-list__row > span:nth-child(6) {
+  display: none;
+}
+
+.contract-page .contract-access-list__row {
+  min-height: 56px;
+  border-top: 0;
+  border-bottom: 1px solid #edf1f5;
+  background: #ffffff;
+}
+
+.contract-page .contract-access-list__row:last-child {
+  border-bottom: 0;
+}
+
+.contract-page .contract-access-list__row:hover {
+  background: #fbfdff;
+}
+
+.contract-page .contract-access-list__row > span:nth-child(1),
+.contract-page .contract-access-list__row > span:nth-child(3),
+.contract-page .contract-access-list__row > span:nth-child(4),
+.contract-page .contract-access-list__row > span:nth-child(5) {
+  display: grid;
+  align-content: center;
+  gap: 3px;
+}
+
+.contract-page .contract-access-list__row > span:nth-child(1) strong {
+  color: #1f2f49;
+  font-size: 12px;
+}
+
+.contract-page .contract-access-list__row > span:nth-child(1) small {
+  color: #7d899b;
+}
+
+.contract-page .contract-access-list__row > span:nth-child(3) > strong {
+  display: none;
+}
+
+.contract-page .contract-access-list__row > span:nth-child(3) > small {
+  color: #31445f;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.contract-page .contract-access-list__row > span:nth-child(4) strong,
+.contract-page .contract-access-list__row > span:nth-child(4) small {
+  font-variant-numeric: tabular-nums;
+}
+
+.contract-page .contract-access-list__row > span:nth-child(5) strong {
+  color: #1f5fbf;
+  font-size: 12px;
+}
+
+.contract-page .contract-access-list__row > span:nth-child(5) small {
+  color: #7c899b;
+}
+
+.contract-page .contract-access-list__actions {
+  min-height: 56px !important;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 9px !important;
+  border-right: 0 !important;
+}
+
+.contract-page .contract-access-list__actions button {
+  min-height: 26px;
+  border: 1px solid #d5dfec;
+  border-radius: 6px;
+  padding: 0 8px;
+  background: #ffffff;
+  color: #2563eb;
+  font-size: 10px;
+}
+
+.contract-page .contract-access-list__actions button:hover {
+  border-color: #b8cff2;
+  background: #f4f8ff;
+}
+
+.contract-page .contract-access-list__actions button.danger {
+  border-color: transparent;
+  color: #c53a3a;
+}
+
+.contract-page .contract-access-empty {
+  min-height: 94px;
+}
+
+.contract-page .contract-access-empty > span {
+  display: none;
+}
+
+.contract-page .contract-access-empty > button {
+  font-size: 0;
+}
+
+.contract-page .contract-access-empty > button::after {
+  content: '添加合作游戏';
+  font-size: 11px;
+}
+
+@media (max-width: 900px) {
+  .contract-page .contract-access-panel {
+    margin-left: 14px;
+  }
+}
