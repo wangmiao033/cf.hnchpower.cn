@@ -23,6 +23,7 @@ export interface BankTransactionRow {
   amount: string | number | null
   income_amount: string | number | null
   expense_amount: string | number | null
+  balance: string | number | null
   currency: string | null
   transaction_no: string | null
   instruction_no: string | null
@@ -32,6 +33,10 @@ export interface BankTransactionRow {
   status: string | null
   raw_text: string | null
   attachment_url: string | null
+  source_bank?: string | null
+  source_file_name?: string | null
+  source_row_no?: number | null
+  dedupe_key?: string | null
   reconciliation_id?: string | null
   reconciliation_type?: string | null
   reconciliation_no?: string | null
@@ -52,6 +57,22 @@ export type BankTransactionUpdateBody = Partial<
 export interface BankTransactionListResponse {
   items: BankTransactionRow[]
   total: number
+}
+
+export interface BankTransactionBulkImportBody {
+  source_bank?: string | null
+  source_file_name?: string | null
+  bank_account?: string | null
+  items: BankTransactionCreateBody[]
+}
+
+export interface BankTransactionBulkImportResponse {
+  total: number
+  inserted: number
+  duplicates: number
+  invalid: number
+  duplicate_row_nos: number[]
+  invalid_row_nos: number[]
 }
 
 const PATH = '/api/bank-transactions'
@@ -91,6 +112,12 @@ export async function createBankTransaction(
   body: BankTransactionCreateBody
 ): Promise<BankTransactionRow> {
   return apiPost<BankTransactionRow>(PATH, body)
+}
+
+export async function bulkImportBankTransactions(
+  body: BankTransactionBulkImportBody
+): Promise<BankTransactionBulkImportResponse> {
+  return apiPost<BankTransactionBulkImportResponse>(`${PATH}/bulk-import`, body, { timeoutMs: 120_000 })
 }
 
 export async function updateBankTransaction(
