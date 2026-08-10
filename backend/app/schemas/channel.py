@@ -42,6 +42,7 @@ class ChannelLineItemCreate(BaseModel):
     refund_cost: float = 0
     test_cost: float = 0
     welfare_cost: float = 0
+    coin_cost: float = 0
     share_rate: float = Field(default=0, ge=0, le=100)
     billing_amount: float = 0
     share_amount: float = 0
@@ -68,6 +69,7 @@ class ChannelLineItemRead(BaseModel):
     refund_cost: float
     test_cost: float
     welfare_cost: float
+    coin_cost: float = 0
     share_rate: float
     billing_amount: float
     share_amount: float
@@ -140,6 +142,7 @@ class ChannelRecordRead(BaseModel):
     refund_cost: float
     test_cost: float
     welfare_cost: float
+    coin_cost: float = 0
     share_rate: float
     billing_amount: float
     share_amount: float
