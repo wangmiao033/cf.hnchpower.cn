@@ -14,7 +14,9 @@ import {
   buildRdSettlementPeriodOptions
 } from '@/domain/reconciliation/rdSettlementPeriods.js'
 import { totalReconciliationSettlementAmount } from '@/domain/settlement/calculateSettlementAmount.js'
+import { useAuth } from '@/features/auth/AuthContext.jsx'
 import { getBillInvoiceSummary } from '@/lib/api/billInvoiceAllocations.ts'
+import { getInvoiceRequestStatuses, submitChannelInvoiceRequest } from '@/lib/api/financeTasks.ts'
 import '@/components/reconciliation/reconciliation-admin.css'
 import './CoreReconciliationPages.css'
 
@@ -33,6 +35,10 @@ function monthLabel(value) {
   return match ? `${match[1]}年${Number(match[2])}月` : value
 }
 
+function money(value) {
+  return `¥${Number(value || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+}
+
 function settlementAmount(record) {
   const stored = Number.parseFloat(record?.settlementAmount)
   return Number.isFinite(stored)
@@ -45,6 +51,7 @@ function invoiceSummaryKey(billType, billId) {
 }
 
 export default function RdReconciliationProgressPage() {
+  const { can } = useAuth()
   const {
     recon,
     showToast,
@@ -57,6 +64,9 @@ export default function RdReconciliationProgressPage() {
   const [selectedBill, setSelectedBill] = useState(null)
   const [invoiceSummaries, setInvoiceSummaries] = useState({})
   const [invoiceRevision, setInvoiceRevision] = useState(0)
+  const [invoiceTaskStatuses, setInvoiceTaskStatuses] = useState({})
+  const [invoiceTaskRevision, setInvoiceTaskRevision] = useState(0)
+  const [invoiceTaskBusyId, setInvoiceTaskBusyId] = useState('')
 
   useEffect(() => {
     if (!selectedBill) return undefined
@@ -80,18 +90,15 @@ export default function RdReconciliationProgressPage() {
     return Array.from(
       new Set(
         channelRecords
-          .map((record) =>
-            monthKey(record.settlementMonth || record.billMonth || record.month)
-          )
+          .map((record) => monthKey(record.settlementMonth || record.billMonth || record.month))
           .filter(Boolean)
       )
     ).sort((a, b) => b.localeCompare(a))
   }, [channelRecords, gameRecords, mode])
 
-  const activeMonth =
-    selectedMonth && monthOptions.includes(selectedMonth)
-      ? selectedMonth
-      : monthOptions[0] || ''
+  const activeMonth = selectedMonth && monthOptions.includes(selectedMonth)
+    ? selectedMonth
+    : monthOptions[0] || ''
 
   const gameSnapshot = useMemo(() => {
     const keyword = clean(query).toLowerCase()
@@ -129,22 +136,22 @@ export default function RdReconciliationProgressPage() {
   const channelSnapshot = useMemo(() => {
     const keyword = clean(query).toLowerCase()
     if (!keyword) return channelMonthSnapshot
-
+    const filterRows = (rows = []) => rows.filter((row) =>
+      [row.billNumber, row.channel, row.partner, row.product]
+        .join(' ')
+        .toLowerCase()
+        .includes(keyword)
+    )
     return {
       ...channelMonthSnapshot,
-      unresolved: channelMonthSnapshot.unresolved.filter((row) =>
-        [row.billNumber, row.channel, row.partner, row.product]
-          .join(' ')
-          .toLowerCase()
-          .includes(keyword)
-      )
+      rows: filterRows(channelMonthSnapshot.rows),
+      unresolved: filterRows(channelMonthSnapshot.unresolved)
     }
   }, [channelMonthSnapshot, query])
 
-  const scopeCount =
-    mode === 'game'
-      ? gameSnapshot?.totals?.rows || 0
-      : channelMonthSnapshot?.totals?.rows || 0
+  const scopeCount = mode === 'game'
+    ? gameSnapshot?.totals?.rows || 0
+    : channelMonthSnapshot?.totals?.rows || 0
 
   const visibleInvoiceBills = useMemo(() => {
     const rows = mode === 'game' ? gameSnapshot.rows : channelSnapshot.rows
@@ -172,10 +179,46 @@ export default function RdReconciliationProgressPage() {
       )
       if (!cancelled) setInvoiceSummaries(Object.fromEntries(entries.filter(([, value]) => value)))
     })()
-    return () => {
-      cancelled = true
-    }
+    return () => { cancelled = true }
   }, [invoiceRevision, visibleInvoiceBills])
+
+  const visibleChannelBillIds = useMemo(
+    () => (channelSnapshot.rows || []).map((row) => String(row.id || '')).filter(Boolean),
+    [channelSnapshot.rows]
+  )
+
+  useEffect(() => {
+    let cancelled = false
+    getInvoiceRequestStatuses(visibleChannelBillIds)
+      .then((response) => {
+        if (cancelled) return
+        setInvoiceTaskStatuses(Object.fromEntries((response.items || []).map((item) => [String(item.bill_id), item])))
+      })
+      .catch(() => {
+        if (!cancelled) setInvoiceTaskStatuses({})
+      })
+    return () => { cancelled = true }
+  }, [invoiceTaskRevision, visibleChannelBillIds])
+
+  async function handleSubmitInvoiceRequest(row, previousTask = null) {
+    const invoiceSummary = invoiceSummaries[`channel:${row.id}`]
+    const remaining = Number(invoiceSummary?.remaining_amount ?? row.settlementAmount ?? 0)
+    const action = previousTask?.status === 'rejected' ? '重新提交' : '提交'
+    const reason = previousTask?.status === 'rejected' && previousTask?.reject_reason
+      ? `\n上次驳回：${previousTask.reject_reason}`
+      : ''
+    if (!window.confirm(`${action}给财务开票吗？\n\n账单：${row.billNumber}\n合作方：${row.partner}\n当前待开票：${money(remaining)}${reason}`)) return
+    setInvoiceTaskBusyId(String(row.id))
+    try {
+      const task = await submitChannelInvoiceRequest(String(row.id))
+      showToast(`已提交财务：${task.task_no}`, 'success')
+      setInvoiceTaskRevision((value) => value + 1)
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : '提交开票失败', 'error')
+    } finally {
+      setInvoiceTaskBusyId('')
+    }
+  }
 
   function changeMode(nextMode) {
     setMode(nextMode)
@@ -189,10 +232,7 @@ export default function RdReconciliationProgressPage() {
         <div className="core-recon-head">
           <div className="core-recon-title">
             <span className="core-recon-title-mark rd-progress-title-mark">进</span>
-            <div>
-              <h1>对账进度</h1>
-              <p>统一查看游戏账单与渠道账单的核对、结算和待处理进度</p>
-            </div>
+            <div><h1>对账进度</h1><p>统一查看游戏账单与渠道账单的核对、结算和待处理进度</p></div>
           </div>
           <div className="rd-progress-scope">
             <strong>{monthLabel(activeMonth) || '全部账期'}</strong>
@@ -202,60 +242,21 @@ export default function RdReconciliationProgressPage() {
 
         <div className="core-recon-filters rd-progress-filters">
           <div className="rd-progress-mode-switch" role="group" aria-label="对账类型">
-            <button
-              type="button"
-              className={mode === 'game' ? 'is-active' : ''}
-              onClick={() => changeMode('game')}
-            >
-              游戏对账
-            </button>
-            <button
-              type="button"
-              className={mode === 'channel' ? 'is-active' : ''}
-              onClick={() => changeMode('channel')}
-            >
-              渠道对账
-            </button>
+            <button type="button" className={mode === 'game' ? 'is-active' : ''} onClick={() => changeMode('game')}>游戏对账</button>
+            <button type="button" className={mode === 'channel' ? 'is-active' : ''} onClick={() => changeMode('channel')}>渠道对账</button>
           </div>
-
           <label className="core-recon-filter-control">
             <span>统计月份</span>
-            <select
-              value={activeMonth}
-              onChange={(event) => setSelectedMonth(event.target.value)}
-            >
+            <select value={activeMonth} onChange={(event) => setSelectedMonth(event.target.value)}>
               {monthOptions.length === 0 && <option value="">暂无账期</option>}
-              {monthOptions.map((month) => (
-                <option key={month} value={month}>
-                  {monthLabel(month)}
-                </option>
-              ))}
+              {monthOptions.map((month) => <option key={month} value={month}>{monthLabel(month)}</option>)}
             </select>
           </label>
-
           <label className="core-recon-filter-search">
             <span>搜索</span>
-            <input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder={
-                mode === 'game'
-                  ? '编号、客户或产品'
-                  : '编号、渠道、合作方或产品'
-              }
-            />
+            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={mode === 'game' ? '编号、客户或产品' : '编号、渠道、合作方或产品'} />
           </label>
-
-          <button
-            type="button"
-            className="core-recon-reset"
-            onClick={() => {
-              setSelectedMonth(null)
-              setQuery('')
-            }}
-          >
-            回到最新月
-          </button>
+          <button type="button" className="core-recon-reset" onClick={() => { setSelectedMonth(null); setQuery('') }}>回到最新月</button>
         </div>
       </section>
 
@@ -263,67 +264,34 @@ export default function RdReconciliationProgressPage() {
         <RdReconciliationProgressPanel
           snapshot={gameSnapshot}
           onEdit={(id) => openReconciliationEdit(String(id), VIEWS.RECON_PROGRESS)}
-          onViewAttachments={(row) => setSelectedBill({
-            panel: 'attachments',
-            billType: 'rd',
-            billId: row.billId,
-            billNumber: row.billNumber
-          })}
-          onViewInvoices={(row) => setSelectedBill({
-            panel: 'invoices',
-            billType: 'rd',
-            billId: row.billId,
-            billNumber: row.billNumber
-          })}
+          onViewAttachments={(row) => setSelectedBill({ panel: 'attachments', billType: 'rd', billId: row.billId, billNumber: row.billNumber })}
+          onViewInvoices={(row) => setSelectedBill({ panel: 'invoices', billType: 'rd', billId: row.billId, billNumber: row.billNumber })}
           invoiceSummaries={invoiceSummaries}
         />
       ) : (
         <ChannelBillProgressPanel
           snapshot={channelSnapshot}
           onEditBill={(id) => openChannelReconciliationEdit(String(id), VIEWS.RECON_PROGRESS)}
-          onViewAttachments={(row) => setSelectedBill({
-            panel: 'attachments',
-            billType: 'channel',
-            billId: row.id,
-            billNumber: row.billNumber
-          })}
-          onViewInvoices={(row) => setSelectedBill({
-            panel: 'invoices',
-            billType: 'channel',
-            billId: row.id,
-            billNumber: row.billNumber
-          })}
+          onViewAttachments={(row) => setSelectedBill({ panel: 'attachments', billType: 'channel', billId: row.id, billNumber: row.billNumber })}
+          onViewInvoices={(row) => setSelectedBill({ panel: 'invoices', billType: 'channel', billId: row.id, billNumber: row.billNumber })}
+          onSubmitInvoiceRequest={(row, task) => void handleSubmitInvoiceRequest(row, task)}
           invoiceSummaries={invoiceSummaries}
+          invoiceTaskStatuses={invoiceTaskStatuses}
+          canSubmitInvoiceRequest={can('invoice_requests.submit')}
+          invoiceTaskBusyId={invoiceTaskBusyId}
         />
       )}
 
       {selectedBill && (
         <>
-          <button
-            type="button"
-            className="rec-drawer-backdrop"
-            aria-label="关闭账单管理"
-            onClick={() => setSelectedBill(null)}
-          />
-          <AdminDrawerLayout
-            className="rec-drawer rec-drawer--wide rec-drawer--light"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="bill-detail-drawer-title"
-          >
+          <button type="button" className="rec-drawer-backdrop" aria-label="关闭账单管理" onClick={() => setSelectedBill(null)} />
+          <AdminDrawerLayout className="rec-drawer rec-drawer--wide rec-drawer--light" role="dialog" aria-modal="true" aria-labelledby="bill-detail-drawer-title">
             <div className="rec-drawer__head">
               <h2 id="bill-detail-drawer-title" className="rec-drawer__title">
                 {selectedBill.panel === 'invoices' ? '账单发票' : '账单附件'}
                 <span className="rec-drawer__title-sub"> · {selectedBill.billNumber || selectedBill.billId}</span>
               </h2>
-              <button
-                type="button"
-                className="rec-drawer__close"
-                onClick={() => setSelectedBill(null)}
-                aria-label="关闭"
-              >
-                ×
-              </button>
+              <button type="button" className="rec-drawer__close" onClick={() => setSelectedBill(null)} aria-label="关闭">×</button>
             </div>
             <div className="rec-drawer__body">
               {selectedBill.panel === 'invoices' ? (
@@ -331,13 +299,13 @@ export default function RdReconciliationProgressPage() {
                   billType={selectedBill.billType}
                   billId={selectedBill.billId}
                   showToast={showToast}
-                  onChanged={() => setInvoiceRevision((value) => value + 1)}
+                  onChanged={() => {
+                    setInvoiceRevision((value) => value + 1)
+                    setInvoiceTaskRevision((value) => value + 1)
+                  }}
                 />
               ) : (
-                <BillScanAttachments
-                  billType={selectedBill.billType}
-                  billId={selectedBill.billId}
-                />
+                <BillScanAttachments billType={selectedBill.billType} billId={selectedBill.billId} />
               )}
             </div>
           </AdminDrawerLayout>
