@@ -40,6 +40,7 @@ class BankTransaction(Base):
     source_file_name: Mapped[str | None] = mapped_column(Text, nullable=True)
     source_row_no: Mapped[int | None] = mapped_column(Integer, nullable=True)
     dedupe_key: Mapped[str | None] = mapped_column(String, nullable=True)
+    import_batch_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     reconciliation_id: Mapped[str | None] = mapped_column(String, nullable=True)
     reconciliation_type: Mapped[str | None] = mapped_column(String, nullable=True)
     reconciliation_no: Mapped[str | None] = mapped_column(String, nullable=True)
