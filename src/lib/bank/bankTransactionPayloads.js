@@ -58,6 +58,7 @@ export function buildRdPaymentConfirmPayload(confirm, rdLink) {
     amount: amt,
     income_amount: null,
     expense_amount: amt,
+    balance: null,
     currency: 'CNY',
     transaction_no: null,
     instruction_no: null,
@@ -114,6 +115,7 @@ export function buildCollectionRegisterPayload(form, pasteText) {
     amount: amt,
     income_amount: amt,
     expense_amount: null,
+    balance: null,
     currency: form.currency ? String(form.currency).trim() : 'CNY',
     transaction_no: form.bankSerialNo ? String(form.bankSerialNo).trim() : null,
     instruction_no: instructionNo || null,
@@ -134,6 +136,7 @@ export function buildCollectionRegisterPayload(form, pasteText) {
 export function buildStatementImportPayload(form, pasteText, receiptText) {
   const inc = num(form.incomeAmount)
   const exp = num(form.expenseAmount)
+  const bal = num(form.balance)
   const counter = form.counterpartyName ? String(form.counterpartyName).trim() : ''
   const counterAcc = form.counterpartyAccount ? String(form.counterpartyAccount).trim() : ''
 
@@ -169,6 +172,7 @@ export function buildStatementImportPayload(form, pasteText, receiptText) {
     amount: primary,
     income_amount: inc,
     expense_amount: exp,
+    balance: bal,
     currency: 'CNY',
     transaction_no: form.serialNo ? String(form.serialNo).trim() : null,
     instruction_no: null,
