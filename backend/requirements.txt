@@ -10,3 +10,4 @@ passlib[bcrypt]==1.7.4
 bcrypt==4.0.1
 vercel==0.8.1
 sqlparse==0.5.5
+pypdf==6.1.1

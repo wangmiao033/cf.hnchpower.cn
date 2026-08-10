@@ -1,8 +1,6 @@
-/**
- * 发票管理 REST API
- */
+/** 发票管理 REST API */
 
-import { apiDelete, apiGet, apiPost, apiPut } from '@/lib/api/client.ts'
+import { apiDelete, apiGet, apiPost, apiPostMultipart, apiPut } from '@/lib/api/client.ts'
 
 export type ApiInvoiceRow = {
   id: string
@@ -21,9 +19,14 @@ export type ApiInvoiceRow = {
   invoice_amount: number
   tax_amount: number
   amount_with_tax: number
+  tax_rate: number | null
   invoice_date: string | null
   issuer: string | null
   invoice_source: string | null
+  source_file_name: string | null
+  source_file_url: string | null
+  source_file_type: string | null
+  source_file_size: number | null
   tax_status: string
   original_invoice_id: string | null
   status: string | null
@@ -35,10 +38,7 @@ export type ApiInvoiceRow = {
   updated_at: string
 }
 
-export type InvoiceListResponse = {
-  items: ApiInvoiceRow[]
-  total: number
-}
+export type InvoiceListResponse = { items: ApiInvoiceRow[]; total: number }
 
 export type InvoiceRecordPayload = {
   invoice_direction?: 'output' | 'input' | null
@@ -56,9 +56,14 @@ export type InvoiceRecordPayload = {
   invoice_amount: number
   tax_amount?: number
   amount_with_tax?: number
+  tax_rate?: number | null
   invoice_date?: string | null
   issuer?: string | null
   invoice_source?: string | null
+  source_file_name?: string | null
+  source_file_url?: string | null
+  source_file_type?: string | null
+  source_file_size?: number | null
   tax_status?: string | null
   original_invoice_id?: string | null
   status?: string | null
@@ -69,22 +74,44 @@ export type InvoiceRecordPayload = {
 }
 
 export type InvoiceRecordUpdatePayload = Partial<InvoiceRecordPayload>
+export type InvoiceImportResponse = { created: number; updated: number; skipped: number; total: number }
 
-export type InvoiceImportResponse = {
-  created: number
-  updated: number
-  skipped: number
-  total: number
+export type ElectronicInvoiceParsedFields = {
+  invoice_direction: 'output' | 'input'
+  invoice_type: string | null
+  digital_invoice_no: string | null
+  invoice_code: string | null
+  invoice_no: string | null
+  buyer_name: string | null
+  buyer_tax_no: string | null
+  seller_name: string | null
+  seller_tax_no: string | null
+  invoice_amount: number
+  tax_amount: number
+  amount_with_tax: number
+  tax_rate: number | null
+  invoice_date: string | null
+  issuer: string | null
+  invoice_source: string | null
+  tax_status: string
+  status: string | null
+  source_file_name: string | null
+  source_file_url: string | null
+  source_file_type: string | null
+  source_file_size: number | null
+}
+
+export type ElectronicInvoiceParseResponse = {
+  parser: 'pdf_text' | 'ofd_xml' | 'xml' | string
+  confidence: number
+  warnings: string[]
+  existing_invoice_id?: string | null
+  invoice: ElectronicInvoiceParsedFields
 }
 
 const PATH = '/api/invoices'
 
-export function listInvoiceRecords(params?: {
-  search?: string
-  status?: string
-  limit?: number
-  offset?: number
-}): Promise<InvoiceListResponse> {
+export function listInvoiceRecords(params?: { search?: string; status?: string; limit?: number; offset?: number }): Promise<InvoiceListResponse> {
   const q = new URLSearchParams()
   if (params?.search) q.set('search', params.search)
   if (params?.status) q.set('status', params.status)
@@ -102,25 +129,33 @@ export function createInvoiceRecord(payload: InvoiceRecordPayload): Promise<ApiI
   return apiPost<ApiInvoiceRow>(PATH, payload)
 }
 
-export function importInvoiceRecords(
-  items: InvoiceRecordPayload[],
-  sourceFile?: string
-): Promise<InvoiceImportResponse> {
-  return apiPost<InvoiceImportResponse>(`${PATH}/import`, {
-    items,
-    source_file: sourceFile || null
-  })
+export function importInvoiceRecords(items: InvoiceRecordPayload[], sourceFile?: string): Promise<InvoiceImportResponse> {
+  return apiPost<InvoiceImportResponse>(`${PATH}/import`, { items, source_file: sourceFile || null })
 }
 
-export function updateInvoiceRecord(
-  id: string,
-  payload: InvoiceRecordUpdatePayload
-): Promise<ApiInvoiceRow> {
+export function updateInvoiceRecord(id: string, payload: InvoiceRecordUpdatePayload): Promise<ApiInvoiceRow> {
   return apiPut<ApiInvoiceRow>(`${PATH}/${encodeURIComponent(id)}`, payload)
 }
 
 export function deleteInvoiceRecord(id: string): Promise<void> {
   return apiDelete(`${PATH}/${encodeURIComponent(id)}`)
+}
+
+export function parseElectronicInvoiceFile(
+  file: File,
+  direction: 'output' | 'input' = 'output'
+): Promise<ElectronicInvoiceParseResponse> {
+  const form = new FormData()
+  form.append('file', file)
+  return apiPostMultipart<ElectronicInvoiceParseResponse>(
+    `/api/electronic-invoices/parse?direction=${encodeURIComponent(direction)}`,
+    form,
+    { timeoutMs: 90_000 }
+  )
+}
+
+export function electronicInvoiceSourceFileUrl(invoiceId: string, inline = true): string {
+  return `/api/electronic-invoices/${encodeURIComponent(invoiceId)}/file?inline=${inline ? 'true' : 'false'}`
 }
 
 /** API 行 -> 前端发票记录（与 useInvoiceStore / InvoiceForm 字段一致） */
@@ -145,39 +180,36 @@ export function apiInvoiceRowToFrontend(row: ApiInvoiceRow): Record<string, unkn
     amount: Number.isFinite(amt) ? amt.toFixed(2) : '0.00',
     taxAmount: Number.isFinite(tax) ? tax.toFixed(2) : '0.00',
     amountWithTax: Number.isFinite(withTax) ? withTax.toFixed(2) : '0.00',
+    taxRate: row.tax_rate == null ? '' : String(row.tax_rate),
     issueDate: row.invoice_date ?? '',
     issuer: row.issuer ?? '',
     invoiceSource: row.invoice_source ?? '',
+    sourceFileName: row.source_file_name ?? '',
+    sourceFileUrl: row.source_file_url ?? '',
+    sourceFileType: row.source_file_type ?? '',
+    sourceFileSize: row.source_file_size ?? 0,
     taxStatus: row.tax_status || 'normal',
     originalInvoiceId: row.original_invoice_id ?? '',
     status: row.status || '未开',
     remark: row.remark != null ? String(row.remark) : '',
     verified: Boolean(row.verified),
     verifiedAmount: Number.isFinite(row.verified_amount) ? row.verified_amount : 0,
-    verifiedRecordIds: Array.isArray(row.verified_record_ids)
-      ? row.verified_record_ids.map((x) => String(x))
-      : []
+    verifiedRecordIds: Array.isArray(row.verified_record_ids) ? row.verified_record_ids.map(String) : []
   }
 }
 
 /** 前端记录 -> API 写入体 */
 export function frontendInvoiceRecordToPayload(record: Record<string, unknown>): InvoiceRecordPayload {
   const idsRaw = record.verifiedRecordIds
-  const ids = Array.isArray(idsRaw) ? idsRaw.map((x) => String(x)) : []
+  const ids = Array.isArray(idsRaw) ? idsRaw.map(String) : []
   const va = record.verifiedAmount ?? record.verified_amount
-  const verifiedAmt =
-    typeof va === 'number' && Number.isFinite(va) ? va : parseFloat(String(va ?? 0)) || 0
+  const verifiedAmt = typeof va === 'number' && Number.isFinite(va) ? va : parseFloat(String(va ?? 0)) || 0
   const displayStatus = (record.status as string) || '未开'
-  const derivedTaxStatus = displayStatus === '作废'
-    ? 'void'
-    : displayStatus.includes('红')
-      ? 'red'
-      : 'normal'
+  const derivedTaxStatus = displayStatus === '作废' ? 'void' : displayStatus.includes('红') ? 'red' : 'normal'
+  const taxRateRaw = record.taxRate ?? record.tax_rate
+  const taxRate = taxRateRaw === '' || taxRateRaw == null ? null : Number(taxRateRaw)
   return {
-    invoice_direction:
-      String(record.invoiceDirection || record.invoice_direction || 'output') === 'input'
-        ? 'input'
-        : 'output',
+    invoice_direction: String(record.invoiceDirection || record.invoice_direction || 'output') === 'input' ? 'input' : 'output',
     invoice_type: (record.invoiceType as string) || null,
     digital_invoice_no: (record.digitalInvoiceNo as string) || null,
     invoice_code: (record.invoiceCode as string) || null,
@@ -189,19 +221,21 @@ export function frontendInvoiceRecordToPayload(record: Record<string, unknown>):
     seller_tax_no: (record.sellerTaxNo as string) || null,
     title: (record.title as string) || null,
     tax_no: (record.taxNo as string) || null,
-    invoice_amount: parseFloat(String(record.amount ?? 0)),
-    tax_amount: parseFloat(String(record.taxAmount ?? 0)),
-    amount_with_tax:
-      parseFloat(String(record.amountWithTax ?? 0)) ||
-      parseFloat(String(record.amount ?? 0)) + parseFloat(String(record.taxAmount ?? 0)),
+    invoice_amount: parseFloat(String(record.amount ?? 0)) || 0,
+    tax_amount: parseFloat(String(record.taxAmount ?? 0)) || 0,
+    amount_with_tax: parseFloat(String(record.amountWithTax ?? 0)) || (parseFloat(String(record.amount ?? 0)) || 0) + (parseFloat(String(record.taxAmount ?? 0)) || 0),
+    tax_rate: Number.isFinite(taxRate) ? taxRate : null,
     invoice_date: (record.issueDate as string) || null,
     issuer: (record.issuer as string) || null,
     invoice_source: (record.invoiceSource as string) || null,
+    source_file_name: (record.sourceFileName as string) || null,
+    source_file_url: (record.sourceFileUrl as string) || null,
+    source_file_type: (record.sourceFileType as string) || null,
+    source_file_size: Number(record.sourceFileSize || 0) || null,
     tax_status: (record.taxStatus as string) || derivedTaxStatus,
     original_invoice_id: (record.originalInvoiceId as string) || null,
     status: displayStatus,
-    remark:
-      record.remark != null && String(record.remark).trim() !== '' ? String(record.remark) : null,
+    remark: record.remark != null && String(record.remark).trim() !== '' ? String(record.remark) : null,
     verified: Boolean(record.verified),
     verified_amount: verifiedAmt,
     verified_record_ids: ids
@@ -211,6 +245,5 @@ export function frontendInvoiceRecordToPayload(record: Record<string, unknown>):
 export function getInvoiceRecordId(record: Record<string, unknown> | null | undefined): string {
   if (record == null) return ''
   const v = record.id
-  if (v === undefined || v === null || v === '') return ''
-  return String(v)
+  return v === undefined || v === null || v === '' ? '' : String(v)
 }

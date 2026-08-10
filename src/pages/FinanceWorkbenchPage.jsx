@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import PageContainer from '@/components/layout/PageContainer.jsx'
+import ElectronicInvoiceQuickEntry from '@/components/invoice/ElectronicInvoiceQuickEntry.jsx'
 import { useAppState } from '@/app/AppStateContext.jsx'
 import { VIEWS } from '@/app/routes.js'
 import { useAuth } from '@/features/auth/AuthContext.jsx'
@@ -37,7 +38,7 @@ function statusLabel(status) {
 
 function FinanceWorkbenchPage() {
   const { user } = useAuth()
-  const { showToast, setActiveView, openBill360 } = useAppState()
+  const { showToast, setActiveView, openBill360, invoice } = useAppState()
   const [status, setStatus] = useState('all')
   const [summary, setSummary] = useState(null)
   const [tasks, setTasks] = useState([])
@@ -64,18 +65,16 @@ function FinanceWorkbenchPage() {
       .catch((error) => {
         if (!cancelled) showToast(error instanceof Error ? error.message : '财务任务读取失败', 'error')
       })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
+      .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
   }, [revision, showToast, status])
 
   useEffect(() => {
-    if (!selected) {
+    if (!selected || selected.status === 'completed' || selected.status === 'rejected') {
       setBillSummary(null)
       setInvoiceId('')
       setAllocatedAmount('')
-      return
+      return undefined
     }
     let cancelled = false
     setDetailLoading(true)
@@ -96,12 +95,8 @@ function FinanceWorkbenchPage() {
           setAllocatedAmount('')
         }
       })
-      .catch(() => {
-        if (!cancelled) setBillSummary(null)
-      })
-      .finally(() => {
-        if (!cancelled) setDetailLoading(false)
-      })
+      .catch(() => { if (!cancelled) setBillSummary(null) })
+      .finally(() => { if (!cancelled) setDetailLoading(false) })
     return () => { cancelled = true }
   }, [selected, revision])
 
@@ -141,11 +136,11 @@ function FinanceWorkbenchPage() {
     }
   }
 
-  const handleComplete = async () => {
+  const handleCompleteExisting = async () => {
     if (!selected || !invoiceId) return showToast('请先选择已录入的销项发票', 'error')
     const amount = Number(allocatedAmount)
     if (!Number.isFinite(amount) || amount <= 0) return showToast('请输入有效关联金额', 'error')
-    if (!window.confirm(`确认用该销项发票完成任务？\n\n本次关联：${money(amount)}\n完成后会自动关联回来源账单。`)) return
+    if (!window.confirm(`确认用已录入发票完成任务？\n\n本次关联：${money(amount)}`)) return
     setBusy(selected.id)
     try {
       await completeFinanceInvoiceTask(selected.id, { invoice_id: invoiceId, allocated_amount: amount })
@@ -157,6 +152,12 @@ function FinanceWorkbenchPage() {
     } finally {
       setBusy('')
     }
+  }
+
+  const handleQuickSaved = async () => {
+    try { await invoice?.refetchInvoiceFromApi?.() } catch { /* best effort */ }
+    setSelected(null)
+    refresh()
   }
 
   return (
@@ -238,30 +239,45 @@ function FinanceWorkbenchPage() {
               ) : selected.status === 'rejected' ? (
                 <section className="finance-task-rejected"><strong>已驳回</strong><span>{selected.reject_reason || '未填写原因'}</span></section>
               ) : (
-                <section className="finance-task-process">
-                  <header><div><span>实际发票</span><h3>录票后完成并自动关联</h3></div><button type="button" onClick={() => setActiveView(VIEWS.INVOICE_CREATE)}>＋ 录入销项发票</button></header>
-                  {detailLoading ? <div className="finance-task-loading">正在查找可关联销项发票…</div> : null}
-                  {!detailLoading && !billSummary?.candidates?.length ? <div className="finance-task-hint">暂未找到可关联的销项发票。先点击“录入销项发票”，保存后回到这里刷新即可。</div> : null}
-                  {billSummary?.candidates?.length ? (
-                    <>
-                      <label><span>选择已开销项发票</span><select value={invoiceId} onChange={(event) => {
-                        const nextId = event.target.value
-                        setInvoiceId(nextId)
-                        const candidate = billSummary.candidates.find((item) => String(item.invoice.id) === nextId)
-                        if (candidate) setAllocatedAmount(String(Math.min(Number(selected.requested_amount || 0), Number(candidate.available_amount || 0), Number(billSummary.remaining_amount || 0)).toFixed(2)))
-                      }}><option value="">请选择</option>{billSummary.candidates.map((candidate) => <option key={candidate.invoice.id} value={candidate.invoice.id}>{candidate.invoice.number} · {candidate.invoice.counterparty_name} · 可分配 {money(candidate.available_amount)}</option>)}</select></label>
-                      {selectedCandidate ? <div className="finance-task-candidate"><span>{selectedCandidate.invoice.number}</span><strong>{money(selectedCandidate.invoice.gross_amount)}</strong><small>{selectedCandidate.match_reasons?.join(' · ') || '候选销项发票'}</small></div> : null}
-                      <label><span>本次关联金额</span><input type="number" step="0.01" min="0.01" value={allocatedAmount} onChange={(event) => setAllocatedAmount(event.target.value)} /></label>
-                    </>
-                  ) : null}
-                </section>
+                <>
+                  <section className="finance-task-process">
+                    <header><div><span>电子专票极速处理</span><h3>拖入发票，核对后直接完成</h3></div></header>
+                    <ElectronicInvoiceQuickEntry
+                      compact
+                      task={selected}
+                      direction="output"
+                      showToast={showToast}
+                      onSaved={() => void handleQuickSaved()}
+                    />
+                  </section>
+
+                  <details className="finance-task-existing-invoice">
+                    <summary>这张发票已经在系统里？使用已录入发票</summary>
+                    <div className="finance-task-process">
+                      {detailLoading ? <div className="finance-task-loading">正在查找可关联销项发票…</div> : null}
+                      {!detailLoading && !billSummary?.candidates?.length ? <div className="finance-task-hint">当前没有可关联的已录入销项发票。</div> : null}
+                      {billSummary?.candidates?.length ? (
+                        <>
+                          <label><span>选择已开销项发票</span><select value={invoiceId} onChange={(event) => {
+                            const nextId = event.target.value
+                            setInvoiceId(nextId)
+                            const candidate = billSummary.candidates.find((item) => String(item.invoice.id) === nextId)
+                            if (candidate) setAllocatedAmount(String(Math.min(Number(selected.requested_amount || 0), Number(candidate.available_amount || 0), Number(billSummary.remaining_amount || 0)).toFixed(2)))
+                          }}><option value="">请选择</option>{billSummary.candidates.map((candidate) => <option key={candidate.invoice.id} value={candidate.invoice.id}>{candidate.invoice.number} · {candidate.invoice.counterparty_name} · 可分配 {money(candidate.available_amount)}</option>)}</select></label>
+                          {selectedCandidate ? <div className="finance-task-candidate"><span>{selectedCandidate.invoice.number}</span><strong>{money(selectedCandidate.invoice.gross_amount)}</strong><small>{selectedCandidate.match_reasons?.join(' · ') || '候选销项发票'}</small></div> : null}
+                          <label><span>本次关联金额</span><input type="number" step="0.01" min="0.01" value={allocatedAmount} onChange={(event) => setAllocatedAmount(event.target.value)} /></label>
+                          <button type="button" className="is-primary" disabled={busy === selected.id || !invoiceId} onClick={() => void handleCompleteExisting()}>使用已有发票完成</button>
+                        </>
+                      ) : null}
+                    </div>
+                  </details>
+                </>
               )}
             </main>
             {selected.status === 'pending' || selected.status === 'processing' ? (
               <footer>
                 <button type="button" className="is-danger" disabled={busy === selected.id} onClick={() => void handleReject(selected)}>驳回资料</button>
-                {selected.status === 'pending' ? <button type="button" disabled={busy === selected.id} onClick={() => void handleStart(selected)}>领取任务</button> : null}
-                <button type="button" className="is-primary" disabled={busy === selected.id || !invoiceId} onClick={() => void handleComplete()}>{busy === selected.id ? '处理中…' : '完成开票并关联'}</button>
+                {selected.status === 'pending' ? <button type="button" disabled={busy === selected.id} onClick={() => void handleStart(selected)}>仅领取任务</button> : null}
               </footer>
             ) : null}
           </aside>
