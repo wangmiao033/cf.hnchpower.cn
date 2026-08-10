@@ -6,15 +6,26 @@ from datetime import datetime, timezone
 from typing import Any
 
 import psycopg
-from fastapi import HTTPException, Query, Request
+from fastapi import FastAPI, HTTPException, Query, Request
 from psycopg.rows import dict_row
 
 try:
-    from .main import app, _database_url, _ensure_table, _require_permission
+    from .main import app as _base_app, _database_url, _ensure_table, _require_permission
     from .matcher import evaluate_line, summarize_results
 except ImportError:  # Vercel loads service modules from the service root.
-    from main import app, _database_url, _ensure_table, _require_permission
+    from main import app as _base_app, _database_url, _ensure_table, _require_permission
     from matcher import evaluate_line, summarize_results
+
+# Vercel's Python builder discovers handlers statically. Keep an explicit
+# top-level FastAPI assignment in this entrypoint, then reuse all existing
+# contract-terms routes from the stable base service.
+app = FastAPI(
+    title="contract-terms-reconciliation",
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
+)
+app.router.routes.extend(list(_base_app.router.routes))
 
 
 def _float(value: Any) -> float:
