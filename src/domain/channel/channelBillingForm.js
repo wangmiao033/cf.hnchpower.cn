@@ -3,6 +3,7 @@ import { getChannelLineItems } from '@/domain/channel/channelAggregates.js'
 
 export const CHANNEL_RULE_PRESETS = {
   legacy_fixed_fee_tax: { label: '固定通道费 + 分成税（旧规则）', feeMode: 'fixed', taxMode: 'share' },
+  five_percent_gateway_share: { label: '5%支付通道费后分成（不扣税）', feeMode: 'percent', taxMode: 'none', feeRate: 5 },
   xiaomi_percent_fee: { label: '百分比渠道费，税率仅记录（小米类）', feeMode: 'percent', taxMode: 'none', feeRate: 5 },
   percent_fee_after_tax: { label: '百分比渠道费后再扣税', feeMode: 'percent', taxMode: 'after_fee' },
   share_only: { label: '仅按可分成金额 × 分成比例', feeMode: 'none', taxMode: 'none' },
