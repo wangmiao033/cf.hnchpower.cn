@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import re
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -43,6 +44,15 @@ def _actor_name(user: AuthUser) -> str:
 def _invoice_gross(invoice: InvoiceRecord) -> float:
     gross = float(invoice.amount_with_tax or 0)
     return abs(gross if gross != 0 else float(invoice.invoice_amount or 0) + float(invoice.tax_amount or 0))
+
+
+def _company_key(value: str | None) -> str:
+    normalized = re.sub(r"[\s\W_]+", "", str(value or "").lower())
+    for suffix in ("有限责任公司", "股份有限公司", "有限公司"):
+        if normalized.endswith(suffix):
+            normalized = normalized[: -len(suffix)]
+            break
+    return normalized
 
 
 def _allocated_to_bill(db: Session, bill_type: str, bill_id: str) -> float:
@@ -88,15 +98,9 @@ def submit_channel_invoice_request(
         raise HTTPException(status_code=404, detail={"error": "bill_not_found", "id": bill_id})
     bill_status = str(bill.status or "pending").strip().lower()
     if bill_status in {"pending", "draft", "cancelled", "canceled", "void", "deleted"}:
-        raise HTTPException(
-            status_code=409,
-            detail={"error": "bill_not_confirmed", "message": "渠道账单尚未核对完成，不能提交开票。"},
-        )
+        raise HTTPException(status_code=409, detail={"error": "bill_not_confirmed", "message": "渠道账单尚未核对完成，不能提交开票。"})
     if str(getattr(bill, "validation_status", "unvalidated") or "unvalidated") == "fail":
-        raise HTTPException(
-            status_code=409,
-            detail={"error": "bill_validation_failed", "message": "平台结算金额校验未通过，不能提交开票。"},
-        )
+        raise HTTPException(status_code=409, detail={"error": "bill_validation_failed", "message": "平台结算金额校验未通过，不能提交开票。"})
 
     active = db.execute(
         select(FinanceInvoiceTask).where(
@@ -112,10 +116,7 @@ def submit_channel_invoice_request(
     bill_amount = abs(float(bill.settlement_amount or 0))
     remaining = round(max(0, bill_amount - _allocated_to_bill(db, "channel", bill_id)), 2)
     if remaining <= 0.01:
-        raise HTTPException(
-            status_code=409,
-            detail={"error": "invoice_fully_covered", "message": "该账单发票已覆盖，无需再次提交开票。"},
-        )
+        raise HTTPException(status_code=409, detail={"error": "invoice_fully_covered", "message": "该账单发票已覆盖，无需再次提交开票。"})
 
     now = _now()
     row = FinanceInvoiceTask(
@@ -209,9 +210,7 @@ def list_invoice_tasks(
         stmt = stmt.where(FinanceInvoiceTask.status == status_filter)
         count_stmt = count_stmt.where(FinanceInvoiceTask.status == status_filter)
     total = int(db.execute(count_stmt).scalar_one() or 0)
-    rows = db.execute(
-        stmt.order_by(FinanceInvoiceTask.submitted_at.desc()).limit(limit).offset(offset)
-    ).scalars().all()
+    rows = db.execute(stmt.order_by(FinanceInvoiceTask.submitted_at.desc()).limit(limit).offset(offset)).scalars().all()
     return FinanceInvoiceTaskListResponse(items=[_task_read(row) for row in rows], total=total)
 
 
@@ -310,6 +309,12 @@ def complete_invoice_task(
         raise HTTPException(status_code=409, detail={"error": "invoice_direction_mismatch", "message": "开票任务只能关联销项发票。"})
     if str(invoice.tax_status or "normal") in {"red", "void"} or str(invoice.status or "") == "作废":
         raise HTTPException(status_code=409, detail={"error": "invoice_not_allocatable", "message": "红冲或作废发票不能完成开票任务。"})
+    if not str(invoice.digital_invoice_no or invoice.invoice_no or "").strip() or not str(invoice.invoice_date or "").strip():
+        raise HTTPException(status_code=409, detail={"error": "invoice_not_issued", "message": "请先录入真实发票号码和开票日期，再完成开票任务。"})
+    bill_company = _company_key(row.partner_name)
+    invoice_company = _company_key(invoice.buyer_name or invoice.title)
+    if bill_company and invoice_company and not (bill_company in invoice_company or invoice_company in bill_company):
+        raise HTTPException(status_code=409, detail={"error": "invoice_partner_mismatch", "message": "销项发票购买方与来源账单合作方不一致，请核对后再关联。"})
 
     existing = db.execute(
         select(BillInvoiceAllocation).where(
