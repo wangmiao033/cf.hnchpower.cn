@@ -28,6 +28,7 @@ import LoginPage from './pages/LoginPage.jsx'
 import '@/styles/admin-polish.css'
 
 const PAGE_LOADERS = Object.freeze({
+  financeWorkbench: () => import('./pages/FinanceWorkbenchPage.jsx'),
   anomalies: () => import('./pages/AnomalyCenterPage.jsx'),
   businessDashboard: () => import('./pages/MonthlyBusinessDashboardPage.jsx'),
   profitAnalysis: () => import('./pages/ProfitAnalysisPage.jsx'),
@@ -53,6 +54,7 @@ const PAGE_LOADERS = Object.freeze({
   userCenter: () => import('./pages/UserCenterPage.jsx')
 })
 
+const FinanceWorkbenchPage = lazy(PAGE_LOADERS.financeWorkbench)
 const AnomalyCenterPage = lazy(PAGE_LOADERS.anomalies)
 const MonthlyBusinessDashboardPage = lazy(PAGE_LOADERS.businessDashboard)
 const ProfitAnalysisPage = lazy(PAGE_LOADERS.profitAnalysis)
@@ -103,7 +105,7 @@ function scheduleIdleTask(callback) {
 }
 
 function App() {
-  const { isAuthenticated, loading, can } = useAuth()
+  const { user, isAuthenticated, loading, can } = useAuth()
   const [activeView, setActiveViewState] = useState(VIEWS.DASHBOARD)
   const [openTabs, setOpenTabs] = useState(readOpenTabs)
   const [reconEditRecordId, setReconEditRecordId] = useState(null)
@@ -115,6 +117,7 @@ function App() {
   const prevActiveViewRef = useRef(activeView)
   const activeViewRef = useRef(activeView)
   const navigationBlockerRef = useRef(null)
+  const roleLandingUserRef = useRef('')
   const [toast, setToast] = useState({ isVisible: false, message: '', type: 'success' })
 
   const showToast = useCallback((message, type = 'success') => {
@@ -127,6 +130,16 @@ function App() {
   const settings = useSettingsStore({ showToast, enabled: isAuthenticated && !loading })
   const recon = useReconciliationStore(settings, showToast, { enabled: hasReconciliationAccess })
   const invoice = useInvoiceStore({ showToast, enabled: hasInvoiceAccess })
+
+  useEffect(() => {
+    if (!isAuthenticated || loading || !user?.id) return
+    if (roleLandingUserRef.current === String(user.id)) return
+    roleLandingUserRef.current = String(user.id)
+    if (user.role === 'finance' && canOpenView(can, VIEWS.FINANCE_WORKBENCH)) {
+      setActiveViewState(VIEWS.FINANCE_WORKBENCH)
+      setOpenTabs((current) => current.includes(VIEWS.FINANCE_WORKBENCH) ? current : [...current, VIEWS.FINANCE_WORKBENCH])
+    }
+  }, [isAuthenticated, loading, user?.id, user?.role, can])
 
   useEffect(() => {
     if (!hasReconciliationAccess) return undefined
@@ -164,10 +177,10 @@ function App() {
     setOpenTabs((current) => current.filter((view) => canOpenView(can, view)))
     if (!canOpenView(can, activeView)) {
       navigationBlockerRef.current = null
-      setActiveViewState(VIEWS.DASHBOARD)
+      setActiveViewState(user?.role === 'finance' && canOpenView(can, VIEWS.FINANCE_WORKBENCH) ? VIEWS.FINANCE_WORKBENCH : VIEWS.DASHBOARD)
       setBill360Target(null)
     }
-  }, [isAuthenticated, loading, can, activeView])
+  }, [isAuthenticated, loading, can, activeView, user?.role])
 
   const setNavigationBlocker = useCallback((blocker) => {
     navigationBlockerRef.current = blocker?.active && blocker?.view ? blocker : null
@@ -222,9 +235,9 @@ function App() {
       const closedIndex = groupTabs.indexOf(view)
       const previousTab = [...groupTabs.slice(0, Math.max(closedIndex, 0))].reverse().find((tab) => remainingTabs.includes(tab) && canOpenView(can, tab))
       const nextTab = groupTabs.slice(Math.max(closedIndex + 1, 0)).find((tab) => remainingTabs.includes(tab) && canOpenView(can, tab))
-      setActiveViewState(previousTab || nextTab || VIEWS.DASHBOARD)
+      setActiveViewState(previousTab || nextTab || (user?.role === 'finance' ? VIEWS.FINANCE_WORKBENCH : VIEWS.DASHBOARD))
     })
-  }, [activeView, openTabs, confirmLeaveCurrentView, can])
+  }, [activeView, openTabs, confirmLeaveCurrentView, can, user?.role])
 
   const hideToast = useCallback(() => setToast((t) => ({ ...t, isVisible: false })), [])
 
@@ -282,6 +295,7 @@ function App() {
   const renderView = () => {
     if (!canOpenView(can, activeView)) return <CoreDashboardPage />
     switch (activeView) {
+      case VIEWS.FINANCE_WORKBENCH: return <FinanceWorkbenchPage />
       case VIEWS.ANOMALIES: return <AnomalyCenterPage />
       case VIEWS.BUSINESS_DASHBOARD: return <MonthlyBusinessDashboardPage />
       case VIEWS.PROFIT_ANALYSIS: return <ProfitAnalysisPage />

@@ -81,24 +81,27 @@ export function calculateBillingAmount(data) {
 }
 export function calculateShareAmount(data) { return calculateBillingAmount(data) * Number(data.shareRate || 0) / 100 }
 
-export function calculateSettlementDetails(data, header = initialHeaderForm) {
+function calculateSettlementRaw(data, header = initialHeaderForm) {
   const shareAmount = calculateShareAmount(data)
   const feeMode = header.channelFeeMode || 'fixed'; const taxMode = header.taxMode || 'share'
   let afterFee = shareAmount
   if (feeMode === 'percent') afterFee = shareAmount * (1 - Number(header.channelFeeRate || 0) / 100)
   else if (feeMode === 'fixed') afterFee = shareAmount - Number(data.gatewayCost || 0)
   const taxRate = Number(data.taxRate || 0) / 100
-  let system = afterFee
-  if (taxMode === 'share') system = afterFee - shareAmount * taxRate
-  else if (taxMode === 'after_fee') system = afterFee * (1 - taxRate)
-  system = round2(system)
+  if (taxMode === 'share') return afterFee - shareAmount * taxRate
+  if (taxMode === 'after_fee') return afterFee * (1 - taxRate)
+  return afterFee
+}
+
+export function calculateSettlementDetails(data, header = initialHeaderForm) {
+  const system = round2(calculateSettlementRaw(data, header))
   const platform = optionalNumber(data.platformSettlementAmount)
   const difference = platform == null ? null : round2(system - platform)
   const tolerance = Math.max(0, Number(header.validationTolerance || 0.05))
   const validationStatus = platform == null ? 'unvalidated' : Math.abs(difference) <= tolerance ? 'pass' : 'fail'
   return { systemSettlementAmount: system, platformSettlementAmount: platform, settlementDifference: difference, validationStatus, settlementAmount: platform == null ? system : round2(platform) }
 }
-export function calculateSettlement(data, header = initialHeaderForm) { return calculateSettlementDetails(data, header).systemSettlementAmount }
+export function calculateSettlement(data, header = initialHeaderForm) { return calculateSettlementRaw(data, header) }
 
 export function buildLineRecordFromForm(fd, headerForm = initialHeaderForm) {
   const details = calculateSettlementDetails(fd, headerForm)
