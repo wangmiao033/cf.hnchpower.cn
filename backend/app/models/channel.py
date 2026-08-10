@@ -27,6 +27,7 @@ class ChannelRecord(Base):
     refund_cost: Mapped[float] = mapped_column(Numeric(18, 2), nullable=False, default=0)
     test_cost: Mapped[float] = mapped_column(Numeric(18, 2), nullable=False, default=0)
     welfare_cost: Mapped[float] = mapped_column(Numeric(18, 2), nullable=False, default=0)
+    coin_cost: Mapped[float] = mapped_column(Numeric(18, 2), nullable=False, default=0)
     share_rate: Mapped[float] = mapped_column(Numeric(10, 4), nullable=False, default=0)
     billing_amount: Mapped[float] = mapped_column(Numeric(18, 2), nullable=False, default=0)
     share_amount: Mapped[float] = mapped_column(Numeric(18, 2), nullable=False, default=0)
@@ -53,12 +54,8 @@ class ChannelRecord(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
-    line_items: Mapped[list["ChannelRecordLineItem"]] = relationship(
-        "ChannelRecordLineItem", back_populates="parent", cascade="all, delete-orphan", order_by="ChannelRecordLineItem.sort_order"
-    )
-    receipts: Mapped[list["ChannelReceipt"]] = relationship(
-        "ChannelReceipt", back_populates="channel_record", cascade="all, delete-orphan"
-    )
+    line_items: Mapped[list["ChannelRecordLineItem"]] = relationship("ChannelRecordLineItem", back_populates="parent", cascade="all, delete-orphan", order_by="ChannelRecordLineItem.sort_order")
+    receipts: Mapped[list["ChannelReceipt"]] = relationship("ChannelReceipt", back_populates="channel_record", cascade="all, delete-orphan")
 
 
 class ChannelRecordLineItem(Base):
@@ -76,6 +73,7 @@ class ChannelRecordLineItem(Base):
     refund_cost: Mapped[float] = mapped_column(Numeric(18, 2), nullable=False, default=0)
     test_cost: Mapped[float] = mapped_column(Numeric(18, 2), nullable=False, default=0)
     welfare_cost: Mapped[float] = mapped_column(Numeric(18, 2), nullable=False, default=0)
+    coin_cost: Mapped[float] = mapped_column(Numeric(18, 2), nullable=False, default=0)
     share_rate: Mapped[float] = mapped_column(Numeric(10, 4), nullable=False, default=0)
     billing_amount: Mapped[float] = mapped_column(Numeric(18, 2), nullable=False, default=0)
     share_amount: Mapped[float] = mapped_column(Numeric(18, 2), nullable=False, default=0)
