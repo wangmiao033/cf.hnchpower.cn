@@ -64,6 +64,7 @@ def _sync_denormalized_totals(row: ChannelRecord, db: Session) -> None:
     row.refund_cost = float(sum(float(i.refund_cost or 0) for i in items))
     row.test_cost = float(sum(float(i.test_cost or 0) for i in items))
     row.welfare_cost = float(sum(float(i.welfare_cost or 0) for i in items))
+    row.coin_cost = float(sum(float(i.coin_cost or 0) for i in items))
     row.billing_amount = float(sum(float(i.billing_amount or 0) for i in items))
     row.share_amount = float(sum(float(i.share_amount or 0) for i in items))
     row.gateway_cost = float(sum(float(i.gateway_cost or 0) for i in items))
@@ -88,7 +89,7 @@ def _legacy_items_from_row(row: ChannelRecord) -> list[ChannelLineItemRead]:
             game_name=row.game_name, billing_flow=float(row.billing_flow or 0), discount_factor=1.0,
             voucher_cost=float(row.voucher_cost or 0), no_worry_cost=float(row.no_worry_cost or 0),
             refund_cost=float(row.refund_cost or 0), test_cost=float(row.test_cost or 0),
-            welfare_cost=float(row.welfare_cost or 0), share_rate=float(row.share_rate or 0),
+            welfare_cost=float(row.welfare_cost or 0), coin_cost=float(row.coin_cost or 0), share_rate=float(row.share_rate or 0),
             billing_amount=float(row.billing_amount or 0), share_amount=float(row.share_amount or 0),
             tax_rate=float(row.tax_rate or 0), gateway_cost=float(row.gateway_cost or 0),
             platform_settlement_amount=row.platform_settlement_amount,
