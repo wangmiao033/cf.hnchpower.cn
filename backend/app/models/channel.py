@@ -42,21 +42,22 @@ class ChannelRecord(Base):
     channel_fee_rate: Mapped[float | None] = mapped_column(Numeric(10, 4), nullable=True)
     dev_share_rate: Mapped[float | None] = mapped_column(Numeric(10, 4), nullable=True)
     profit_rate: Mapped[float | None] = mapped_column(Numeric(10, 4), nullable=True)
+    settlement_rule_code: Mapped[str] = mapped_column(String(40), nullable=False, default="legacy_fixed_fee_tax")
+    channel_fee_mode: Mapped[str] = mapped_column(String(16), nullable=False, default="fixed")
+    tax_mode: Mapped[str] = mapped_column(String(16), nullable=False, default="share")
+    validation_tolerance: Mapped[float] = mapped_column(Numeric(18, 2), nullable=False, default=0.05)
+    system_settlement_amount: Mapped[float] = mapped_column(Numeric(18, 2), nullable=False, default=0)
+    platform_settlement_amount: Mapped[float | None] = mapped_column(Numeric(18, 2), nullable=True)
+    settlement_difference: Mapped[float | None] = mapped_column(Numeric(18, 2), nullable=True)
+    validation_status: Mapped[str] = mapped_column(String(16), nullable=False, default="unvalidated", index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
-    )
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
     line_items: Mapped[list["ChannelRecordLineItem"]] = relationship(
-        "ChannelRecordLineItem",
-        back_populates="parent",
-        cascade="all, delete-orphan",
-        order_by="ChannelRecordLineItem.sort_order",
+        "ChannelRecordLineItem", back_populates="parent", cascade="all, delete-orphan", order_by="ChannelRecordLineItem.sort_order"
     )
     receipts: Mapped[list["ChannelReceipt"]] = relationship(
-        "ChannelReceipt",
-        back_populates="channel_record",
-        cascade="all, delete-orphan",
+        "ChannelReceipt", back_populates="channel_record", cascade="all, delete-orphan"
     )
 
 
@@ -64,9 +65,7 @@ class ChannelRecordLineItem(Base):
     __tablename__ = "channel_record_line_items"
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
-    channel_record_id: Mapped[str] = mapped_column(
-        String, ForeignKey("channel_records.id", ondelete="CASCADE"), nullable=False, index=True
-    )
+    channel_record_id: Mapped[str] = mapped_column(String, ForeignKey("channel_records.id", ondelete="CASCADE"), nullable=False, index=True)
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     settlement_cycle: Mapped[str | None] = mapped_column(String(16), nullable=True, index=True)
     game_name: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -82,24 +81,22 @@ class ChannelRecordLineItem(Base):
     share_amount: Mapped[float] = mapped_column(Numeric(18, 2), nullable=False, default=0)
     tax_rate: Mapped[float] = mapped_column(Numeric(10, 4), nullable=False, default=0)
     gateway_cost: Mapped[float] = mapped_column(Numeric(18, 2), nullable=False, default=0)
+    platform_settlement_amount: Mapped[float | None] = mapped_column(Numeric(18, 2), nullable=True)
+    system_settlement_amount: Mapped[float] = mapped_column(Numeric(18, 2), nullable=False, default=0)
+    settlement_difference: Mapped[float | None] = mapped_column(Numeric(18, 2), nullable=True)
+    validation_status: Mapped[str] = mapped_column(String(16), nullable=False, default="unvalidated")
     settlement_amount: Mapped[float] = mapped_column(Numeric(18, 2), nullable=False, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
-    )
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
     parent: Mapped[ChannelRecord] = relationship("ChannelRecord", back_populates="line_items")
 
 
 class ChannelReceipt(Base):
-    """渠道对账单笔收款明细。"""
-
     __tablename__ = "channel_receipts"
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
-    channel_record_id: Mapped[str] = mapped_column(
-        String, ForeignKey("channel_records.id", ondelete="CASCADE"), nullable=False, index=True
-    )
+    channel_record_id: Mapped[str] = mapped_column(String, ForeignKey("channel_records.id", ondelete="CASCADE"), nullable=False, index=True)
     amount: Mapped[float] = mapped_column(Numeric(18, 2), nullable=False, default=0)
     receipt_date: Mapped[str | None] = mapped_column(String(32), nullable=True)
     bank_account: Mapped[str | None] = mapped_column(String(512), nullable=True)
