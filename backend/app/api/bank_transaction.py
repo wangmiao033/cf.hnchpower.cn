@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
@@ -16,6 +17,8 @@ from app.core.blob_storage import private_blob_response, upload_private_blob
 from app.core.deps import get_db
 from app.models.bank_transaction import BankTransaction
 from app.schemas.bank_transaction import (
+    BankTransactionBulkImportRequest,
+    BankTransactionBulkImportResponse,
     BankTransactionCreate,
     BankTransactionListResponse,
     BankTransactionRead,
@@ -31,6 +34,47 @@ _MATCH_SAFE_UPDATE_FIELDS = frozenset({"remark", "attachment_url"})
 
 def _row_to_read(row: BankTransaction) -> BankTransactionRead:
     return BankTransactionRead.model_validate(row)
+
+
+def _clean_text(value: object | None) -> str:
+    return str(value or "").strip()
+
+
+def _money_key(value: object | None) -> str:
+    if value is None or value == "":
+        return ""
+    try:
+        return f"{Decimal(str(value)).quantize(Decimal('0.01')):.2f}"
+    except Exception:
+        return _clean_text(value)
+
+
+def _build_dedupe_key(data: dict) -> str:
+    """Stable import signature independent of file name / row position."""
+    source_bank = _clean_text(data.get("source_bank")).upper() or "BANK"
+    pieces = (
+        source_bank,
+        _clean_text(data.get("trade_date")),
+        _money_key(data.get("income_amount")),
+        _money_key(data.get("expense_amount")),
+        _money_key(data.get("balance")),
+        _clean_text(data.get("payer_name")),
+        _clean_text(data.get("payer_account")),
+        _clean_text(data.get("payee_name")),
+        _clean_text(data.get("payee_account")),
+        _clean_text(data.get("transaction_no")),
+        _clean_text(data.get("summary")),
+        _clean_text(data.get("purpose")),
+    )
+    return hashlib.sha256("\x1f".join(pieces).encode("utf-8")).hexdigest()
+
+
+def _valid_statement_import(data: dict) -> bool:
+    if not _clean_text(data.get("trade_date")):
+        return False
+    income = Decimal(str(data.get("income_amount") or 0))
+    expense = Decimal(str(data.get("expense_amount") or 0))
+    return (income > 0) ^ (expense > 0)
 
 
 @router.get("", response_model=BankTransactionListResponse)
@@ -72,6 +116,7 @@ def list_bank_transactions(
                 BankTransaction.instruction_no.ilike(term),
                 BankTransaction.remark.ilike(term),
                 BankTransaction.summary.ilike(term),
+                BankTransaction.source_file_name.ilike(term),
             )
         )
     total = int(db.execute(select(func.count()).select_from(stmt.subquery())).scalar_one())
@@ -101,6 +146,69 @@ async def download_bank_transaction_attachment(file_id: str) -> StreamingRespons
     return await private_blob_response(f"bank-transactions/{safe_name}", file_name=safe_name, inline=True)
 
 
+@router.post("/bulk-import", response_model=BankTransactionBulkImportResponse, status_code=status.HTTP_201_CREATED)
+def bulk_import_bank_transactions(
+    payload: BankTransactionBulkImportRequest,
+    db: Session = Depends(get_db),
+) -> BankTransactionBulkImportResponse:
+    source_bank = _clean_text(payload.source_bank).upper() or "ICBC"
+    source_file_name = _clean_text(payload.source_file_name) or None
+    bank_account = _clean_text(payload.bank_account) or None
+
+    prepared: list[tuple[dict, str, int | None]] = []
+    invalid_rows: list[int] = []
+    for item in payload.items:
+        data = item.model_dump(exclude_unset=True)
+        data["type"] = "statement_import"
+        data["source_bank"] = source_bank
+        if source_file_name:
+            data["source_file_name"] = source_file_name
+        if bank_account:
+            data["bank_account"] = bank_account
+        row_no = data.get("source_row_no")
+        if not _valid_statement_import(data):
+            if isinstance(row_no, int):
+                invalid_rows.append(row_no)
+            continue
+        dedupe_key = _build_dedupe_key(data)
+        data["dedupe_key"] = dedupe_key
+        prepared.append((data, dedupe_key, row_no if isinstance(row_no, int) else None))
+
+    keys = [key for _, key, _ in prepared]
+    existing_keys: set[str] = set()
+    if keys:
+        existing_keys = set(
+            db.execute(
+                select(BankTransaction.dedupe_key).where(BankTransaction.dedupe_key.in_(keys))
+            ).scalars().all()
+        )
+        existing_keys.discard(None)
+
+    seen = set(existing_keys)
+    duplicate_rows: list[int] = []
+    inserted = 0
+    for data, dedupe_key, row_no in prepared:
+        if dedupe_key in seen:
+            if row_no is not None:
+                duplicate_rows.append(row_no)
+            continue
+        row = BankTransaction(id=str(uuid4()), **data)
+        db.add(row)
+        seen.add(dedupe_key)
+        inserted += 1
+
+    db.commit()
+    duplicates = len(prepared) - inserted
+    return BankTransactionBulkImportResponse(
+        total=len(payload.items),
+        inserted=inserted,
+        duplicates=duplicates,
+        invalid=len(invalid_rows),
+        duplicate_row_nos=duplicate_rows,
+        invalid_row_nos=invalid_rows,
+    )
+
+
 @router.get("/{transaction_id}", response_model=BankTransactionRead)
 def get_bank_transaction(transaction_id: str, db: Session = Depends(get_db)) -> BankTransactionRead:
     row = db.get(BankTransaction, transaction_id)
@@ -113,7 +221,18 @@ def get_bank_transaction(transaction_id: str, db: Session = Depends(get_db)) -> 
 def create_bank_transaction(payload: BankTransactionCreate, db: Session = Depends(get_db)) -> BankTransactionRead:
     if payload.type not in _ALLOWED_TYPES:
         raise HTTPException(status_code=400, detail={"error": "invalid_type", "allowed": list(_ALLOWED_TYPES)})
-    row = BankTransaction(id=str(uuid4()), **payload.model_dump(exclude_unset=True))
+    data = payload.model_dump(exclude_unset=True)
+    if payload.type == "statement_import" and _clean_text(data.get("source_bank")):
+        data["dedupe_key"] = _build_dedupe_key(data)
+        exists = db.execute(
+            select(BankTransaction.id).where(BankTransaction.dedupe_key == data["dedupe_key"]).limit(1)
+        ).scalar_one_or_none()
+        if exists:
+            raise HTTPException(
+                status_code=409,
+                detail={"error": "duplicate_bank_transaction", "message": "该银行流水已存在，无需重复录入。"},
+            )
+    row = BankTransaction(id=str(uuid4()), **data)
     db.add(row)
     db.commit()
     db.refresh(row)
