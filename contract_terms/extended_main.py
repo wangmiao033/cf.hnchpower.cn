@@ -12,9 +12,11 @@ from psycopg.rows import dict_row
 try:
     from .main import app as _base_app, _database_url, _ensure_table, _require_permission
     from .matcher import evaluate_line, summarize_results
+    from .channel_rule_recommender import recommend_channel_rules
 except ImportError:  # Vercel loads service modules from the service root.
     from main import app as _base_app, _database_url, _ensure_table, _require_permission
     from matcher import evaluate_line, summarize_results
+    from channel_rule_recommender import recommend_channel_rules
 
 # Vercel's Python builder discovers handlers statically. Keep an explicit
 # top-level FastAPI assignment in this entrypoint, then reuse all existing
@@ -267,6 +269,25 @@ def _bill_level_checks(bill: dict, line_results: list[dict]) -> list[dict]:
             }
         )
     return checks
+
+
+@app.post("/api/contract-terms/channel-rule-recommendation")
+def recommend_channel_rule(request: Request, payload: dict) -> dict:
+    """Match a draft channel bill to contract access items before the bill exists."""
+    _require_permission(request, "contracts.view")
+    partner_name = str(payload.get("partner_name") or "").strip()
+    channel_name = str(payload.get("channel_name") or "").strip()
+    lines = payload.get("lines") if isinstance(payload.get("lines"), list) else []
+    if not partner_name:
+        raise HTTPException(status_code=422, detail="请先选择合作方，再自动匹配合同规则")
+    if not lines:
+        raise HTTPException(status_code=422, detail="请至少填写一条游戏明细")
+
+    with psycopg.connect(_database_url(), connect_timeout=15, row_factory=dict_row) as conn:
+        candidates = _candidate_rows(conn)
+        result = recommend_channel_rules(partner_name, channel_name, lines, candidates)
+        conn.commit()
+    return {**result, "generated_at": datetime.now(timezone.utc).isoformat()}
 
 
 @app.get("/api/contract-terms/reconcile")
