@@ -25,6 +25,7 @@ export class ApiError extends Error {
   requestId: string
   errorCode: string
   userMessage: string
+  diagnosticMessage: string
 
   constructor(
     message: string,
@@ -34,14 +35,14 @@ export class ApiError extends Error {
     errorCode = ''
   ) {
     const userMessage = String(message || '').trim() || '请求失败，请稍后重试。'
-    const diagnostic = formatApiDiagnosticMessage(userMessage, errorCode, requestId)
-    super(diagnostic)
+    super(userMessage)
     this.name = 'ApiError'
     this.status = status
     this.body = body
     this.requestId = requestId
     this.errorCode = errorCode
     this.userMessage = userMessage
+    this.diagnosticMessage = formatApiDiagnosticMessage(userMessage, errorCode, requestId)
   }
 }
 
@@ -51,6 +52,12 @@ export function formatApiDiagnosticMessage(message: string, errorCode = '', requ
   if (errorCode) parts.push(`错误码 ${errorCode}`)
   if (requestId) parts.push(`请求 ${requestId}`)
   return parts.length ? `${base}（${parts.join(' · ')}）` : base
+}
+
+export function apiErrorDiagnosticMessage(error: unknown, fallback = '请求失败，请稍后重试。'): string {
+  if (error instanceof ApiError) return error.diagnosticMessage
+  if (error instanceof Error && error.message) return error.message
+  return fallback
 }
 
 function makeRequestId(): string {
@@ -135,7 +142,7 @@ function notifyUnauthorized() {
   window.dispatchEvent(new Event(AUTH_UNAUTHORIZED_EVENT))
 }
 
-function requestHeaders(requestId: string, extra?: HeadersInit): HeadersInit {
+function requestHeaders(requestId: string, extra?: Record<string, string>): HeadersInit {
   return { 'X-Request-ID': requestId, ...(extra || {}) }
 }
 
