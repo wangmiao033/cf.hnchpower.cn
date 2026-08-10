@@ -6,16 +6,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
-from fastapi import APIRouter, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-from fastapi import Depends
 
-from app.core.blob_storage import (
-    MAX_SERVER_UPLOAD_BYTES,
-    private_blob_response,
-    upload_private_blob,
-)
+from app.core.blob_storage import MAX_SERVER_UPLOAD_BYTES, private_blob_response, upload_private_blob
 from app.core.deps import get_db
 from app.models.invoice import InvoiceRecord
 from app.services.electronic_invoice_parser import (
@@ -62,9 +57,8 @@ async def parse_electronic_invoice_file(
         )
 
     parsed = parse_electronic_invoice_text(extracted_text, direction=direction)
-    now = datetime.now(timezone.utc)
-    pathname = f"invoice-files/{now:%Y/%m}/{uuid4().hex}{suffix}"
-    file_url = await upload_private_blob(pathname, body, content_type)
+    confidence = parsed.pop("confidence", 0)
+    warnings = parsed.pop("warnings", [])
 
     digital_no = str(parsed.get("digital_invoice_no") or "").strip()
     invoice_code = str(parsed.get("invoice_code") or "").strip()
@@ -72,23 +66,35 @@ async def parse_electronic_invoice_file(
     identity_key = f"digital:{digital_no}" if digital_no else (
         f"legacy:{invoice_code}:{invoice_no}" if invoice_code and invoice_no else None
     )
-    existing_invoice_id = None
+    existing = None
     if identity_key:
-        existing_invoice_id = db.execute(
-            select(InvoiceRecord.id).where(InvoiceRecord.invoice_identity_key == identity_key).limit(1)
-        ).scalar_one_or_none()
+        existing = db.execute(
+            select(InvoiceRecord).where(InvoiceRecord.invoice_identity_key == identity_key).limit(1)
+        ).scalars().first()
 
-    parsed.update({
-        "source_file_name": original_name,
-        "source_file_url": file_url,
-        "source_file_type": content_type,
-        "source_file_size": len(body),
-    })
+    if existing is not None:
+        parsed.update({
+            "source_file_name": existing.source_file_name or None,
+            "source_file_url": existing.source_file_url or None,
+            "source_file_type": existing.source_file_type or None,
+            "source_file_size": int(existing.source_file_size or 0) or None,
+        })
+    else:
+        now = datetime.now(timezone.utc)
+        pathname = f"invoice-files/{now:%Y/%m}/{uuid4().hex}{suffix}"
+        file_url = await upload_private_blob(pathname, body, content_type)
+        parsed.update({
+            "source_file_name": original_name,
+            "source_file_url": file_url,
+            "source_file_type": content_type,
+            "source_file_size": len(body),
+        })
+
     return {
         "parser": parser,
-        "confidence": parsed.pop("confidence", 0),
-        "warnings": parsed.pop("warnings", []),
-        "existing_invoice_id": existing_invoice_id,
+        "confidence": confidence,
+        "warnings": warnings,
+        "existing_invoice_id": existing.id if existing is not None else None,
         "invoice": parsed,
     }
 
