@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ApiError, formatApiDiagnosticMessage } from './client.ts'
+import { ApiError, apiErrorDiagnosticMessage, formatApiDiagnosticMessage } from './client.ts'
 
 describe('API diagnostics', () => {
   it('adds error code and request id to user-visible diagnostics', () => {
@@ -8,11 +8,13 @@ describe('API diagnostics', () => {
     )
   })
 
-  it('keeps structured diagnostics on ApiError', () => {
+  it('keeps legacy message readable and exposes structured diagnostics', () => {
     const error = new ApiError('数据库查询失败', 500, { error: 'database_error' }, 'REQ-1', 'DB-500')
     expect(error.status).toBe(500)
     expect(error.requestId).toBe('REQ-1')
     expect(error.errorCode).toBe('DB-500')
-    expect(error.message).toContain('请求 REQ-1')
+    expect(error.message).toBe('数据库查询失败')
+    expect(error.diagnosticMessage).toContain('请求 REQ-1')
+    expect(apiErrorDiagnosticMessage(error)).toBe(error.diagnosticMessage)
   })
 })
