@@ -1,0 +1,155 @@
+.bill360-contract-launcher {
+  position: fixed;
+  right: 28px;
+  bottom: 24px;
+  z-index: 1320;
+  min-width: 270px;
+  max-width: min(390px, calc(100vw - 32px));
+  min-height: 54px;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) 16px;
+  gap: 9px;
+  align-items: center;
+  padding: 8px 10px;
+  border: 1px solid #ccd8e8;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, .98);
+  color: #35455c;
+  box-shadow: 0 16px 34px rgba(15, 23, 42, .18);
+  text-align: left;
+  cursor: pointer;
+}
+
+.bill360-contract-launcher > span:first-child {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: #edf3fb;
+  color: #3766a8;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.bill360-contract-launcher > span:nth-child(2) {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.bill360-contract-launcher strong,
+.bill360-contract-launcher small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bill360-contract-launcher strong { font-size: 11px; }
+.bill360-contract-launcher small { color: #8290a3; font-size: 8.5px; }
+.bill360-contract-launcher em { color: #8794a5; font-size: 18px; font-style: normal; }
+
+.bill360-contract-launcher.is-pass { border-color: #bfe3d0; }
+.bill360-contract-launcher.is-pass > span:first-child { background: #eaf8f1; color: #14774a; }
+.bill360-contract-launcher.is-pass strong { color: #176b47; }
+.bill360-contract-launcher.is-warning { border-color: #ead9ad; }
+.bill360-contract-launcher.is-warning > span:first-child { background: #fff5dd; color: #9a6612; }
+.bill360-contract-launcher.is-warning strong { color: #8c621a; }
+.bill360-contract-launcher.is-fail { border-color: #edc2c2; }
+.bill360-contract-launcher.is-fail > span:first-child { background: #ffeded; color: #b53b3b; }
+.bill360-contract-launcher.is-fail strong { color: #a43a3a; }
+
+.bill360-contract-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1450;
+  display: flex;
+  justify-content: flex-end;
+  background: rgba(15, 23, 42, .28);
+  backdrop-filter: blur(2px);
+}
+
+.bill360-contract-panel {
+  width: min(980px, 94vw);
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #f4f7fb;
+  box-shadow: -22px 0 60px rgba(15, 23, 42, .22);
+}
+
+.bill360-contract-panel__head {
+  min-height: 76px;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 13px 16px 12px 18px;
+  border-bottom: 1px solid #dfe6ef;
+  background: #fff;
+}
+
+.bill360-contract-panel__head > div {
+  min-width: 0;
+}
+
+.bill360-contract-panel__head span {
+  color: #5578aa;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .05em;
+}
+
+.bill360-contract-panel__head h2 {
+  margin: 3px 0 2px;
+  color: #24334a;
+  font-size: 18px;
+}
+
+.bill360-contract-panel__head p {
+  margin: 0;
+  color: #8793a4;
+  font-size: 9.5px;
+}
+
+.bill360-contract-panel__head button {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  border: 1px solid #dbe3ee;
+  border-radius: 9px;
+  background: #fff;
+  color: #758195;
+  font-size: 22px;
+  cursor: pointer;
+}
+
+.bill360-contract-panel__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px;
+}
+
+@media (max-width: 720px) {
+  .bill360-contract-launcher {
+    right: 12px;
+    bottom: 12px;
+    min-width: 0;
+    width: calc(100vw - 24px);
+  }
+
+  .bill360-contract-panel {
+    width: 100vw;
+  }
+
+  .bill360-contract-panel__head p {
+    display: none;
+  }
+
+  .bill360-contract-panel__body {
+    padding: 8px;
+  }
+}
