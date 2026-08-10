@@ -24,6 +24,7 @@ class BankTransactionCreate(BaseModel):
     amount: Decimal | None = None
     income_amount: Decimal | None = None
     expense_amount: Decimal | None = None
+    balance: Decimal | None = None
     currency: str | None = Field(default="CNY")
     transaction_no: str | None = None
     instruction_no: str | None = None
@@ -33,6 +34,10 @@ class BankTransactionCreate(BaseModel):
     status: str | None = None
     raw_text: str | None = None
     attachment_url: str | None = None
+    source_bank: str | None = None
+    source_file_name: str | None = None
+    source_row_no: int | None = None
+    dedupe_key: str | None = None
     reconciliation_id: str | None = None
     reconciliation_type: str | None = None
     reconciliation_no: str | None = None
@@ -52,6 +57,7 @@ class BankTransactionUpdate(BaseModel):
     amount: Decimal | None = None
     income_amount: Decimal | None = None
     expense_amount: Decimal | None = None
+    balance: Decimal | None = None
     currency: str | None = None
     transaction_no: str | None = None
     instruction_no: str | None = None
@@ -61,6 +67,10 @@ class BankTransactionUpdate(BaseModel):
     status: str | None = None
     raw_text: str | None = None
     attachment_url: str | None = None
+    source_bank: str | None = None
+    source_file_name: str | None = None
+    source_row_no: int | None = None
+    dedupe_key: str | None = None
     reconciliation_id: str | None = None
     reconciliation_type: str | None = None
     reconciliation_no: str | None = None
@@ -83,6 +93,7 @@ class BankTransactionRead(BaseModel):
     amount: Decimal | None
     income_amount: Decimal | None
     expense_amount: Decimal | None
+    balance: Decimal | None = None
     currency: str | None
     transaction_no: str | None
     instruction_no: str | None
@@ -92,6 +103,10 @@ class BankTransactionRead(BaseModel):
     status: str | None
     raw_text: str | None
     attachment_url: str | None
+    source_bank: str | None = None
+    source_file_name: str | None = None
+    source_row_no: int | None = None
+    dedupe_key: str | None = None
     reconciliation_id: str | None = None
     reconciliation_type: str | None = None
     reconciliation_no: str | None = None
@@ -103,3 +118,19 @@ class BankTransactionRead(BaseModel):
 class BankTransactionListResponse(BaseModel):
     items: list[BankTransactionRead]
     total: int
+
+
+class BankTransactionBulkImportRequest(BaseModel):
+    source_bank: str | None = Field(default="ICBC", max_length=64)
+    source_file_name: str | None = Field(default=None, max_length=500)
+    bank_account: str | None = Field(default=None, max_length=200)
+    items: list[BankTransactionCreate] = Field(min_length=1, max_length=5000)
+
+
+class BankTransactionBulkImportResponse(BaseModel):
+    total: int
+    inserted: int
+    duplicates: int
+    invalid: int
+    duplicate_row_nos: list[int] = Field(default_factory=list)
+    invalid_row_nos: list[int] = Field(default_factory=list)
