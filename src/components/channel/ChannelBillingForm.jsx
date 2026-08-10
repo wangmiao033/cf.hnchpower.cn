@@ -17,6 +17,7 @@ import {
   detectChannelRulePreset,
   ruleFormulaText
 } from '@/domain/channel/channelBillingForm.js'
+import { recommendChannelContractRules } from '@/lib/api/contractTerms.ts'
 import '@/components/ChannelBilling.css'
 import './ChannelSettlementRule.css'
 import LineItemsTable from '@/components/shared/LineItemsTable.jsx'
@@ -41,6 +42,14 @@ function validationText(status) {
   return { pass: '一致', fail: '差异', partial: '部分校验', unvalidated: '未校验' }[status] || '未校验'
 }
 
+function contractRuleLabel(state) {
+  if (state.loading) return '正在匹配合同规则…'
+  if (state.tone === 'applied') return '已从合同自动带入'
+  if (state.tone === 'review') return '合同规则需确认'
+  if (state.tone === 'error') return '合同规则读取失败'
+  return '合同规则自动匹配'
+}
+
 function ChannelBillingForm({
   formId,
   mode = 'add',
@@ -61,6 +70,9 @@ function ChannelBillingForm({
   const [header, setHeader] = useState(initialHeaderForm)
   const [lines, setLines] = useState([initialLineItem()])
   const [partnerId, setPartnerId] = useState('')
+  const [contractRuleState, setContractRuleState] = useState({ loading: false, tone: 'idle', message: '', contracts: [] })
+  const [contractRuleRevision, setContractRuleRevision] = useState(0)
+  const [lastContractRuleKey, setLastContractRuleKey] = useState('')
 
   const fullRecord = useMemo(
     () => buildFullChannelRecord({ ...header, status: header.status || 'pending' }, lines),
@@ -96,11 +108,15 @@ function ChannelBillingForm({
       setHeader(recordToHeaderForm(stateRecord))
       const lineForms = recordToLineForms(stateRecord)
       setLines(lineForms.length ? lineForms : [initialLineItem()])
+      setContractRuleState({ loading: false, tone: 'idle', message: '', contracts: [] })
+      setLastContractRuleKey('')
       return
     }
     setHeader({ ...initialHeaderForm })
     setPartnerId('')
     setLines([{ ...initialLineItem() }])
+    setContractRuleState({ loading: false, tone: 'idle', message: '', contracts: [] })
+    setLastContractRuleKey('')
   }, [mode, sourceRecord?.id, draftRecord])
 
   useEffect(() => {
@@ -111,11 +127,101 @@ function ChannelBillingForm({
     setHeader((current) => ({ ...current, partnerName: current.partnerName || matched.name, channelName: current.channelName || matched.shortName || matched.name }))
   }, [partners, header.partnerName, header.channelName, partnerId])
 
+  useEffect(() => {
+    if (mode !== 'add') return undefined
+    const partnerName = String(header.partnerName || '').trim()
+    const draftLines = lines
+      .map((row, index) => ({
+        index,
+        game_name: String(row.gameName || '').trim(),
+        settlement_cycle: normalizeChannelSettlementCycle(row.settlementCycle)
+      }))
+      .filter((row) => row.game_name)
+    if (!partnerName || !draftLines.length || draftLines.some((row) => !row.settlement_cycle)) {
+      setContractRuleState((current) => current.loading ? { loading: false, tone: 'idle', message: '', contracts: [] } : current)
+      return undefined
+    }
+
+    const fingerprint = JSON.stringify({
+      partnerName,
+      channelName: String(header.channelName || '').trim(),
+      lines: draftLines.map((row) => [row.game_name, row.settlement_cycle])
+    })
+    const requestKey = `${fingerprint}:${contractRuleRevision}`
+    if (requestKey === lastContractRuleKey) return undefined
+
+    let cancelled = false
+    const timer = window.setTimeout(() => {
+      setContractRuleState((current) => ({ ...current, loading: true, tone: 'idle', message: '正在根据合作方、游戏和授权期匹配合同…' }))
+      recommendChannelContractRules({
+        partner_name: partnerName,
+        channel_name: String(header.channelName || '').trim(),
+        lines: draftLines.map((row) => ({ game_name: row.game_name, settlement_cycle: row.settlement_cycle }))
+      })
+        .then((result) => {
+          if (cancelled) return
+          const contractNames = [...new Set((result.lines || []).map((item) => item.match?.contract_name).filter(Boolean))]
+          setLastContractRuleKey(requestKey)
+          if (!result.auto_apply || !result.header_recommendation) {
+            setContractRuleState({
+              loading: false,
+              tone: 'review',
+              message: result.message || '已找到合同，但规则存在歧义，请人工确认。',
+              contracts: contractNames
+            })
+            return
+          }
+
+          const recommendation = result.header_recommendation
+          setHeader((current) => ({
+            ...current,
+            settlementRuleCode: recommendation.settlement_rule_code,
+            channelFeeMode: recommendation.channel_fee_mode,
+            channelFeeRate: String(recommendation.channel_fee_rate ?? ''),
+            taxMode: recommendation.tax_mode,
+            validationTolerance: String(recommendation.validation_tolerance ?? 0.05)
+          }))
+          setLines((current) => current.map((row, index) => {
+            const lineRecommendation = (result.lines || []).find((item) => item.line_index === index && item.auto_apply)?.recommended
+            if (!lineRecommendation) return row
+            return {
+              ...row,
+              shareRate: lineRecommendation.share_rate != null ? String(lineRecommendation.share_rate) : row.shareRate,
+              taxRate: lineRecommendation.tax_rate != null ? String(lineRecommendation.tax_rate) : row.taxRate,
+              gatewayCost: recommendation.channel_fee_mode === 'fixed' ? row.gatewayCost : ''
+            }
+          }))
+          setContractRuleState({
+            loading: false,
+            tone: 'applied',
+            message: `${result.message || '合同规则已自动带入'}；分成、通道费和税率记录已按合同合作清单填充。`,
+            contracts: contractNames
+          })
+        })
+        .catch((error) => {
+          if (cancelled) return
+          setContractRuleState({
+            loading: false,
+            tone: 'error',
+            message: error instanceof Error ? error.message : '合同规则读取失败，请手工选择结算规则。',
+            contracts: []
+          })
+        })
+    }, 450)
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [mode, header.partnerName, header.channelName, lines, contractRuleRevision, lastContractRuleKey])
+
   const handleHeaderChange = (field, value) => setHeader((current) => ({ ...current, [field]: value }))
   const handleRuleFieldChange = (field, value) => setHeader((current) => ({ ...current, settlementRuleCode: 'custom', [field]: value }))
 
   const handlePartnerChange = (partnerName, nextPartnerId = '', selected = null) => {
     setPartnerId(nextPartnerId)
+    setLastContractRuleKey('')
+    setContractRuleState({ loading: false, tone: 'idle', message: '', contracts: [] })
     setHeader((current) => {
       const base = { ...current, partnerName, channelName: selected && nextPartnerId ? selected.shortName || selected.name : partnerName }
       const preset = detectChannelRulePreset(base.channelName || base.partnerName)
@@ -156,7 +262,7 @@ function ChannelBillingForm({
         onAfterSubmit?.(intent)
       } else {
         const result = onAddRecord?.(record); if (result && typeof result.then === 'function') await result
-        if (intent === 'continue') { setHeader({ ...initialHeaderForm }); setPartnerId(''); setLines([{ ...initialLineItem() }]) }
+        if (intent === 'continue') { setHeader({ ...initialHeaderForm }); setPartnerId(''); setLines([{ ...initialLineItem() }]); setLastContractRuleKey(''); setContractRuleState({ loading: false, tone: 'idle', message: '', contracts: [] }) }
         onAfterSubmit?.(intent)
       }
     } catch { return }
@@ -182,9 +288,19 @@ function ChannelBillingForm({
 
         <section className="channel-rule-panel">
           <div className="channel-rule-panel__head">
-            <div><span>结算规则引擎</span><strong>明确区分百分比渠道费和固定通道费</strong></div>
-            <small>平台结算额填入后作为实际应收；系统计算用于校验。超过容差的账单可以保存，但不能确认核对。</small>
+            <div><span>结算规则引擎</span><strong>合同优先驱动，人工可覆盖</strong></div>
+            <small>选择合作方并填写游戏、账期后，系统优先按合同合作清单带入分成和通道费；平台结算额仍用于最终校验。</small>
           </div>
+          {mode === 'add' && (contractRuleState.loading || contractRuleState.message) ? (
+            <div className={`channel-contract-rule-status is-${contractRuleState.tone || 'idle'}`}>
+              <div>
+                <strong>{contractRuleLabel(contractRuleState)}</strong>
+                <span>{contractRuleState.message}</span>
+                {contractRuleState.contracts?.length ? <small>{contractRuleState.contracts.join(' · ')}</small> : null}
+              </div>
+              <button type="button" onClick={() => { setLastContractRuleKey(''); setContractRuleRevision((value) => value + 1) }} disabled={contractRuleState.loading}>重新匹配</button>
+            </div>
+          ) : null}
           <div className="channel-rule-grid">
             <label><span>规则模板</span><select value={header.settlementRuleCode} onChange={(e) => setHeader((current) => applyChannelRulePreset(current, e.target.value))}>{Object.entries(CHANNEL_RULE_PRESETS).map(([key, preset]) => <option key={key} value={key}>{preset.label}</option>)}</select></label>
             <label><span>渠道费模式</span><select value={header.channelFeeMode} onChange={(e) => handleRuleFieldChange('channelFeeMode', e.target.value)}><option value="none">不扣渠道费</option><option value="percent">百分比</option><option value="fixed">固定金额/行</option></select></label>

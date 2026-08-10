@@ -5,6 +5,8 @@ from __future__ import annotations
 import logging
 import os
 import re
+import time
+from uuid import uuid4
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -68,6 +70,7 @@ SECURITY_HEADERS = {
     "Content-Security-Policy": "frame-ancestors 'none'; base-uri 'self'; object-src 'none'",
 }
 _RECONCILIATION_RECORD_PATH_RE = re.compile(r"^/api/reconciliation/[^/]+$")
+_REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9._:-]{1,80}$")
 
 
 def _is_production_env() -> bool:
@@ -111,17 +114,29 @@ def _cors_headers_for_request(request: Request, allowed: list[str]) -> dict[str,
         return {
             "Access-Control-Allow-Origin": origin,
             "Access-Control-Allow-Credentials": "true",
+            "Access-Control-Expose-Headers": "X-Request-ID, X-Error-Code",
             "Vary": "Origin",
         }
     return {}
 
 
-def _apply_common_response_headers(response, path: str) -> None:
+def _request_id(request: Request) -> str:
+    supplied = str(request.headers.get("x-request-id") or "").strip()
+    if supplied and _REQUEST_ID_RE.fullmatch(supplied):
+        return supplied
+    return f"REQ-{uuid4().hex[:16]}"
+
+
+def _apply_common_response_headers(response, path: str, request_id: str | None = None) -> None:
     for key, value in SECURITY_HEADERS.items():
         response.headers.setdefault(key, value)
     if path.startswith("/api/") or path == "/health/db":
         response.headers["Cache-Control"] = "no-store"
         response.headers["Pragma"] = "no-cache"
+    if request_id:
+        response.headers["X-Request-ID"] = request_id
+    if response.status_code >= 400:
+        response.headers.setdefault("X-Error-Code", f"HTTP-{response.status_code}")
 
 
 def _is_idempotent_reconciliation_delete_miss(method: str, path: str, status_code: int) -> bool:
@@ -146,13 +161,17 @@ app.add_middleware(
     allow_origins=_cors_allowed,
     allow_credentials=True,
     allow_methods=["GET", "HEAD", "OPTIONS", "POST", "PUT", "PATCH", "DELETE"],
-    allow_headers=["Accept", "Content-Type", "Origin", "X-Requested-With"],
+    allow_headers=["Accept", "Content-Type", "Origin", "X-Requested-With", "X-Request-ID"],
+    expose_headers=["X-Request-ID", "X-Error-Code"],
 )
 
 
 @app.middleware("http")
 async def enforce_origin_and_response_policy(request: Request, call_next):
     path = request.url.path
+    request_id = _request_id(request)
+    request.state.request_id = request_id
+    started = time.perf_counter()
     origin = (request.headers.get("origin") or "").rstrip("/")
     if (
         path.startswith("/api/")
@@ -160,13 +179,27 @@ async def enforce_origin_and_response_policy(request: Request, call_next):
         and origin
         and origin not in _cors_allowed
     ):
+        # Keep the historical JSON body stable for existing callers; diagnostics
+        # travel in response headers so observability does not break API contracts.
         response = JSONResponse(status_code=403, content={"detail": "请求来源不受信任"})
-        _apply_common_response_headers(response, path)
+        _apply_common_response_headers(response, path, request_id)
+        response.headers["X-Error-Code"] = "SEC-ORIGIN-403"
         return response
+
     response = await call_next(request)
     if _is_idempotent_reconciliation_delete_miss(request.method, path, response.status_code):
         response = Response(status_code=204, headers=_cors_headers_for_request(request, _cors_allowed))
-    _apply_common_response_headers(response, path)
+    _apply_common_response_headers(response, path, request_id)
+    elapsed_ms = round((time.perf_counter() - started) * 1000, 1)
+    if response.status_code >= 400:
+        logger.warning(
+            "API %s %s -> %s request_id=%s duration_ms=%s",
+            request.method,
+            path,
+            response.status_code,
+            request_id,
+            elapsed_ms,
+        )
     return response
 
 
@@ -218,13 +251,39 @@ app.mount("/uploads", StaticFiles(directory=str(_upload_root)), name="uploads")
 
 @app.exception_handler(SQLAlchemyError)
 async def handle_sqlalchemy_error(request: Request, exc: SQLAlchemyError) -> JSONResponse:
-    logger.exception("SQLAlchemy error: %s", request.url.path)
+    request_id = getattr(request.state, "request_id", None) or _request_id(request)
+    logger.exception("SQLAlchemy error: %s request_id=%s", request.url.path, request_id)
     response = JSONResponse(
         status_code=500,
-        content={"error": "database_error", "message": "数据库查询失败，请联系系统管理员检查服务状态。"},
+        content={
+            "error": "database_error",
+            "error_code": "DB-500",
+            "message": "数据库查询失败，请联系系统管理员检查服务状态。",
+            "request_id": request_id,
+        },
         headers=_cors_headers_for_request(request, _cors_allowed),
     )
-    _apply_common_response_headers(response, request.url.path)
+    _apply_common_response_headers(response, request.url.path, request_id)
+    response.headers["X-Error-Code"] = "DB-500"
+    return response
+
+
+@app.exception_handler(Exception)
+async def handle_unexpected_error(request: Request, exc: Exception) -> JSONResponse:
+    request_id = getattr(request.state, "request_id", None) or _request_id(request)
+    logger.exception("Unhandled API error: %s request_id=%s", request.url.path, request_id)
+    response = JSONResponse(
+        status_code=500,
+        content={
+            "error": "internal_error",
+            "error_code": "SYS-500",
+            "message": "系统处理失败，请稍后重试；如重复出现请提供请求编号。",
+            "request_id": request_id,
+        },
+        headers=_cors_headers_for_request(request, _cors_allowed),
+    )
+    _apply_common_response_headers(response, request.url.path, request_id)
+    response.headers["X-Error-Code"] = "SYS-500"
     return response
 
 
