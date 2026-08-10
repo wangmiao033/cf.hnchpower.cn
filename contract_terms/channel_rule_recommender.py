@@ -43,7 +43,7 @@ def _rule_fields(candidate: dict) -> dict:
         "channel_fee_mode": fee_mode,
         "channel_fee_rate": fee_value,
         # invoice_tax_rate is an invoice attribute, not evidence that tax should
-        # reduce settlement.  Record it on the line, but default calculation to
+        # reduce settlement. Record it on the line, but default calculation to
         # "not participating" unless the user explicitly changes the rule.
         "tax_mode": "none",
         "tax_rate": round(tax, 4) if tax is not None else None,
@@ -62,11 +62,16 @@ def recommend_channel_rules(
 
     Header fields are auto-applicable only when every entered line has a unique
     high-confidence match and all matched access items agree on the settlement
-    rule.  Per-line share/tax fields remain visible even when header rules are
+    rule. Per-line share/tax fields remain visible even when header rules are
     ambiguous so the UI can explain why it did not auto-apply.
     """
     results: list[dict] = []
     for index, raw in enumerate(lines or []):
+        source_index = raw.get("line_index", index)
+        try:
+            source_index = int(source_index)
+        except (TypeError, ValueError):
+            source_index = index
         game_name = str(raw.get("game_name") or raw.get("gameName") or "").strip()
         cycle = str(raw.get("settlement_cycle") or raw.get("settlementCycle") or "").strip()
         if not game_name:
@@ -77,7 +82,7 @@ def recommend_channel_rules(
             "settlement_month": cycle,
         }
         line = {
-            "line_id": str(raw.get("line_id") or raw.get("id") or f"draft-{index}"),
+            "line_id": str(raw.get("line_id") or raw.get("id") or f"draft-{source_index}"),
             "game_name": game_name,
             "settlement_cycle": cycle,
         }
@@ -90,7 +95,7 @@ def recommend_channel_rules(
         if not ranked:
             results.append(
                 {
-                    "line_index": index,
+                    "line_index": source_index,
                     "game_name": game_name,
                     "settlement_cycle": cycle,
                     "auto_apply": False,
@@ -115,7 +120,7 @@ def recommend_channel_rules(
         recommended = _rule_fields(candidate)
         results.append(
             {
-                "line_index": index,
+                "line_index": source_index,
                 "game_name": game_name,
                 "settlement_cycle": cycle,
                 "auto_apply": auto_apply,
