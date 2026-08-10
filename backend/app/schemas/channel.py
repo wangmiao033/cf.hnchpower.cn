@@ -18,7 +18,6 @@ class ChannelReceiptCreate(BaseModel):
 
 class ChannelReceiptRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
-
     id: str
     channel_record_id: str
     amount: float
@@ -34,8 +33,6 @@ class ChannelReceiptListResponse(BaseModel):
 
 
 class ChannelLineItemCreate(BaseModel):
-    """单行游戏明细；每行可属于不同结算月份。"""
-
     settlement_cycle: str | None = None
     game_name: str | None = None
     billing_flow: float = Field(default=0, ge=0)
@@ -50,12 +47,15 @@ class ChannelLineItemCreate(BaseModel):
     share_amount: float = 0
     tax_rate: float = Field(default=0, ge=0, le=100)
     gateway_cost: float = 0
+    platform_settlement_amount: float | None = None
+    system_settlement_amount: float = 0
+    settlement_difference: float | None = None
+    validation_status: str = "unvalidated"
     settlement_amount: float = 0
 
 
 class ChannelLineItemRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
-
     id: str
     channel_record_id: str
     sort_order: int
@@ -73,6 +73,10 @@ class ChannelLineItemRead(BaseModel):
     share_amount: float
     tax_rate: float
     gateway_cost: float
+    platform_settlement_amount: float | None = None
+    system_settlement_amount: float = 0
+    settlement_difference: float | None = None
+    validation_status: str = "unvalidated"
     settlement_amount: float
     created_at: datetime
     updated_at: datetime
@@ -92,6 +96,10 @@ class ChannelRecordCreate(BaseModel):
     channel_fee_rate: float | None = Field(default=None, ge=0, le=100)
     dev_share_rate: float | None = Field(default=None, ge=0, le=100)
     profit_rate: float | None = Field(default=None, ge=0, le=100)
+    settlement_rule_code: str = "legacy_fixed_fee_tax"
+    channel_fee_mode: str = "fixed"
+    tax_mode: str = "share"
+    validation_tolerance: float = Field(default=0.05, ge=0, le=1000)
     items: Annotated[list[ChannelLineItemCreate], Field(min_length=1)]
 
 
@@ -109,12 +117,15 @@ class ChannelRecordUpdate(BaseModel):
     channel_fee_rate: float | None = Field(default=None, ge=0, le=100)
     dev_share_rate: float | None = Field(default=None, ge=0, le=100)
     profit_rate: float | None = Field(default=None, ge=0, le=100)
+    settlement_rule_code: str | None = None
+    channel_fee_mode: str | None = None
+    tax_mode: str | None = None
+    validation_tolerance: float | None = Field(default=None, ge=0, le=1000)
     items: list[ChannelLineItemCreate] | None = None
 
 
 class ChannelRecordRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
-
     id: str
     statement_no: str | None = None
     channel_name: str | None
@@ -144,6 +155,14 @@ class ChannelRecordRead(BaseModel):
     channel_fee_rate: float | None
     dev_share_rate: float | None
     profit_rate: float | None
+    settlement_rule_code: str = "legacy_fixed_fee_tax"
+    channel_fee_mode: str = "fixed"
+    tax_mode: str = "share"
+    validation_tolerance: float = 0.05
+    system_settlement_amount: float = 0
+    platform_settlement_amount: float | None = None
+    settlement_difference: float | None = None
+    validation_status: str = "unvalidated"
     created_at: datetime
     updated_at: datetime
     items: list[ChannelLineItemRead] = Field(default_factory=list)
