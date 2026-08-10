@@ -1,4 +1,4 @@
-import { apiDelete, apiGet, apiPut } from '@/lib/api/client.ts'
+import { apiDelete, apiGet, apiPost, apiPut } from '@/lib/api/client.ts'
 
 export type ContractAccessTerms = {
   access_item_id: string
@@ -121,6 +121,58 @@ export type ContractBillReconciliation = {
   bill_checks: ContractBillFieldCheck[]
 }
 
+export type ChannelContractRuleRecommendation = {
+  version: string
+  generated_at: string
+  auto_apply: boolean
+  matched_lines: number
+  total_lines: number
+  message: string
+  header_recommendation: null | {
+    settlement_rule_code: string
+    channel_fee_mode: 'none' | 'percent' | 'fixed'
+    channel_fee_rate: number
+    tax_mode: 'none' | 'share' | 'after_fee'
+    validation_tolerance: number
+  }
+  lines: Array<{
+    line_index: number
+    game_name: string
+    settlement_cycle: string
+    auto_apply: boolean
+    confidence: 'high' | 'medium' | 'low' | 'none'
+    score: number
+    ambiguity_margin?: number
+    message: string
+    match: null | {
+      contract_id: string
+      contract_name: string
+      contract_no: string | null
+      access_item_id: string
+      product_name: string
+      channel_name: string
+      authorization_start: string | null
+      authorization_end: string | null
+      share_rate: string | number | null
+      channel_fee_rate: string | number | null
+      invoice_tax_rate: string | number | null
+      settlement_mode: string | null
+      settlement_basis: string | null
+      payment_terms: string | null
+      reasons: string[]
+    }
+    recommended: null | {
+      settlement_rule_code: string
+      channel_fee_mode: 'none' | 'percent' | 'fixed'
+      channel_fee_rate: number
+      tax_mode: 'none' | 'share' | 'after_fee'
+      tax_rate: number | null
+      share_rate: number | null
+      validation_tolerance: number
+    }
+  }>
+}
+
 const PATH = '/api/contract-terms'
 
 export function listContractAccessTerms(params?: { contractId?: string; accessItemId?: string }) {
@@ -142,4 +194,12 @@ export function deleteContractAccessTerms(accessItemId: string) {
 export function getContractBillReconciliation(billType: 'rd' | 'channel', billId: string) {
   const query = new URLSearchParams({ bill_type: billType, bill_id: billId })
   return apiGet<ContractBillReconciliation>(`${PATH}/reconcile?${query.toString()}`)
+}
+
+export function recommendChannelContractRules(payload: {
+  partner_name: string
+  channel_name?: string
+  lines: Array<{ game_name: string; settlement_cycle: string }>
+}) {
+  return apiPost<ChannelContractRuleRecommendation>(`${PATH}/channel-rule-recommendation`, payload)
 }
