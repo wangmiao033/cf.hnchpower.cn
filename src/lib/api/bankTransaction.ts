@@ -37,6 +37,7 @@ export interface BankTransactionRow {
   source_file_name?: string | null
   source_row_no?: number | null
   dedupe_key?: string | null
+  import_batch_id?: string | null
   reconciliation_id?: string | null
   reconciliation_type?: string | null
   reconciliation_no?: string | null
@@ -47,11 +48,11 @@ export interface BankTransactionRow {
 
 export type BankTransactionCreateBody = Omit<
   BankTransactionRow,
-  'id' | 'created_at' | 'updated_at'
+  'id' | 'created_at' | 'updated_at' | 'import_batch_id'
 >
 
 export type BankTransactionUpdateBody = Partial<
-  Omit<BankTransactionRow, 'id' | 'created_at' | 'updated_at'>
+  Omit<BankTransactionRow, 'id' | 'created_at' | 'updated_at' | 'import_batch_id'>
 >
 
 export interface BankTransactionListResponse {
@@ -62,17 +63,61 @@ export interface BankTransactionListResponse {
 export interface BankTransactionBulkImportBody {
   source_bank?: string | null
   source_file_name?: string | null
+  source_sheet_name?: string | null
   bank_account?: string | null
+  source_total_rows?: number | null
+  source_invalid_row_nos?: number[]
   items: BankTransactionCreateBody[]
 }
 
 export interface BankTransactionBulkImportResponse {
+  batch_id: string
   total: number
   inserted: number
   duplicates: number
   invalid: number
   duplicate_row_nos: number[]
   invalid_row_nos: number[]
+}
+
+export interface BankImportBatchRow {
+  id: string
+  source_bank: string | null
+  source_file_name: string | null
+  source_sheet_name: string | null
+  bank_account: string | null
+  total: number
+  inserted: number
+  duplicates: number
+  invalid: number
+  income_total: string | number
+  expense_total: string | number
+  date_from: string | null
+  date_to: string | null
+  duplicate_row_nos: number[]
+  invalid_row_nos: number[]
+  legacy_backfill: boolean
+  created_at: string
+}
+
+export interface BankImportBatchListResponse {
+  items: BankImportBatchRow[]
+  total: number
+}
+
+export interface BankAccountSummaryRow {
+  source_bank: string | null
+  bank_account: string
+  transaction_count: number
+  latest_trade_date: string | null
+  latest_balance: string | number | null
+  latest_file_name: string | null
+  latest_import_batch_id: string | null
+  last_imported_at: string | null
+}
+
+export interface BankAccountSummaryListResponse {
+  items: BankAccountSummaryRow[]
 }
 
 const PATH = '/api/bank-transactions'
@@ -84,6 +129,10 @@ export interface GetBankTransactionsParams {
   date_to?: string
   amount_min?: string
   amount_max?: string
+  bank_account?: string
+  source_bank?: string
+  source_file_name?: string
+  import_batch_id?: string
   limit?: number
   offset?: number
 }
@@ -98,10 +147,28 @@ export async function getBankTransactions(
   if (params.date_to?.trim()) sp.set('date_to', params.date_to.trim())
   if (params.amount_min?.trim()) sp.set('amount_min', params.amount_min.trim())
   if (params.amount_max?.trim()) sp.set('amount_max', params.amount_max.trim())
+  if (params.bank_account?.trim()) sp.set('bank_account', params.bank_account.trim())
+  if (params.source_bank?.trim()) sp.set('source_bank', params.source_bank.trim())
+  if (params.source_file_name?.trim()) sp.set('source_file_name', params.source_file_name.trim())
+  if (params.import_batch_id?.trim()) sp.set('import_batch_id', params.import_batch_id.trim())
   if (params.limit != null) sp.set('limit', String(params.limit))
   if (params.offset != null) sp.set('offset', String(params.offset))
   const qs = sp.toString()
   return apiGet<BankTransactionListResponse>(`${PATH}${qs ? `?${qs}` : ''}`)
+}
+
+export async function getBankImportBatches(
+  params: { limit?: number; offset?: number } = {}
+): Promise<BankImportBatchListResponse> {
+  const sp = new URLSearchParams()
+  if (params.limit != null) sp.set('limit', String(params.limit))
+  if (params.offset != null) sp.set('offset', String(params.offset))
+  const qs = sp.toString()
+  return apiGet<BankImportBatchListResponse>(`${PATH}/import-batches${qs ? `?${qs}` : ''}`)
+}
+
+export async function getBankAccountSummaries(): Promise<BankAccountSummaryListResponse> {
+  return apiGet<BankAccountSummaryListResponse>(`${PATH}/accounts`)
 }
 
 export async function getBankTransactionDetail(id: string): Promise<BankTransactionRow> {
