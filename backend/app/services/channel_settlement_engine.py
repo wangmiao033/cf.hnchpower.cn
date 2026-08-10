@@ -5,13 +5,7 @@ from __future__ import annotations
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Any
 
-VALID_RULES = {
-    "legacy_fixed_fee_tax",
-    "xiaomi_percent_fee",
-    "percent_fee_after_tax",
-    "share_only",
-    "custom",
-}
+VALID_RULES = {"legacy_fixed_fee_tax", "xiaomi_percent_fee", "percent_fee_after_tax", "share_only", "custom"}
 VALID_FEE_MODES = {"none", "percent", "fixed"}
 VALID_TAX_MODES = {"none", "share", "after_fee"}
 
@@ -51,13 +45,7 @@ def resolve_rule_settings(record: Any) -> dict[str, Any]:
         fee_mode = "fixed"
     if tax_mode not in VALID_TAX_MODES:
         tax_mode = "share"
-    return {
-        "rule_code": code,
-        "fee_mode": fee_mode,
-        "tax_mode": tax_mode,
-        "fee_rate": fee_rate,
-        "tolerance": tolerance,
-    }
+    return {"rule_code": code, "fee_mode": fee_mode, "tax_mode": tax_mode, "fee_rate": fee_rate, "tolerance": tolerance}
 
 
 def calculate_channel_line(item: Any, record: Any) -> dict[str, Any]:
@@ -68,8 +56,8 @@ def calculate_channel_line(item: Any, record: Any) -> dict[str, Any]:
         discount = Decimal("1")
     effective_flow = _money(flow * discount)
     billing_amount = effective_flow - sum(
-        _d(getattr(item, field, None))
-        for field in ("voucher_cost", "no_worry_cost", "refund_cost", "test_cost", "welfare_cost")
+        (_d(getattr(item, field, None)) for field in ("voucher_cost", "no_worry_cost", "refund_cost", "test_cost", "welfare_cost", "coin_cost")),
+        Decimal("0"),
     )
     share_rate = _d(getattr(item, "share_rate", None)) / Decimal("100")
     share_amount = billing_amount * share_rate
@@ -113,12 +101,7 @@ def calculate_channel_line(item: Any, record: Any) -> dict[str, Any]:
 
 def aggregate_validation(items: list[Any]) -> dict[str, Any]:
     if not items:
-        return {
-            "system_total": Decimal("0"),
-            "platform_total": None,
-            "difference_total": None,
-            "validation_status": "unvalidated",
-        }
+        return {"system_total": Decimal("0"), "platform_total": None, "difference_total": None, "validation_status": "unvalidated"}
     system_total = _money(sum((_d(getattr(item, "system_settlement_amount", None)) for item in items), Decimal("0")))
     provided = [item for item in items if getattr(item, "platform_settlement_amount", None) is not None]
     platform_total = _money(sum((_d(getattr(item, "platform_settlement_amount", None)) for item in provided), Decimal("0"))) if provided else None
@@ -132,9 +115,4 @@ def aggregate_validation(items: list[Any]) -> dict[str, Any]:
         status = "partial"
     else:
         status = "unvalidated"
-    return {
-        "system_total": system_total,
-        "platform_total": platform_total,
-        "difference_total": difference_total,
-        "validation_status": status,
-    }
+    return {"system_total": system_total, "platform_total": platform_total, "difference_total": difference_total, "validation_status": status}
