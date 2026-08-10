@@ -16,8 +16,23 @@ from app.schemas.bank_auto_reconciliation import (
     BankMatchConfirmResponse,
     BankMatchReverseRequest,
 )
+from app.schemas.bank_multi_allocation import (
+    P2AllocateRequest,
+    P2AllocateResponse,
+    P2BillSummary,
+    P2Dashboard,
+    P2TransactionSummaryRequest,
+    P2TransactionSummaryResponse,
+)
 from app.services.bank_auto_reconciliation import build_dashboard, confirm_match
 from app.services.bank_auto_reconciliation_reverse import reverse_confirmed_match
+from app.services.bank_multi_allocation import (
+    allocate_transaction,
+    bill_summary,
+    build_p2_dashboard,
+    transaction_summaries,
+)
+from app.services.permissions import require_permission
 
 router = APIRouter()
 
@@ -40,12 +55,57 @@ def get_bank_auto_reconciliation_dashboard(
     return BankAutoReconciliationDashboard.model_validate(result)
 
 
+@router.get("/p2-dashboard", response_model=P2Dashboard)
+def get_p2_dashboard(
+    limit: int = Query(500, ge=1, le=500),
+    db: Session = Depends(get_db),
+    _user: AuthUser = Depends(require_current_user),
+) -> P2Dashboard:
+    return P2Dashboard.model_validate(build_p2_dashboard(db, limit=limit))
+
+
+@router.post("/p2/transaction-summaries", response_model=P2TransactionSummaryResponse)
+def get_p2_transaction_summaries(
+    payload: P2TransactionSummaryRequest,
+    db: Session = Depends(get_db),
+    _user: AuthUser = Depends(require_current_user),
+) -> P2TransactionSummaryResponse:
+    return P2TransactionSummaryResponse(items=transaction_summaries(db, payload.transaction_ids))
+
+
+@router.get("/p2/bills/{bill_type}/{bill_id}", response_model=P2BillSummary)
+def get_p2_bill_summary(
+    bill_type: str,
+    bill_id: str,
+    db: Session = Depends(get_db),
+    _user: AuthUser = Depends(require_current_user),
+) -> P2BillSummary:
+    return P2BillSummary.model_validate(bill_summary(db, bill_type, bill_id))
+
+
+@router.post("/{transaction_id}/p2-allocate", response_model=P2AllocateResponse)
+def p2_allocate_bank_transaction(
+    transaction_id: str,
+    payload: P2AllocateRequest,
+    db: Session = Depends(get_db),
+    user: AuthUser = Depends(require_permission("funds.manage")),
+) -> P2AllocateResponse:
+    return P2AllocateResponse.model_validate(
+        allocate_transaction(
+            db,
+            transaction_id,
+            [item.model_dump() for item in payload.allocations],
+            user,
+        )
+    )
+
+
 @router.post("/{transaction_id}/confirm", response_model=BankMatchConfirmResponse)
 def confirm_bank_match(
     transaction_id: str,
     payload: BankMatchConfirmRequest,
     db: Session = Depends(get_db),
-    user: AuthUser = Depends(require_current_user),
+    user: AuthUser = Depends(require_permission("funds.manage")),
 ) -> BankMatchConfirmResponse:
     return BankMatchConfirmResponse.model_validate(
         confirm_match(db, transaction_id, payload.bill_type, payload.bill_id, user)
@@ -57,7 +117,7 @@ def reverse_bank_match(
     match_id: str,
     payload: BankMatchReverseRequest,
     db: Session = Depends(get_db),
-    user: AuthUser = Depends(require_current_user),
+    user: AuthUser = Depends(require_permission("funds.manage")),
 ) -> BankMatchConfirmResponse:
     return BankMatchConfirmResponse.model_validate(
         reverse_confirmed_match(db, match_id, payload.reason, user)

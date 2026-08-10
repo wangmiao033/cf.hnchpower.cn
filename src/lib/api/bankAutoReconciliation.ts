@@ -9,9 +9,18 @@ export type BankMatchCandidate = {
   game_name?: string | null
   bill_amount: number
   outstanding_amount: number
+  recommended_amount?: number
   score: number
   confidence_level: 'high' | 'medium' | 'low'
   reasons: string[]
+}
+
+export type ExistingBankAllocation = {
+  match_id: string
+  bill_type: 'rd' | 'channel'
+  bill_id: string
+  bill_number?: string | null
+  linked_amount: number
 }
 
 export type BankMatchSuggestion = {
@@ -21,10 +30,17 @@ export type BankMatchSuggestion = {
   direction: 'collection' | 'payment' | 'unknown'
   direction_label: string
   amount: number
+  total_amount?: number
+  allocated_amount?: number
+  remaining_amount?: number
+  allocation_count?: number
+  allocation_status?: string
+  bill_numbers?: string[]
+  existing_allocations?: ExistingBankAllocation[]
   currency?: string | null
   counterparty_name?: string | null
   summary?: string | null
-  auto_ready: boolean
+  auto_ready?: boolean
   confidence_level: 'high' | 'medium' | 'low' | 'none'
   top_score: number
   ambiguity_margin: number
@@ -53,6 +69,46 @@ export type BankMatchHistoryRow = {
   reverse_reason?: string | null
 }
 
+export type BankTransactionAllocationSummary = {
+  transaction_id: string
+  direction: string
+  total_amount: number
+  allocated_amount: number
+  remaining_amount: number
+  allocation_count: number
+  allocation_status: 'unallocated' | 'partial' | 'allocated' | 'blocked'
+  bill_numbers: string[]
+}
+
+export type BankBillAllocationRow = {
+  match_id: string
+  bank_transaction_id: string
+  linked_amount: number
+  trade_date?: string | null
+  transaction_no?: string | null
+  counterparty_name?: string | null
+  summary?: string | null
+  bank_account?: string | null
+  source_bank?: string | null
+  source_file_name?: string | null
+  source_row_no?: number | null
+  confirmed_email?: string | null
+  confirmed_at: string
+}
+
+export type BankBillAllocationSummary = {
+  bill_type: 'rd' | 'channel'
+  bill_id: string
+  bill_number: string
+  partner_name: string
+  bill_amount: number
+  bank_allocated_amount: number
+  cash_total_amount: number
+  remaining_amount: number
+  allocation_count: number
+  allocations: BankBillAllocationRow[]
+}
+
 export type BankAutoReconciliationDashboard = {
   stats: {
     pending_transactions: number
@@ -66,10 +122,23 @@ export type BankAutoReconciliationDashboard = {
   recent_matches: BankMatchHistoryRow[]
 }
 
+export type BankMultiAllocationDashboard = {
+  stats: {
+    pending_transactions: number
+    partial_transactions: number
+    remaining_amount: number
+  }
+  suggestions: BankMatchSuggestion[]
+}
+
 const PATH = '/api/bank-auto-reconciliation'
 
 export function getBankAutoReconciliationDashboard(limit = 200) {
   return apiGet<BankAutoReconciliationDashboard>(`${PATH}?limit=${limit}`)
+}
+
+export function getBankMultiAllocationDashboard(limit = 500) {
+  return apiGet<BankMultiAllocationDashboard>(`${PATH}/p2-dashboard?limit=${limit}`)
 }
 
 export function confirmBankAutoReconciliation(
@@ -80,6 +149,29 @@ export function confirmBankAutoReconciliation(
   return apiPost<{ match: BankMatchHistoryRow; message: string }>(
     `${PATH}/${encodeURIComponent(transactionId)}/confirm`,
     { bill_type: billType, bill_id: billId }
+  )
+}
+
+export function allocateBankTransaction(
+  transactionId: string,
+  allocations: Array<{ bill_type: 'rd' | 'channel'; bill_id: string; amount: number }>
+) {
+  return apiPost<{
+    matches: BankMatchHistoryRow[]
+    transaction: BankTransactionAllocationSummary
+    message: string
+  }>(`${PATH}/${encodeURIComponent(transactionId)}/p2-allocate`, { allocations })
+}
+
+export function getBankTransactionAllocationSummaries(transactionIds: string[]) {
+  return apiPost<{ items: BankTransactionAllocationSummary[] }>(`${PATH}/p2/transaction-summaries`, {
+    transaction_ids: transactionIds
+  })
+}
+
+export function getBankBillAllocationSummary(billType: 'rd' | 'channel', billId: string) {
+  return apiGet<BankBillAllocationSummary>(
+    `${PATH}/p2/bills/${encodeURIComponent(billType)}/${encodeURIComponent(billId)}`
   )
 }
 

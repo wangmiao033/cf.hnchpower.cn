@@ -1,4 +1,4 @@
-"""研发对账与 bank_transactions（付款登记）关联金额的聚合。"""
+"""研发对账资金聚合：手工付款 + 银行核销分配统一口径。"""
 
 from __future__ import annotations
 
@@ -7,9 +7,10 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import exists, func, select
 from sqlalchemy.orm import Session
 
+from app.models.bank_reconciliation_match import BankReconciliationMatch
 from app.models.bank_transaction import BankTransaction
 
 EPS = Decimal("0.005")
@@ -40,16 +41,63 @@ def _compute_status(payable: Decimal, paid: Decimal) -> str:
     return "已付款"
 
 
+def _date_string(value: Any) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.date().isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
+    raw = str(value).strip()
+    return raw[:10] if raw else None
+
+
 def aggregate_rd_payments_for_ids(
     db: Session, reconciliation_ids: list[str]
 ) -> dict[str, RdPaymentAggregate]:
-    """按研发对账 id 聚合已关联的付款登记（type=payment_register, reconciliation_type=rd）。"""
-    if not reconciliation_ids:
+    """按研发账单聚合真实付款。
+
+    - 银行核销：以 bank_reconciliation_matches.confirmed.linked_amount 为事实源。
+    - 旧手工付款登记：仍从 bank_transactions(payment_register) 聚合，但排除已有
+      confirmed match 的流水，避免同一笔银行钱重复计算。
+    """
+    ids = list(dict.fromkeys(str(value) for value in reconciliation_ids if value))
+    if not ids:
         return {}
 
-    paid_expr = func.coalesce(BankTransaction.linked_amount, BankTransaction.amount, 0)
+    totals: dict[str, Decimal] = {item: Decimal("0") for item in ids}
+    counts: dict[str, int] = {item: 0 for item in ids}
+    latest: dict[str, str | None] = {item: None for item in ids}
 
-    stmt = (
+    match_rows = db.execute(
+        select(
+            BankReconciliationMatch.bill_id,
+            func.coalesce(func.sum(BankReconciliationMatch.linked_amount), 0).label("paid_sum"),
+            func.count(BankReconciliationMatch.id).label("cnt"),
+            func.max(BankReconciliationMatch.confirmed_at).label("latest_at"),
+        )
+        .where(
+            BankReconciliationMatch.bill_type == RD_TYPE,
+            BankReconciliationMatch.direction == "payment",
+            BankReconciliationMatch.status == "confirmed",
+            BankReconciliationMatch.bill_id.in_(ids),
+        )
+        .group_by(BankReconciliationMatch.bill_id)
+    ).all()
+    for rec_id, paid_sum, cnt, latest_at in match_rows:
+        sid = str(rec_id)
+        totals[sid] = totals.get(sid, Decimal("0")) + Decimal(str(paid_sum or 0))
+        counts[sid] = counts.get(sid, 0) + int(cnt or 0)
+        latest[sid] = _date_string(latest_at)
+
+    active_match_exists = exists(
+        select(BankReconciliationMatch.id).where(
+            BankReconciliationMatch.bank_transaction_id == BankTransaction.id,
+            BankReconciliationMatch.status == "confirmed",
+        )
+    ).correlate(BankTransaction)
+    paid_expr = func.coalesce(BankTransaction.linked_amount, BankTransaction.amount, 0)
+    manual_rows = db.execute(
         select(
             BankTransaction.reconciliation_id,
             func.coalesce(func.sum(paid_expr), 0).label("paid_sum"),
@@ -58,56 +106,45 @@ def aggregate_rd_payments_for_ids(
         )
         .where(
             BankTransaction.type == "payment_register",
-            BankTransaction.reconciliation_id.in_(reconciliation_ids),
             BankTransaction.reconciliation_type == RD_TYPE,
+            BankTransaction.reconciliation_id.in_(ids),
+            ~active_match_exists,
         )
         .group_by(BankTransaction.reconciliation_id)
-    )
-
-    rows = db.execute(stmt).all()
-    out: dict[str, RdPaymentAggregate] = {}
-    for rec_id, paid_sum, cnt, latest_at in rows:
+    ).all()
+    for rec_id, paid_sum, cnt, latest_at in manual_rows:
         if not rec_id:
             continue
         sid = str(rec_id)
-        paid = Decimal(str(paid_sum or 0))
-        cnt_int = int(cnt or 0)
-        latest_str: str | None = None
-        if latest_at is not None:
-            if isinstance(latest_at, datetime):
-                latest_str = latest_at.date().isoformat()
-            elif isinstance(latest_at, date):
-                latest_str = latest_at.isoformat()
-        #占位：payable 在列表层按行填入
-        out[sid] = RdPaymentAggregate(
-            paid_amount=paid,
+        totals[sid] = totals.get(sid, Decimal("0")) + Decimal(str(paid_sum or 0))
+        counts[sid] = counts.get(sid, 0) + int(cnt or 0)
+        candidate = _date_string(latest_at)
+        if candidate and (latest.get(sid) is None or candidate > str(latest[sid])):
+            latest[sid] = candidate
+
+    return {
+        sid: RdPaymentAggregate(
+            paid_amount=totals.get(sid, Decimal("0")),
             unpaid_amount=Decimal("0"),
             payment_status="未付款",
-            payment_count=cnt_int,
-            latest_payment_date=latest_str,
+            payment_count=counts.get(sid, 0),
+            latest_payment_date=latest.get(sid),
         )
-    return out
+        for sid in ids
+        if totals.get(sid, Decimal("0")) > EPS or counts.get(sid, 0) > 0
+    }
 
 
 def fill_payable_for_row(
     agg: RdPaymentAggregate | None, settlement_amount: Any
 ) -> RdPaymentAggregate:
-    payable = _payable_decimal(settlement_amount)
-    if agg is None:
-        paid = Decimal("0")
-        return RdPaymentAggregate(
-            paid_amount=paid,
-            unpaid_amount=max(Decimal("0"), payable - paid),
-            payment_status=_compute_status(payable, paid),
-            payment_count=0,
-            latest_payment_date=None,
-        )
-    paid = agg.paid_amount
+    payable = abs(_payable_decimal(settlement_amount))
+    paid = agg.paid_amount if agg is not None else Decimal("0")
     unpaid = max(Decimal("0"), payable - paid)
     return RdPaymentAggregate(
         paid_amount=paid,
         unpaid_amount=unpaid,
         payment_status=_compute_status(payable, paid),
-        payment_count=agg.payment_count,
-        latest_payment_date=agg.latest_payment_date,
+        payment_count=agg.payment_count if agg is not None else 0,
+        latest_payment_date=agg.latest_payment_date if agg is not None else None,
     )

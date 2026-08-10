@@ -1,4 +1,4 @@
-"""银行核销撤销：先解除确认态，再恢复资金记录，兼容数据库防旁路触发器。"""
+"""银行核销撤销：支持单条分配撤销，并保留同一流水的其他有效分配。"""
 
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ from app.models.bank_transaction import BankTransaction
 from app.models.channel import ChannelReceipt, ChannelRecord
 from app.models.user import AuthUser
 from app.services.bank_auto_reconciliation import _history_row, _recompute_channel_receipts
+from app.services.bank_multi_allocation import sync_transaction_projection
 
 
 def reverse_confirmed_match(db: Session, match_id: str, reason: str, user: AuthUser) -> dict:
@@ -21,7 +22,9 @@ def reverse_confirmed_match(db: Session, match_id: str, reason: str, user: AuthU
         raise HTTPException(status_code=422, detail="撤销核销必须填写原因")
 
     match = db.execute(
-        select(BankReconciliationMatch).where(BankReconciliationMatch.id == match_id).with_for_update()
+        select(BankReconciliationMatch)
+        .where(BankReconciliationMatch.id == match_id)
+        .with_for_update()
     ).scalar_one_or_none()
     if match is None:
         raise HTTPException(status_code=404, detail="核销记录不存在")
@@ -29,13 +32,14 @@ def reverse_confirmed_match(db: Session, match_id: str, reason: str, user: AuthU
         raise HTTPException(status_code=409, detail="该核销记录已经撤销")
 
     tx = db.execute(
-        select(BankTransaction).where(BankTransaction.id == match.bank_transaction_id).with_for_update()
+        select(BankTransaction)
+        .where(BankTransaction.id == match.bank_transaction_id)
+        .with_for_update()
     ).scalar_one_or_none()
     if tx is None:
         raise HTTPException(status_code=409, detail="原银行流水不存在，无法自动撤销")
 
     now = datetime.now(timezone.utc)
-    # 先解除 confirmed，随后数据库资金保护触发器才允许恢复流水/删除自动收款。
     match.status = "reversed"
     match.reversed_by = str(user.id)
     match.reversed_email = user.email
@@ -53,15 +57,9 @@ def reverse_confirmed_match(db: Session, match_id: str, reason: str, user: AuthU
             if parent is not None:
                 _recompute_channel_receipts(db, parent)
 
-    tx.type = match.original_transaction_type or "statement_import"
-    tx.status = match.original_transaction_status
-    tx.reconciliation_id = None
-    tx.reconciliation_type = None
-    tx.reconciliation_no = None
-    tx.linked_amount = None
-    tx.updated_at = now
-
+    # 只重算该流水的兼容投影；还有其他 confirmed 分配时，不恢复整笔银行流水。
+    sync_transaction_projection(db, tx)
     db.commit()
     db.refresh(match)
     db.refresh(tx)
-    return {"match": _history_row(match, tx), "message": "已撤销银行流水核销"}
+    return {"match": _history_row(match, tx), "message": "已撤销该条核销分配"}
