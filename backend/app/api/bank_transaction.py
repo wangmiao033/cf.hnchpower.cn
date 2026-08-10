@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
@@ -10,13 +11,17 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy import Numeric, cast, func, or_, select
+from sqlalchemy import Numeric, cast, func, or_, select, text
 from sqlalchemy.orm import Session
 
 from app.core.blob_storage import private_blob_response, upload_private_blob
 from app.core.deps import get_db
 from app.models.bank_transaction import BankTransaction
 from app.schemas.bank_transaction import (
+    BankAccountSummaryListResponse,
+    BankAccountSummaryRead,
+    BankImportBatchListResponse,
+    BankImportBatchRead,
     BankTransactionBulkImportRequest,
     BankTransactionBulkImportResponse,
     BankTransactionCreate,
@@ -77,6 +82,16 @@ def _valid_statement_import(data: dict) -> bool:
     return (income > 0) ^ (expense > 0)
 
 
+def _decimal_sum(prepared: list[tuple[dict, str, int | None]], field: str) -> Decimal:
+    total = Decimal("0")
+    for data, _, _ in prepared:
+        try:
+            total += Decimal(str(data.get(field) or 0))
+        except Exception:
+            continue
+    return total.quantize(Decimal("0.01"))
+
+
 @router.get("", response_model=BankTransactionListResponse)
 def list_bank_transactions(
     db: Session = Depends(get_db),
@@ -86,7 +101,11 @@ def list_bank_transactions(
     date_to: str | None = Query(None),
     amount_min: Decimal | None = Query(None),
     amount_max: Decimal | None = Query(None),
-    limit: int = Query(50, ge=1, le=200),
+    bank_account: str | None = Query(None),
+    source_bank: str | None = Query(None),
+    source_file_name: str | None = Query(None),
+    import_batch_id: str | None = Query(None),
+    limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
 ) -> BankTransactionListResponse:
     stmt = select(BankTransaction)
@@ -103,6 +122,14 @@ def list_bank_transactions(
         stmt = stmt.where(BankTransaction.amount.isnot(None), cast(BankTransaction.amount, Numeric) >= amount_min)
     if amount_max is not None:
         stmt = stmt.where(BankTransaction.amount.isnot(None), cast(BankTransaction.amount, Numeric) <= amount_max)
+    if bank_account and bank_account.strip():
+        stmt = stmt.where(BankTransaction.bank_account == bank_account.strip())
+    if source_bank and source_bank.strip():
+        stmt = stmt.where(func.upper(BankTransaction.source_bank) == source_bank.strip().upper())
+    if source_file_name and source_file_name.strip():
+        stmt = stmt.where(BankTransaction.source_file_name == source_file_name.strip())
+    if import_batch_id and import_batch_id.strip():
+        stmt = stmt.where(BankTransaction.import_batch_id == import_batch_id.strip())
     if q and q.strip():
         term = f"%{q.strip()}%"
         stmt = stmt.where(
@@ -117,11 +144,97 @@ def list_bank_transactions(
                 BankTransaction.remark.ilike(term),
                 BankTransaction.summary.ilike(term),
                 BankTransaction.source_file_name.ilike(term),
+                BankTransaction.reconciliation_no.ilike(term),
             )
         )
     total = int(db.execute(select(func.count()).select_from(stmt.subquery())).scalar_one())
-    rows = db.execute(stmt.order_by(BankTransaction.created_at.desc()).limit(limit).offset(offset)).scalars().all()
+    rows = db.execute(stmt.order_by(BankTransaction.trade_date.desc().nullslast(), BankTransaction.created_at.desc()).limit(limit).offset(offset)).scalars().all()
     return BankTransactionListResponse(items=[_row_to_read(r) for r in rows], total=total)
+
+
+@router.get("/import-batches", response_model=BankImportBatchListResponse)
+def list_bank_import_batches(
+    db: Session = Depends(get_db),
+    limit: int = Query(100, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> BankImportBatchListResponse:
+    total = int(db.execute(text("SELECT COUNT(*) FROM bank_import_batches")).scalar_one())
+    rows = db.execute(
+        text(
+            """
+            SELECT
+              id,
+              source_bank,
+              source_file_name,
+              source_sheet_name,
+              bank_account,
+              total,
+              inserted,
+              duplicates,
+              invalid,
+              income_total,
+              expense_total,
+              date_from,
+              date_to,
+              duplicate_row_nos,
+              invalid_row_nos,
+              legacy_backfill,
+              created_at
+            FROM bank_import_batches
+            ORDER BY created_at DESC
+            LIMIT :limit OFFSET :offset
+            """
+        ),
+        {"limit": limit, "offset": offset},
+    ).mappings().all()
+    return BankImportBatchListResponse(
+        items=[BankImportBatchRead(**dict(row)) for row in rows],
+        total=total,
+    )
+
+
+@router.get("/accounts", response_model=BankAccountSummaryListResponse)
+def list_bank_account_summaries(db: Session = Depends(get_db)) -> BankAccountSummaryListResponse:
+    rows = db.execute(
+        text(
+            """
+            WITH ranked AS (
+              SELECT
+                COALESCE(NULLIF(UPPER(TRIM(source_bank)), ''), 'BANK') AS source_bank,
+                TRIM(bank_account) AS bank_account,
+                trade_date,
+                balance,
+                source_file_name,
+                import_batch_id,
+                created_at,
+                COUNT(*) OVER (PARTITION BY TRIM(bank_account)) AS transaction_count,
+                ROW_NUMBER() OVER (
+                  PARTITION BY TRIM(bank_account)
+                  ORDER BY trade_date DESC NULLS LAST, created_at DESC
+                ) AS row_rank
+              FROM bank_transactions
+              WHERE type = 'statement_import'
+                AND bank_account IS NOT NULL
+                AND TRIM(bank_account) <> ''
+            )
+            SELECT
+              source_bank,
+              bank_account,
+              transaction_count,
+              trade_date AS latest_trade_date,
+              balance AS latest_balance,
+              source_file_name AS latest_file_name,
+              import_batch_id AS latest_import_batch_id,
+              created_at AS last_imported_at
+            FROM ranked
+            WHERE row_rank = 1
+            ORDER BY created_at DESC
+            """
+        )
+    ).mappings().all()
+    return BankAccountSummaryListResponse(
+        items=[BankAccountSummaryRead(**dict(row)) for row in rows]
+    )
 
 
 @router.post("/upload-attachment", status_code=status.HTTP_201_CREATED)
@@ -151,12 +264,14 @@ def bulk_import_bank_transactions(
     payload: BankTransactionBulkImportRequest,
     db: Session = Depends(get_db),
 ) -> BankTransactionBulkImportResponse:
+    batch_id = str(uuid4())
     source_bank = _clean_text(payload.source_bank).upper() or "ICBC"
     source_file_name = _clean_text(payload.source_file_name) or None
+    source_sheet_name = _clean_text(payload.source_sheet_name) or None
     bank_account = _clean_text(payload.bank_account) or None
 
     prepared: list[tuple[dict, str, int | None]] = []
-    invalid_rows: list[int] = []
+    invalid_rows: list[int] = sorted({int(row) for row in payload.source_invalid_row_nos if isinstance(row, int) and row > 0})
     for item in payload.items:
         data = item.model_dump(exclude_unset=True)
         data["type"] = "statement_import"
@@ -167,13 +282,14 @@ def bulk_import_bank_transactions(
             data["bank_account"] = bank_account
         row_no = data.get("source_row_no")
         if not _valid_statement_import(data):
-            if isinstance(row_no, int):
+            if isinstance(row_no, int) and row_no > 0:
                 invalid_rows.append(row_no)
             continue
         dedupe_key = _build_dedupe_key(data)
         data["dedupe_key"] = dedupe_key
         prepared.append((data, dedupe_key, row_no if isinstance(row_no, int) else None))
 
+    invalid_rows = sorted(set(invalid_rows))
     keys = [key for _, key, _ in prepared]
     existing_keys: set[str] = set()
     if keys:
@@ -192,19 +308,88 @@ def bulk_import_bank_transactions(
             if row_no is not None:
                 duplicate_rows.append(row_no)
             continue
+        data["import_batch_id"] = batch_id
         row = BankTransaction(id=str(uuid4()), **data)
         db.add(row)
         seen.add(dedupe_key)
         inserted += 1
 
-    db.commit()
     duplicates = len(prepared) - inserted
+    valid_dates = sorted(
+        _clean_text(data.get("trade_date"))
+        for data, _, _ in prepared
+        if _clean_text(data.get("trade_date"))
+    )
+    total_rows = payload.source_total_rows or (len(payload.items) + len(payload.source_invalid_row_nos))
+    total_rows = max(total_rows, len(payload.items), inserted + duplicates + len(invalid_rows))
+
+    db.execute(
+        text(
+            """
+            INSERT INTO bank_import_batches (
+              id,
+              source_bank,
+              source_file_name,
+              source_sheet_name,
+              bank_account,
+              total,
+              inserted,
+              duplicates,
+              invalid,
+              income_total,
+              expense_total,
+              date_from,
+              date_to,
+              duplicate_row_nos,
+              invalid_row_nos,
+              legacy_backfill
+            ) VALUES (
+              :id,
+              :source_bank,
+              :source_file_name,
+              :source_sheet_name,
+              :bank_account,
+              :total,
+              :inserted,
+              :duplicates,
+              :invalid,
+              :income_total,
+              :expense_total,
+              :date_from,
+              :date_to,
+              CAST(:duplicate_row_nos AS JSONB),
+              CAST(:invalid_row_nos AS JSONB),
+              FALSE
+            )
+            """
+        ),
+        {
+            "id": batch_id,
+            "source_bank": source_bank,
+            "source_file_name": source_file_name,
+            "source_sheet_name": source_sheet_name,
+            "bank_account": bank_account,
+            "total": total_rows,
+            "inserted": inserted,
+            "duplicates": duplicates,
+            "invalid": len(invalid_rows),
+            "income_total": _decimal_sum(prepared, "income_amount"),
+            "expense_total": _decimal_sum(prepared, "expense_amount"),
+            "date_from": valid_dates[0] if valid_dates else None,
+            "date_to": valid_dates[-1] if valid_dates else None,
+            "duplicate_row_nos": json.dumps(sorted(set(duplicate_rows))),
+            "invalid_row_nos": json.dumps(invalid_rows),
+        },
+    )
+
+    db.commit()
     return BankTransactionBulkImportResponse(
-        total=len(payload.items),
+        batch_id=batch_id,
+        total=total_rows,
         inserted=inserted,
         duplicates=duplicates,
         invalid=len(invalid_rows),
-        duplicate_row_nos=duplicate_rows,
+        duplicate_row_nos=sorted(set(duplicate_rows)),
         invalid_row_nos=invalid_rows,
     )
 
