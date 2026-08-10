@@ -179,14 +179,9 @@ async def enforce_origin_and_response_policy(request: Request, call_next):
         and origin
         and origin not in _cors_allowed
     ):
-        response = JSONResponse(
-            status_code=403,
-            content={
-                "detail": "请求来源不受信任",
-                "error_code": "SEC-ORIGIN-403",
-                "request_id": request_id,
-            },
-        )
+        # Keep the historical JSON body stable for existing callers; diagnostics
+        # travel in response headers so observability does not break API contracts.
+        response = JSONResponse(status_code=403, content={"detail": "请求来源不受信任"})
         _apply_common_response_headers(response, path, request_id)
         response.headers["X-Error-Code"] = "SEC-ORIGIN-403"
         return response
