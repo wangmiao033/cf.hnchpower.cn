@@ -77,7 +77,9 @@ class ContractMatcherTest(unittest.TestCase):
         candidate = {**self.candidate, "authorization_end": "2026-05-31"}
         result = evaluate_line(self.bill, self.line, [candidate])
         self.assertEqual(result["status"], "fail")
-        self.assertEqual(result["match"]["confidence"], "medium")
+        # A contract outside the bill period should not remain a medium/high-confidence
+        # automatic match even when partner/game names are exact.
+        self.assertEqual(result["match"]["confidence"], "low")
         self.assertEqual(
             next(item for item in result["checks"] if item["key"] == "authorization")["status"],
             "fail",
