@@ -1,0 +1,363 @@
+.bill-contract-check {
+  margin-bottom: 16px;
+  overflow: hidden;
+  border: 1px solid #dfe6ef;
+  border-radius: 14px;
+  background: #fff;
+}
+
+.bill-contract-check__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 16px 18px;
+  border-bottom: 1px solid #e8edf3;
+  background: linear-gradient(135deg, #fbfdff 0%, #f5f9ff 100%);
+}
+
+.bill-contract-check__head > div:first-child {
+  min-width: 0;
+}
+
+.bill-contract-check__head > div:first-child > span {
+  color: #3f6cae;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .08em;
+}
+
+.bill-contract-check__head h3 {
+  margin: 3px 0 3px;
+  color: #24334a;
+  font-size: 16px;
+}
+
+.bill-contract-check__head p {
+  margin: 0;
+  color: #7f8b9d;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.bill-contract-check__summary {
+  min-width: 190px;
+  max-width: 300px;
+  display: grid;
+  gap: 3px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  text-align: right;
+}
+
+.bill-contract-check__summary strong {
+  font-size: 13px;
+}
+
+.bill-contract-check__summary span {
+  color: #738197;
+  font-size: 9px;
+  line-height: 1.4;
+}
+
+.bill-contract-check__summary.is-pass { background: #eef9f3; color: #147a4d; }
+.bill-contract-check__summary.is-warning { background: #fff8e9; color: #9b6510; }
+.bill-contract-check__summary.is-fail { background: #fff1f1; color: #b83d3d; }
+.bill-contract-check__summary.is-loading { background: #f4f6f9; color: #66758b; }
+
+.bill-contract-check__loading,
+.bill-contract-check__error,
+.bill-contract-check__empty {
+  min-height: 90px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  padding: 18px;
+  color: #7b8798;
+  font-size: 11px;
+}
+
+.bill-contract-check__loading > span {
+  width: 15px;
+  height: 15px;
+  border: 2px solid #d8e3f2;
+  border-top-color: #3b6eb5;
+  border-radius: 50%;
+  animation: bill-contract-spin .8s linear infinite;
+}
+
+@keyframes bill-contract-spin {
+  to { transform: rotate(360deg); }
+}
+
+.bill-contract-check__error {
+  display: grid;
+  gap: 4px;
+  justify-items: start;
+  min-height: 0;
+  margin: 12px;
+  border: 1px solid #f0d2d2;
+  border-radius: 10px;
+  background: #fff7f7;
+}
+
+.bill-contract-check__error strong { color: #a53838; }
+.bill-contract-check__error span { color: #8c6868; }
+
+.bill-contract-check__metrics {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  border-bottom: 1px solid #edf1f5;
+}
+
+.bill-contract-check__metrics > div {
+  min-width: 0;
+  padding: 10px 12px;
+  border-right: 1px solid #edf1f5;
+  background: #fff;
+}
+
+.bill-contract-check__metrics > div:last-child { border-right: 0; }
+.bill-contract-check__metrics span { display: block; color: #8a96a7; font-size: 9px; }
+.bill-contract-check__metrics strong { display: block; margin-top: 4px; color: #314056; font-size: 17px; }
+.bill-contract-check__metrics .is-pass strong { color: #168050; }
+.bill-contract-check__metrics .is-warning strong { color: #a36b11; }
+.bill-contract-check__metrics .is-fail strong { color: #bd3d3d; }
+.bill-contract-check__metrics .is-unmatched strong { color: #6c7788; }
+
+.bill-contract-check__bill-level {
+  display: grid;
+  gap: 7px;
+  margin: 12px 14px 0;
+  padding: 10px 11px;
+  border: 1px solid #eadfc2;
+  border-radius: 10px;
+  background: #fffaf0;
+}
+
+.bill-contract-check__bill-level > strong {
+  color: #78561c;
+  font-size: 10px;
+}
+
+.bill-contract-check__bill-level > div {
+  display: grid;
+  grid-template-columns: 100px minmax(0, 1fr);
+  gap: 10px;
+  font-size: 9px;
+}
+
+.bill-contract-check__bill-level > div > span { color: #9a6b13; font-weight: 700; }
+.bill-contract-check__bill-level p { margin: 0; color: #7d6d52; }
+
+.bill-contract-check__lines {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+}
+
+.bill-contract-line {
+  overflow: hidden;
+  border: 1px solid #e1e7ef;
+  border-radius: 11px;
+  background: #fbfcfe;
+}
+
+.bill-contract-line.is-pass { border-left: 3px solid #2b9f68; }
+.bill-contract-line.is-warning { border-left: 3px solid #d69a2a; }
+.bill-contract-line.is-fail { border-left: 3px solid #d24a4a; }
+.bill-contract-line.is-unmatched { border-left: 3px solid #9aa5b4; }
+
+.bill-contract-line__head {
+  width: 100%;
+  min-height: 58px;
+  display: grid;
+  grid-template-columns: 78px minmax(120px, .8fr) minmax(220px, 1.4fr) 20px;
+  gap: 12px;
+  align-items: center;
+  padding: 9px 11px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.bill-contract-line__status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: max-content;
+  min-width: 54px;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: #eef2f6;
+  color: #657387;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.bill-contract-line.is-pass .bill-contract-line__status { background: #e9f8f0; color: #14784b; }
+.bill-contract-line.is-warning .bill-contract-line__status { background: #fff5dc; color: #9b6611; }
+.bill-contract-line.is-fail .bill-contract-line__status { background: #ffeded; color: #b53b3b; }
+
+.bill-contract-line__game,
+.bill-contract-line__match {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.bill-contract-line__game strong,
+.bill-contract-line__match strong,
+.bill-contract-line__game small,
+.bill-contract-line__match small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bill-contract-line__game strong { color: #2d3b51; font-size: 11px; }
+.bill-contract-line__game small,
+.bill-contract-line__match small { color: #8b97a7; font-size: 9px; }
+.bill-contract-line__match strong { color: #496079; font-size: 10px; }
+
+.bill-contract-line__arrow {
+  color: #8b97a7;
+  font-size: 18px;
+  transform: rotate(90deg);
+  transition: transform .15s ease;
+}
+
+.bill-contract-line__arrow.is-open { transform: rotate(-90deg); }
+
+.bill-contract-line__body {
+  padding: 0 11px 12px;
+  border-top: 1px solid #edf1f5;
+  background: #fff;
+}
+
+.bill-contract-match-meta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  padding: 11px 0;
+}
+
+.bill-contract-match-meta > div {
+  min-width: 0;
+  padding: 8px 9px;
+  border-radius: 8px;
+  background: #f7f9fc;
+}
+
+.bill-contract-match-meta span { display: block; color: #8d99a8; font-size: 8.5px; }
+.bill-contract-match-meta strong {
+  display: block;
+  margin-top: 3px;
+  overflow: hidden;
+  color: #4a596d;
+  font-size: 9.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bill-contract-check-table {
+  overflow-x: auto;
+  border: 1px solid #e7ebf1;
+  border-radius: 9px;
+}
+
+.bill-contract-check-table__head,
+.bill-contract-check-row {
+  min-width: 680px;
+  display: grid;
+  grid-template-columns: minmax(210px, 1.4fr) minmax(120px, .75fr) minmax(160px, 1fr) 90px;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 10px;
+}
+
+.bill-contract-check-table__head {
+  background: #f7f9fc;
+  color: #7d8999;
+  font-size: 8.5px;
+  font-weight: 800;
+}
+
+.bill-contract-check-row {
+  border-top: 1px solid #edf1f5;
+  color: #5e6b7d;
+  font-size: 9px;
+}
+
+.bill-contract-check-row > span:first-child { display: grid; gap: 2px; }
+.bill-contract-check-row > span:first-child strong { color: #46556a; font-size: 9.5px; }
+.bill-contract-check-row > span:first-child small { color: #909baa; line-height: 1.35; }
+.bill-contract-check-row em {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 54px;
+  height: 22px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: #eef2f6;
+  color: #637186;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.bill-contract-check-row.is-pass em { background: #eaf8f1; color: #15794b; }
+.bill-contract-check-row.is-fail em { background: #ffeded; color: #b53b3b; }
+.bill-contract-check-row.is-manual em,
+.bill-contract-check-row.is-missing em { background: #fff5dc; color: #9b6611; }
+
+.bill-contract-candidates {
+  display: grid;
+  gap: 4px;
+  margin-top: 9px;
+  padding: 8px 9px;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #778497;
+  font-size: 9px;
+}
+
+.bill-contract-candidates strong { color: #526177; }
+
+.bill-contract-check__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 10px 14px;
+  border-top: 1px solid #e8edf3;
+  background: #fafbfd;
+  color: #8692a3;
+  font-size: 9px;
+}
+
+.bill-contract-check__foot strong { color: #506076; }
+
+@media (max-width: 900px) {
+  .bill-contract-check__head { align-items: flex-start; flex-direction: column; }
+  .bill-contract-check__summary { width: 100%; max-width: none; text-align: left; }
+  .bill-contract-check__metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .bill-contract-check__metrics > div:nth-child(3) { border-right: 0; }
+  .bill-contract-check__metrics > div:nth-child(-n + 3) { border-bottom: 1px solid #edf1f5; }
+  .bill-contract-line__head { grid-template-columns: 70px minmax(0, 1fr) 18px; }
+  .bill-contract-line__match { grid-column: 2; }
+  .bill-contract-line__arrow { grid-column: 3; grid-row: 1 / span 2; }
+  .bill-contract-match-meta { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 560px) {
+  .bill-contract-check__metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .bill-contract-check__metrics > div:nth-child(2n) { border-right: 0; }
+  .bill-contract-check__metrics > div { border-bottom: 1px solid #edf1f5; }
+  .bill-contract-match-meta { grid-template-columns: 1fr; }
+  .bill-contract-check__foot { align-items: flex-start; flex-direction: column; }
+}
