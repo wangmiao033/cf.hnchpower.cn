@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Numeric, String, Text, func, text
+from sqlalchemy import BigInteger, Boolean, DateTime, Numeric, String, Text, func, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -30,9 +30,14 @@ class InvoiceRecord(Base):
     invoice_amount: Mapped[float] = mapped_column(Numeric(18, 2), nullable=False, default=0)
     tax_amount: Mapped[float] = mapped_column(Numeric(18, 2), nullable=False, default=0)
     amount_with_tax: Mapped[float] = mapped_column(Numeric(18, 2), nullable=False, default=0)
+    tax_rate: Mapped[float | None] = mapped_column(Numeric(8, 4), nullable=True)
     invoice_date: Mapped[str | None] = mapped_column(String, nullable=True)
     issuer: Mapped[str | None] = mapped_column(String, nullable=True)
     invoice_source: Mapped[str | None] = mapped_column(String, nullable=True)
+    source_file_name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source_file_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source_file_type: Mapped[str | None] = mapped_column(String, nullable=True)
+    source_file_size: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     tax_status: Mapped[str] = mapped_column(String(32), nullable=False, default="normal")
     original_invoice_id: Mapped[str | None] = mapped_column(String, nullable=True)
     status: Mapped[str | None] = mapped_column(String, nullable=True, default="未开")
