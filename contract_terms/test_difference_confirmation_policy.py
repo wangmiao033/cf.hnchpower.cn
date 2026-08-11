@@ -1,6 +1,6 @@
 import unittest
 
-from v7_main import _apply_confirmation_policy
+from v8_main import _apply_confirmation_policy
 
 
 class DifferenceConfirmationPolicyTests(unittest.TestCase):
