@@ -148,25 +148,19 @@ export function listQuickSdkRdLines(params: {
   q?: string
   limit?: number
 }): Promise<QuickSdkRdLineListResponse> {
-  return apiGet<QuickSdkRdLineListResponse>(
-    `${PATH}/rd-lines${queryString(params)}`,
-    READ_OPTIONS
-  ).catch(
-    async (error) => {
-      if (!(error instanceof ApiError) || error.status !== 404) throw error
-      return listQuickSdkRdLinesFromFlows(params)
-    }
-  )
+  // Production QuickSDK traffic is routed to the legacy data service, which exposes
+  // /flows but not /rd-lines. Build the same summary directly from that source so
+  // normal page loads do not emit a guaranteed 404 before falling back.
+  return listQuickSdkRdLinesFromFlows(params)
 }
 
 export function getQuickSdkGameFlow(params: {
   settlement_month?: string
   game_name: string
 }): Promise<QuickSdkGameFlowResponse> {
-  return apiGet<QuickSdkGameFlowResponse>(
-    `${PATH}/game-flow${queryString(params)}`,
-    READ_OPTIONS
-  ).catch(() => getQuickSdkGameFlowFromFlows(params))
+  // Keep this on the same production QuickSDK data source as /flows. The core
+  // service has a similarly named endpoint backed by different tables.
+  return getQuickSdkGameFlowFromFlows(params)
 }
 
 async function buildAnalyticsFromFlows(params: { settlement_month?: string }) {
