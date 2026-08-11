@@ -129,11 +129,21 @@ def pool_candidates(db: Session, policy: ChannelCumulativeSettlementPolicy) -> l
     key = str(policy.partner_key)
     rows = db.execute(
         select(ChannelRecord).where(
-            func.lower(func.coalesce(ChannelRecord.status, "pending")) == "confirmed",
+            func.lower(func.coalesce(ChannelRecord.status, "pending")).in_(("confirmed", "completed")),
             ChannelRecord.settlement_amount >= 0,
         ).order_by(ChannelRecord.settlement_month.asc(), ChannelRecord.created_at.asc())
     ).scalars().all()
-    rows = [row for row in rows if normalize_partner_key(row.partner_name or row.channel_name) == key]
+    # A zero-settlement month can still contribute to a flow-based threshold. It
+    # may already be lifecycle-completed because no cash action is needed, but
+    # its flow remains part of the partner's cumulative contractual threshold.
+    rows = [
+        row for row in rows
+        if normalize_partner_key(row.partner_name or row.channel_name) == key
+        and (
+            str(row.status or "pending").strip().lower() == "confirmed"
+            or _num(row.settlement_amount) <= EPS
+        )
+    ]
     ids = [str(row.id) for row in rows]
     batched = active_batch_bill_ids(db, ids)
     invoiced = invoice_touched_bill_ids(db, ids)
