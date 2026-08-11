@@ -14,6 +14,8 @@ class FinanceInvoiceTaskRead(BaseModel):
     task_no: str
     bill_type: str
     bill_id: str
+    source_kind: str = "bill"
+    cumulative_batch_id: str | None = None
     direction: str
     status: str
     requested_amount: float
