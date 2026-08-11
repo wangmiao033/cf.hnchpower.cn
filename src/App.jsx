@@ -85,6 +85,29 @@ const OPEN_TABS_STORAGE_KEY = 'core-open-workspace-tabs-v2'
 const VALID_TAB_VIEWS = new Set(
   SIDEBAR_GROUPS.flatMap((group) => group.items.map((item) => item.view)).filter((view) => view !== VIEWS.DASHBOARD)
 )
+const RECON_DATA_VIEWS = new Set([
+  VIEWS.RECON_RD,
+  VIEWS.RECON_PROGRESS,
+  VIEWS.RECON_CREATE,
+  VIEWS.RECON_EDIT,
+  VIEWS.RECON_CHANNEL,
+  VIEWS.CHANNEL_RECON_CREATE,
+  VIEWS.CHANNEL_RECON_EDIT,
+  VIEWS.BANK_RECONCILIATION,
+  VIEWS.BANK_TRANSACTIONS_LEDGER,
+  VIEWS.BANK_STATEMENT_IMPORT,
+  VIEWS.INVOICE_MANAGE,
+  VIEWS.INVOICE_INPUT,
+  VIEWS.INVOICE_CREATE,
+  VIEWS.INVOICE_EDIT
+])
+const INVOICE_DATA_VIEWS = new Set([
+  VIEWS.FINANCE_WORKBENCH,
+  VIEWS.INVOICE_MANAGE,
+  VIEWS.INVOICE_INPUT,
+  VIEWS.INVOICE_CREATE,
+  VIEWS.INVOICE_EDIT
+])
 
 function readOpenTabs() {
   if (typeof window === 'undefined') return []
@@ -106,6 +129,36 @@ function scheduleIdleTask(callback) {
   return () => window.clearTimeout(id)
 }
 
+function WorkspaceLoadingFallback() {
+  return (
+    <div style={{ padding: '18px 22px', minHeight: 420, background: '#f5f7fb' }} aria-label="正在打开页面">
+      <div style={{ height: 34, width: 180, borderRadius: 8, background: '#e9edf4', marginBottom: 16 }} />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,minmax(0,1fr))', gap: 10, marginBottom: 14 }}>
+        {[0, 1, 2, 3].map((item) => <div key={item} style={{ height: 82, borderRadius: 10, background: '#fff', border: '1px solid #e5eaf1' }} />)}
+      </div>
+      <div style={{ height: 300, borderRadius: 10, background: '#fff', border: '1px solid #e5eaf1' }} />
+    </div>
+  )
+}
+
+function Bill360LoadingFallback({ onClose }) {
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 240, background: 'rgba(22,31,47,.34)' }} onMouseDown={(event) => {
+      if (event.target === event.currentTarget) onClose?.()
+    }}>
+      <aside style={{ position: 'absolute', top: 0, right: 0, width: 'min(980px,94vw)', height: '100%', background: '#f6f8fb', boxShadow: '-20px 0 50px rgba(21,32,49,.16)' }}>
+        <div style={{ height: 86, background: '#fff', borderBottom: '1px solid #e6ebf2', padding: '18px 22px', display: 'flex', justifyContent: 'space-between' }}>
+          <div><div style={{ height: 12, width: 88, background: '#e9edf4', borderRadius: 6, marginBottom: 10 }} /><div style={{ height: 22, width: 220, background: '#e1e7f0', borderRadius: 7 }} /></div>
+          <button type="button" onClick={onClose} style={{ width: 34, height: 34, border: '1px solid #dce3ed', borderRadius: 8, background: '#fff', cursor: 'pointer' }}>×</button>
+        </div>
+        <div style={{ padding: 16, display: 'grid', gridTemplateColumns: 'repeat(4,minmax(0,1fr))', gap: 10 }}>
+          {[0, 1, 2, 3].map((item) => <div key={item} style={{ height: 92, background: '#fff', border: '1px solid #e5eaf1', borderRadius: 10 }} />)}
+        </div>
+      </aside>
+    </div>
+  )
+}
+
 function App() {
   const { user, isAuthenticated, loading, can } = useAuth()
   const [activeView, setActiveViewState] = useState(VIEWS.DASHBOARD)
@@ -116,6 +169,8 @@ function App() {
   const [channelReturnView, setChannelReturnView] = useState(VIEWS.RECON_CHANNEL)
   const [invoiceEditId, setInvoiceEditId] = useState(null)
   const [bill360Target, setBill360Target] = useState(null)
+  const [reconDataActivated, setReconDataActivated] = useState(false)
+  const [invoiceDataActivated, setInvoiceDataActivated] = useState(false)
   const prevActiveViewRef = useRef(activeView)
   const activeViewRef = useRef(activeView)
   const navigationBlockerRef = useRef(null)
@@ -129,9 +184,30 @@ function App() {
 
   const hasReconciliationAccess = isAuthenticated && !loading && can('reconciliation.view')
   const hasInvoiceAccess = isAuthenticated && !loading && can('invoices.view')
+
+  useEffect(() => {
+    if (hasReconciliationAccess && RECON_DATA_VIEWS.has(activeView)) setReconDataActivated(true)
+  }, [activeView, hasReconciliationAccess])
+
+  useEffect(() => {
+    if (hasInvoiceAccess && INVOICE_DATA_VIEWS.has(activeView)) setInvoiceDataActivated(true)
+  }, [activeView, hasInvoiceAccess])
+
   const settings = useSettingsStore({ showToast, enabled: isAuthenticated && !loading })
-  const recon = useReconciliationStore(settings, showToast, { enabled: hasReconciliationAccess })
-  const invoice = useInvoiceStore({ showToast, enabled: hasInvoiceAccess })
+  const recon = useReconciliationStore(settings, showToast, {
+    enabled: hasReconciliationAccess && reconDataActivated
+  })
+  const invoice = useInvoiceStore({
+    showToast,
+    enabled: hasInvoiceAccess && invoiceDataActivated
+  })
+
+  useEffect(() => {
+    if (!isAuthenticated || loading || !can('reconciliation.view')) return undefined
+    return scheduleIdleTask(() => {
+      void PAGE_LOADERS.bill360().catch(() => {})
+    })
+  }, [isAuthenticated, loading, can])
 
   useEffect(() => {
     if (!isAuthenticated || loading || !user?.id) return
@@ -144,7 +220,7 @@ function App() {
   }, [isAuthenticated, loading, user?.id, user?.role, can])
 
   useEffect(() => {
-    if (!hasReconciliationAccess) return undefined
+    if (!hasReconciliationAccess || !reconDataActivated) return undefined
     let cancelled = false
     const tasks = [
       ...(recon.records || []).slice(0, 2).map((row) => async () => {
@@ -168,7 +244,7 @@ function App() {
         }
       })()
     })
-  }, [hasReconciliationAccess, recon.records, recon.channelRecords])
+  }, [hasReconciliationAccess, reconDataActivated, recon.records, recon.channelRecords])
 
   useEffect(() => {
     if (typeof window !== 'undefined') window.localStorage.setItem(OPEN_TABS_STORAGE_KEY, JSON.stringify(openTabs))
@@ -335,9 +411,13 @@ function App() {
     <ErrorBoundary>
       <AppStateProvider value={appCtx}>
         <AppShell activeView={activeView} onNavigate={navigate} openTabs={openTabs} onCloseTab={closeTab} onSettingsChange={handleHeaderSettingsChange}>
-          <Suspense fallback={null}>{renderView()}</Suspense>
+          <Suspense fallback={<WorkspaceLoadingFallback />}>{renderView()}</Suspense>
         </AppShell>
-        {bill360Target ? <Suspense fallback={null}><Bill360Drawer target={bill360Target} onClose={closeBill360} /></Suspense> : null}
+        {bill360Target ? (
+          <Suspense fallback={<Bill360LoadingFallback onClose={closeBill360} />}>
+            <Bill360Drawer target={bill360Target} onClose={closeBill360} />
+          </Suspense>
+        ) : null}
         <ConfirmDialog isOpen={recon.showDeleteConfirm} title="确认删除" message="确定要删除这条研发对账记录吗？此操作无法撤销。" onConfirm={recon.confirmDelete} onCancel={recon.cancelDelete} confirmText="删除" cancelText="取消" />
         <ConfirmDialog isOpen={recon.showBatchDeleteConfirm} title="确认批量删除" message={`确定要删除选中的 ${recon.selectedIds.length} 条研发对账记录吗？此操作无法撤销。`} onConfirm={recon.confirmBatchDelete} onCancel={recon.cancelBatchDelete} confirmText="删除" cancelText="取消" />
         <Toast isVisible={toast.isVisible} message={toast.message} type={toast.type} onClose={hideToast} />
