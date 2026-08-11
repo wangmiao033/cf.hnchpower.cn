@@ -1,0 +1,56 @@
+/* Bill 360 overview: keep normal facts quiet and let unresolved items lead. */
+.bill360-overview-grid .bill360-check-list > .is-warning,
+.bill360-overview-grid .bill360-check-list > .is-danger,
+.bill360-overview-grid .bill360-check-list > .is-neutral {
+  order: 1;
+}
+
+.bill360-overview-grid .bill360-check-list > .is-good {
+  order: 2;
+  opacity: .46;
+  background: #f8fafc;
+  border-color: #edf1f5;
+  box-shadow: none;
+}
+
+.bill360-overview-grid .bill360-check-list > .is-danger {
+  box-shadow: inset 3px 0 0 #ef4444;
+}
+
+.bill360-overview-grid .bill360-check-list > .is-warning {
+  box-shadow: inset 3px 0 0 #f59e0b;
+}
+
+.bill360-overview-grid .bill360-check-list:not(:has(> .is-warning, > .is-danger, > .is-neutral)) > .is-good {
+  display: none;
+}
+
+.bill360-overview-grid .bill360-check-list:not(:has(> .is-warning, > .is-danger, > .is-neutral))::before {
+  content: '✓ 当前账单闭环正常，无待处理事项';
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  min-height: 76px;
+  padding: 0 18px;
+  border: 1px solid #d8eee4;
+  border-radius: 9px;
+  background: #f4fbf7;
+  color: #16815d;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.bill360-contract-launcher .bill360-due-note {
+  margin-top: 2px;
+  color: #64748b;
+}
+
+.bill360-contract-launcher .bill360-due-note.is-overdue {
+  color: #c2413b;
+  font-weight: 700;
+}
+
+.bill360-contract-launcher .bill360-due-note.is-soon {
+  color: #a16207;
+  font-weight: 700;
+}
