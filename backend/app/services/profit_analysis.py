@@ -13,6 +13,7 @@ from app.models.channel import ChannelRecord
 from app.models.operating_expense import OperatingExpense
 from app.models.reconciliation import ReconciliationRecord
 from app.services.monthly_business_dashboard import metric, month_key, month_window, shift_month
+from app.services.profit_game_normalization import normalize_profit_game_name
 
 _BLOCKED_STATUSES = {
     "cancelled",
@@ -64,7 +65,8 @@ def _active(record) -> bool:
 
 
 def _game(value) -> str:
-    return str(value or "").strip() or "未填写产品"
+    # 原始游戏名仍保留在账单/合同/QuickSDK 中；这里只改变利润分析的分组 key。
+    return normalize_profit_game_name(value)
 
 
 def _add_rd_costs(
@@ -330,6 +332,7 @@ def build_profit_analysis(
         "trend": trend,
         "notes": [
             "管理口径经营利润 = 渠道结算 - 研发结算成本 - 账单服务器成本 - 经营费用。",
+            "产品利润按母游戏自动归并；折扣、专服、混服、渠道等原始版本名仍保留在来源账单中，不会被改写。",
             "研发多周期账单继续按每条明细自己的 settlement_cycle 归属月份。",
             "多游戏渠道账单的服务器成本按各游戏结算金额占比分配；若明细结算均为 0，则按明细行平均分配。",
             "产品可归属利润只扣明确归属到该游戏的经营费用；公司公共费用不强行分摊到产品。",
