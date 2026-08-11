@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.models.channel import ChannelRecord
 from app.models.operating_expense import OperatingExpense
 from app.models.reconciliation import ReconciliationRecord
+from app.models.server_cost import ServerCost
 from app.services.monthly_business_dashboard import metric, month_key, month_window, shift_month
 from app.services.profit_game_normalization import normalize_profit_game_name
 
@@ -33,6 +34,11 @@ class ProfitMonthBucket:
     channel_settlement: float = 0
     rd_cost: float = 0
     server_cost: float = 0
+    legacy_server_cost: float = 0
+    standalone_server_cost: float = 0
+    shared_server_cost: float = 0
+    attributed_server_cost: float = 0
+    server_cost_count: int = 0
     operating_expense: float = 0
     shared_expense: float = 0
     attributed_expense: float = 0
@@ -107,7 +113,7 @@ def _add_rd_costs(
 
 
 def _channel_line_allocations(record) -> list[tuple[str, float, float, float]]:
-    """Return (game, normalized settlement, flow, allocated server cost)."""
+    """Return (game, normalized settlement, flow, allocated legacy server cost)."""
     items = list(getattr(record, "line_items", None) or [])
     total_settlement = abs(_num(getattr(record, "settlement_amount", 0)))
     server_cost = max(0.0, _num(getattr(record, "server_cost", 0)))
@@ -164,6 +170,7 @@ def _add_channel_income(
         server = max(0.0, _num(record.server_cost))
         months[month].channel_settlement += total
         months[month].server_cost += server
+        months[month].legacy_server_cost += server
         months[month].channel_bill_ids.add(str(record.id))
 
         for game_name, settlement, flow, server_share in _channel_line_allocations(record):
@@ -171,6 +178,33 @@ def _add_channel_income(
             game.channel_settlement += settlement
             game.channel_flow += flow
             game.server_cost_allocated += server_share
+
+
+def _add_server_costs(
+    months: dict[str, ProfitMonthBucket],
+    games: dict[str, dict[str, ProfitGameBucket]],
+    costs: list[ServerCost],
+) -> None:
+    """Add standalone server-cost ledger rows without rewriting legacy channel bill costs."""
+    for cost in costs:
+        if not _active(cost):
+            continue
+        month = month_key(getattr(cost, "expense_month", None))
+        if not month:
+            continue
+        amount = abs(_num(getattr(cost, "amount", 0)))
+        if amount <= 0.005:
+            continue
+        bucket = months[month]
+        bucket.server_cost += amount
+        bucket.standalone_server_cost += amount
+        bucket.server_cost_count += 1
+        game_name = str(getattr(cost, "game_name", None) or "").strip()
+        if game_name:
+            bucket.attributed_server_cost += amount
+            games[month][_game(game_name)].server_cost_allocated += amount
+        else:
+            bucket.shared_server_cost += amount
 
 
 def _add_expenses(
@@ -270,6 +304,9 @@ def build_profit_analysis(
         .options(selectinload(ChannelRecord.line_items))
         .order_by(ChannelRecord.created_at.asc())
     ).scalars().all()
+    standalone_server_costs = db.execute(
+        select(ServerCost).order_by(ServerCost.expense_month.asc(), ServerCost.created_at.asc())
+    ).scalars().all()
     expenses = db.execute(
         select(OperatingExpense).order_by(OperatingExpense.expense_month.asc(), OperatingExpense.created_at.asc())
     ).scalars().all()
@@ -278,6 +315,7 @@ def build_profit_analysis(
     games: dict[str, dict[str, ProfitGameBucket]] = defaultdict(lambda: defaultdict(ProfitGameBucket))
     _add_rd_costs(months, games, list(rd_records))
     _add_channel_income(months, games, list(channel_records))
+    _add_server_costs(months, games, list(standalone_server_costs))
     _add_expenses(months, games, list(expenses))
 
     available_months = sorted((month for month in months if month), reverse=True)
@@ -316,6 +354,10 @@ def build_profit_analysis(
         "channel_settlement": metric(current.channel_settlement, previous.channel_settlement),
         "rd_cost": metric(current.rd_cost, previous.rd_cost),
         "server_cost": metric(current.server_cost, previous.server_cost),
+        "legacy_server_cost": metric(current.legacy_server_cost, previous.legacy_server_cost),
+        "standalone_server_cost": metric(current.standalone_server_cost, previous.standalone_server_cost),
+        "shared_server_cost": metric(current.shared_server_cost, previous.shared_server_cost),
+        "attributed_server_cost": metric(current.attributed_server_cost, previous.attributed_server_cost),
         "operating_expense": metric(current.operating_expense, previous.operating_expense),
         "pre_expense_contribution": metric(
             current_d["pre_expense_contribution"], previous_d["pre_expense_contribution"]
@@ -326,15 +368,18 @@ def build_profit_analysis(
         "attributed_expense": metric(current.attributed_expense, previous.attributed_expense),
         "channel_bill_count": len(current.channel_bill_ids),
         "rd_bill_count": len(current.rd_bill_ids),
+        "server_cost_count": current.server_cost_count,
         "expense_count": current.expense_count,
         "expense_categories": _category_rows(current),
         "games": _game_rows(games[selected])[:100],
         "trend": trend,
         "notes": [
-            "管理口径经营利润 = 渠道结算 - 研发结算成本 - 账单服务器成本 - 经营费用。",
+            "管理口径经营利润 = 渠道结算 - 研发结算成本 - 服务器成本 - 经营费用。",
+            "服务器成本 = 历史渠道账单服务器费 + 独立服务器成本台账；新录入建议只走服务器成本台账，避免重复录入同一费用。",
+            "独立服务器成本归属具体游戏时扣减该游戏利润；留空时作为公司公共服务器成本，只扣公司利润，不强行分摊到产品。",
             "产品利润按母游戏自动归并；折扣、专服、混服、渠道等原始版本名仍保留在来源账单中，不会被改写。",
             "研发多周期账单继续按每条明细自己的 settlement_cycle 归属月份。",
-            "多游戏渠道账单的服务器成本按各游戏结算金额占比分配；若明细结算均为 0，则按明细行平均分配。",
+            "历史多游戏渠道账单的服务器成本仍按各游戏结算金额占比分配；若明细结算均为 0，则按明细行平均分配。",
             "产品可归属利润只扣明确归属到该游戏的经营费用；公司公共费用不强行分摊到产品。",
             "该页面用于内部经营管理，不等同于法定会计报表净利润；折旧、所得税调整等未录入项目不会自动推算。",
         ],
