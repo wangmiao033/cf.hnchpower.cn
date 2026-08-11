@@ -1,0 +1,303 @@
+.channel-cumulative-card {
+  margin-top: 14px;
+  border: 1px solid #dce7f1;
+  border-radius: 14px;
+  padding: 14px;
+  background: linear-gradient(180deg, #fbfdff 0%, #f7fbff 100%);
+  color: #183247;
+}
+
+.channel-cumulative-card.is-threshold {
+  border-color: #b8d8c9;
+  background: linear-gradient(180deg, #fbfffd 0%, #f3fbf7 100%);
+}
+
+.channel-cumulative-card.is-empty {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  align-items: center;
+}
+
+.channel-cumulative-card.is-empty div,
+.channel-cumulative-card__head > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.channel-cumulative-card.is-empty span,
+.channel-cumulative-card__head span,
+.channel-cumulative-card__metrics span,
+.channel-cumulative-card__batch span,
+.channel-cumulative-card__settings span {
+  font-size: 12px;
+  color: #6d7f8d;
+}
+
+.channel-cumulative-card.is-empty strong,
+.channel-cumulative-card__head strong {
+  font-size: 15px;
+  color: #17364d;
+}
+
+.channel-cumulative-card.is-empty p,
+.channel-cumulative-card__head small {
+  margin: 0;
+  color: #758696;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.channel-cumulative-card__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.channel-cumulative-card__head > em,
+.channel-cumulative-card__batch > em {
+  flex: 0 0 auto;
+  padding: 4px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 700;
+  background: #eef3f7;
+  color: #607283;
+}
+
+.channel-cumulative-card__head > em.is-running {
+  background: #fff4dc;
+  color: #a76500;
+}
+
+.channel-cumulative-card__head > em.is-ready,
+.channel-cumulative-card__batch.is-ready > em {
+  background: #e7f7ee;
+  color: #147946;
+}
+
+.channel-cumulative-card__metrics {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.channel-cumulative-card__metrics > div {
+  border: 1px solid #e1ebe5;
+  border-radius: 10px;
+  background: rgba(255,255,255,.82);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.channel-cumulative-card__metrics strong {
+  font-size: 18px;
+  color: #16633f;
+}
+
+.channel-cumulative-card__metrics small {
+  color: #789085;
+  font-size: 11px;
+}
+
+.channel-cumulative-card__progress {
+  height: 7px;
+  border-radius: 999px;
+  background: #e6efe9;
+  overflow: hidden;
+  margin: 10px 2px 0;
+}
+
+.channel-cumulative-card__progress > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #20a464;
+  transition: width .2s ease;
+}
+
+.channel-cumulative-card__projection {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #fff8e8;
+  border: 1px solid #f0ddad;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 12px;
+  align-items: center;
+}
+
+.channel-cumulative-card__projection > span {
+  grid-row: 1 / span 2;
+  color: #9b6400;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.channel-cumulative-card__projection strong {
+  color: #7d5100;
+  font-size: 13px;
+}
+
+.channel-cumulative-card__projection small {
+  color: #9d7d3c;
+  font-size: 11px;
+}
+
+.channel-cumulative-card__projection.is-ready {
+  background: #ebf8f0;
+  border-color: #b8e0c8;
+}
+
+.channel-cumulative-card__projection.is-ready > span,
+.channel-cumulative-card__projection.is-ready strong {
+  color: #167348;
+}
+
+.channel-cumulative-card__actions {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.channel-cumulative-card button {
+  border: 1px solid #cad8e3;
+  background: #fff;
+  color: #31506a;
+  border-radius: 8px;
+  min-height: 32px;
+  padding: 0 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.channel-cumulative-card button.is-primary {
+  background: #188a55;
+  border-color: #188a55;
+  color: #fff;
+}
+
+.channel-cumulative-card button:disabled {
+  opacity: .5;
+  cursor: default;
+}
+
+.channel-cumulative-card__batch {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid #dce8e1;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.channel-cumulative-card__batch > div {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.channel-cumulative-card__batch > div strong {
+  color: #26475c;
+  font-size: 13px;
+}
+
+.channel-cumulative-card__batch > div small,
+.channel-cumulative-card__batch > small {
+  color: #7a8c97;
+  font-size: 11px;
+}
+
+.channel-cumulative-card__batch.is-processing > em {
+  background: #fff2d9;
+  color: #9c6507;
+}
+
+.channel-cumulative-card__batch.is-invoiced > em {
+  background: #eaf3ff;
+  color: #2865a7;
+}
+
+.channel-cumulative-card__batch.is-done > em {
+  background: #e7f7ee;
+  color: #147946;
+}
+
+.channel-cumulative-card__settings {
+  margin-top: 12px;
+  border-top: 1px dashed #cfdcd4;
+  padding-top: 10px;
+}
+
+.channel-cumulative-card__settings summary {
+  cursor: pointer;
+  color: #4d6d5c;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.channel-cumulative-card__settings-grid {
+  margin: 10px 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.channel-cumulative-card__settings-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.channel-cumulative-card__settings-grid label.is-wide {
+  grid-column: 1 / -1;
+}
+
+.channel-cumulative-card__settings select,
+.channel-cumulative-card__settings input {
+  min-width: 0;
+  height: 34px;
+  border: 1px solid #cedbe4;
+  border-radius: 8px;
+  padding: 0 9px;
+  background: #fff;
+  color: #28475e;
+  font-size: 12px;
+}
+
+.channel-cumulative-card__message {
+  margin-top: 10px;
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #f1f6f9;
+  color: #526a79;
+  font-size: 12px;
+}
+
+@media (max-width: 900px) {
+  .channel-cumulative-card__metrics,
+  .channel-cumulative-card__settings-grid {
+    grid-template-columns: 1fr;
+  }
+  .channel-cumulative-card__settings-grid label.is-wide {
+    grid-column: auto;
+  }
+  .channel-cumulative-card.is-empty,
+  .channel-cumulative-card__head,
+  .channel-cumulative-card__batch {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

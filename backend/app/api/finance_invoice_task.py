@@ -26,6 +26,11 @@ from app.schemas.finance_invoice_task import (
     FinanceInvoiceTaskStatusResponse,
     FinanceInvoiceTaskSummary,
 )
+from app.services.channel_cumulative_invoice import (
+    assert_single_bill_invoice_allowed,
+    complete_cumulative_task,
+    reject_cumulative_task,
+)
 from app.services.permissions import require_permission
 
 router = APIRouter()
@@ -101,11 +106,13 @@ def submit_channel_invoice_request(
         raise HTTPException(status_code=409, detail={"error": "bill_not_confirmed", "message": "渠道账单尚未核对完成，不能提交开票。"})
     if str(getattr(bill, "validation_status", "unvalidated") or "unvalidated") == "fail":
         raise HTTPException(status_code=409, detail={"error": "bill_validation_failed", "message": "平台结算金额校验未通过，不能提交开票。"})
+    assert_single_bill_invoice_allowed(db, bill)
 
     active = db.execute(
         select(FinanceInvoiceTask).where(
             FinanceInvoiceTask.bill_type == "channel",
             FinanceInvoiceTask.bill_id == bill_id,
+            FinanceInvoiceTask.source_kind == "bill",
             FinanceInvoiceTask.direction == "output",
             FinanceInvoiceTask.status.in_(ACTIVE_TASK_STATUSES),
         ).order_by(FinanceInvoiceTask.submitted_at.desc())
@@ -124,6 +131,7 @@ def submit_channel_invoice_request(
         task_no=f"FP-{now.strftime('%Y%m%d')}-{uuid4().hex[:6].upper()}",
         bill_type="channel",
         bill_id=bill_id,
+        source_kind="bill",
         direction="output",
         status="pending",
         requested_amount=remaining,
@@ -146,6 +154,7 @@ def submit_channel_invoice_request(
             select(FinanceInvoiceTask).where(
                 FinanceInvoiceTask.bill_type == "channel",
                 FinanceInvoiceTask.bill_id == bill_id,
+                FinanceInvoiceTask.source_kind == "bill",
                 FinanceInvoiceTask.direction == "output",
                 FinanceInvoiceTask.status.in_(ACTIVE_TASK_STATUSES),
             ).order_by(FinanceInvoiceTask.submitted_at.desc())
@@ -170,6 +179,7 @@ def invoice_request_status_by_bills(
         select(FinanceInvoiceTask).where(
             FinanceInvoiceTask.bill_type == "channel",
             FinanceInvoiceTask.bill_id.in_(ids),
+            FinanceInvoiceTask.source_kind == "bill",
             FinanceInvoiceTask.direction == "output",
         ).order_by(FinanceInvoiceTask.submitted_at.desc())
     ).scalars().all()
@@ -282,6 +292,7 @@ def reject_invoice_task(
     row.assigned_to_name = _actor_name(user)
     if row.started_at is None:
         row.started_at = now
+    reject_cumulative_task(db, row)
     db.commit()
     db.refresh(row)
     return _task_read(row)
@@ -299,9 +310,7 @@ def complete_invoice_task(
         return _task_read(row)
     if row.status == "rejected":
         raise HTTPException(status_code=409, detail={"error": "task_rejected", "message": "驳回任务不能直接完成，请业务重新提交。"})
-    bill = db.get(ChannelRecord, row.bill_id) if row.bill_type == "channel" else None
-    if bill is None:
-        raise HTTPException(status_code=404, detail={"error": "bill_not_found", "id": row.bill_id})
+
     invoice = db.get(InvoiceRecord, payload.invoice_id)
     if invoice is None:
         raise HTTPException(status_code=404, detail={"error": "invoice_not_found", "id": payload.invoice_id})
@@ -316,46 +325,59 @@ def complete_invoice_task(
     if bill_company and invoice_company and not (bill_company in invoice_company or invoice_company in bill_company):
         raise HTTPException(status_code=409, detail={"error": "invoice_partner_mismatch", "message": "销项发票购买方与来源账单合作方不一致，请核对后再关联。"})
 
-    existing = db.execute(
-        select(BillInvoiceAllocation).where(
-            BillInvoiceAllocation.bill_type == row.bill_type,
-            BillInvoiceAllocation.bill_id == row.bill_id,
-            BillInvoiceAllocation.invoice_id == invoice.id,
-            BillInvoiceAllocation.status.in_(ACTIVE_ALLOCATION_STATUSES),
-        ).order_by(BillInvoiceAllocation.created_at.desc())
-    ).scalars().first()
-    if existing is not None:
-        amount = float(existing.allocated_gross_amount or 0)
-    else:
-        bill_amount = abs(float(bill.settlement_amount or 0))
-        bill_remaining = round(max(0, bill_amount - _allocated_to_bill(db, row.bill_type, row.bill_id)), 2)
-        invoice_gross = _invoice_gross(invoice)
-        invoice_remaining = round(max(0, invoice_gross - _allocated_from_invoice(db, invoice.id)), 2)
-        amount = round(float(payload.allocated_amount or min(float(row.requested_amount or 0), bill_remaining, invoice_remaining)), 2)
-        if amount <= 0.01:
-            raise HTTPException(status_code=409, detail={"error": "no_allocatable_amount", "message": "当前账单或发票已没有可分配金额。"})
-        if amount > bill_remaining + 0.01:
-            raise HTTPException(status_code=409, detail={"error": "bill_over_allocation", "message": "本次关联金额超过账单剩余开票金额。"})
-        if amount > invoice_remaining + 0.01:
-            raise HTTPException(status_code=409, detail={"error": "invoice_over_allocation", "message": "本次关联金额超过发票剩余可分配金额。"})
-        ratio = amount / invoice_gross if invoice_gross > 0 else 0
-        allocation = BillInvoiceAllocation(
-            id=str(uuid4()),
-            bill_type=row.bill_type,
-            bill_id=row.bill_id,
-            invoice_id=invoice.id,
-            allocated_net_amount=round(abs(float(invoice.invoice_amount or 0)) * ratio, 2),
-            allocated_tax_amount=round(abs(float(invoice.tax_amount or 0)) * ratio, 2),
-            allocated_gross_amount=amount,
-            status="confirmed",
-            match_type="finance_task",
-            match_score=1,
-            match_reasons=["财务开票任务完成自动关联"],
-            confirmed_by=str(user.email or user.id),
-            confirmed_at=_now(),
+    if str(row.source_kind or "bill") == "cumulative_batch":
+        amount = complete_cumulative_task(
+            db,
+            row,
+            invoice,
+            invoice_allocated_before=_allocated_from_invoice(db, invoice.id),
+            requested_amount=payload.allocated_amount,
+            user=user,
         )
-        db.add(allocation)
-        db.flush()
+    else:
+        bill = db.get(ChannelRecord, row.bill_id) if row.bill_type == "channel" else None
+        if bill is None:
+            raise HTTPException(status_code=404, detail={"error": "bill_not_found", "id": row.bill_id})
+        existing = db.execute(
+            select(BillInvoiceAllocation).where(
+                BillInvoiceAllocation.bill_type == row.bill_type,
+                BillInvoiceAllocation.bill_id == row.bill_id,
+                BillInvoiceAllocation.invoice_id == invoice.id,
+                BillInvoiceAllocation.status.in_(ACTIVE_ALLOCATION_STATUSES),
+            ).order_by(BillInvoiceAllocation.created_at.desc())
+        ).scalars().first()
+        if existing is not None:
+            amount = float(existing.allocated_gross_amount or 0)
+        else:
+            bill_amount = abs(float(bill.settlement_amount or 0))
+            bill_remaining = round(max(0, bill_amount - _allocated_to_bill(db, row.bill_type, row.bill_id)), 2)
+            invoice_gross = _invoice_gross(invoice)
+            invoice_remaining = round(max(0, invoice_gross - _allocated_from_invoice(db, invoice.id)), 2)
+            amount = round(float(payload.allocated_amount or min(float(row.requested_amount or 0), bill_remaining, invoice_remaining)), 2)
+            if amount <= 0.01:
+                raise HTTPException(status_code=409, detail={"error": "no_allocatable_amount", "message": "当前账单或发票已没有可分配金额。"})
+            if amount > bill_remaining + 0.01:
+                raise HTTPException(status_code=409, detail={"error": "bill_over_allocation", "message": "本次关联金额超过账单剩余开票金额。"})
+            if amount > invoice_remaining + 0.01:
+                raise HTTPException(status_code=409, detail={"error": "invoice_over_allocation", "message": "本次关联金额超过发票剩余可分配金额。"})
+            ratio = amount / invoice_gross if invoice_gross > 0 else 0
+            allocation = BillInvoiceAllocation(
+                id=str(uuid4()),
+                bill_type=row.bill_type,
+                bill_id=row.bill_id,
+                invoice_id=invoice.id,
+                allocated_net_amount=round(abs(float(invoice.invoice_amount or 0)) * ratio, 2),
+                allocated_tax_amount=round(abs(float(invoice.tax_amount or 0)) * ratio, 2),
+                allocated_gross_amount=amount,
+                status="confirmed",
+                match_type="finance_task",
+                match_score=1,
+                match_reasons=["财务开票任务完成自动关联"],
+                confirmed_by=str(user.email or user.id),
+                confirmed_at=_now(),
+            )
+            db.add(allocation)
+            db.flush()
 
     now = _now()
     row.status = "completed"

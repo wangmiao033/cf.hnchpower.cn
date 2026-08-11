@@ -1,0 +1,18 @@
+.bill360-funding-launcher.is-cumulative {
+  border-color: #b8d9c7;
+  background: rgba(249, 255, 252, .99);
+}
+
+.bill360-funding-launcher.is-cumulative > span:first-child {
+  background: #e7f7ee;
+  color: #14794a;
+}
+
+.bill360-funding-launcher.is-cumulative strong {
+  color: #176b47;
+}
+
+.bill360-funding-panel .channel-cumulative-card {
+  margin-top: 0;
+  margin-bottom: 12px;
+}

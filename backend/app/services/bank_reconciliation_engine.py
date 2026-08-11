@@ -11,6 +11,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.models.bank_transaction import BankTransaction
+from app.models.channel import ChannelRecord
 from app.models.user import AuthUser
 from app.services.bank_auto_reconciliation import EPS, _history_row
 from app.services.bank_auto_reconciliation_reverse import reverse_confirmed_match
@@ -19,6 +20,7 @@ from app.services.bank_multi_allocation import (
     allocate_transaction,
     transaction_summary,
 )
+from app.services.channel_cumulative_batch import bill_condition
 
 
 def _num(value) -> float:
@@ -46,6 +48,36 @@ def _existing_exact_allocations(db: Session, transaction_id: str, allocations: l
     return matched
 
 
+def _assert_cumulative_collection_allowed(db: Session, allocations: list[dict]) -> None:
+    for raw in allocations:
+        if str(raw.get("bill_type") or "").strip() != "channel":
+            continue
+        bill_id = str(raw.get("bill_id") or "").strip()
+        bill = db.get(ChannelRecord, bill_id)
+        if bill is None:
+            continue
+        condition = bill_condition(db, bill)
+        if not condition.get("deferred"):
+            continue
+        policy = condition.get("policy") or {}
+        pool = condition.get("pool") or {}
+        threshold = float(policy.get("threshold_amount") or 0)
+        if pool.get("ready"):
+            message = (
+                f"该账单所属合作方累计金额已达到 ¥{threshold:.2f} 门槛，"
+                "请先生成累计结算批次，再按批次统一回款核销。"
+            )
+        else:
+            message = (
+                f"该账单处于累计结算中：当前累计 ¥{float(pool.get('basis_total') or 0):.2f} / ¥{threshold:.2f}，"
+                f"还差 ¥{float(pool.get('remaining_to_threshold') or 0):.2f}。未达门槛前不应作为普通待收账单核销。"
+            )
+        raise HTTPException(
+            status_code=409,
+            detail={"error": "cumulative_collection_deferred", "message": message},
+        )
+
+
 def allocate(db: Session, transaction_id: str, allocations: list[dict], user: AuthUser) -> dict:
     """Allocate one bank transaction through the sole P2 allocation write path.
 
@@ -65,6 +97,7 @@ def allocate(db: Session, transaction_id: str, allocations: list[dict], user: Au
             "message": "核销分配已存在，无需重复操作",
         }
 
+    _assert_cumulative_collection_allowed(db, allocations)
     return allocate_transaction(db, transaction_id, allocations, user)
 
 

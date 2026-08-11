@@ -25,6 +25,7 @@ from app.schemas.bank_multi_allocation import (
     P2TransactionSummaryResponse,
 )
 from app.services.bank_auto_reconciliation import build_dashboard
+from app.services.bank_cumulative_filter import filter_cumulative_bank_suggestions
 from app.services.bank_multi_allocation import (
     bill_summary,
     build_p2_dashboard,
@@ -42,7 +43,7 @@ def get_bank_auto_reconciliation_dashboard(
     db: Session = Depends(get_db),
     _user: AuthUser = Depends(require_current_user),
 ) -> BankAutoReconciliationDashboard:
-    result = build_dashboard(db, limit=limit)
+    result = filter_cumulative_bank_suggestions(db, build_dashboard(db, limit=limit))
     confirmed_count, confirmed_amount = db.execute(
         select(
             func.count(BankReconciliationMatch.id),
@@ -60,7 +61,8 @@ def get_p2_dashboard(
     db: Session = Depends(get_db),
     _user: AuthUser = Depends(require_current_user),
 ) -> P2Dashboard:
-    return P2Dashboard.model_validate(build_p2_dashboard(db, limit=limit))
+    result = filter_cumulative_bank_suggestions(db, build_p2_dashboard(db, limit=limit))
+    return P2Dashboard.model_validate(result)
 
 
 @router.post("/p2/transaction-summaries", response_model=P2TransactionSummaryResponse)

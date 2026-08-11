@@ -3,6 +3,7 @@ import { useAppState } from '@/app/AppStateContext.jsx'
 import PageContainer from '@/components/layout/PageContainer.jsx'
 import BillScanAttachments from '@/components/billing/BillScanAttachments.jsx'
 import ChannelBillingForm from '@/components/channel/ChannelBillingForm.jsx'
+import ChannelCumulativeSettlementCard from '@/components/channel/ChannelCumulativeSettlementCard.jsx'
 import { CoreBillLoadingState } from '@/pages/CoreBillLoadingState.jsx'
 import { VIEWS } from '@/app/routes.js'
 import { apiChannelRowToFrontend, getChannelRecord } from '@/lib/api/channel.ts'
@@ -185,7 +186,7 @@ function CoreChannelBillFormPage({ mode }) {
     const confirmed = window.confirm(
       zeroSettlement
         ? `确认核对并结清这张零结算账单吗？\n\n结算金额：${money(settlementAmount)}\n\n本期无需开票和收款，确认后账单将直接完成并锁定。`
-        : `确认核对这张渠道账单吗？\n\n结算金额：${money(settlementAmount)}\n\n确认后账单会自动锁定；如需再修改，可点击“退回修改”。`
+        : `确认核对这张渠道账单吗？\n\n结算金额：${money(settlementAmount)}\n\n确认后账单会自动锁定；如合作方启用了累计结算，本期会进入累计池而不是立即催收/开票。`
     )
     if (!confirmed) return
 
@@ -202,12 +203,20 @@ function CoreChannelBillFormPage({ mode }) {
       safety.clearAfterSubmit()
       invalidateEditRecord('channel', billId)
 
-      await transitionBillLifecycle('channel', billId, 'confirmed', '')
+      const lifecycle = await transitionBillLifecycle('channel', billId, 'confirmed', '')
       if (zeroSettlement) {
         await transitionBillLifecycle('channel', billId, 'completed', '')
       }
       await recon.refetchChannelFromApi?.()
-      showToast(zeroSettlement ? '零结算账单已核对并结清' : '核对完成，账单已锁定', 'success')
+      const deferred = Boolean(lifecycle?.settlement_condition?.deferred)
+      showToast(
+        zeroSettlement
+          ? '零结算账单已核对并结清'
+          : deferred
+            ? '核对完成，账单已锁定并进入累计结算池'
+            : '核对完成，账单已锁定',
+        'success'
+      )
       goList()
     } catch (error) {
       showToast(error instanceof Error ? error.message : '账单已保存，但确认核对失败，请稍后重试。', 'error')
@@ -242,6 +251,7 @@ function CoreChannelBillFormPage({ mode }) {
   }
 
   const zeroSettlementPreview = isZeroSettlement(previewAmount)
+  const currentRecord = safety.currentRecord || safety.draftRecord || stableRecord || {}
 
   return (
     <PageContainer
@@ -261,10 +271,10 @@ function CoreChannelBillFormPage({ mode }) {
             {isEdit
               ? zeroSettlementPreview
                 ? '当前为零结算账单，可直接“确认核对并结清”，系统会跳过开票与收款环节。'
-                : '修改完成后可直接“保存并确认核对”，确认后系统自动锁定账单。'
+                : '修改完成后可直接“保存并确认核对”；累计结算合作方会在核对后自动进入累计池。'
               : '先选择合作方和账期，再录入游戏明细。保存后账单进入待核对。'}
           </span>
-          {isEdit ? <span className="core-bill-review-hint">日常只需要“确认核对”与“退回修改”两个动作</span> : null}
+          {isEdit ? <span className="core-bill-review-hint">账单核对与实际结算已分离：未达累计门槛也可以正常完成核对</span> : null}
           <div className={`core-bill-draft-state ${safety.dirty ? 'is-dirty' : 'is-clean'}`}>
             <span aria-hidden="true" />
             <strong>{safety.statusText}</strong>
@@ -305,6 +315,14 @@ function CoreChannelBillFormPage({ mode }) {
           }}
         />
       </section>
+
+      <ChannelCumulativeSettlementCard
+        partnerName={currentRecord.partnerName || currentRecord.channelName || ''}
+        recordId={isEdit ? String(stableRecord?.id || channelEditRecordId || '') : ''}
+        billStatus={currentRecord.status || stableRecord?.status || 'pending'}
+        draftBasisAmount={Number(currentRecord.flow ?? currentRecord.billingFlow ?? 0)}
+        draftSettlementAmount={Number(currentRecord.settlementAmount ?? previewAmount ?? 0)}
+      />
 
       <BillScanAttachments
         billType="channel"

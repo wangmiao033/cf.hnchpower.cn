@@ -3,6 +3,7 @@ import {
   createContractReconciliationSnapshot,
   getContractBillReconciliation
 } from '@/lib/api/contractTerms.ts'
+import type { ChannelCumulativeBillCondition } from '@/lib/api/channelCumulativeSettlement.ts'
 
 export type BillTransitionOption = {
   status: string
@@ -20,14 +21,15 @@ export type BillLifecycle = {
   status_label: string
   locked: boolean
   final: boolean
-  payment_phase: 'unpaid' | 'partial' | 'paid' | string
+  payment_phase: 'unpaid' | 'partial' | 'paid' | 'deferred' | string
   payment_label: string
   bill_amount: number
   paid_amount: number
-  invoice_coverage_status: 'none' | 'partial' | 'complete' | 'over' | string
+  invoice_coverage_status: 'none' | 'partial' | 'complete' | 'over' | 'deferred' | string
   invoice_coverage_percent: number
   invoice_allocated_amount: number
   invoice_remaining_amount: number
+  settlement_condition?: ChannelCumulativeBillCondition | null
   transitions: BillTransitionOption[]
 }
 

@@ -15,7 +15,7 @@ from app.schemas.customer360 import Customer360Response
 from app.schemas.workbench import WorkbenchTodoResponse
 from app.services.customer360 import build_customer360
 from app.services.permissions import resolve_permissions
-from app.services.workbench_todos import build_workbench_todos
+from app.services.workbench_todos_cumulative import build_workbench_todos
 
 router = APIRouter()
 
