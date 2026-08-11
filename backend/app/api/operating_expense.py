@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
+from app.api.server_cost import router as server_cost_router
 from app.core.deps import get_db
 from app.models.operating_expense import OperatingExpense
 from app.schemas.operating_expense import (
@@ -20,6 +21,7 @@ from app.schemas.operating_expense import (
 from app.services.monthly_business_dashboard import month_key
 
 router = APIRouter()
+router.include_router(server_cost_router, prefix="/server-costs", tags=["server-costs"])
 
 OPERATING_EXPENSE_CATEGORIES = frozenset(
     {

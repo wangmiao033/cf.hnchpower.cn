@@ -29,6 +29,7 @@ import '@/styles/admin-polish.css'
 
 const PAGE_LOADERS = Object.freeze({
   financeWorkbench: () => import('./pages/FinanceWorkbenchPage.jsx'),
+  serverCosts: () => import('./pages/ServerCostPage.jsx'),
   anomalies: () => import('./pages/AnomalyCenterPage.jsx'),
   businessDashboard: () => import('./pages/MonthlyBusinessDashboardPage.jsx'),
   profitAnalysis: () => import('./pages/ProfitAnalysisPage.jsx'),
@@ -55,6 +56,7 @@ const PAGE_LOADERS = Object.freeze({
 })
 
 const FinanceWorkbenchPage = lazy(PAGE_LOADERS.financeWorkbench)
+const ServerCostPage = lazy(PAGE_LOADERS.serverCosts)
 const AnomalyCenterPage = lazy(PAGE_LOADERS.anomalies)
 const MonthlyBusinessDashboardPage = lazy(PAGE_LOADERS.businessDashboard)
 const ProfitAnalysisPage = lazy(PAGE_LOADERS.profitAnalysis)
@@ -296,6 +298,7 @@ function App() {
     if (!canOpenView(can, activeView)) return <CoreDashboardPage />
     switch (activeView) {
       case VIEWS.FINANCE_WORKBENCH: return <FinanceWorkbenchPage />
+      case VIEWS.SERVER_COSTS: return <ServerCostPage />
       case VIEWS.ANOMALIES: return <AnomalyCenterPage />
       case VIEWS.BUSINESS_DASHBOARD: return <MonthlyBusinessDashboardPage />
       case VIEWS.PROFIT_ANALYSIS: return <ProfitAnalysisPage />

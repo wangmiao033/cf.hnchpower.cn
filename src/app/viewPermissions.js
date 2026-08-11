@@ -2,6 +2,7 @@ import { VIEWS } from '@/app/routes.js'
 
 export const VIEW_PERMISSIONS = Object.freeze({
   [VIEWS.FINANCE_WORKBENCH]: 'finance_tasks.view',
+  [VIEWS.SERVER_COSTS]: 'analytics.view',
   [VIEWS.BUSINESS_DASHBOARD]: 'analytics.view',
   [VIEWS.PROFIT_ANALYSIS]: 'analytics.view',
   [VIEWS.ANOMALIES]: 'anomalies.view',

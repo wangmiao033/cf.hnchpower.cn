@@ -49,6 +49,10 @@ class ProfitAnalysisRead(BaseModel):
     channel_settlement: ProfitMetric
     rd_cost: ProfitMetric
     server_cost: ProfitMetric
+    legacy_server_cost: ProfitMetric = Field(default_factory=ProfitMetric)
+    standalone_server_cost: ProfitMetric = Field(default_factory=ProfitMetric)
+    shared_server_cost: ProfitMetric = Field(default_factory=ProfitMetric)
+    attributed_server_cost: ProfitMetric = Field(default_factory=ProfitMetric)
     operating_expense: ProfitMetric
     pre_expense_contribution: ProfitMetric
     operating_profit: ProfitMetric
@@ -58,6 +62,7 @@ class ProfitAnalysisRead(BaseModel):
 
     channel_bill_count: int = 0
     rd_bill_count: int = 0
+    server_cost_count: int = 0
     expense_count: int = 0
 
     expense_categories: list[ProfitExpenseCategoryRow] = Field(default_factory=list)

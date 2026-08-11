@@ -43,6 +43,10 @@ export type ProfitAnalysis = {
   channel_settlement: ProfitMetric
   rd_cost: ProfitMetric
   server_cost: ProfitMetric
+  legacy_server_cost: ProfitMetric
+  standalone_server_cost: ProfitMetric
+  shared_server_cost: ProfitMetric
+  attributed_server_cost: ProfitMetric
   operating_expense: ProfitMetric
   pre_expense_contribution: ProfitMetric
   operating_profit: ProfitMetric
@@ -51,6 +55,7 @@ export type ProfitAnalysis = {
   attributed_expense: ProfitMetric
   channel_bill_count: number
   rd_bill_count: number
+  server_cost_count: number
   expense_count: number
   expense_categories: ProfitExpenseCategoryRow[]
   games: ProfitGameRow[]
