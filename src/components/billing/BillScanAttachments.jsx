@@ -123,7 +123,9 @@ export default function BillScanAttachments({ billType, billId }) {
   }
 
   const handleFiles = async (event) => {
-    const files = event.target.files
+    // FileList is live. Snapshot it before clearing the input so the selected
+    // files are not discarded before uploadFiles reads them.
+    const files = Array.from(event.target.files || [])
     event.target.value = ''
     await uploadFiles(files)
   }
