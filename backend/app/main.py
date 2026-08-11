@@ -18,6 +18,7 @@ from app.api.anomaly import router as anomaly_router
 from app.api.bill_lifecycle import router as bill_lifecycle_router
 from app.api.business_dashboard import router as business_dashboard_router
 from app.api.channel import router as channel_router
+from app.api.channel_cumulative_settlement import router as channel_cumulative_settlement_router
 from app.api.bill_attachment import router as bill_attachment_router
 from app.api.bill_invoice_allocation import router as bill_invoice_allocation_router
 from app.api.electronic_invoice import router as electronic_invoice_router
@@ -179,8 +180,6 @@ async def enforce_origin_and_response_policy(request: Request, call_next):
         and origin
         and origin not in _cors_allowed
     ):
-        # Keep the historical JSON body stable for existing callers; diagnostics
-        # travel in response headers so observability does not break API contracts.
         response = JSONResponse(status_code=403, content={"detail": "请求来源不受信任"})
         _apply_common_response_headers(response, path, request_id)
         response.headers["X-Error-Code"] = "SEC-ORIGIN-403"
@@ -231,6 +230,7 @@ app.include_router(finance_invoice_task_router, prefix="/api/finance-tasks", tag
 app.include_router(reconciliation_router, prefix="/api/reconciliation", tags=["reconciliation"], dependencies=[reconciliation_access])
 app.include_router(reconciliation_period_router, prefix="/api/reconciliation-periods", tags=["reconciliation-periods"], dependencies=[reconciliation_access])
 app.include_router(channel_router, prefix="/api/channel-records", tags=["channel-records"], dependencies=[reconciliation_access])
+app.include_router(channel_cumulative_settlement_router, prefix="/api/channel-cumulative-settlement", tags=["channel-cumulative-settlement"])
 app.include_router(bill_lifecycle_router, prefix="/api/bill-lifecycle", tags=["bill-lifecycle"], dependencies=[reconciliation_access])
 app.include_router(business_dashboard_router, prefix="/api/business-dashboard", tags=["business-dashboard"], dependencies=[analytics_access])
 app.include_router(profit_analysis_router, prefix="/api/profit-analysis", tags=["profit-analysis"], dependencies=[analytics_access])
