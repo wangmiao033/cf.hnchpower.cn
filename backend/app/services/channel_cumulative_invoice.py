@@ -36,29 +36,27 @@ def _allocated_to_bill(db: Session, bill_id: str) -> float:
     return float(value or 0)
 
 
+def _deferred_message(condition: dict, *, action: str) -> str:
+    pool = condition.get("pool") or {}
+    policy = condition.get("policy") or {}
+    threshold = float(policy.get("threshold_amount") or 0)
+    if pool.get("ready"):
+        return f"该合作方累计金额已达到 ¥{threshold:.2f} 门槛，请先生成累计结算批次后统一{action}。"
+    return (
+        f"该账单已核对并进入累计结算池，当前累计 ¥{float(pool.get('basis_total') or 0):.2f} / ¥{threshold:.2f}，"
+        f"还差 ¥{float(pool.get('remaining_to_threshold') or 0):.2f}；未达门槛前无需{action}。"
+    )
+
+
 def assert_single_bill_invoice_allowed(db: Session, bill: ChannelRecord) -> None:
     condition = bill_condition(db, bill)
     state = str(condition.get("state") or "normal")
     if condition.get("deferred"):
-        pool = condition.get("pool") or {}
-        policy = condition.get("policy") or {}
-        threshold = float(policy.get("threshold_amount") or 0)
-        if pool.get("ready"):
-            raise HTTPException(
-                status_code=409,
-                detail={
-                    "error": "cumulative_batch_required",
-                    "message": f"该合作方累计金额已达到 ¥{threshold:.2f} 门槛，请先生成累计结算批次后统一提交开票。",
-                },
-            )
         raise HTTPException(
             status_code=409,
             detail={
                 "error": "cumulative_settlement_deferred",
-                "message": (
-                    f"该账单已核对并进入累计结算池，当前累计 ¥{float(pool.get('basis_total') or 0):.2f} / ¥{threshold:.2f}，"
-                    f"还差 ¥{float(pool.get('remaining_to_threshold') or 0):.2f}；未达门槛前无需开票。"
-                ),
+                "message": _deferred_message(condition, action="开票"),
             },
         )
     if state == "batched":
@@ -70,6 +68,19 @@ def assert_single_bill_invoice_allowed(db: Session, bill: ChannelRecord) -> None
                 "message": f"该账单已属于累计结算批次 {batch.get('batch_no') or ''}，请通过累计批次统一提交开票。",
             },
         )
+
+
+def assert_single_bill_collection_allowed(db: Session, bill: ChannelRecord) -> None:
+    condition = bill_condition(db, bill)
+    if not condition.get("deferred"):
+        return
+    raise HTTPException(
+        status_code=409,
+        detail={
+            "error": "cumulative_collection_deferred",
+            "message": _deferred_message(condition, action="登记收款"),
+        },
+    )
 
 
 def reject_cumulative_task(db: Session, task: FinanceInvoiceTask) -> None:
