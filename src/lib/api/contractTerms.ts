@@ -52,6 +52,19 @@ export type ContractBillFieldCheck = {
   message: string
 }
 
+export type ContractBillBinding = {
+  bill_type: 'rd' | 'channel'
+  bill_id: string
+  line_id: string
+  access_item_id: string
+  match_method: 'manual' | 'auto_locked' | string
+  note: string
+  confirmed_by: string
+  confirmed_at: string | null
+  created_at: string | null
+  updated_at: string | null
+}
+
 export type ContractBillMatch = {
   contract_id: string
   contract_name: string
@@ -63,12 +76,38 @@ export type ContractBillMatch = {
   authorization_end: string | null
   share_rate: string | number | null
   channel_fee_rate: string | number | null
+  invoice_tax_rate?: string | number | null
   settlement_mode: string | null
   settlement_basis: string | null
   payment_terms: string | null
   score: number
   confidence: 'high' | 'medium' | 'low'
   reasons: string[]
+  match_method?: 'auto' | 'manual' | 'auto_locked' | string
+  locked?: boolean
+}
+
+export type ContractBillCandidate = {
+  contract_id: string
+  contract_name: string
+  contract_no?: string | null
+  access_item_id: string
+  product_name: string
+  channel_name: string
+  partner_name?: string
+  authorization_start: string | null
+  authorization_end: string | null
+  share_rate?: string | number | null
+  channel_fee_rate?: string | number | null
+  invoice_tax_rate?: string | number | null
+  settlement_mode?: string | null
+  settlement_basis?: string | null
+  payment_terms?: string | null
+  score: number
+  confidence: 'high' | 'medium' | 'low'
+  authorization_status: 'covered' | 'out_of_range' | 'unknown'
+  eligible?: boolean
+  reasons?: string[]
 }
 
 export type ContractBillLineCheck = {
@@ -77,18 +116,21 @@ export type ContractBillLineCheck = {
   settlement_cycle: string
   status: ContractCheckStatus
   match: ContractBillMatch | null
-  candidates: Array<{
-    contract_id: string
-    contract_name: string
-    access_item_id: string
-    product_name: string
-    channel_name: string
-    score: number
-    confidence: 'high' | 'medium' | 'low'
-    authorization_status: 'covered' | 'out_of_range' | 'unknown'
-  }>
+  binding?: ContractBillBinding | null
+  candidates: ContractBillCandidate[]
   checks: ContractBillFieldCheck[]
   message: string
+}
+
+export type ContractReconciliationSnapshot = {
+  id: string
+  bill_type: 'rd' | 'channel'
+  bill_id: string
+  event_type: string
+  overall_status: 'pass' | 'warning' | 'fail' | string
+  summary: Record<string, unknown>
+  created_by: string
+  created_at: string | null
 }
 
 export type ContractBillReconciliation = {
@@ -116,9 +158,13 @@ export type ContractBillReconciliation = {
     issue_count: number
     overall_status: 'pass' | 'warning' | 'fail'
     can_auto_confirm: boolean
+    binding_count?: number
+    manual_binding_count?: number
+    auto_binding_count?: number
   }
   lines: ContractBillLineCheck[]
   bill_checks: ContractBillFieldCheck[]
+  last_snapshot?: ContractReconciliationSnapshot | null
 }
 
 export type ChannelContractRuleRecommendation = {
@@ -193,7 +239,64 @@ export function deleteContractAccessTerms(accessItemId: string) {
 
 export function getContractBillReconciliation(billType: 'rd' | 'channel', billId: string) {
   const query = new URLSearchParams({ bill_type: billType, bill_id: billId })
-  return apiGet<ContractBillReconciliation>(`${PATH}/reconcile?${query.toString()}`)
+  return apiGet<ContractBillReconciliation>(`${PATH}/reconcile-v2?${query.toString()}`)
+}
+
+export function bindBillContractLine(
+  billType: 'rd' | 'channel',
+  billId: string,
+  lineId: string,
+  accessItemId: string,
+  note = ''
+) {
+  return apiPut<ContractBillBinding>(
+    `${PATH}/bill-links/${encodeURIComponent(billType)}/${encodeURIComponent(billId)}/${encodeURIComponent(lineId)}`,
+    { access_item_id: accessItemId, note }
+  )
+}
+
+export function unbindBillContractLine(
+  billType: 'rd' | 'channel',
+  billId: string,
+  lineId: string
+) {
+  return apiDelete(
+    `${PATH}/bill-links/${encodeURIComponent(billType)}/${encodeURIComponent(billId)}/${encodeURIComponent(lineId)}`
+  )
+}
+
+export function autoLockBillContractLines(billType: 'rd' | 'channel', billId: string) {
+  return apiPost<{ locked_count: number; reconciliation: ContractBillReconciliation }>(
+    `${PATH}/bill-links/auto-lock`,
+    { bill_type: billType, bill_id: billId }
+  )
+}
+
+export function createContractReconciliationSnapshot(
+  billType: 'rd' | 'channel',
+  billId: string,
+  eventType = 'confirmed'
+) {
+  return apiPost<ContractReconciliationSnapshot>(`${PATH}/reconcile-snapshots`, {
+    bill_type: billType,
+    bill_id: billId,
+    event_type: eventType
+  })
+}
+
+export function listContractReconciliationSnapshots(
+  billType: 'rd' | 'channel',
+  billId: string,
+  limit = 10
+) {
+  const query = new URLSearchParams({
+    bill_type: billType,
+    bill_id: billId,
+    limit: String(limit)
+  })
+  return apiGet<{ items: ContractReconciliationSnapshot[]; total: number }>(
+    `${PATH}/reconcile-snapshots?${query.toString()}`
+  )
 }
 
 export function recommendChannelContractRules(payload: {

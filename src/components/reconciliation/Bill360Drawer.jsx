@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import Bill360DrawerBase from './Bill360DrawerBase.jsx'
-import BillContractCheckPanel from './BillContractCheckPanel.jsx'
+import BillContractCheckPanelV2 from './BillContractCheckPanelV2.jsx'
 import Bill360FundingPanel from './Bill360FundingPanel.jsx'
 import { getContractBillReconciliation } from '@/lib/api/contractTerms.ts'
 import { billDueInfo, dueStatusText } from '@/domain/reconciliation/billDueDate.js'
@@ -14,6 +14,7 @@ function launcherText(summary, loading, unavailable) {
   if (!summary) return '合同自动核验'
   if (summary.fail_count) return `合同核验：${summary.fail_count} 条差异`
   if (summary.issue_count) return `合同核验：${summary.issue_count} 项需复核`
+  if (summary.binding_count) return `合同核验：${summary.binding_count} 条已锁定`
   return `合同核验：${summary.total_lines} 条通过`
 }
 
@@ -111,7 +112,7 @@ function Bill360Drawer({ target, onClose }) {
         <span aria-hidden>合</span>
         <span>
           <strong>{launcherText(checkSummary, checkLoading, checkUnavailable)}</strong>
-          <small>分成 · 税率 · 渠道费 · 测试费 · 退款/扣除规则</small>
+          <small>固定合同依据 · 分成 · 税率 · 渠道费 · 退款/扣除规则</small>
           {dueInfo ? (
             <small className={`bill360-due-note ${dueTone}`.trim()}>
               到期 {dueInfo.dueDate} · {dueText} · {dueInfo.paymentTerms}
@@ -146,14 +147,14 @@ function Bill360Drawer({ target, onClose }) {
           <aside className="bill360-contract-panel" role="dialog" aria-modal="true" aria-label="合同自动核验详情">
             <header className="bill360-contract-panel__head">
               <div>
-                <span>账单 360° · 合同驱动预检</span>
+                <span>账单 360° · 合同驱动核验 V2</span>
                 <h2>合同自动核验</h2>
-                <p>当前只做预检提示，不会因为旧合同缺字段直接阻断账单确认。</p>
+                <p>自动推荐可锁定到具体合作清单；账单确认时保存合同核验快照，形成可追溯依据。</p>
               </div>
               <button type="button" onClick={() => setCheckOpen(false)} aria-label="关闭合同核验">×</button>
             </header>
             <main className="bill360-contract-panel__body">
-              <BillContractCheckPanel billType={billType} billId={billId} />
+              <BillContractCheckPanelV2 billType={billType} billId={billId} />
             </main>
           </aside>
         </div>
