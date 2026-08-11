@@ -23,9 +23,20 @@ export type WorkbenchTodoSummary = {
   invoice_gap_amount: number
 }
 
+export type WorkbenchBillSnapshot = {
+  rd_bill_count: number
+  channel_bill_count: number
+  rd_pending_count: number
+  channel_pending_count: number
+  rd_total_amount: number
+  channel_total_amount: number
+  latest_settlement_month: string | null
+}
+
 export type WorkbenchTodoResponse = {
   generated_at: string
   summary: WorkbenchTodoSummary
+  snapshot: WorkbenchBillSnapshot
   items: WorkbenchTodoItem[]
   visible_modules: string[]
 }
