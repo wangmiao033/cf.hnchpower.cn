@@ -324,6 +324,11 @@ def _transition_requires_reason(current: str, target: str) -> bool:
 def _cumulative_transition_block(db: Session, bill_type: str, bill, current: str, target: str) -> str | None:
     if bill_type != "channel" or current != "confirmed":
         return None
+    # Zero-settlement months have no cash action, so they may complete normally.
+    # Their flow still contributes to a flow-based cumulative threshold through
+    # channel_cumulative_policy.pool_candidates().
+    if target == "completed" and _settlement_amount(bill) == 0:
+        return None
     condition = bill_condition(db, bill)
     if condition.get("state") == "batched" and target in {"pending", "cancelled"}:
         batch = condition.get("batch") or {}
