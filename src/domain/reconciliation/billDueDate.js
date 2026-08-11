@@ -43,7 +43,7 @@ export function dueDateFromPaymentTerms(settlementCycle, paymentTerms) {
     return isoDate(target.year, target.month, Number(monthDay[2]))
   }
 
-  const monthEnd = normalized.match(/(次次月|隔月|次月|当月|本月)(月底|月末)/)
+  const monthEnd = normalized.match(/(次次月|隔月|次月|当月|本月)(?:底|末|月底|月末)/)
   if (monthEnd) {
     const offset = monthEnd[1] === '次月' ? 1 : (monthEnd[1] === '次次月' || monthEnd[1] === '隔月') ? 2 : 0
     const target = addMonths(parts.year, parts.month, offset)
