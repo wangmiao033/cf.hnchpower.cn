@@ -1,4 +1,5 @@
 import { apiGet, apiPost } from '@/lib/api/client.ts'
+import { createContractReconciliationSnapshot } from '@/lib/api/contractTerms.ts'
 
 export type BillTransitionOption = {
   status: string
@@ -34,17 +35,31 @@ export function getBillLifecycle(
   return apiGet(`/api/bill-lifecycle/${encodeURIComponent(billType)}/${encodeURIComponent(billId)}`)
 }
 
-export function transitionBillLifecycle(
+export async function transitionBillLifecycle(
   billType: 'rd' | 'channel',
   billId: string,
   toStatus: string,
   reason = ''
 ): Promise<BillLifecycle> {
-  return apiPost(
+  const result = await apiPost<BillLifecycle>(
     `/api/bill-lifecycle/${encodeURIComponent(billType)}/${encodeURIComponent(billId)}/transition`,
     {
       to_status: toStatus,
       reason: reason || null
     }
   )
+
+  // Confirmation is the accounting decision point. Persist the exact contract
+  // preflight that existed at that moment so later edits to a contract do not
+  // rewrite the historical basis for this bill. Snapshot failure must never
+  // roll back an otherwise valid bill lifecycle transition.
+  if (toStatus === 'confirmed') {
+    try {
+      await createContractReconciliationSnapshot(billType, billId, 'confirmed')
+    } catch (snapshotError) {
+      console.warn('Contract reconciliation snapshot could not be saved', snapshotError)
+    }
+  }
+
+  return result
 }
