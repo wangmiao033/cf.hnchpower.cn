@@ -21,6 +21,7 @@ class ServerCost(Base):
     amount: Mapped[float] = mapped_column(Numeric(18, 2), nullable=False, default=0)
     game_name: Mapped[str | None] = mapped_column(Text, nullable=True, index=True)
     payer_entity: Mapped[str | None] = mapped_column(Text, nullable=True)
+    payer_partner_id: Mapped[str | None] = mapped_column(Text, nullable=True, index=True)
     remark: Mapped[str | None] = mapped_column(Text, nullable=True)
     source: Mapped[str] = mapped_column(String(32), nullable=False, default="manual")
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="active", index=True)

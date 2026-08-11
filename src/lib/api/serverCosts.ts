@@ -9,6 +9,7 @@ export type ServerCost = {
   amount: number
   game_name?: string | null
   payer_entity?: string | null
+  payer_partner_id?: string | null
   remark?: string | null
   source: string
   status: 'active' | 'void' | string
@@ -26,6 +27,7 @@ export type ServerCostPayload = {
   amount: number
   game_name?: string | null
   payer_entity?: string | null
+  payer_partner_id?: string | null
   remark?: string | null
   source?: string
 }
