@@ -69,6 +69,7 @@ def _apply_filters(stmt, *, month: str | None, category: str | None, game_name: 
                 ServerCost.game_name.ilike(term),
                 ServerCost.provider_name.ilike(term),
                 ServerCost.payer_entity.ilike(term),
+                ServerCost.payer_partner_id.ilike(term),
                 ServerCost.remark.ilike(term),
                 ServerCost.category.ilike(term),
             )
@@ -121,7 +122,14 @@ def create_server_cost(payload: ServerCostCreate, db: Session = Depends(get_db))
     data = payload.model_dump()
     data["expense_month"] = _validate_month(data.get("expense_month"))
     data["category"] = _validate_category(data.get("category"))
-    for field in ("expense_date", "provider_name", "game_name", "payer_entity", "remark"):
+    for field in (
+        "expense_date",
+        "provider_name",
+        "game_name",
+        "payer_entity",
+        "payer_partner_id",
+        "remark",
+    ):
         data[field] = _normalize_text(data.get(field))
     data["source"] = str(data.get("source") or "manual").strip() or "manual"
     row = ServerCost(id=str(uuid4()), status="active", **data)
@@ -150,7 +158,14 @@ def update_server_cost(cost_id: str, payload: ServerCostUpdate, db: Session = De
         if not source:
             raise HTTPException(status_code=422, detail="费用来源不能为空")
         data["source"] = source
-    for field in ("expense_date", "provider_name", "game_name", "payer_entity", "remark"):
+    for field in (
+        "expense_date",
+        "provider_name",
+        "game_name",
+        "payer_entity",
+        "payer_partner_id",
+        "remark",
+    ):
         if field in data:
             data[field] = _normalize_text(data.get(field))
     for key, value in data.items():
