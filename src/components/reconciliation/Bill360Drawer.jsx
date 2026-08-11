@@ -1,7 +1,10 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import { useAppState } from '@/app/AppStateContext.jsx'
+import { VIEWS } from '@/app/routes.js'
 import Bill360DrawerBase from './Bill360DrawerBase.jsx'
 import BillContractCheckPanelV2 from './BillContractCheckPanelV2.jsx'
 import Bill360FundingPanel from './Bill360FundingPanel.jsx'
+import ContractDifferenceActionPanel from './ContractDifferenceActionPanel.jsx'
 import ChannelCumulativeSettlementCard from '@/components/channel/ChannelCumulativeSettlementCard.jsx'
 import { getContractBillReconciliation } from '@/lib/api/contractTerms.ts'
 import { getChannelCumulativeBillCondition } from '@/lib/api/channelCumulativeSettlement.ts'
@@ -21,6 +24,8 @@ function launcherText(summary, loading, unavailable) {
   if (loading) return '正在核验合同…'
   if (unavailable) return '合同核验不可用'
   if (!summary) return '合同自动核验'
+  if (summary.unresolved_difference_lines) return `合同核验：${summary.unresolved_difference_lines} 条待处置差异`
+  if (summary.handled_difference_lines) return `合同核验：${summary.handled_difference_lines} 条差异处理中`
   if (summary.fail_count) return `合同核验：${summary.fail_count} 条差异`
   if (summary.issue_count) return `合同核验：${summary.issue_count} 项需复核`
   if (summary.binding_count) return `合同核验：${summary.binding_count} 条已锁定`
@@ -35,8 +40,10 @@ function amountVarianceText(amountSummary) {
   return '金额一致'
 }
 
-function amountStatusText(amountSummary) {
+function amountStatusText(amountSummary, differenceSummary) {
   if (!amountSummary) return '等待合同重算'
+  if (differenceSummary?.unresolved_lines) return '存在待处置合同差异'
+  if (differenceSummary?.handled_lines) return '合同差异已进入处理闭环'
   if (amountSummary.status === 'fail') return '存在明确金额差异'
   if (amountSummary.deterministic_complete) return '合同金额重算通过'
   if (amountSummary.comparable_lines) return `已重算 ${amountSummary.comparable_lines}/${amountSummary.total_lines} 条`
@@ -81,37 +88,46 @@ function cumulativeFundingText(condition) {
 }
 
 function Bill360Drawer({ target, onClose }) {
+  const {
+    activeView,
+    openReconciliationEdit,
+    openChannelReconciliationEdit
+  } = useAppState()
   const [checkOpen, setCheckOpen] = useState(false)
   const [fundingOpen, setFundingOpen] = useState(false)
   const [checkData, setCheckData] = useState(null)
   const [checkSummary, setCheckSummary] = useState(null)
   const [checkLoading, setCheckLoading] = useState(false)
   const [checkUnavailable, setCheckUnavailable] = useState(false)
+  const [checkVersion, setCheckVersion] = useState(0)
   const [cumulativeCondition, setCumulativeCondition] = useState(null)
   const billType = target?.billType === 'channel' ? 'channel' : 'rd'
   const billId = String(target?.billId || '')
 
-  useEffect(() => {
-    if (!billId) return undefined
-    let active = true
+  const loadContractCheck = useCallback(async () => {
+    if (!billId) return null
     setCheckLoading(true)
     setCheckUnavailable(false)
+    try {
+      const result = await getContractBillReconciliation(billType, billId)
+      setCheckData(result)
+      setCheckSummary(result.summary || null)
+      setCheckVersion((value) => value + 1)
+      return result
+    } catch (error) {
+      console.error(error)
+      setCheckUnavailable(true)
+      return null
+    } finally {
+      setCheckLoading(false)
+    }
+  }, [billId, billType])
+
+  useEffect(() => {
     setCheckData(null)
     setCheckSummary(null)
-    void getContractBillReconciliation(billType, billId)
-      .then((result) => {
-        if (!active) return
-        setCheckData(result)
-        setCheckSummary(result.summary || null)
-      })
-      .catch(() => {
-        if (active) setCheckUnavailable(true)
-      })
-      .finally(() => {
-        if (active) setCheckLoading(false)
-      })
-    return () => { active = false }
-  }, [billId, billType])
+    void loadContractCheck()
+  }, [loadContractCheck])
 
   useEffect(() => {
     if (billType !== 'channel' || !billId) {
@@ -134,11 +150,22 @@ function Bill360Drawer({ target, onClose }) {
     setFundingOpen(false)
   }, [billId, billType])
 
+  const openBillEdit = useCallback(() => {
+    setCheckOpen(false)
+    onClose?.()
+    if (billType === 'channel') {
+      openChannelReconciliationEdit(billId, activeView || VIEWS.RECON_CHANNEL)
+    } else {
+      openReconciliationEdit(billId, activeView || VIEWS.RECON_RD)
+    }
+  }, [activeView, billId, billType, onClose, openChannelReconciliationEdit, openReconciliationEdit])
+
   const cumulativeDeferred = Boolean(cumulativeCondition?.deferred)
   const cumulativeFunding = cumulativeFundingText(cumulativeCondition)
   const rawDueInfo = useMemo(() => billDueInfo(checkData), [checkData])
   const dueInfo = cumulativeDeferred ? null : rawDueInfo
   const amountSummary = checkData?.amount_summary || null
+  const differenceSummary = checkData?.difference_summary || null
   const remainingAmount = remainingFromInitial(billType, target?.initialRecord)
   const remainingKnown = remainingAmount !== null
   const settled = remainingKnown && remainingAmount <= 0.01
@@ -149,9 +176,9 @@ function Bill360Drawer({ target, onClose }) {
       ? 'is-soon'
       : ''
 
-  const tone = checkSummary?.fail_count
+  const tone = checkSummary?.unresolved_difference_lines || checkSummary?.fail_count
     ? 'fail'
-    : checkSummary?.issue_count
+    : checkSummary?.handled_difference_lines || checkSummary?.issue_count
       ? 'warning'
       : checkSummary
         ? 'pass'
@@ -246,9 +273,9 @@ function Bill360Drawer({ target, onClose }) {
           <aside className="bill360-contract-panel" role="dialog" aria-modal="true" aria-label="合同自动核验详情">
             <header className="bill360-contract-panel__head">
               <div>
-                <span>账单 360° · 合同驱动核验 V3</span>
-                <h2>合同自动核验 + 标准结算重算</h2>
-                <p>锁定具体合作清单后，使用账单原始流水与扣项、合同数字条款重新计算应结金额，并量化多结/少结差额。</p>
+                <span>账单 360° · V3.0 合同差异处置闭环</span>
+                <h2>合同自动核验 + 差异处置</h2>
+                <p>先按合同数字条款计算应结金额，再由财务确认修改账单、接受差异、生成补差项或转下月冲抵；系统不自动改历史金额。</p>
               </div>
               <button type="button" onClick={() => setCheckOpen(false)} aria-label="关闭合同核验">×</button>
             </header>
@@ -258,7 +285,7 @@ function Bill360Drawer({ target, onClose }) {
                   <div className="bill360-contract-amount-hero__head">
                     <div>
                       <span>CONTRACT STANDARD SETTLEMENT</span>
-                      <strong>{amountStatusText(amountSummary)}</strong>
+                      <strong>{amountStatusText(amountSummary, differenceSummary)}</strong>
                     </div>
                     <em>{amountVarianceText(amountSummary) || '待计算'}</em>
                   </div>
@@ -269,11 +296,23 @@ function Bill360Drawer({ target, onClose }) {
                     <div><span>自动重算覆盖</span><strong>{amountSummary.deterministic_lines}/{amountSummary.total_lines}</strong></div>
                   </div>
                   {!amountSummary.deterministic_complete ? (
-                    <p>未能确定的明细不会被当成金额差异自动拦截；单价/CPA、固定费、保底和文本型扣除条款仍保留人工复核。</p>
+                    <p>未能确定的明细不会被当成金额差异自动拦截；按实付/折后流水不明确、单价/CPA、固定费、保底和文本型扣除条款继续保留人工复核。</p>
                   ) : null}
                 </section>
               ) : null}
-              <BillContractCheckPanelV2 billType={billType} billId={billId} />
+
+              <ContractDifferenceActionPanel
+                billType={billType}
+                billId={billId}
+                onEditBill={openBillEdit}
+                onChanged={loadContractCheck}
+              />
+
+              <BillContractCheckPanelV2
+                key={`${billType}-${billId}-${checkVersion}`}
+                billType={billType}
+                billId={billId}
+              />
             </main>
           </aside>
         </div>
