@@ -110,6 +110,38 @@ export type ContractBillCandidate = {
   reasons?: string[]
 }
 
+export type ContractStandardSettlementAmount = {
+  status: 'pass' | 'fail' | 'manual'
+  supported: boolean
+  deterministic: boolean
+  actual_amount: number | null
+  expected_amount: number | null
+  difference_amount: number | null
+  variance_abs: number | null
+  variance_direction: 'equal' | 'under' | 'over' | 'unknown'
+  tolerance: number
+  formula_code: string
+  formula_label: string
+  breakdown: Record<string, unknown>
+  assumptions: string[]
+  message: string
+}
+
+export type ContractAmountSummary = {
+  status: 'pass' | 'warning' | 'fail'
+  total_lines: number
+  comparable_lines: number
+  deterministic_lines: number
+  blocking_difference_lines: number
+  comparable_complete: boolean
+  deterministic_complete: boolean
+  actual_amount: number | null
+  expected_amount: number | null
+  difference_amount: number | null
+  variance_abs: number | null
+  variance_direction: 'equal' | 'under' | 'over' | 'unknown'
+}
+
 export type ContractBillLineCheck = {
   line_id: string
   game_name: string
@@ -119,6 +151,7 @@ export type ContractBillLineCheck = {
   binding?: ContractBillBinding | null
   candidates: ContractBillCandidate[]
   checks: ContractBillFieldCheck[]
+  contract_amount?: ContractStandardSettlementAmount | null
   message: string
 }
 
@@ -161,9 +194,16 @@ export type ContractBillReconciliation = {
     binding_count?: number
     manual_binding_count?: number
     auto_binding_count?: number
+    amount_status?: 'pass' | 'warning' | 'fail'
+    amount_comparable_lines?: number
+    amount_deterministic_lines?: number
+    amount_expected?: number | null
+    amount_actual?: number | null
+    amount_difference?: number | null
   }
   lines: ContractBillLineCheck[]
   bill_checks: ContractBillFieldCheck[]
+  amount_summary?: ContractAmountSummary | null
   last_snapshot?: ContractReconciliationSnapshot | null
 }
 
@@ -239,7 +279,7 @@ export function deleteContractAccessTerms(accessItemId: string) {
 
 export function getContractBillReconciliation(billType: 'rd' | 'channel', billId: string) {
   const query = new URLSearchParams({ bill_type: billType, bill_id: billId })
-  return apiGet<ContractBillReconciliation>(`${PATH}/reconcile-v2?${query.toString()}`)
+  return apiGet<ContractBillReconciliation>(`${PATH}/reconcile-v3?${query.toString()}`)
 }
 
 export function bindBillContractLine(
