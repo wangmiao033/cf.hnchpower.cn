@@ -192,7 +192,12 @@ async def enforce_origin_and_response_policy(request: Request, call_next):
     _apply_common_response_headers(response, path, request_id)
     elapsed_ms = round((time.perf_counter() - started) * 1000, 1)
     if response.status_code >= 400:
-        logger.warning(
+        log_api_response = (
+            logger.info
+            if response.status_code == 401 and path != "/api/auth/login-password"
+            else logger.warning
+        )
+        log_api_response(
             "API %s %s -> %s request_id=%s duration_ms=%s",
             request.method,
             path,
