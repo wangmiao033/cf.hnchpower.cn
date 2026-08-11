@@ -30,6 +30,12 @@ class BankMatchSuggestion(BaseModel):
     amount: float = 0
     currency: str | None = None
     counterparty_name: str | None = None
+    counterparty_raw_name: str | None = None
+    partner_id: str | None = None
+    partner_name: str | None = None
+    partner_short_name: str | None = None
+    partner_match_method: str | None = None
+    partner_match_explicit: bool = False
     summary: str | None = None
     auto_ready: bool = False
     confidence_level: str = "none"
