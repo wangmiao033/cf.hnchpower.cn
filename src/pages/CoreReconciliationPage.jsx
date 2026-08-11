@@ -1,6 +1,7 @@
-import React, { useMemo, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useAppState } from '@/app/AppStateContext.jsx'
 import PageContainer from '@/components/layout/PageContainer.jsx'
+import BillQuickFilters from '@/components/reconciliation/BillQuickFilters.jsx'
 import { VIEWS } from '@/app/routes.js'
 import {
   buildRdSettlementPeriodOptions,
@@ -8,11 +9,14 @@ import {
   rdRecordMatchesSettlementPeriod,
   rdRecordSettlementPeriodLabel
 } from '@/domain/reconciliation/rdSettlementPeriods.js'
+import { bill360Lines, bill360QuickSdkKeys } from '@/domain/reconciliation/bill360.js'
 import { totalReconciliationSettlementAmount } from '@/domain/settlement/calculateSettlementAmount.js'
 import {
   apiRowToFrontend,
   getReconciliationRecord
 } from '@/lib/api/reconciliation.ts'
+import { getQuickSdkGameFlow } from '@/lib/api/quicksdk.ts'
+import { transitionBillLifecycle } from '@/lib/api/billLifecycle.ts'
 import './CoreReconciliationPages.css'
 import '@/components/reconciliation/reconciliation-admin.css'
 
@@ -34,6 +38,16 @@ function money(value) {
 function recordSettlementAmount(row) {
   const stored = Number.parseFloat(row?.settlementAmount)
   return Number.isFinite(stored) ? stored : totalReconciliationSettlementAmount(row)
+}
+
+function paymentAmounts(row) {
+  const paid = Math.max(0, Number(row?.paidAmount || 0))
+  const storedUnpaid = Number(row?.unpaidAmount)
+  const fallbackUnpaid = recordSettlementAmount(row) - paid
+  return {
+    paid,
+    unpaid: Math.max(0, Number.isFinite(storedUnpaid) ? storedUnpaid : fallbackUnpaid)
+  }
 }
 
 function text(value, fallback = '-') {
@@ -85,8 +99,16 @@ function CoreReconciliationPage() {
   const [partnerDraft, setPartnerDraft] = useState('')
   const [status, setStatus] = useState('')
   const [query, setQuery] = useState('')
+  const [quickFilter, setQuickFilter] = useState('all')
+  const [dataDiffIds, setDataDiffIds] = useState(null)
+  const [dataDiffLoading, setDataDiffLoading] = useState(false)
   const [selectedIds, setSelectedIds] = useState([])
   const [isExporting, setIsExporting] = useState(false)
+  const [voidingId, setVoidingId] = useState('')
+
+  useEffect(() => {
+    setDataDiffIds(null)
+  }, [recon.records])
 
   const monthOptions = useMemo(
     () => buildRdSettlementPeriodOptions(recon.records || []),
@@ -112,7 +134,7 @@ function CoreReconciliationPage() {
     return [...unique.values()].sort((a, b) => a.localeCompare(b, 'zh-CN'))
   }, [recon.records, settings.partners])
 
-  const rows = useMemo(() => {
+  const baseRows = useMemo(() => {
     const q = query.trim().toLowerCase()
     return (recon.records || []).filter((row) => {
       const matchesMonth = !month || rdRecordMatchesSettlementPeriod(row, month)
@@ -140,19 +162,43 @@ function CoreReconciliationPage() {
     })
   }, [recon.records, month, partner, query, status])
 
+  const rows = useMemo(() => baseRows.filter((row) => {
+    if (quickFilter === 'all') return true
+    if (String(row.status || '') === 'cancelled') return false
+    const { paid, unpaid } = paymentAmounts(row)
+    if (quickFilter === 'unpaid') return unpaid > 0.01 && paid <= 0.01
+    if (quickFilter === 'partial') return paid > 0.01 && unpaid > 0.01
+    if (quickFilter === 'data-diff') return Boolean(dataDiffIds?.has(String(row.id)))
+    return true
+  }), [baseRows, quickFilter, dataDiffIds])
+
   const selectedRows = useMemo(
     () => rows.filter((row) => selectedIds.includes(String(row.id))),
     [rows, selectedIds]
   )
 
+  const quickItems = useMemo(() => [
+    { key: 'all', label: '全部', count: baseRows.length },
+    {
+      key: 'unpaid',
+      label: '未付款',
+      count: baseRows.filter((row) => String(row.status || '') !== 'cancelled' && paymentAmounts(row).unpaid > 0.01 && paymentAmounts(row).paid <= 0.01).length
+    },
+    {
+      key: 'partial',
+      label: '部分付款',
+      count: baseRows.filter((row) => {
+        const amount = paymentAmounts(row)
+        return String(row.status || '') !== 'cancelled' && amount.paid > 0.01 && amount.unpaid > 0.01
+      }).length
+    },
+    { key: 'data-diff', label: '数据差异', count: dataDiffIds ? baseRows.filter((row) => dataDiffIds.has(String(row.id))).length : null }
+  ], [baseRows, dataDiffIds])
+
   const stats = useMemo(() => {
     const total = rows.reduce((sum, row) => sum + recordSettlementAmount(row), 0)
-    const paid = rows.reduce((sum, row) => sum + Number(row.paidAmount || 0), 0)
-    const unpaid = rows.reduce((sum, row) => {
-      const storedUnpaid = Number(row.unpaidAmount)
-      const fallbackUnpaid = recordSettlementAmount(row) - Number(row.paidAmount || 0)
-      return sum + Math.max(0, Number.isFinite(storedUnpaid) ? storedUnpaid : fallbackUnpaid)
-    }, 0)
+    const paid = rows.reduce((sum, row) => sum + paymentAmounts(row).paid, 0)
+    const unpaid = rows.reduce((sum, row) => sum + paymentAmounts(row).unpaid, 0)
     const partners = new Set(
       rows
         .map((row) => text(row.partnerId || row.partner || row.partyBName, ''))
@@ -170,6 +216,64 @@ function CoreReconciliationPage() {
   const toggleSelected = (id) => {
     const sid = String(id)
     setSelectedIds((prev) => (prev.includes(sid) ? prev.filter((item) => item !== sid) : [...prev, sid]))
+  }
+
+  const loadDataDifferences = async () => {
+    if (dataDiffIds || dataDiffLoading) return
+    setDataDiffLoading(true)
+    try {
+      const results = await Promise.all((recon.records || []).map(async (row) => {
+        if (String(row.status || '') === 'cancelled') return [String(row.id), false]
+        const keys = bill360QuickSdkKeys('rd', row)
+        if (!keys.length) return [String(row.id), false]
+        const quickRows = await Promise.all(keys.map(async (key) => {
+          try {
+            return await getQuickSdkGameFlow({ settlement_month: key.month, game_name: key.game })
+          } catch {
+            return null
+          }
+        }))
+        if (!quickRows.some(Boolean)) return [String(row.id), false]
+        const databaseFlow = quickRows.reduce((sum, item) => sum + Number(item?.total_flow || 0), 0)
+        const billFlow = bill360Lines('rd', row).reduce((sum, line) => sum + Number(line.flow || 0), 0)
+        return [String(row.id), Math.abs(databaseFlow - billFlow) > 0.01]
+      }))
+      setDataDiffIds(new Set(results.filter(([, different]) => different).map(([id]) => id)))
+    } catch (error) {
+      console.error(error)
+      showToast('数据差异核对失败，请稍后重试', 'error')
+      setDataDiffIds(new Set())
+    } finally {
+      setDataDiffLoading(false)
+    }
+  }
+
+  const handleQuickFilter = (key) => {
+    setQuickFilter(key)
+    setSelectedIds([])
+    if (key === 'data-diff') void loadDataDifferences()
+  }
+
+  const voidBill = async (row) => {
+    if (String(row.status || '') === 'cancelled' || voidingId) return
+    const reason = window.prompt(`请输入作废账单“${text(row.settlementNumber)}”的原因：`, '')
+    if (reason === null) return
+    if (!reason.trim()) {
+      showToast('作废账单必须填写原因', 'error')
+      return
+    }
+    setVoidingId(String(row.id))
+    try {
+      await transitionBillLifecycle('rd', String(row.id), 'cancelled', reason.trim())
+      await recon.refetchReconciliationFromApi?.()
+      setSelectedIds((prev) => prev.filter((id) => id !== String(row.id)))
+      showToast('研发账单已作废，历史记录已保留', 'success')
+    } catch (error) {
+      console.error(error)
+      showToast(error instanceof Error ? error.message : '账单作废失败', 'error')
+    } finally {
+      setVoidingId('')
+    }
   }
 
   const exportSelected = async () => {
@@ -326,12 +430,20 @@ function CoreReconciliationPage() {
             setPartnerDraft('')
             setStatus('')
             setQuery('')
+            setQuickFilter('all')
             setSelectedIds([])
           }}>
             重置
           </button>
         </div>
       </section>
+
+      <BillQuickFilters
+        value={quickFilter}
+        items={quickItems}
+        onChange={handleQuickFilter}
+        busyKey={dataDiffLoading ? 'data-diff' : ''}
+      />
 
       <section className="core-recon-stats">
         {stats.map((item) => (
@@ -379,16 +491,16 @@ function CoreReconciliationPage() {
             <tbody>
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="core-recon-empty">暂无研发账单</td>
+                  <td colSpan={10} className="core-recon-empty">
+                    {quickFilter === 'data-diff' && dataDiffLoading ? '正在核对 QuickSDK 数据差异…' : '暂无研发账单'}
+                  </td>
                 </tr>
               ) : (
                 rows.map((row) => {
                   const periodLabel = rdRecordSettlementPeriodLabel(row)
                   const periodCount = getRdRecordSettlementPeriods(row).length
-                  const paidAmount = Number(row.paidAmount || 0)
-                  const storedUnpaid = Number(row.unpaidAmount)
-                  const fallbackUnpaid = recordSettlementAmount(row) - paidAmount
-                  const unpaidAmount = Math.max(0, Number.isFinite(storedUnpaid) ? storedUnpaid : fallbackUnpaid)
+                  const { paid, unpaid } = paymentAmounts(row)
+                  const isCancelled = String(row.status || '') === 'cancelled'
                   return (
                     <tr
                       key={row.id}
@@ -431,8 +543,8 @@ function CoreReconciliationPage() {
                         className="core-recon-money core-recon-money--received"
                         title={row.paymentStatus || '未付款'}
                       >
-                        <strong style={{ display: 'block', fontWeight: 700 }}>{money(paidAmount)}</strong>
-                        <small style={{ display: 'block', marginTop: 2, color: '#8a98aa', fontSize: 10 }}>未付 {money(unpaidAmount)}</small>
+                        <strong style={{ display: 'block', fontWeight: 700 }}>{money(paid)}</strong>
+                        <small style={{ display: 'block', marginTop: 2, color: '#8a98aa', fontSize: 10 }}>未付 {money(unpaid)}</small>
                       </td>
                       <td>
                         <span className={`core-recon-status core-recon-status--${row.status || 'pending'}`}>
@@ -447,8 +559,14 @@ function CoreReconciliationPage() {
                           <button type="button" onClick={() => openReconciliationEdit(String(row.id))}>
                             编辑
                           </button>
-                          <button type="button" className="danger" onClick={() => recon.deleteRecord(row.id)}>
-                            删除
+                          <button
+                            type="button"
+                            className="danger"
+                            disabled={isCancelled || voidingId === String(row.id)}
+                            title={isCancelled ? '账单已作废' : '作废会保留账单、关联关系和操作日志'}
+                            onClick={() => void voidBill(row)}
+                          >
+                            {isCancelled ? '已作废' : voidingId === String(row.id) ? '作废中…' : '作废'}
                           </button>
                         </div>
                       </td>
