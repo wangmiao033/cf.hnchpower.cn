@@ -17,6 +17,7 @@ import {
 } from '@/lib/api/reconciliation.ts'
 import { getQuickSdkGameFlow } from '@/lib/api/quicksdk.ts'
 import { transitionBillLifecycle } from '@/lib/api/billLifecycle.ts'
+import { archiveBill, getBillArchiveSnapshot, unarchiveBill } from '@/lib/api/billArchive.ts'
 import './CoreReconciliationPages.css'
 import '@/components/reconciliation/reconciliation-admin.css'
 
@@ -105,9 +106,32 @@ function CoreReconciliationPage() {
   const [selectedIds, setSelectedIds] = useState([])
   const [isExporting, setIsExporting] = useState(false)
   const [voidingId, setVoidingId] = useState('')
+  const [archiveState, setArchiveState] = useState({ archived_ids: [], eligible_ids: [], items: [], auto_archive_days: 7 })
+  const [archiveLoading, setArchiveLoading] = useState(true)
+  const [archiveWorkingId, setArchiveWorkingId] = useState('')
+
+  const archivedIds = useMemo(() => new Set((archiveState.archived_ids || []).map(String)), [archiveState])
+  const eligibleIds = useMemo(() => new Set((archiveState.eligible_ids || []).map(String)), [archiveState])
+
+  const refreshArchiveState = async (announceAuto = false) => {
+    setArchiveLoading(true)
+    try {
+      const snapshot = await getBillArchiveSnapshot('rd', true)
+      setArchiveState(snapshot)
+      if (announceAuto && Number(snapshot.auto_archived_count || 0) > 0) {
+        showToast(`已自动归档 ${snapshot.auto_archived_count} 张结清满 ${snapshot.auto_archive_days || 7} 天的研发账单`, 'info')
+      }
+    } catch (error) {
+      console.error(error)
+      setArchiveState((current) => ({ ...current, archived_ids: current.archived_ids || [], eligible_ids: current.eligible_ids || [] }))
+    } finally {
+      setArchiveLoading(false)
+    }
+  }
 
   useEffect(() => {
     setDataDiffIds(null)
+    void refreshArchiveState(true)
   }, [recon.records])
 
   const monthOptions = useMemo(
@@ -134,7 +158,7 @@ function CoreReconciliationPage() {
     return [...unique.values()].sort((a, b) => a.localeCompare(b, 'zh-CN'))
   }, [recon.records, settings.partners])
 
-  const baseRows = useMemo(() => {
+  const scopedRows = useMemo(() => {
     const q = query.trim().toLowerCase()
     return (recon.records || []).filter((row) => {
       const matchesMonth = !month || rdRecordMatchesSettlementPeriod(row, month)
@@ -162,38 +186,49 @@ function CoreReconciliationPage() {
     })
   }, [recon.records, month, partner, query, status])
 
-  const rows = useMemo(() => baseRows.filter((row) => {
-    if (quickFilter === 'all') return true
-    if (String(row.status || '') === 'cancelled') return false
-    const { paid, unpaid } = paymentAmounts(row)
-    if (quickFilter === 'unpaid') return unpaid > 0.01 && paid <= 0.01
-    if (quickFilter === 'partial') return paid > 0.01 && unpaid > 0.01
-    if (quickFilter === 'data-diff') return Boolean(dataDiffIds?.has(String(row.id)))
-    return true
-  }), [baseRows, quickFilter, dataDiffIds])
+  const activeRows = useMemo(
+    () => scopedRows.filter((row) => !archivedIds.has(String(row.id))),
+    [scopedRows, archivedIds]
+  )
+
+  const rows = useMemo(() => {
+    if (quickFilter === 'archived') return scopedRows.filter((row) => archivedIds.has(String(row.id)))
+    if (quickFilter === 'all') return activeRows
+    return activeRows.filter((row) => {
+      if (String(row.status || '') === 'cancelled') return false
+      const { paid, unpaid } = paymentAmounts(row)
+      if (quickFilter === 'unpaid') return unpaid > 0.01 && paid <= 0.01
+      if (quickFilter === 'partial') return paid > 0.01 && unpaid > 0.01
+      if (quickFilter === 'settled') return eligibleIds.has(String(row.id))
+      if (quickFilter === 'data-diff') return Boolean(dataDiffIds?.has(String(row.id)))
+      return true
+    })
+  }, [activeRows, scopedRows, quickFilter, dataDiffIds, archivedIds, eligibleIds])
 
   const selectedRows = useMemo(
-    () => rows.filter((row) => selectedIds.includes(String(row.id))),
-    [rows, selectedIds]
+    () => rows.filter((row) => !archivedIds.has(String(row.id)) && selectedIds.includes(String(row.id))),
+    [rows, selectedIds, archivedIds]
   )
 
   const quickItems = useMemo(() => [
-    { key: 'all', label: '全部', count: baseRows.length },
+    { key: 'all', label: '全部', count: activeRows.length },
     {
       key: 'unpaid',
       label: '未付款',
-      count: baseRows.filter((row) => String(row.status || '') !== 'cancelled' && paymentAmounts(row).unpaid > 0.01 && paymentAmounts(row).paid <= 0.01).length
+      count: activeRows.filter((row) => String(row.status || '') !== 'cancelled' && paymentAmounts(row).unpaid > 0.01 && paymentAmounts(row).paid <= 0.01).length
     },
     {
       key: 'partial',
       label: '部分付款',
-      count: baseRows.filter((row) => {
+      count: activeRows.filter((row) => {
         const amount = paymentAmounts(row)
         return String(row.status || '') !== 'cancelled' && amount.paid > 0.01 && amount.unpaid > 0.01
       }).length
     },
-    { key: 'data-diff', label: '数据差异', count: dataDiffIds ? baseRows.filter((row) => dataDiffIds.has(String(row.id))).length : null }
-  ], [baseRows, dataDiffIds])
+    { key: 'settled', label: '已结清', count: activeRows.filter((row) => eligibleIds.has(String(row.id))).length },
+    { key: 'data-diff', label: '数据差异', count: dataDiffIds ? activeRows.filter((row) => dataDiffIds.has(String(row.id))).length : null },
+    { key: 'archived', label: '归档账单', count: archiveLoading ? null : scopedRows.filter((row) => archivedIds.has(String(row.id))).length }
+  ], [activeRows, scopedRows, dataDiffIds, archivedIds, eligibleIds, archiveLoading])
 
   const stats = useMemo(() => {
     const total = rows.reduce((sum, row) => sum + recordSettlementAmount(row), 0)
@@ -252,6 +287,38 @@ function CoreReconciliationPage() {
     setQuickFilter(key)
     setSelectedIds([])
     if (key === 'data-diff') void loadDataDifferences()
+  }
+
+  const handleArchive = async (row) => {
+    const id = String(row.id)
+    if (archiveWorkingId) return
+    setArchiveWorkingId(id)
+    try {
+      await archiveBill('rd', id)
+      await refreshArchiveState(false)
+      showToast('研发账单已归档，默认列表不再显示', 'success')
+    } catch (error) {
+      console.error(error)
+      showToast(error instanceof Error ? error.message : '归档失败', 'error')
+    } finally {
+      setArchiveWorkingId('')
+    }
+  }
+
+  const handleUnarchive = async (row) => {
+    const id = String(row.id)
+    if (archiveWorkingId) return
+    setArchiveWorkingId(id)
+    try {
+      await unarchiveBill('rd', id)
+      await refreshArchiveState(false)
+      showToast('已取消归档，账单恢复到默认列表', 'success')
+    } catch (error) {
+      console.error(error)
+      showToast(error instanceof Error ? error.message : '取消归档失败', 'error')
+    } finally {
+      setArchiveWorkingId('')
+    }
   }
 
   const voidBill = async (row) => {
@@ -457,7 +524,7 @@ function CoreReconciliationPage() {
 
       <section className="core-recon-panel">
         <div className="core-recon-panel-head">
-          <h2>账单列表</h2>
+          <h2>{quickFilter === 'archived' ? '归档账单' : '账单列表'}</h2>
           <span>{selectedRows.length > 0 ? `已选 ${selectedRows.length} 条` : `${rows.length} 条`}</span>
         </div>
         <div className="core-recon-table-wrap">
@@ -492,7 +559,7 @@ function CoreReconciliationPage() {
               {rows.length === 0 ? (
                 <tr>
                   <td colSpan={10} className="core-recon-empty">
-                    {quickFilter === 'data-diff' && dataDiffLoading ? '正在核对 QuickSDK 数据差异…' : '暂无研发账单'}
+                    {quickFilter === 'data-diff' && dataDiffLoading ? '正在核对 QuickSDK 数据差异…' : quickFilter === 'archived' ? '暂无归档账单' : '暂无研发账单'}
                   </td>
                 </tr>
               ) : (
@@ -501,6 +568,8 @@ function CoreReconciliationPage() {
                   const periodCount = getRdRecordSettlementPeriods(row).length
                   const { paid, unpaid } = paymentAmounts(row)
                   const isCancelled = String(row.status || '') === 'cancelled'
+                  const archived = archivedIds.has(String(row.id))
+                  const canArchive = eligibleIds.has(String(row.id))
                   return (
                     <tr
                       key={row.id}
@@ -511,6 +580,7 @@ function CoreReconciliationPage() {
                           type="checkbox"
                           aria-label={`选择账单 ${text(row.settlementNumber)}`}
                           checked={selectedIds.includes(String(row.id))}
+                          disabled={archived}
                           onChange={() => toggleSelected(row.id)}
                         />
                         <span>{periodLabel}</span>
@@ -547,27 +617,44 @@ function CoreReconciliationPage() {
                         <small style={{ display: 'block', marginTop: 2, color: '#8a98aa', fontSize: 10 }}>未付 {money(unpaid)}</small>
                       </td>
                       <td>
-                        <span className={`core-recon-status core-recon-status--${row.status || 'pending'}`}>
-                          {STATUS_LABELS[row.status] || row.status || '待处理'}
-                        </span>
+                        {archived ? (
+                          <span className="core-recon-status core-recon-status--completed">已归档</span>
+                        ) : (
+                          <span className={`core-recon-status core-recon-status--${row.status || 'pending'}`}>
+                            {STATUS_LABELS[row.status] || row.status || '待处理'}
+                          </span>
+                        )}
                       </td>
                       <td>
                         <div className="core-recon-row-actions">
                           <button type="button" onClick={() => openBill360('rd', String(row.id), row)}>
                             360°
                           </button>
-                          <button type="button" onClick={() => openReconciliationEdit(String(row.id))}>
-                            编辑
-                          </button>
-                          <button
-                            type="button"
-                            className="danger"
-                            disabled={isCancelled || voidingId === String(row.id)}
-                            title={isCancelled ? '账单已作废' : '作废会保留账单、关联关系和操作日志'}
-                            onClick={() => void voidBill(row)}
-                          >
-                            {isCancelled ? '已作废' : voidingId === String(row.id) ? '作废中…' : '作废'}
-                          </button>
+                          {archived ? (
+                            <button type="button" disabled={archiveWorkingId === String(row.id)} onClick={() => void handleUnarchive(row)}>
+                              {archiveWorkingId === String(row.id) ? '处理中…' : '取消归档'}
+                            </button>
+                          ) : (
+                            <>
+                              {canArchive ? (
+                                <button type="button" disabled={Boolean(archiveWorkingId)} onClick={() => void handleArchive(row)}>
+                                  {archiveWorkingId === String(row.id) ? '归档中…' : '归档'}
+                                </button>
+                              ) : null}
+                              <button type="button" onClick={() => openReconciliationEdit(String(row.id))}>
+                                编辑
+                              </button>
+                              <button
+                                type="button"
+                                className="danger"
+                                disabled={isCancelled || voidingId === String(row.id)}
+                                title={isCancelled ? '账单已作废' : '作废会保留账单、关联关系和操作日志'}
+                                onClick={() => void voidBill(row)}
+                              >
+                                {isCancelled ? '已作废' : voidingId === String(row.id) ? '作废中…' : '作废'}
+                              </button>
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>

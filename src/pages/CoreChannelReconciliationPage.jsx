@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import * as XLSX from 'xlsx'
 import { useAppState } from '@/app/AppStateContext.jsx'
 import PageContainer from '@/components/layout/PageContainer.jsx'
@@ -18,6 +18,7 @@ import {
 import { parseChannelStatementWorkbook } from '@/domain/channel/channelStatementImport.js'
 import { getChannelBillNumber } from '@/utils/channelBillNumber.js'
 import { transitionBillLifecycle } from '@/lib/api/billLifecycle.ts'
+import { archiveBill, getBillArchiveSnapshot, unarchiveBill } from '@/lib/api/billArchive.ts'
 import '@/components/reconciliation/reconciliation-admin.css'
 import './CoreReconciliationPages.css'
 
@@ -119,6 +120,32 @@ function CoreChannelReconciliationPage() {
   const [selectedIds, setSelectedIds] = useState([])
   const [isWorking, setIsWorking] = useState(false)
   const [receiptRecord, setReceiptRecord] = useState(null)
+  const [archiveState, setArchiveState] = useState({ archived_ids: [], eligible_ids: [], items: [], auto_archive_days: 7 })
+  const [archiveLoading, setArchiveLoading] = useState(true)
+  const [archiveWorkingId, setArchiveWorkingId] = useState('')
+
+  const archivedIds = useMemo(() => new Set((archiveState.archived_ids || []).map(String)), [archiveState])
+  const eligibleIds = useMemo(() => new Set((archiveState.eligible_ids || []).map(String)), [archiveState])
+
+  const refreshArchiveState = async (announceAuto = false) => {
+    setArchiveLoading(true)
+    try {
+      const snapshot = await getBillArchiveSnapshot('channel', true)
+      setArchiveState(snapshot)
+      if (announceAuto && Number(snapshot.auto_archived_count || 0) > 0) {
+        showToast(`已自动归档 ${snapshot.auto_archived_count} 张结清满 ${snapshot.auto_archive_days || 7} 天的渠道账单`, 'info')
+      }
+    } catch (error) {
+      console.error(error)
+      setArchiveState((current) => ({ ...current, archived_ids: current.archived_ids || [], eligible_ids: current.eligible_ids || [] }))
+    } finally {
+      setArchiveLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    void refreshArchiveState(true)
+  }, [recon.channelRecords])
 
   const monthOptions = useMemo(
     () => [...new Set((recon.channelRecords || []).flatMap(channelMonths))].sort((a, b) => b.localeCompare(a)),
@@ -131,7 +158,7 @@ function CoreChannelReconciliationPage() {
     [recon.channelRecords]
   )
 
-  const baseRows = useMemo(() => {
+  const scopedRows = useMemo(() => {
     const q = query.trim().toLowerCase()
     const channelQuery = channel.trim().toLowerCase()
     return (recon.channelRecords || []).filter((row) => {
@@ -147,26 +174,36 @@ function CoreChannelReconciliationPage() {
     })
   }, [recon.channelRecords, month, channel, status, query])
 
-  const rows = useMemo(() => baseRows.filter((row) => {
-    if (quickFilter === 'all') return true
-    if (String(row.status || '') === 'cancelled') return false
-    const amounts = channelPaymentAmounts(row)
-    if (quickFilter === 'unpaid') return amounts.unpaid > 0.01 && amounts.received <= 0.01
-    if (quickFilter === 'partial') return amounts.received > 0.01 && amounts.unpaid > 0.01
-    if (quickFilter === 'data-diff') return channelHasDataDifference(row)
-    return true
-  }), [baseRows, quickFilter])
+  const activeRows = useMemo(
+    () => scopedRows.filter((row) => !archivedIds.has(String(row.id))),
+    [scopedRows, archivedIds]
+  )
 
-  const selectedRows = useMemo(() => rows.filter((row) => selectedIds.includes(String(row.id))), [rows, selectedIds])
-  const allVisibleSelected = rows.length > 0 && selectedRows.length === rows.length
+  const rows = useMemo(() => {
+    if (quickFilter === 'archived') return scopedRows.filter((row) => archivedIds.has(String(row.id)))
+    if (quickFilter === 'all') return activeRows
+    return activeRows.filter((row) => {
+      if (String(row.status || '') === 'cancelled') return false
+      const amounts = channelPaymentAmounts(row)
+      if (quickFilter === 'unpaid') return amounts.unpaid > 0.01 && amounts.received <= 0.01
+      if (quickFilter === 'partial') return amounts.received > 0.01 && amounts.unpaid > 0.01
+      if (quickFilter === 'settled') return eligibleIds.has(String(row.id))
+      if (quickFilter === 'data-diff') return channelHasDataDifference(row)
+      return true
+    })
+  }, [activeRows, scopedRows, quickFilter, archivedIds, eligibleIds])
+
+  const selectableRows = useMemo(() => rows.filter((row) => !archivedIds.has(String(row.id))), [rows, archivedIds])
+  const selectedRows = useMemo(() => selectableRows.filter((row) => selectedIds.includes(String(row.id))), [selectableRows, selectedIds])
+  const allVisibleSelected = selectableRows.length > 0 && selectedRows.length === selectableRows.length
   const partiallyVisibleSelected = selectedRows.length > 0 && !allVisibleSelected
 
   const quickItems = useMemo(() => [
-    { key: 'all', label: '全部', count: baseRows.length },
+    { key: 'all', label: '全部', count: activeRows.length },
     {
       key: 'unpaid',
       label: '未收款',
-      count: baseRows.filter((row) => {
+      count: activeRows.filter((row) => {
         const amounts = channelPaymentAmounts(row)
         return String(row.status || '') !== 'cancelled' && amounts.unpaid > 0.01 && amounts.received <= 0.01
       }).length
@@ -174,17 +211,19 @@ function CoreChannelReconciliationPage() {
     {
       key: 'partial',
       label: '部分收款',
-      count: baseRows.filter((row) => {
+      count: activeRows.filter((row) => {
         const amounts = channelPaymentAmounts(row)
         return String(row.status || '') !== 'cancelled' && amounts.received > 0.01 && amounts.unpaid > 0.01
       }).length
     },
+    { key: 'settled', label: '已结清', count: activeRows.filter((row) => eligibleIds.has(String(row.id))).length },
     {
       key: 'data-diff',
       label: '数据差异',
-      count: baseRows.filter((row) => String(row.status || '') !== 'cancelled' && channelHasDataDifference(row)).length
-    }
-  ], [baseRows])
+      count: activeRows.filter((row) => String(row.status || '') !== 'cancelled' && channelHasDataDifference(row)).length
+    },
+    { key: 'archived', label: '归档账单', count: archiveLoading ? null : scopedRows.filter((row) => archivedIds.has(String(row.id))).length }
+  ], [activeRows, scopedRows, archivedIds, eligibleIds, archiveLoading])
 
   const stats = useMemo(() => {
     const settlement = rows.reduce((sum, row) => sum + getChannelTotals(row).settlementAmount, 0)
@@ -206,7 +245,7 @@ function CoreChannelReconciliationPage() {
   }
 
   const toggleSelectAll = () => {
-    const visibleIds = rows.map((row) => String(row.id))
+    const visibleIds = selectableRows.map((row) => String(row.id))
     setSelectedIds((prev) => {
       const next = new Set(prev)
       if (allVisibleSelected) visibleIds.forEach((id) => next.delete(id))
@@ -218,6 +257,38 @@ function CoreChannelReconciliationPage() {
   const handleQuickFilter = (key) => {
     setQuickFilter(key)
     setSelectedIds([])
+  }
+
+  const handleArchive = async (row) => {
+    const id = String(row.id)
+    if (archiveWorkingId) return
+    setArchiveWorkingId(id)
+    try {
+      await archiveBill('channel', id)
+      await refreshArchiveState(false)
+      showToast('渠道账单已归档，默认列表不再显示', 'success')
+    } catch (error) {
+      console.error(error)
+      showToast(error instanceof Error ? error.message : '归档失败', 'error')
+    } finally {
+      setArchiveWorkingId('')
+    }
+  }
+
+  const handleUnarchive = async (row) => {
+    const id = String(row.id)
+    if (archiveWorkingId) return
+    setArchiveWorkingId(id)
+    try {
+      await unarchiveBill('channel', id)
+      await refreshArchiveState(false)
+      showToast('已取消归档，账单恢复到默认列表', 'success')
+    } catch (error) {
+      console.error(error)
+      showToast(error instanceof Error ? error.message : '取消归档失败', 'error')
+    } finally {
+      setArchiveWorkingId('')
+    }
   }
 
   const handleBulkVoid = async () => {
@@ -400,7 +471,7 @@ function CoreChannelReconciliationPage() {
 
       <section className="core-recon-panel">
         <div className="core-recon-panel-head">
-          <h2>账单列表</h2>
+          <h2>{quickFilter === 'archived' ? '归档账单' : '账单列表'}</h2>
           <div className="core-recon-panel-tools">
             <span>{selectedRows.length > 0 ? `已选 ${selectedRows.length} 条` : `${rows.length} 条`}</span>
             {selectedRows.length > 0 && (
@@ -430,26 +501,28 @@ function CoreChannelReconciliationPage() {
             </colgroup>
             <thead>
               <tr>
-                <th><label className="core-recon-select-all"><input ref={(node) => { if (node) node.indeterminate = partiallyVisibleSelected }} type="checkbox" aria-label="全选当前筛选结果" checked={allVisibleSelected} disabled={!rows.length || isWorking} onChange={toggleSelectAll} /><span>结算周期</span></label></th>
+                <th><label className="core-recon-select-all"><input ref={(node) => { if (node) node.indeterminate = partiallyVisibleSelected }} type="checkbox" aria-label="全选当前筛选结果" checked={allVisibleSelected} disabled={!selectableRows.length || isWorking} onChange={toggleSelectAll} /><span>结算周期</span></label></th>
                 <th>编号</th><th>渠道</th><th>合作方</th><th>产品</th>
                 <th className="core-recon-align-right">计费流水</th><th className="core-recon-align-right">分成金额</th>
                 <th className="core-recon-align-right">渠道应收</th><th className="core-recon-align-right">已收 / 未收</th><th>状态</th><th>操作</th>
               </tr>
             </thead>
             <tbody>
-              {!rows.length ? <tr><td colSpan={11} className="core-recon-empty">暂无渠道账单</td></tr> : rows.map((row) => {
+              {!rows.length ? <tr><td colSpan={11} className="core-recon-empty">{quickFilter === 'archived' ? '暂无归档账单' : '暂无渠道账单'}</td></tr> : rows.map((row) => {
                 const totals = getChannelTotals(row)
                 const games = channelGames(row)
                 const received = getChannelReceivedAmount(row)
                 const unpaid = Math.max(0, totals.settlementAmount - received)
                 const settled = isChannelReceiptSettled(row)
                 const cancelled = String(row.status || '') === 'cancelled'
+                const archived = archivedIds.has(String(row.id))
+                const canArchive = eligibleIds.has(String(row.id))
                 const gameText = games.join('、')
                 const periodText = channelPeriodLabel(row)
                 return (
                   <tr key={row.id} className={selectedIds.includes(String(row.id)) ? 'is-selected' : ''}>
                     <td className="core-rd-month-cell">
-                      <input type="checkbox" aria-label={`选择渠道账单 ${text(row.channelName)} ${periodText}`} checked={selectedIds.includes(String(row.id))} disabled={isWorking} onChange={() => toggleSelected(row.id)} />
+                      <input type="checkbox" aria-label={`选择渠道账单 ${text(row.channelName)} ${periodText}`} checked={selectedIds.includes(String(row.id))} disabled={isWorking || archived} onChange={() => toggleSelected(row.id)} />
                       <span title={channelMonths(row).map(monthLabel).join('、')}>{periodText}</span>
                     </td>
                     <td className="core-recon-number">{getChannelBillNumber(row)}</td>
@@ -460,20 +533,30 @@ function CoreChannelReconciliationPage() {
                     <td className="core-recon-money">{money(sumChannelNumericLines(row, 'shareAmount'))}</td>
                     <td className="core-recon-money core-recon-money--settlement">{money(totals.settlementAmount)}</td>
                     <td className="core-recon-money core-recon-money--received"><strong style={{ display: 'block', fontWeight: 700 }}>{money(received)}</strong><small style={{ display: 'block', marginTop: 2, color: '#8a98aa', fontSize: 10 }}>未收 {money(unpaid)}</small></td>
-                    <td><span className={`core-recon-status core-recon-status--${row.status || 'pending'}`}>{STATUS_LABELS[row.status] || row.status || '待处理'}</span></td>
+                    <td>{archived ? <span className="core-recon-status core-recon-status--completed">已归档</span> : <span className={`core-recon-status core-recon-status--${row.status || 'pending'}`}>{STATUS_LABELS[row.status] || row.status || '待处理'}</span>}</td>
                     <td><div className="core-recon-row-actions">
                       <button type="button" onClick={() => openBill360('channel', String(row.id), row)}>360°</button>
-                      <button type="button" disabled={settled || !recon.channelApiEnabled || cancelled} title={!recon.channelApiEnabled ? '渠道 API 不可用，暂不能登记收款' : cancelled ? '已作废账单不能登记收款' : settled ? '该账单已结清' : '登记渠道收款'} onClick={() => setReceiptRecord(row)}>{settled ? '已结清' : '收款'}</button>
-                      <button type="button" onClick={() => openChannelReconciliationEdit(String(row.id))}>编辑</button>
-                      <button
-                        type="button"
-                        className="danger"
-                        disabled={isWorking || cancelled}
-                        title={cancelled ? '账单已作废' : '作废会保留账单、关联关系和操作日志'}
-                        onClick={() => void handleSingleVoid(row)}
-                      >
-                        {cancelled ? '已作废' : '作废'}
-                      </button>
+                      {archived ? (
+                        <button type="button" disabled={archiveWorkingId === String(row.id)} onClick={() => void handleUnarchive(row)}>{archiveWorkingId === String(row.id) ? '处理中…' : '取消归档'}</button>
+                      ) : (
+                        <>
+                          {settled && canArchive ? (
+                            <button type="button" disabled={Boolean(archiveWorkingId)} onClick={() => void handleArchive(row)}>{archiveWorkingId === String(row.id) ? '归档中…' : '归档'}</button>
+                          ) : (
+                            <button type="button" disabled={settled || !recon.channelApiEnabled || cancelled} title={!recon.channelApiEnabled ? '渠道 API 不可用，暂不能登记收款' : cancelled ? '已作废账单不能登记收款' : settled ? '该账单已结清，完成核对后即可归档' : '登记渠道收款'} onClick={() => setReceiptRecord(row)}>{settled ? '已结清' : '收款'}</button>
+                          )}
+                          <button type="button" onClick={() => openChannelReconciliationEdit(String(row.id))}>编辑</button>
+                          <button
+                            type="button"
+                            className="danger"
+                            disabled={isWorking || cancelled}
+                            title={cancelled ? '账单已作废' : '作废会保留账单、关联关系和操作日志'}
+                            onClick={() => void handleSingleVoid(row)}
+                          >
+                            {cancelled ? '已作废' : '作废'}
+                          </button>
+                        </>
+                      )}
                     </div></td>
                   </tr>
                 )
