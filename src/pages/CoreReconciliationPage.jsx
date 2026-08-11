@@ -147,6 +147,12 @@ function CoreReconciliationPage() {
 
   const stats = useMemo(() => {
     const total = rows.reduce((sum, row) => sum + recordSettlementAmount(row), 0)
+    const paid = rows.reduce((sum, row) => sum + Number(row.paidAmount || 0), 0)
+    const unpaid = rows.reduce((sum, row) => {
+      const storedUnpaid = Number(row.unpaidAmount)
+      const fallbackUnpaid = recordSettlementAmount(row) - Number(row.paidAmount || 0)
+      return sum + Math.max(0, Number.isFinite(storedUnpaid) ? storedUnpaid : fallbackUnpaid)
+    }, 0)
     const partners = new Set(
       rows
         .map((row) => text(row.partnerId || row.partner || row.partyBName, ''))
@@ -155,9 +161,9 @@ function CoreReconciliationPage() {
     const games = new Set(rows.flatMap((row) => gameText(row).split('、').filter(Boolean)))
     return [
       { label: '账单数量', value: rows.length },
-      { label: '合作方', value: partners.size },
-      { label: '游戏项目', value: games.size },
-      { label: '结算金额', value: money(total) }
+      { label: '合作方', value: partners.size, note: `${games.size} 个游戏项目` },
+      { label: '研发应付', value: money(total) },
+      { label: '未付', value: money(unpaid), note: `已付 ${money(paid)}` }
     ]
   }, [rows])
 
@@ -332,6 +338,7 @@ function CoreReconciliationPage() {
           <div key={item.label}>
             <span>{item.label}</span>
             <strong>{item.value}</strong>
+            {item.note && <small>{item.note}</small>}
           </div>
         ))}
       </section>
@@ -364,7 +371,7 @@ function CoreReconciliationPage() {
                 <th className="core-recon-align-right">流水</th>
                 <th className="core-recon-align-right">分成比例</th>
                 <th className="core-recon-align-right">结算金额</th>
-                <th className="core-recon-align-right">收款</th>
+                <th className="core-recon-align-right">已付 / 未付</th>
                 <th>状态</th>
                 <th>操作</th>
               </tr>
@@ -378,6 +385,10 @@ function CoreReconciliationPage() {
                 rows.map((row) => {
                   const periodLabel = rdRecordSettlementPeriodLabel(row)
                   const periodCount = getRdRecordSettlementPeriods(row).length
+                  const paidAmount = Number(row.paidAmount || 0)
+                  const storedUnpaid = Number(row.unpaidAmount)
+                  const fallbackUnpaid = recordSettlementAmount(row) - paidAmount
+                  const unpaidAmount = Math.max(0, Number.isFinite(storedUnpaid) ? storedUnpaid : fallbackUnpaid)
                   return (
                     <tr
                       key={row.id}
@@ -420,7 +431,8 @@ function CoreReconciliationPage() {
                         className="core-recon-money core-recon-money--received"
                         title={row.paymentStatus || '未付款'}
                       >
-                        {money(row.paidAmount)}
+                        <strong style={{ display: 'block', fontWeight: 700 }}>{money(paidAmount)}</strong>
+                        <small style={{ display: 'block', marginTop: 2, color: '#8a98aa', fontSize: 10 }}>未付 {money(unpaidAmount)}</small>
                       </td>
                       <td>
                         <span className={`core-recon-status core-recon-status--${row.status || 'pending'}`}>
@@ -430,7 +442,7 @@ function CoreReconciliationPage() {
                       <td>
                         <div className="core-recon-row-actions">
                           <button type="button" onClick={() => openBill360('rd', String(row.id), row)}>
-                            详情
+                            360°
                           </button>
                           <button type="button" onClick={() => openReconciliationEdit(String(row.id))}>
                             编辑
