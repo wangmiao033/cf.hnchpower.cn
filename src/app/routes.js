@@ -44,27 +44,6 @@ export const SIDEBAR_GROUPS = [
     ]
   },
   {
-    id: 'finance',
-    label: '财务处理',
-    items: [
-      { view: VIEWS.FINANCE_WORKBENCH, label: '财务工作台' }
-    ]
-  },
-  {
-    id: 'server-costs',
-    label: '服务器成本',
-    items: [
-      { view: VIEWS.SERVER_COSTS, label: '服务器成本' }
-    ]
-  },
-  {
-    id: 'funds',
-    label: '资金管理',
-    items: [
-      { view: VIEWS.BANK_RECONCILIATION, label: '银行中心' }
-    ]
-  },
-  {
     id: 'reconciliation',
     label: '核心对账',
     items: [
@@ -95,6 +74,27 @@ export const SIDEBAR_GROUPS = [
       { view: VIEWS.QUICKSDK_GAMES, label: '游戏数据' },
       { view: VIEWS.QUICKSDK_CHANNELS, label: '渠道数据' },
       { view: VIEWS.PARTNER_CONTACTS, label: '客户库' }
+    ]
+  },
+  {
+    id: 'finance',
+    label: '财务处理',
+    items: [
+      { view: VIEWS.FINANCE_WORKBENCH, label: '财务工作台' }
+    ]
+  },
+  {
+    id: 'server-costs',
+    label: '服务器成本',
+    items: [
+      { view: VIEWS.SERVER_COSTS, label: '服务器成本' }
+    ]
+  },
+  {
+    id: 'funds',
+    label: '资金管理',
+    items: [
+      { view: VIEWS.BANK_RECONCILIATION, label: '银行中心' }
     ]
   }
 ]
