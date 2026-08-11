@@ -26,6 +26,8 @@ from app.schemas.channel import (
     ChannelRecordRead,
     ChannelRecordUpdate,
 )
+from app.services.channel_cumulative_batch import refresh_batches_for_bill
+from app.services.channel_cumulative_invoice import assert_single_bill_collection_allowed
 from app.services.channel_settlement_engine import aggregate_validation, calculate_channel_line
 
 router = APIRouter()
@@ -174,7 +176,7 @@ async def delete_channel_receipt(record_id: str, receipt_id: str, db: Session = 
     if rec is None or rec.channel_record_id != record_id: raise HTTPException(status_code=404, detail={"error": "receipt_not_found", "id": receipt_id})
     attachment_url = str(rec.attachment_url or "")
     if attachment_url.startswith("/api/channel-records/receipt-attachments/"): await delete_private_blob(f"channel-receipts/{Path(attachment_url).name}")
-    db.delete(rec); parent.updated_at = datetime.now(timezone.utc); db.flush(); _recompute_receipt_rollup(db, parent); db.commit()
+    db.delete(rec); parent.updated_at = datetime.now(timezone.utc); db.flush(); _recompute_receipt_rollup(db, parent); refresh_batches_for_bill(db, record_id); db.commit()
 
 
 @router.get("/{record_id}", response_model=ChannelRecordRead)
@@ -188,10 +190,11 @@ def get_channel_record(record_id: str, db: Session = Depends(get_db)) -> Channel
 def create_channel_receipt(record_id: str, payload: ChannelReceiptCreate, db: Session = Depends(get_db)) -> ChannelRecordRead:
     row = db.get(ChannelRecord, record_id)
     if row is None: raise HTTPException(status_code=404, detail={"error": "not_found", "id": record_id})
+    assert_single_bill_collection_allowed(db, row)
     data = payload.model_dump()
     if not str(data.get("receipt_date") or "").strip(): data["receipt_date"] = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     db.add(ChannelReceipt(id=str(uuid4()), channel_record_id=record_id, **data))
-    row.updated_at = datetime.now(timezone.utc); db.flush(); _recompute_receipt_rollup(db, row)
+    row.updated_at = datetime.now(timezone.utc); db.flush(); _recompute_receipt_rollup(db, row); refresh_batches_for_bill(db, record_id)
     try: db.commit()
     except IntegrityError:
         db.rollback(); raise HTTPException(status_code=409, detail={"error": "conflict"}) from None
