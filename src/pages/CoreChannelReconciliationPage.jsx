@@ -135,9 +135,9 @@ function CoreChannelReconciliationPage() {
     const games = new Set(rows.flatMap(channelGames))
     return [
       { label: '账单数量', value: rows.length },
-      { label: '渠道', value: channels.size },
-      { label: '产品', value: games.size },
-      { label: '渠道应收', value: money(settlement), note: `已收 ${money(received)} · 未收 ${money(unpaid)}` }
+      { label: '渠道', value: channels.size, note: `${games.size} 个产品` },
+      { label: '渠道应收', value: money(settlement) },
+      { label: '未收', value: money(unpaid), note: `已收 ${money(received)}` }
     ]
   }, [rows])
 
@@ -366,7 +366,7 @@ function CoreChannelReconciliationPage() {
                     <td className="core-recon-money core-recon-money--received"><strong style={{ display: 'block', fontWeight: 700 }}>{money(received)}</strong><small style={{ display: 'block', marginTop: 2, color: '#8a98aa', fontSize: 10 }}>未收 {money(unpaid)}</small></td>
                     <td><span className={`core-recon-status core-recon-status--${row.status || 'pending'}`}>{STATUS_LABELS[row.status] || row.status || '待处理'}</span></td>
                     <td><div className="core-recon-row-actions">
-                      <button type="button" onClick={() => openBill360('channel', String(row.id), row)}>详情</button>
+                      <button type="button" onClick={() => openBill360('channel', String(row.id), row)}>360°</button>
                       <button type="button" disabled={settled || !recon.channelApiEnabled} title={!recon.channelApiEnabled ? '渠道 API 不可用，暂不能登记收款' : settled ? '该账单已结清' : '登记渠道收款'} onClick={() => setReceiptRecord(row)}>{settled ? '已结清' : '收款'}</button>
                       <button type="button" onClick={() => openChannelReconciliationEdit(String(row.id))}>编辑</button>
                       <button type="button" className="danger" disabled={isDeleting} onClick={() => handleSingleDelete(row)}>删除</button>
