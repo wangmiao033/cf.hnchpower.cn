@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from fastapi import HTTPException
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models.bill_invoice_allocation import BillInvoiceAllocation
@@ -16,11 +17,23 @@ from app.models.user import AuthUser
 from app.services.channel_cumulative_batch import batch_by_id, bill_condition
 
 EPS = 0.01
+ACTIVE_ALLOCATION_STATUSES = ("suggested", "confirmed")
 
 
 def _invoice_gross(invoice: InvoiceRecord) -> float:
     gross = float(invoice.amount_with_tax or 0)
     return abs(gross if gross != 0 else float(invoice.invoice_amount or 0) + float(invoice.tax_amount or 0))
+
+
+def _allocated_to_bill(db: Session, bill_id: str) -> float:
+    value = db.execute(
+        select(func.coalesce(func.sum(BillInvoiceAllocation.allocated_gross_amount), 0)).where(
+            BillInvoiceAllocation.bill_type == "channel",
+            BillInvoiceAllocation.bill_id == str(bill_id),
+            BillInvoiceAllocation.status.in_(ACTIVE_ALLOCATION_STATUSES),
+        )
+    ).scalar_one()
+    return float(value or 0)
 
 
 def assert_single_bill_invoice_allowed(db: Session, bill: ChannelRecord) -> None:
@@ -91,14 +104,12 @@ def complete_cumulative_task(
 
     bill_rows: list[tuple[ChannelRecord, float]] = []
     total_needed = 0.0
-    from app.api.finance_invoice_task import _allocated_to_bill  # local import avoids module initialization cycle
-
     for item in active_items:
         bill = db.get(ChannelRecord, str(item.bill_id))
         if bill is None:
             raise HTTPException(status_code=404, detail=f"累计批次中的渠道账单 {item.bill_id} 不存在")
         bill_amount = abs(float(bill.settlement_amount or 0))
-        remaining = round(max(0.0, bill_amount - _allocated_to_bill(db, "channel", str(bill.id))), 2)
+        remaining = round(max(0.0, bill_amount - _allocated_to_bill(db, str(bill.id))), 2)
         if remaining > EPS:
             bill_rows.append((bill, remaining))
             total_needed += remaining
