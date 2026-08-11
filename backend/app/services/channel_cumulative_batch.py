@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any
 from uuid import uuid4
 
 from fastapi import HTTPException
@@ -50,16 +49,31 @@ def batch_to_dict(db: Session, batch: ChannelCumulativeSettlementBatch) -> dict:
         str(row.id): row
         for row in db.execute(select(ChannelRecord).where(ChannelRecord.id.in_(bill_ids))).scalars().all()
     } if bill_ids else {}
-    received_total = round(sum(max(0.0, _num(bills.get(str(item.bill_id)).received_amount if bills.get(str(item.bill_id)) else 0)) for item in items), 2)
+    received_total = round(
+        sum(
+            max(0.0, _num(bills.get(str(item.bill_id)).received_amount if bills.get(str(item.bill_id)) else 0))
+            for item in items
+        ),
+        2,
+    )
     settlement_total = round(_num(batch.settlement_total), 2)
     current_status = str(batch.status or "ready")
-    if current_status in {"invoicing", "invoiced"} and items and received_total + EPS >= settlement_total:
+    # A batch is only financially settled after a real invoice has been attached.
+    # Receipt can arrive early, but that must not skip the invoice step.
+    if current_status == "invoiced" and items and received_total + EPS >= settlement_total:
+        batch.status = "settled"
+        batch.settled_at = datetime.now(timezone.utc)
+        batch.updated_at = datetime.now(timezone.utc)
         current_status = "settled"
-        if batch.status != "settled":
-            batch.status = "settled"
-            batch.settled_at = datetime.now(timezone.utc)
-            batch.updated_at = datetime.now(timezone.utc)
-            db.flush()
+        db.flush()
+    elif current_status == "settled" and received_total + EPS < settlement_total:
+        # Receipt deletion/reversal reopens the receivable while preserving the
+        # invoice relationship and audit trail.
+        batch.status = "invoiced"
+        batch.settled_at = None
+        batch.updated_at = datetime.now(timezone.utc)
+        current_status = "invoiced"
+        db.flush()
     return {
         "id": str(batch.id),
         "batch_no": str(batch.batch_no),
@@ -90,7 +104,10 @@ def batch_to_dict(db: Session, batch: ChannelCumulativeSettlementBatch) -> dict:
                 "settlement_month": item.settlement_month,
                 "basis_amount": round(_num(item.basis_amount), 2),
                 "settlement_amount": round(_num(item.settlement_amount), 2),
-                "received_amount": round(max(0.0, _num(bills.get(str(item.bill_id)).received_amount if bills.get(str(item.bill_id)) else 0)), 2),
+                "received_amount": round(
+                    max(0.0, _num(bills.get(str(item.bill_id)).received_amount if bills.get(str(item.bill_id)) else 0)),
+                    2,
+                ),
                 "bill_number": str(bills.get(str(item.bill_id)).statement_no or item.bill_id) if bills.get(str(item.bill_id)) else str(item.bill_id),
                 "game_name": str(bills.get(str(item.bill_id)).game_name or "") if bills.get(str(item.bill_id)) else "",
             }
@@ -169,7 +186,10 @@ def bill_condition(db: Session, bill: ChannelRecord) -> dict:
 def create_batch(db: Session, partner_name: str, user: AuthUser) -> dict:
     policy = policy_for_partner(db, partner_name)
     if not is_threshold_policy(policy):
-        raise HTTPException(status_code=409, detail={"error": "not_threshold_partner", "message": "当前合作方未启用累计达标结算。"})
+        raise HTTPException(
+            status_code=409,
+            detail={"error": "not_threshold_partner", "message": "当前合作方未启用累计达标结算。"},
+        )
     policy = db.execute(
         select(ChannelCumulativeSettlementPolicy)
         .where(ChannelCumulativeSettlementPolicy.id == policy.id)
@@ -186,10 +206,16 @@ def create_batch(db: Session, partner_name: str, user: AuthUser) -> dict:
         )
     bills = state.get("bills") or []
     if not bills:
-        raise HTTPException(status_code=409, detail={"error": "empty_pool", "message": "当前没有可生成批次的已核对账单。"})
+        raise HTTPException(
+            status_code=409,
+            detail={"error": "empty_pool", "message": "当前没有可生成批次的已核对账单。"},
+        )
     settlement_total = round(sum(_num(item.get("settlement_amount")) for item in bills), 2)
     if settlement_total <= EPS:
-        raise HTTPException(status_code=409, detail={"error": "zero_batch", "message": "累计池结算金额为 0，无需生成收款批次。"})
+        raise HTTPException(
+            status_code=409,
+            detail={"error": "zero_batch", "message": "累计池结算金额为 0，无需生成收款批次。"},
+        )
     now = datetime.now(timezone.utc)
     batch = ChannelCumulativeSettlementBatch(
         id=str(uuid4()),
@@ -240,9 +266,15 @@ def list_batches(db: Session, partner_name: str, limit: int = 20) -> list[dict]:
 def cancel_batch(db: Session, batch_id: str, reason: str) -> dict:
     batch = batch_by_id(db, batch_id)
     if str(batch.status or "") in {"invoiced", "settled"} or batch.invoice_id:
-        raise HTTPException(status_code=409, detail={"error": "batch_financial_activity", "message": "批次已经开票或进入资金流程，不能直接取消。"})
+        raise HTTPException(
+            status_code=409,
+            detail={"error": "batch_financial_activity", "message": "批次已经开票或进入资金流程，不能直接取消。"},
+        )
     if batch.invoice_task_id:
-        raise HTTPException(status_code=409, detail={"error": "batch_task_exists", "message": "批次已有财务开票任务，请先在财务工作台处理任务。"})
+        raise HTTPException(
+            status_code=409,
+            detail={"error": "batch_task_exists", "message": "批次已有财务开票任务，请先在财务工作台处理任务。"},
+        )
     now = datetime.now(timezone.utc)
     batch.status = "cancelled"
     batch.cancelled_at = now
