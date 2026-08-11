@@ -136,17 +136,28 @@ function CoreDashboardPage() {
     }
   }, [can])
 
-  const rdTotal = rdRecords.reduce((sum, row) => sum + Number(row.settlementAmount || 0), 0)
-  const channelTotal = channelRecords.reduce(
-    (sum, row) => sum + Number(row.settlementAmount ?? row.totalAmount ?? row.amount ?? 0),
-    0
-  )
+  const snapshot = todoData?.snapshot || null
   const rdPendingRows = rdRecords.filter((row) => ['draft', 'pending', ''].includes(String(row.status || 'pending').toLowerCase()))
   const channelPendingRows = channelRecords.filter((row) => ['draft', 'pending', ''].includes(String(row.status || 'pending').toLowerCase()))
-  const totalPendingCount = rdPendingRows.length + channelPendingRows.length
-  const allRecords = [...rdRecords, ...channelRecords]
-  const settlementPeriod = resolveSettlementPeriod(settings.settlementMonth, allRecords)
-  const billCount = allRecords.length
+  const rdTotal = snapshot
+    ? Number(snapshot.rd_total_amount || 0)
+    : rdRecords.reduce((sum, row) => sum + Number(row.settlementAmount || 0), 0)
+  const channelTotal = snapshot
+    ? Number(snapshot.channel_total_amount || 0)
+    : channelRecords.reduce(
+      (sum, row) => sum + Number(row.settlementAmount ?? row.totalAmount ?? row.amount ?? 0),
+      0
+    )
+  const rdPendingCount = snapshot ? Number(snapshot.rd_pending_count || 0) : rdPendingRows.length
+  const channelPendingCount = snapshot ? Number(snapshot.channel_pending_count || 0) : channelPendingRows.length
+  const totalPendingCount = rdPendingCount + channelPendingCount
+  const rdBillCount = snapshot ? Number(snapshot.rd_bill_count || 0) : rdRecords.length
+  const channelBillCount = snapshot ? Number(snapshot.channel_bill_count || 0) : channelRecords.length
+  const periodRows = snapshot?.latest_settlement_month
+    ? [{ settlementMonth: snapshot.latest_settlement_month }]
+    : [...rdRecords, ...channelRecords]
+  const settlementPeriod = resolveSettlementPeriod(settings.settlementMonth, periodRows)
+  const billCount = rdBillCount + channelBillCount
   const completedBillCount = Math.max(0, billCount - totalPendingCount)
   const billCompletionRate = billCount > 0 ? (completedBillCount / billCount) * 100 : 100
   const settlementTotal = rdTotal + channelTotal
@@ -294,8 +305,8 @@ function CoreDashboardPage() {
   ].filter((item) => canOpenView(can, item.view))
 
   const modules = [
-    { name: '研发账单', count: `${rdRecords.length} 笔`, meta: currency(rdTotal), view: VIEWS.RECON_RD, tone: 'blue', mark: '研' },
-    { name: '渠道账单', count: `${channelRecords.length} 笔`, meta: currency(channelTotal), view: VIEWS.RECON_CHANNEL, tone: 'green', mark: '渠' },
+    { name: '研发账单', count: `${rdBillCount} 笔`, meta: currency(rdTotal), view: VIEWS.RECON_RD, tone: 'blue', mark: '研' },
+    { name: '渠道账单', count: `${channelBillCount} 笔`, meta: currency(channelTotal), view: VIEWS.RECON_CHANNEL, tone: 'green', mark: '渠' },
     { name: '银行核销', count: '自动匹配', meta: '收付款与流水闭环', view: VIEWS.BANK_RECONCILIATION, tone: 'blue', mark: '核' },
     { name: '合同台账', count: `${contractTotal} 份`, meta: currency(contractSummary.amount_total), view: VIEWS.CONTRACTS, tone: 'violet', mark: '合' },
     { name: '发票中心', count: '销项 / 进项', meta: '发票覆盖与红冲', view: VIEWS.INVOICE_MANAGE, tone: 'cyan', mark: '票' },
