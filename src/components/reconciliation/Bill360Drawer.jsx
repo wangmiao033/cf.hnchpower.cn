@@ -2,7 +2,9 @@ import React, { useEffect, useMemo, useState } from 'react'
 import Bill360DrawerBase from './Bill360DrawerBase.jsx'
 import BillContractCheckPanelV2 from './BillContractCheckPanelV2.jsx'
 import Bill360FundingPanel from './Bill360FundingPanel.jsx'
+import ChannelCumulativeSettlementCard from '@/components/channel/ChannelCumulativeSettlementCard.jsx'
 import { getContractBillReconciliation } from '@/lib/api/contractTerms.ts'
+import { getChannelCumulativeBillCondition } from '@/lib/api/channelCumulativeSettlement.ts'
 import { billDueInfo, dueStatusText } from '@/domain/reconciliation/billDueDate.js'
 import './Bill360ContractAware.css'
 import './Bill360FundingPanel.css'
@@ -55,6 +57,29 @@ function remainingFromInitial(billType, record) {
   return Number.isFinite(amount) ? Math.max(0, amount - received) : null
 }
 
+function cumulativeFundingText(condition) {
+  if (!condition || condition.mode !== 'threshold') return null
+  if (condition.deferred) {
+    const pool = condition.pool || {}
+    const threshold = Number(condition.policy?.threshold_amount || 0)
+    return {
+      icon: '累',
+      title: condition.state === 'ready' ? '累计结算 · 已达门槛' : '累计结算 · 累计中',
+      detail: condition.state === 'ready'
+        ? `累计 ${money(pool.basis_total)} · 可生成结算批次 · 应收 ${money(pool.settlement_total)}`
+        : `累计 ${money(pool.basis_total)} / ${money(threshold)} · 还差 ${money(pool.remaining_to_threshold)}`
+    }
+  }
+  if (condition.state === 'batched' && condition.batch) {
+    return {
+      icon: '批',
+      title: `累计批次 · ${condition.batch.batch_no}`,
+      detail: `应收 ${money(condition.batch.settlement_total)} · 已收 ${money(condition.batch.received_total)} · ${condition.batch.status}`
+    }
+  }
+  return null
+}
+
 function Bill360Drawer({ target, onClose }) {
   const [checkOpen, setCheckOpen] = useState(false)
   const [fundingOpen, setFundingOpen] = useState(false)
@@ -62,6 +87,7 @@ function Bill360Drawer({ target, onClose }) {
   const [checkSummary, setCheckSummary] = useState(null)
   const [checkLoading, setCheckLoading] = useState(false)
   const [checkUnavailable, setCheckUnavailable] = useState(false)
+  const [cumulativeCondition, setCumulativeCondition] = useState(null)
   const billType = target?.billType === 'channel' ? 'channel' : 'rd'
   const billId = String(target?.billId || '')
 
@@ -88,11 +114,30 @@ function Bill360Drawer({ target, onClose }) {
   }, [billId, billType])
 
   useEffect(() => {
+    if (billType !== 'channel' || !billId) {
+      setCumulativeCondition(null)
+      return undefined
+    }
+    let active = true
+    void getChannelCumulativeBillCondition(billId)
+      .then((result) => {
+        if (active) setCumulativeCondition(result)
+      })
+      .catch(() => {
+        if (active) setCumulativeCondition(null)
+      })
+    return () => { active = false }
+  }, [billId, billType])
+
+  useEffect(() => {
     setCheckOpen(false)
     setFundingOpen(false)
   }, [billId, billType])
 
-  const dueInfo = useMemo(() => billDueInfo(checkData), [checkData])
+  const cumulativeDeferred = Boolean(cumulativeCondition?.deferred)
+  const cumulativeFunding = cumulativeFundingText(cumulativeCondition)
+  const rawDueInfo = useMemo(() => billDueInfo(checkData), [checkData])
+  const dueInfo = cumulativeDeferred ? null : rawDueInfo
   const amountSummary = checkData?.amount_summary || null
   const remainingAmount = remainingFromInitial(billType, target?.initialRecord)
   const remainingKnown = remainingAmount !== null
@@ -118,12 +163,15 @@ function Bill360Drawer({ target, onClose }) {
 
       <button
         type="button"
-        className="bill360-funding-launcher"
+        className={`bill360-funding-launcher ${cumulativeFunding ? 'is-cumulative' : ''}`.trim()}
         onClick={() => setFundingOpen(true)}
-        title="查看银行流水、核销分配、累计已收/已付与剩余未结"
+        title={cumulativeDeferred ? '查看累计结算进度；未达到门槛前不进入银行收款核销' : '查看银行流水、核销分配、累计已收/已付与剩余未结'}
       >
-        <span aria-hidden>银</span>
-        <span><strong>银行资金闭环</strong><small>多笔流水 · 部分核销 · 剩余未结</small></span>
+        <span aria-hidden>{cumulativeFunding?.icon || '银'}</span>
+        <span>
+          <strong>{cumulativeFunding?.title || '银行资金闭环'}</strong>
+          <small>{cumulativeFunding?.detail || '多笔流水 · 部分核销 · 剩余未结'}</small>
+        </span>
         <em aria-hidden>›</em>
       </button>
 
@@ -145,6 +193,8 @@ function Bill360Drawer({ target, onClose }) {
             <small className={`bill360-due-note ${dueTone}`.trim()}>
               到期 {dueInfo.dueDate} · {dueText} · {dueInfo.paymentTerms}
             </small>
+          ) : cumulativeDeferred ? (
+            <small className="bill360-due-note">累计结算中 · 未达门槛不计算催收逾期</small>
           ) : null}
         </span>
         <em aria-hidden>›</em>
@@ -154,12 +204,33 @@ function Bill360Drawer({ target, onClose }) {
         <div className="bill360-funding-overlay" role="presentation" onMouseDown={(event) => {
           if (event.target === event.currentTarget) setFundingOpen(false)
         }}>
-          <aside className="bill360-funding-panel" role="dialog" aria-modal="true" aria-label="银行资金闭环">
+          <aside className="bill360-funding-panel" role="dialog" aria-modal="true" aria-label={cumulativeFunding ? '累计结算与资金闭环' : '银行资金闭环'}>
             <header>
-              <div><span>账单 360° · P2</span><h2>银行资金闭环</h2><p>以银行核销 allocation 为资金事实，反向汇总当前账单的每一笔真实银行分配。</p></div>
+              <div>
+                <span>{cumulativeFunding ? '账单 360° · 累计结算' : '账单 360° · P2'}</span>
+                <h2>{cumulativeFunding?.title || '银行资金闭环'}</h2>
+                <p>{cumulativeDeferred ? '本月账单已经完成核对；只有累计口径达到门槛并生成批次后，才进入统一开票、收款和银行核销。' : '以银行核销 allocation 为资金事实，反向汇总当前账单的每一笔真实银行分配。'}</p>
+              </div>
               <button type="button" onClick={() => setFundingOpen(false)} aria-label="关闭资金闭环">×</button>
             </header>
-            <main><Bill360FundingPanel billType={billType} billId={billId} /></main>
+            <main>
+              {billType === 'channel' && cumulativeCondition?.mode === 'threshold' ? (
+                <ChannelCumulativeSettlementCard
+                  partnerName={cumulativeCondition.policy?.partner_name || target?.initialRecord?.partnerName || target?.initialRecord?.channelName || ''}
+                  recordId={billId}
+                  billStatus={target?.initialRecord?.status || 'confirmed'}
+                  draftBasisAmount={0}
+                  draftSettlementAmount={Number(target?.initialRecord?.settlementAmount || 0)}
+                />
+              ) : null}
+              {cumulativeDeferred ? (
+                <div className="bill360-funding-state">
+                  当前无需登记收款或做银行核销。达到累计结算门槛并生成批次后，资金闭环会自动恢复。
+                </div>
+              ) : (
+                <Bill360FundingPanel billType={billType} billId={billId} />
+              )}
+            </main>
           </aside>
         </div>
       ) : null}
