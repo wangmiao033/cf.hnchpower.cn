@@ -1,10 +1,12 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import Bill360DrawerBase from './Bill360DrawerBase.jsx'
 import BillContractCheckPanel from './BillContractCheckPanel.jsx'
 import Bill360FundingPanel from './Bill360FundingPanel.jsx'
 import { getContractBillReconciliation } from '@/lib/api/contractTerms.ts'
+import { billDueInfo, dueStatusText } from '@/domain/reconciliation/billDueDate.js'
 import './Bill360ContractAware.css'
 import './Bill360FundingPanel.css'
+import './Bill360AnomalyPriority.css'
 
 function launcherText(summary, loading, unavailable) {
   if (loading) return '正在核验合同…'
@@ -15,9 +17,24 @@ function launcherText(summary, loading, unavailable) {
   return `合同核验：${summary.total_lines} 条通过`
 }
 
+function remainingFromInitial(billType, record) {
+  if (!record) return null
+  if (billType === 'rd') {
+    const stored = Number(record.unpaidAmount)
+    if (Number.isFinite(stored)) return Math.max(0, stored)
+    const amount = Number(record.settlementAmount)
+    const paid = Number(record.paidAmount || 0)
+    return Number.isFinite(amount) ? Math.max(0, amount - paid) : null
+  }
+  const amount = Number(record.settlementAmount)
+  const received = Number(record.receivedAmount || 0)
+  return Number.isFinite(amount) ? Math.max(0, amount - received) : null
+}
+
 function Bill360Drawer({ target, onClose }) {
   const [checkOpen, setCheckOpen] = useState(false)
   const [fundingOpen, setFundingOpen] = useState(false)
+  const [checkData, setCheckData] = useState(null)
   const [checkSummary, setCheckSummary] = useState(null)
   const [checkLoading, setCheckLoading] = useState(false)
   const [checkUnavailable, setCheckUnavailable] = useState(false)
@@ -29,10 +46,12 @@ function Bill360Drawer({ target, onClose }) {
     let active = true
     setCheckLoading(true)
     setCheckUnavailable(false)
+    setCheckData(null)
     setCheckSummary(null)
     void getContractBillReconciliation(billType, billId)
       .then((result) => {
         if (!active) return
+        setCheckData(result)
         setCheckSummary(result.summary || null)
       })
       .catch(() => {
@@ -48,6 +67,17 @@ function Bill360Drawer({ target, onClose }) {
     setCheckOpen(false)
     setFundingOpen(false)
   }, [billId, billType])
+
+  const dueInfo = useMemo(() => billDueInfo(checkData), [checkData])
+  const remainingAmount = remainingFromInitial(billType, target?.initialRecord)
+  const remainingKnown = remainingAmount !== null
+  const settled = remainingKnown && remainingAmount <= 0.01
+  const dueText = dueStatusText(dueInfo, { settled, remainingKnown })
+  const dueTone = dueInfo?.isPastDue && !settled
+    ? 'is-overdue'
+    : dueInfo && dueInfo.daysUntil <= 7 && !settled
+      ? 'is-soon'
+      : ''
 
   const tone = checkSummary?.fail_count
     ? 'fail'
@@ -82,6 +112,11 @@ function Bill360Drawer({ target, onClose }) {
         <span>
           <strong>{launcherText(checkSummary, checkLoading, checkUnavailable)}</strong>
           <small>分成 · 税率 · 渠道费 · 测试费 · 退款/扣除规则</small>
+          {dueInfo ? (
+            <small className={`bill360-due-note ${dueTone}`.trim()}>
+              到期 {dueInfo.dueDate} · {dueText} · {dueInfo.paymentTerms}
+            </small>
+          ) : null}
         </span>
         <em aria-hidden>›</em>
       </button>
