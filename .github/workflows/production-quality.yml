@@ -24,7 +24,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: '24'
           cache: npm
@@ -39,7 +39,7 @@ jobs:
         run: npm run build
 
   backend:
-    name: Backend tests and compile check
+    name: Backend + contract service tests and compile check
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -51,18 +51,26 @@ jobs:
         with:
           python-version: '3.12'
           cache: pip
-          cache-dependency-path: backend/requirements.txt
+          cache-dependency-path: |
+            backend/requirements.txt
+            contract_terms/requirements.txt
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r backend/requirements.txt
+          python -m pip install -r contract_terms/requirements.txt
           python -m pip check
 
       - name: Compile Python sources
-        run: python -m compileall -q backend/app proxy
+        run: python -m compileall -q backend/app backend/tests proxy contract_terms
 
       - name: Run backend unit tests
         env:
-          PYTHONPATH: backend
+          PYTHONPATH: backend:.
         run: python -m unittest discover -s backend/tests -p 'test_*.py' -v
+
+      - name: Run contract settlement regression tests
+        env:
+          PYTHONPATH: contract_terms:.
+        run: python -m unittest discover -s contract_terms -p 'test_*.py' -v
