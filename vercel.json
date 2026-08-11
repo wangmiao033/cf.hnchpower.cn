@@ -31,7 +31,7 @@
     },
     "contract_terms": {
       "root": "contract_terms/",
-      "entrypoint": "v6_main:app",
+      "entrypoint": "v7_main:app",
       "framework": "fastapi"
     }
   },
