@@ -2,6 +2,7 @@ import React, { useMemo, useRef, useState } from 'react'
 import * as XLSX from 'xlsx'
 import { useAppState } from '@/app/AppStateContext.jsx'
 import PageContainer from '@/components/layout/PageContainer.jsx'
+import BillQuickFilters from '@/components/reconciliation/BillQuickFilters.jsx'
 import ChannelReceiptDrawer from '@/components/channel/ChannelReceiptDrawer.jsx'
 import { VIEWS } from '@/app/routes.js'
 import {
@@ -16,6 +17,7 @@ import {
 } from '@/domain/channel/channelAggregates.js'
 import { parseChannelStatementWorkbook } from '@/domain/channel/channelStatementImport.js'
 import { getChannelBillNumber } from '@/utils/channelBillNumber.js'
+import { transitionBillLifecycle } from '@/lib/api/billLifecycle.ts'
 import '@/components/reconciliation/reconciliation-admin.css'
 import './CoreReconciliationPages.css'
 
@@ -77,6 +79,27 @@ function channelGames(record) {
   return names
 }
 
+function channelPaymentAmounts(row) {
+  const totals = getChannelTotals(row)
+  const received = Math.max(0, getChannelReceivedAmount(row))
+  return {
+    settlement: totals.settlementAmount,
+    received,
+    unpaid: Math.max(0, totals.settlementAmount - received)
+  }
+}
+
+function channelHasDataDifference(row) {
+  const headerDiff = Number(row?.settlementDifference)
+  if (String(row?.validationStatus || '') === 'fail') return true
+  if (Number.isFinite(headerDiff) && Math.abs(headerDiff) > 0.01) return true
+  return Array.isArray(row?.items) && row.items.some((item) => {
+    if (String(item?.validationStatus || '') === 'fail') return true
+    const difference = Number(item?.settlementDifference)
+    return Number.isFinite(difference) && Math.abs(difference) > 0.01
+  })
+}
+
 function CoreChannelReconciliationPage() {
   const {
     recon,
@@ -92,8 +115,9 @@ function CoreChannelReconciliationPage() {
   const [channelDraft, setChannelDraft] = useState('')
   const [status, setStatus] = useState('')
   const [query, setQuery] = useState('')
+  const [quickFilter, setQuickFilter] = useState('all')
   const [selectedIds, setSelectedIds] = useState([])
-  const [isDeleting, setIsDeleting] = useState(false)
+  const [isWorking, setIsWorking] = useState(false)
   const [receiptRecord, setReceiptRecord] = useState(null)
 
   const monthOptions = useMemo(
@@ -107,7 +131,7 @@ function CoreChannelReconciliationPage() {
     [recon.channelRecords]
   )
 
-  const rows = useMemo(() => {
+  const baseRows = useMemo(() => {
     const q = query.trim().toLowerCase()
     const channelQuery = channel.trim().toLowerCase()
     return (recon.channelRecords || []).filter((row) => {
@@ -123,9 +147,44 @@ function CoreChannelReconciliationPage() {
     })
   }, [recon.channelRecords, month, channel, status, query])
 
+  const rows = useMemo(() => baseRows.filter((row) => {
+    if (quickFilter === 'all') return true
+    if (String(row.status || '') === 'cancelled') return false
+    const amounts = channelPaymentAmounts(row)
+    if (quickFilter === 'unpaid') return amounts.unpaid > 0.01 && amounts.received <= 0.01
+    if (quickFilter === 'partial') return amounts.received > 0.01 && amounts.unpaid > 0.01
+    if (quickFilter === 'data-diff') return channelHasDataDifference(row)
+    return true
+  }), [baseRows, quickFilter])
+
   const selectedRows = useMemo(() => rows.filter((row) => selectedIds.includes(String(row.id))), [rows, selectedIds])
   const allVisibleSelected = rows.length > 0 && selectedRows.length === rows.length
   const partiallyVisibleSelected = selectedRows.length > 0 && !allVisibleSelected
+
+  const quickItems = useMemo(() => [
+    { key: 'all', label: '全部', count: baseRows.length },
+    {
+      key: 'unpaid',
+      label: '未收款',
+      count: baseRows.filter((row) => {
+        const amounts = channelPaymentAmounts(row)
+        return String(row.status || '') !== 'cancelled' && amounts.unpaid > 0.01 && amounts.received <= 0.01
+      }).length
+    },
+    {
+      key: 'partial',
+      label: '部分收款',
+      count: baseRows.filter((row) => {
+        const amounts = channelPaymentAmounts(row)
+        return String(row.status || '') !== 'cancelled' && amounts.received > 0.01 && amounts.unpaid > 0.01
+      }).length
+    },
+    {
+      key: 'data-diff',
+      label: '数据差异',
+      count: baseRows.filter((row) => String(row.status || '') !== 'cancelled' && channelHasDataDifference(row)).length
+    }
+  ], [baseRows])
 
   const stats = useMemo(() => {
     const settlement = rows.reduce((sum, row) => sum + getChannelTotals(row).settlementAmount, 0)
@@ -156,28 +215,60 @@ function CoreChannelReconciliationPage() {
     })
   }
 
-  const handleBulkDelete = async () => {
-    if (selectedRows.length === 0 || isDeleting) return
-    if (!window.confirm(`确定永久删除选中的 ${selectedRows.length} 条渠道账单吗？此操作不可恢复。`)) return
-    setIsDeleting(true)
+  const handleQuickFilter = (key) => {
+    setQuickFilter(key)
+    setSelectedIds([])
+  }
+
+  const handleBulkVoid = async () => {
+    const targets = selectedRows.filter((row) => String(row.status || '') !== 'cancelled')
+    if (!targets.length || isWorking) return
+    const reason = window.prompt(`请输入作废所选 ${targets.length} 张渠道账单的原因：`, '')
+    if (reason === null) return
+    if (!reason.trim()) {
+      showToast('批量作废必须填写原因', 'error')
+      return
+    }
+    setIsWorking(true)
     try {
-      const result = await recon.onChannelDeleteRecordsBatch(selectedRows.map((row) => row.id))
-      const deletedIds = new Set(result?.deletedIds || [])
-      setSelectedIds((prev) => prev.filter((id) => !deletedIds.has(String(id))))
+      const results = await Promise.allSettled(
+        targets.map((row) => transitionBillLifecycle('channel', String(row.id), 'cancelled', reason.trim()))
+      )
+      await recon.refetchChannelFromApi?.()
+      const successCount = results.filter((item) => item.status === 'fulfilled').length
+      const failedCount = results.length - successCount
+      setSelectedIds([])
+      showToast(
+        failedCount ? `已作废 ${successCount} 张，${failedCount} 张未满足作废条件` : `已作废 ${successCount} 张渠道账单，历史记录已保留`,
+        failedCount ? 'info' : 'success'
+      )
+    } catch (error) {
+      console.error(error)
+      showToast(error instanceof Error ? error.message : '批量作废失败', 'error')
     } finally {
-      setIsDeleting(false)
+      setIsWorking(false)
     }
   }
 
-  const handleSingleDelete = async (row) => {
-    if (isDeleting) return
-    if (!window.confirm(`确定删除渠道账单“${getChannelBillNumber(row)}”吗？此操作不可恢复。`)) return
-    setIsDeleting(true)
+  const handleSingleVoid = async (row) => {
+    if (String(row.status || '') === 'cancelled' || isWorking) return
+    const reason = window.prompt(`请输入作废账单“${getChannelBillNumber(row)}”的原因：`, '')
+    if (reason === null) return
+    if (!reason.trim()) {
+      showToast('作废账单必须填写原因', 'error')
+      return
+    }
+    setIsWorking(true)
     try {
-      const deleted = await recon.onChannelDeleteRecord(row.id)
-      if (deleted) setSelectedIds((prev) => prev.filter((id) => id !== String(row.id)))
+      await transitionBillLifecycle('channel', String(row.id), 'cancelled', reason.trim())
+      await recon.refetchChannelFromApi?.()
+      setSelectedIds((prev) => prev.filter((id) => id !== String(row.id)))
+      showToast('渠道账单已作废，历史记录已保留', 'success')
+    } catch (error) {
+      console.error(error)
+      showToast(error instanceof Error ? error.message : '账单作废失败', 'error')
     } finally {
-      setIsDeleting(false)
+      setIsWorking(false)
     }
   }
 
@@ -296,10 +387,12 @@ function CoreChannelReconciliationPage() {
             <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="渠道、合作方、产品或月份" />
           </label>
           <button type="button" className="core-recon-reset" onClick={() => {
-            setMonth(''); setChannel(''); setChannelDraft(''); setStatus(''); setQuery(''); setSelectedIds([])
+            setMonth(''); setChannel(''); setChannelDraft(''); setStatus(''); setQuery(''); setQuickFilter('all'); setSelectedIds([])
           }}>重置</button>
         </div>
       </section>
+
+      <BillQuickFilters value={quickFilter} items={quickItems} onChange={handleQuickFilter} />
 
       <section className="core-recon-stats">
         {stats.map((item) => <div key={item.label}><span>{item.label}</span><strong>{item.value}</strong>{item.note && <small>{item.note}</small>}</div>)}
@@ -312,8 +405,10 @@ function CoreChannelReconciliationPage() {
             <span>{selectedRows.length > 0 ? `已选 ${selectedRows.length} 条` : `${rows.length} 条`}</span>
             {selectedRows.length > 0 && (
               <div className="core-recon-selection-actions">
-                <button type="button" onClick={() => setSelectedIds([])} disabled={isDeleting}>取消选择</button>
-                <button type="button" className="danger" onClick={handleBulkDelete} disabled={isDeleting}>{isDeleting ? '删除中…' : `删除所选（${selectedRows.length}）`}</button>
+                <button type="button" onClick={() => setSelectedIds([])} disabled={isWorking}>取消选择</button>
+                <button type="button" className="danger" onClick={() => void handleBulkVoid()} disabled={isWorking}>
+                  {isWorking ? '处理中…' : `作废所选（${selectedRows.length}）`}
+                </button>
               </div>
             )}
           </div>
@@ -335,7 +430,7 @@ function CoreChannelReconciliationPage() {
             </colgroup>
             <thead>
               <tr>
-                <th><label className="core-recon-select-all"><input ref={(node) => { if (node) node.indeterminate = partiallyVisibleSelected }} type="checkbox" aria-label="全选当前筛选结果" checked={allVisibleSelected} disabled={!rows.length || isDeleting} onChange={toggleSelectAll} /><span>结算周期</span></label></th>
+                <th><label className="core-recon-select-all"><input ref={(node) => { if (node) node.indeterminate = partiallyVisibleSelected }} type="checkbox" aria-label="全选当前筛选结果" checked={allVisibleSelected} disabled={!rows.length || isWorking} onChange={toggleSelectAll} /><span>结算周期</span></label></th>
                 <th>编号</th><th>渠道</th><th>合作方</th><th>产品</th>
                 <th className="core-recon-align-right">计费流水</th><th className="core-recon-align-right">分成金额</th>
                 <th className="core-recon-align-right">渠道应收</th><th className="core-recon-align-right">已收 / 未收</th><th>状态</th><th>操作</th>
@@ -348,12 +443,13 @@ function CoreChannelReconciliationPage() {
                 const received = getChannelReceivedAmount(row)
                 const unpaid = Math.max(0, totals.settlementAmount - received)
                 const settled = isChannelReceiptSettled(row)
+                const cancelled = String(row.status || '') === 'cancelled'
                 const gameText = games.join('、')
                 const periodText = channelPeriodLabel(row)
                 return (
                   <tr key={row.id} className={selectedIds.includes(String(row.id)) ? 'is-selected' : ''}>
                     <td className="core-rd-month-cell">
-                      <input type="checkbox" aria-label={`选择渠道账单 ${text(row.channelName)} ${periodText}`} checked={selectedIds.includes(String(row.id))} disabled={isDeleting} onChange={() => toggleSelected(row.id)} />
+                      <input type="checkbox" aria-label={`选择渠道账单 ${text(row.channelName)} ${periodText}`} checked={selectedIds.includes(String(row.id))} disabled={isWorking} onChange={() => toggleSelected(row.id)} />
                       <span title={channelMonths(row).map(monthLabel).join('、')}>{periodText}</span>
                     </td>
                     <td className="core-recon-number">{getChannelBillNumber(row)}</td>
@@ -367,9 +463,17 @@ function CoreChannelReconciliationPage() {
                     <td><span className={`core-recon-status core-recon-status--${row.status || 'pending'}`}>{STATUS_LABELS[row.status] || row.status || '待处理'}</span></td>
                     <td><div className="core-recon-row-actions">
                       <button type="button" onClick={() => openBill360('channel', String(row.id), row)}>360°</button>
-                      <button type="button" disabled={settled || !recon.channelApiEnabled} title={!recon.channelApiEnabled ? '渠道 API 不可用，暂不能登记收款' : settled ? '该账单已结清' : '登记渠道收款'} onClick={() => setReceiptRecord(row)}>{settled ? '已结清' : '收款'}</button>
+                      <button type="button" disabled={settled || !recon.channelApiEnabled || cancelled} title={!recon.channelApiEnabled ? '渠道 API 不可用，暂不能登记收款' : cancelled ? '已作废账单不能登记收款' : settled ? '该账单已结清' : '登记渠道收款'} onClick={() => setReceiptRecord(row)}>{settled ? '已结清' : '收款'}</button>
                       <button type="button" onClick={() => openChannelReconciliationEdit(String(row.id))}>编辑</button>
-                      <button type="button" className="danger" disabled={isDeleting} onClick={() => handleSingleDelete(row)}>删除</button>
+                      <button
+                        type="button"
+                        className="danger"
+                        disabled={isWorking || cancelled}
+                        title={cancelled ? '账单已作废' : '作废会保留账单、关联关系和操作日志'}
+                        onClick={() => void handleSingleVoid(row)}
+                      >
+                        {cancelled ? '已作废' : '作废'}
+                      </button>
                     </div></td>
                   </tr>
                 )
