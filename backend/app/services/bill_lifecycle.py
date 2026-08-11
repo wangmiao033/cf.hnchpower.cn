@@ -15,6 +15,7 @@ from app.models.invoice import InvoiceRecord
 from app.models.operation_log import OperationLog
 from app.models.reconciliation import ReconciliationRecord
 from app.models.user import AuthUser
+from app.services.channel_cumulative_batch import bill_condition
 from app.services.rd_bank_payment_aggregate import (
     aggregate_rd_payments_for_ids,
     fill_payable_for_row,
@@ -261,7 +262,14 @@ def bill_financial_state(db: Session, bill_type: str, bill) -> BillFinancialStat
         label = {"unpaid": "未付款", "partial": "部分付款", "paid": "已付款"}[phase]
     else:
         paid = round(abs(float(getattr(bill, "received_amount", 0) or 0)), 2)
-        if bill_amount == 0 and paid <= 0.01:
+        condition = bill_condition(db, bill)
+        if condition.get("deferred"):
+            phase = "deferred"
+            label = "已达门槛" if condition.get("state") == "ready" else "累计中"
+            coverage = "deferred"
+            coverage_percent = 0
+            remaining = 0.0
+        elif bill_amount == 0 and paid <= 0.01:
             phase = "paid"
             label = "无需收款"
         elif paid <= 0.01:
@@ -313,6 +321,28 @@ def _transition_requires_reason(current: str, target: str) -> bool:
     return False
 
 
+def _cumulative_transition_block(db: Session, bill_type: str, bill, current: str, target: str) -> str | None:
+    if bill_type != "channel" or current != "confirmed":
+        return None
+    condition = bill_condition(db, bill)
+    if condition.get("state") == "batched" and target in {"pending", "cancelled"}:
+        batch = condition.get("batch") or {}
+        return f"账单已进入累计结算批次 {batch.get('batch_no') or ''}，如需退回或作废，请先取消对应累计批次。"
+    if not condition.get("deferred") or target not in {"invoiced", "completed"}:
+        return None
+    pool = condition.get("pool") or {}
+    policy = condition.get("policy") or {}
+    threshold = float(policy.get("threshold_amount") or 0)
+    basis_total = float(pool.get("basis_total") or 0)
+    if pool.get("ready"):
+        return f"累计金额已达到结算门槛 ¥{threshold:.2f}。请先生成累计结算批次，再统一提交开票与收款。"
+    remaining = float(pool.get("remaining_to_threshold") or 0)
+    return (
+        f"当前账单已核对并进入累计结算池：累计 ¥{basis_total:.2f} / ¥{threshold:.2f}，"
+        f"还差 ¥{remaining:.2f}。未达门槛前无需开票或收款，可继续核对后续账单。"
+    )
+
+
 def _transition_guard(
     db: Session,
     bill_type: str,
@@ -328,6 +358,10 @@ def _transition_guard(
     if target == "confirmed":
         ok, reason = _base_bill_is_complete(bill_type, bill)
         return None if ok else reason
+
+    cumulative_block = _cumulative_transition_block(db, bill_type, bill, current, target)
+    if cumulative_block:
+        return cumulative_block
 
     financial = bill_financial_state(db, bill_type, bill)
     settlement_amount = _settlement_amount(bill)
@@ -364,6 +398,7 @@ def _transition_guard(
 def build_lifecycle_snapshot(db: Session, bill_type: str, bill, user: AuthUser) -> dict:
     current = normalize_status(getattr(bill, "status", None))
     financial = bill_financial_state(db, bill_type, bill)
+    settlement_condition = bill_condition(db, bill) if bill_type == "channel" else None
     options = []
     for target in BASE_TRANSITIONS.get(current, ()):
         blocked_reason = _transition_guard(db, bill_type, bill, current, target, user)
@@ -392,6 +427,7 @@ def build_lifecycle_snapshot(db: Session, bill_type: str, bill, user: AuthUser) 
         "invoice_coverage_percent": financial.invoice_coverage_percent,
         "invoice_allocated_amount": financial.invoice_allocated,
         "invoice_remaining_amount": financial.invoice_remaining,
+        "settlement_condition": settlement_condition,
         "transitions": options,
     }
 
@@ -449,7 +485,6 @@ def transition_bill(
         bill.updated_at = datetime.now(timezone.utc)
     db.flush()
 
-    # 状态 UPDATE 触发器已写入审计日志；把本次流转原因补到同一条最新状态日志中。
     if normalized_reason:
         latest = db.execute(
             select(OperationLog)
