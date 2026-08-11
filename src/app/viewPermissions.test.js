@@ -13,6 +13,7 @@ describe('view permissions', () => {
     expect(permissionForView(VIEWS.RECON_RD)).toBe('reconciliation.view')
     expect(permissionForView(VIEWS.BANK_TRANSACTIONS_LEDGER)).toBe('funds.view')
     expect(permissionForView(VIEWS.PROFIT_ANALYSIS)).toBe('analytics.view')
+    expect(permissionForView(VIEWS.SERVER_COSTS)).toBe('analytics.view')
   })
 
   it('requires manage permissions for create and edit views', () => {
