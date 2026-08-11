@@ -34,7 +34,7 @@
       "entrypoint": "extended_main:app",
       "framework": "fastapi"
     }
-  ],
+  },
   "headers": [
     {
       "source": "/(.*)",
