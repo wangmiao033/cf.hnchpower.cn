@@ -32,8 +32,19 @@ class WorkbenchTodoSummary(BaseModel):
     invoice_gap_amount: float = 0
 
 
+class WorkbenchBillSnapshot(BaseModel):
+    rd_bill_count: int = Field(default=0, ge=0)
+    channel_bill_count: int = Field(default=0, ge=0)
+    rd_pending_count: int = Field(default=0, ge=0)
+    channel_pending_count: int = Field(default=0, ge=0)
+    rd_total_amount: float = 0
+    channel_total_amount: float = 0
+    latest_settlement_month: str | None = None
+
+
 class WorkbenchTodoResponse(BaseModel):
     generated_at: datetime
     summary: WorkbenchTodoSummary
+    snapshot: WorkbenchBillSnapshot = Field(default_factory=WorkbenchBillSnapshot)
     items: list[WorkbenchTodoItem]
     visible_modules: list[str]
