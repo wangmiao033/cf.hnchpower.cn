@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import PageContainer from '@/components/layout/PageContainer.jsx'
+import { findExactPartner } from '@/components/shared/PartnerPicker.jsx'
 import { useAppState } from '@/app/AppStateContext.jsx'
 import { useAuth } from '@/features/auth/AuthContext.jsx'
 import { getProfitAnalysis } from '@/lib/api/profitAnalysis.ts'
@@ -21,6 +22,7 @@ const CATEGORY_OPTIONS = [
   ['other', '其他']
 ]
 const CATEGORY_LABELS = Object.fromEntries(CATEGORY_OPTIONS)
+const PROVIDER_OPTIONS = ['火山云', '华为云', '腾讯云', '其他云']
 
 function currentMonth() {
   const date = new Date()
@@ -40,14 +42,17 @@ function emptyForm(month) {
     amount: '',
     gameName: '',
     payerEntity: '',
+    payerPartnerId: '',
     remark: ''
   }
 }
 
 export default function ServerCostPage() {
-  const { showToast } = useAppState()
+  const { showToast, settings } = useAppState()
   const { can } = useAuth()
   const canManage = can('analytics.manage')
+  const partners = settings?.partners || []
+  const partnerLoading = Boolean(settings?.partnerLoading)
   const [month, setMonth] = useState(currentMonth)
   const [category, setCategory] = useState('')
   const [gameName, setGameName] = useState('')
@@ -95,6 +100,17 @@ export default function ServerCostPage() {
     [profit?.games]
   )
 
+  const partnerOptions = useMemo(
+    () => [...partners]
+      .filter((partner) => partner?.id && partner?.name)
+      .sort((left, right) => String(left.shortName || left.name || '').localeCompare(
+        String(right.shortName || right.name || ''),
+        'zh-CN',
+        { numeric: true, sensitivity: 'base' }
+      )),
+    [partners]
+  )
+
   const openCreate = () => {
     if (!canManage) return
     setEditingId('')
@@ -104,15 +120,19 @@ export default function ServerCostPage() {
 
   const openEdit = (row) => {
     if (!canManage || row.status === 'void') return
+    const linkedPartner = partnerOptions.find(
+      (partner) => String(partner.id || '') === String(row.payer_partner_id || '')
+    ) || findExactPartner(partnerOptions, row.payer_entity)
     setEditingId(row.id)
     setForm({
       expenseMonth: row.expense_month || month,
       expenseDate: row.expense_date || '',
-      providerName: row.provider_name || '',
+      providerName: PROVIDER_OPTIONS.includes(row.provider_name) ? row.provider_name : (row.provider_name ? '其他云' : ''),
       category: row.category || 'cloud_server',
       amount: String(row.amount ?? ''),
       gameName: row.game_name || '',
-      payerEntity: row.payer_entity || '',
+      payerEntity: linkedPartner?.name || row.payer_entity || '',
+      payerPartnerId: linkedPartner ? String(linkedPartner.id || '') : String(row.payer_partner_id || ''),
       remark: row.remark || ''
     })
     setEditorOpen(true)
@@ -131,14 +151,19 @@ export default function ServerCostPage() {
       showToast?.('服务器成本金额必须大于 0', 'error')
       return
     }
+    if (!PROVIDER_OPTIONS.includes(form.providerName)) {
+      showToast?.('请选择服务商', 'error')
+      return
+    }
     const payload = {
       expense_month: form.expenseMonth,
       expense_date: form.expenseDate || null,
-      provider_name: form.providerName.trim() || null,
+      provider_name: form.providerName,
       category: form.category,
       amount,
       game_name: form.gameName.trim() || null,
       payer_entity: form.payerEntity.trim() || null,
+      payer_partner_id: form.payerPartnerId || null,
       remark: form.remark.trim() || null,
       source: 'manual'
     }
@@ -186,6 +211,10 @@ export default function ServerCostPage() {
     }
   }
 
+  const payerPartnerExists = partnerOptions.some(
+    (partner) => String(partner.id || '') === String(form.payerPartnerId || '')
+  )
+
   return (
     <PageContainer hideHeader className="server-cost-page">
       <section className="server-cost-head">
@@ -217,13 +246,13 @@ export default function ServerCostPage() {
           <label><span>月份</span><input type="month" value={month} onChange={(event) => setMonth(event.target.value)} /></label>
           <label><span>费用类型</span><select value={category} onChange={(event) => setCategory(event.target.value)}><option value="">全部类型</option>{CATEGORY_OPTIONS.map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label>
           <label><span>游戏</span><input value={gameName} onChange={(event) => setGameName(event.target.value)} placeholder="全部游戏 / 公共" /></label>
-          <label className="is-grow"><span>搜索</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="服务商、付款主体、备注…" /></label>
+          <label className="is-grow"><span>搜索</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="服务商、实付主体、备注…" /></label>
           <label><span>状态</span><select value={status} onChange={(event) => setStatus(event.target.value)}><option value="active">有效</option><option value="void">已作废</option><option value="all">全部</option></select></label>
         </div>
 
         <div className="server-cost-table-wrap">
           <table>
-            <thead><tr><th>费用月份</th><th>发生日期</th><th>服务商</th><th>费用类型</th><th>归属游戏</th><th>付款主体</th><th>备注</th><th className="is-right">金额</th><th>状态</th><th>操作</th></tr></thead>
+            <thead><tr><th>费用月份</th><th>发生日期</th><th>服务商</th><th>费用类型</th><th>归属游戏</th><th>实付主体</th><th>备注</th><th className="is-right">金额</th><th>状态</th><th>操作</th></tr></thead>
             <tbody>
               {loading ? <tr><td colSpan={10} className="server-cost-empty">正在读取服务器成本…</td></tr> : null}
               {!loading && rows.length === 0 ? <tr><td colSpan={10} className="server-cost-empty">当前筛选条件下暂无服务器成本。</td></tr> : null}
@@ -234,7 +263,7 @@ export default function ServerCostPage() {
                   <td>{row.provider_name || '—'}</td>
                   <td>{CATEGORY_LABELS[row.category] || row.category}</td>
                   <td>{row.game_name || <span className="server-cost-public">公共成本</span>}</td>
-                  <td>{row.payer_entity || '—'}</td>
+                  <td>{row.payer_entity || '—'}{row.payer_partner_id ? <small> · 客户库</small> : null}</td>
                   <td className="server-cost-remark" title={row.remark || ''}>{row.remark || '—'}</td>
                   <td className="is-right"><strong>{money(row.amount)}</strong></td>
                   <td><span className={`server-cost-status is-${row.status}`}>{row.status === 'void' ? '已作废' : '有效'}</span>{row.void_reason ? <small>{row.void_reason}</small> : null}</td>
@@ -265,12 +294,24 @@ export default function ServerCostPage() {
                 <label><span>金额 *</span><input type="number" min="0.01" step="0.01" value={form.amount} onChange={(event) => setForm((current) => ({ ...current, amount: event.target.value }))} placeholder="0.00" required /></label>
                 <label><span>发生 / 付款日期</span><input type="date" value={form.expenseDate} onChange={(event) => setForm((current) => ({ ...current, expenseDate: event.target.value }))} /></label>
                 <label><span>费用类型 *</span><select value={form.category} onChange={(event) => setForm((current) => ({ ...current, category: event.target.value }))}>{CATEGORY_OPTIONS.map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label>
-                <label><span>服务商</span><input value={form.providerName} onChange={(event) => setForm((current) => ({ ...current, providerName: event.target.value }))} placeholder="阿里云 / 腾讯云 / AWS…" /></label>
+                <label><span>服务商 *</span><select value={form.providerName} onChange={(event) => setForm((current) => ({ ...current, providerName: event.target.value }))} required><option value="">请选择服务商</option>{PROVIDER_OPTIONS.map((provider) => <option value={provider} key={provider}>{provider}</option>)}</select></label>
                 <label><span>归属游戏</span><input list="server-cost-game-options" value={form.gameName} onChange={(event) => setForm((current) => ({ ...current, gameName: event.target.value }))} placeholder="留空 = 公共成本" /><datalist id="server-cost-game-options">{gameOptions.map((name) => <option value={name} key={name} />)}</datalist></label>
-                <label className="is-wide"><span>付款主体</span><input value={form.payerEntity} onChange={(event) => setForm((current) => ({ ...current, payerEntity: event.target.value }))} placeholder="例如 广州熊动科技有限公司" /></label>
+                <label className="is-wide"><span>实付主体 · 客户库</span><select value={form.payerPartnerId} onChange={(event) => {
+                  const nextId = event.target.value
+                  const partner = partnerOptions.find((item) => String(item.id || '') === nextId)
+                  setForm((current) => ({
+                    ...current,
+                    payerPartnerId: nextId,
+                    payerEntity: partner?.name || ''
+                  }))
+                }} disabled={partnerLoading}>
+                  <option value="">{partnerLoading ? '正在读取客户库…' : '请选择客户库主体'}</option>
+                  {form.payerPartnerId && !payerPartnerExists ? <option value={form.payerPartnerId}>历史关联 · {form.payerEntity || form.payerPartnerId}</option> : null}
+                  {partnerOptions.map((partner) => <option value={String(partner.id)} key={partner.id}>{partner.shortName ? `${partner.shortName} · ${partner.name}` : partner.name}</option>)}
+                </select>{form.payerEntity && !form.payerPartnerId ? <small>历史未关联值：{form.payerEntity}，选择客户库主体后会建立正式关联。</small> : null}</label>
                 <label className="is-wide"><span>备注</span><textarea rows={3} value={form.remark} onChange={(event) => setForm((current) => ({ ...current, remark: event.target.value }))} placeholder="账单周期、实例、用途等" /></label>
               </div>
-              <div className="server-cost-editor-note">归属游戏留空 = 公司公共服务器成本；填写游戏时，利润分析会按母游戏名称自动归并。</div>
+              <div className="server-cost-editor-note">实付主体直接关联客户库并保存客户 ID；服务商只允许选择火山云、华为云、腾讯云或其他云。归属游戏留空 = 公司公共服务器成本。</div>
               <footer><button type="button" onClick={closeEditor}>取消</button><button type="submit" className="is-primary" disabled={saving}>{saving ? '保存中…' : editingId ? '保存修改' : '确认录入'}</button></footer>
             </form>
           </section>
