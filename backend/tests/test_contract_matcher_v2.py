@@ -1,5 +1,6 @@
 import unittest
 
+from contract_terms.v2_1_main import _top_candidate_is_unambiguous
 from contract_terms.v2_main import _candidate_options, _evaluate_line_v2
 
 
@@ -96,6 +97,24 @@ class ContractMatcherV2Test(unittest.TestCase):
         share = next(item for item in result["checks"] if item["key"] == "share_rate")
         self.assertEqual(share["status"], "fail")
         self.assertEqual(share["difference"], 3.0)
+
+    def test_auto_lock_requires_clear_margin_over_second_candidate(self):
+        ambiguous = {
+            "match": {"access_item_id": "a1", "confidence": "high", "score": 96},
+            "candidates": [
+                {"access_item_id": "a1", "eligible": True, "score": 96},
+                {"access_item_id": "a2", "eligible": True, "score": 92},
+            ],
+        }
+        clear = {
+            "match": {"access_item_id": "a1", "confidence": "high", "score": 96},
+            "candidates": [
+                {"access_item_id": "a1", "eligible": True, "score": 96},
+                {"access_item_id": "a2", "eligible": True, "score": 86},
+            ],
+        }
+        self.assertFalse(_top_candidate_is_unambiguous(ambiguous))
+        self.assertTrue(_top_candidate_is_unambiguous(clear))
 
 
 if __name__ == "__main__":
