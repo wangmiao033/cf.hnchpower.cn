@@ -66,6 +66,7 @@ export default function ServerCostPage() {
   const [editorOpen, setEditorOpen] = useState(false)
   const [editingId, setEditingId] = useState('')
   const [form, setForm] = useState(() => emptyForm(currentMonth()))
+  const [payerQuery, setPayerQuery] = useState('')
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
@@ -111,10 +112,32 @@ export default function ServerCostPage() {
     [partners]
   )
 
+  const filteredPartnerOptions = useMemo(() => {
+    const q = payerQuery.trim().toLowerCase()
+    const matches = (q
+      ? partnerOptions.filter((partner) => [
+          partner.shortName,
+          partner.name,
+          partner.taxRegistrationNo,
+          partner.category,
+          partner.tag2
+        ].filter(Boolean).join(' ').toLowerCase().includes(q))
+      : partnerOptions
+    ).slice(0, 80)
+    const selected = partnerOptions.find(
+      (partner) => String(partner.id || '') === String(form.payerPartnerId || '')
+    )
+    if (selected && !matches.some((partner) => String(partner.id) === String(selected.id))) {
+      return [selected, ...matches]
+    }
+    return matches
+  }, [partnerOptions, payerQuery, form.payerPartnerId])
+
   const openCreate = () => {
     if (!canManage) return
     setEditingId('')
     setForm(emptyForm(month))
+    setPayerQuery('')
     setEditorOpen(true)
   }
 
@@ -135,6 +158,7 @@ export default function ServerCostPage() {
       payerPartnerId: linkedPartner ? String(linkedPartner.id || '') : String(row.payer_partner_id || ''),
       remark: row.remark || ''
     })
+    setPayerQuery(linkedPartner?.shortName || linkedPartner?.name || row.payer_entity || '')
     setEditorOpen(true)
   }
 
@@ -142,6 +166,7 @@ export default function ServerCostPage() {
     if (saving) return
     setEditorOpen(false)
     setEditingId('')
+    setPayerQuery('')
   }
 
   const saveCost = async (event) => {
@@ -179,6 +204,7 @@ export default function ServerCostPage() {
       setMonth(form.expenseMonth)
       setEditorOpen(false)
       setEditingId('')
+      setPayerQuery('')
       setRevision((value) => value + 1)
     } catch (error) {
       showToast?.(error instanceof Error ? error.message : '服务器成本保存失败', 'error')
@@ -296,22 +322,37 @@ export default function ServerCostPage() {
                 <label><span>费用类型 *</span><select value={form.category} onChange={(event) => setForm((current) => ({ ...current, category: event.target.value }))}>{CATEGORY_OPTIONS.map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label>
                 <label><span>服务商 *</span><select value={form.providerName} onChange={(event) => setForm((current) => ({ ...current, providerName: event.target.value }))} required><option value="">请选择服务商</option>{PROVIDER_OPTIONS.map((provider) => <option value={provider} key={provider}>{provider}</option>)}</select></label>
                 <label><span>归属游戏</span><input list="server-cost-game-options" value={form.gameName} onChange={(event) => setForm((current) => ({ ...current, gameName: event.target.value }))} placeholder="留空 = 公共成本" /><datalist id="server-cost-game-options">{gameOptions.map((name) => <option value={name} key={name} />)}</datalist></label>
-                <label className="is-wide"><span>实付主体 · 客户库</span><select value={form.payerPartnerId} onChange={(event) => {
-                  const nextId = event.target.value
-                  const partner = partnerOptions.find((item) => String(item.id || '') === nextId)
-                  setForm((current) => ({
-                    ...current,
-                    payerPartnerId: nextId,
-                    payerEntity: partner?.name || ''
-                  }))
-                }} disabled={partnerLoading}>
-                  <option value="">{partnerLoading ? '正在读取客户库…' : '请选择客户库主体'}</option>
-                  {form.payerPartnerId && !payerPartnerExists ? <option value={form.payerPartnerId}>历史关联 · {form.payerEntity || form.payerPartnerId}</option> : null}
-                  {partnerOptions.map((partner) => <option value={String(partner.id)} key={partner.id}>{partner.shortName ? `${partner.shortName} · ${partner.name}` : partner.name}</option>)}
-                </select>{form.payerEntity && !form.payerPartnerId ? <small>历史未关联值：{form.payerEntity}，选择客户库主体后会建立正式关联。</small> : null}</label>
+                <label className="is-wide">
+                  <span>实付主体 · 客户库</span>
+                  <div className="server-cost-payer-picker">
+                    <input
+                      type="search"
+                      value={payerQuery}
+                      onChange={(event) => setPayerQuery(event.target.value)}
+                      placeholder="搜索简称、公司全称、税号"
+                      autoComplete="off"
+                    />
+                    <select value={form.payerPartnerId} onChange={(event) => {
+                      const nextId = event.target.value
+                      const partner = partnerOptions.find((item) => String(item.id || '') === nextId)
+                      setForm((current) => ({
+                        ...current,
+                        payerPartnerId: nextId,
+                        payerEntity: partner?.name || ''
+                      }))
+                      if (partner) setPayerQuery(partner.shortName || partner.name || '')
+                    }} disabled={partnerLoading}>
+                      <option value="">{partnerLoading ? '正在读取客户库…' : '请选择客户库主体'}</option>
+                      {form.payerPartnerId && !payerPartnerExists ? <option value={form.payerPartnerId}>历史关联 · {form.payerEntity || form.payerPartnerId}</option> : null}
+                      {filteredPartnerOptions.map((partner) => <option value={String(partner.id)} key={partner.id}>{partner.shortName ? `${partner.shortName} · ${partner.name}` : partner.name}</option>)}
+                    </select>
+                  </div>
+                  <small>{payerQuery ? `匹配 ${filteredPartnerOptions.length} / ${partnerOptions.length} 个客户` : `客户库共 ${partnerOptions.length} 个，输入关键词可快速筛选`}</small>
+                  {form.payerEntity && !form.payerPartnerId ? <small>历史未关联值：{form.payerEntity}，选择客户库主体后会建立正式关联。</small> : null}
+                </label>
                 <label className="is-wide"><span>备注</span><textarea rows={3} value={form.remark} onChange={(event) => setForm((current) => ({ ...current, remark: event.target.value }))} placeholder="账单周期、实例、用途等" /></label>
               </div>
-              <div className="server-cost-editor-note">实付主体直接关联客户库并保存客户 ID；服务商只允许选择火山云、华为云、腾讯云或其他云。归属游戏留空 = 公司公共服务器成本。</div>
+              <div className="server-cost-editor-note">实付主体支持搜索客户简称、公司全称和税号，并保存客户库 ID；服务商只允许选择火山云、华为云、腾讯云或其他云。归属游戏留空 = 公司公共服务器成本。</div>
               <footer><button type="button" onClick={closeEditor}>取消</button><button type="submit" className="is-primary" disabled={saving}>{saving ? '保存中…' : editingId ? '保存修改' : '确认录入'}</button></footer>
             </form>
           </section>
