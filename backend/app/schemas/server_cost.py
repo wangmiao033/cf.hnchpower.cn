@@ -15,6 +15,7 @@ class ServerCostBase(BaseModel):
     amount: float = Field(gt=0, le=999999999999)
     game_name: str | None = Field(default=None, max_length=500)
     payer_entity: str | None = Field(default=None, max_length=500)
+    payer_partner_id: str | None = Field(default=None, max_length=500)
     remark: str | None = Field(default=None, max_length=2000)
     source: str = Field(default="manual", min_length=1, max_length=32)
 
@@ -31,6 +32,7 @@ class ServerCostUpdate(BaseModel):
     amount: float | None = Field(default=None, gt=0, le=999999999999)
     game_name: str | None = Field(default=None, max_length=500)
     payer_entity: str | None = Field(default=None, max_length=500)
+    payer_partner_id: str | None = Field(default=None, max_length=500)
     remark: str | None = Field(default=None, max_length=2000)
     source: str | None = Field(default=None, min_length=1, max_length=32)
 
