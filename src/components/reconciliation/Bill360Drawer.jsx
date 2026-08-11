@@ -4,6 +4,7 @@ import { VIEWS } from '@/app/routes.js'
 import Bill360DrawerBase from './Bill360DrawerBase.jsx'
 import BillContractCheckPanelV2 from './BillContractCheckPanelV2.jsx'
 import Bill360FundingPanel from './Bill360FundingPanel.jsx'
+import BillCarryForwardInbox from './BillCarryForwardInbox.jsx'
 import ContractDifferenceActionPanel from './ContractDifferenceActionPanel.jsx'
 import ChannelCumulativeSettlementCard from '@/components/channel/ChannelCumulativeSettlementCard.jsx'
 import { getContractBillReconciliation } from '@/lib/api/contractTerms.ts'
@@ -300,6 +301,13 @@ function Bill360Drawer({ target, onClose }) {
                   ) : null}
                 </section>
               ) : null}
+
+              <BillCarryForwardInbox
+                billType={billType}
+                billId={billId}
+                reconciliation={checkData}
+                onChanged={loadContractCheck}
+              />
 
               <ContractDifferenceActionPanel
                 billType={billType}
