@@ -5,6 +5,7 @@
 export const VIEWS = {
   DASHBOARD: 'dashboard',
   FINANCE_WORKBENCH: 'finance-workbench',
+  SERVER_COSTS: 'server-costs',
   BUSINESS_DASHBOARD: 'business-dashboard',
   PROFIT_ANALYSIS: 'profit-analysis',
   ANOMALIES: 'anomalies',
@@ -47,6 +48,13 @@ export const SIDEBAR_GROUPS = [
     label: '财务处理',
     items: [
       { view: VIEWS.FINANCE_WORKBENCH, label: '财务工作台' }
+    ]
+  },
+  {
+    id: 'server-costs',
+    label: '服务器成本',
+    items: [
+      { view: VIEWS.SERVER_COSTS, label: '服务器成本' }
     ]
   },
   {
@@ -94,6 +102,7 @@ export const SIDEBAR_GROUPS = [
 const VIEW_TITLES = {
   [VIEWS.DASHBOARD]: '核心工作台',
   [VIEWS.FINANCE_WORKBENCH]: '财务工作台',
+  [VIEWS.SERVER_COSTS]: '服务器成本',
   [VIEWS.BUSINESS_DASHBOARD]: '月度经营驾驶舱',
   [VIEWS.PROFIT_ANALYSIS]: '利润分析',
   [VIEWS.ANOMALIES]: '异常中心',
@@ -123,6 +132,7 @@ const VIEW_TITLES = {
 const VIEW_DESCRIPTIONS = {
   [VIEWS.DASHBOARD]: '研发对账、渠道对账、合同、数据库和客户资料统一管理。',
   [VIEWS.FINANCE_WORKBENCH]: '集中处理业务提交的开票任务，跟踪领取、驳回、完成与真实发票关联。',
+  [VIEWS.SERVER_COSTS]: '独立维护云服务器、CDN、数据库、带宽和域名等成本，并自动进入利润分析。',
   [VIEWS.BUSINESS_DASHBOARD]: '按月区分权责结算与实际现金口径，查看渠道应收、研发应付、现金收支、结算贡献、产品排行与账单完成度。',
   [VIEWS.PROFIT_ANALYSIS]: '按管理口径分析经营利润、费用结构和产品可归属利润，并维护月度经营费用台账。',
   [VIEWS.ANOMALIES]: '自动巡检账单、收付款、发票、合同和流水数据中的异常与待处理风险。',
@@ -152,6 +162,7 @@ const VIEW_DESCRIPTIONS = {
 export const VIEW_ICONS = {
   [VIEWS.DASHBOARD]: '总',
   [VIEWS.FINANCE_WORKBENCH]: '财',
+  [VIEWS.SERVER_COSTS]: '服',
   [VIEWS.BUSINESS_DASHBOARD]: '营',
   [VIEWS.PROFIT_ANALYSIS]: '利',
   [VIEWS.ANOMALIES]: '异',
