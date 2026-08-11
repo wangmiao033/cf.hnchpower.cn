@@ -33,11 +33,6 @@
       "root": "contract_terms/",
       "entrypoint": "v3_main:app",
       "framework": "fastapi"
-    },
-    "maintenance": {
-      "root": "backend/",
-      "entrypoint": "maintenance_main:app",
-      "framework": "fastapi"
     }
   },
   "headers": [
@@ -108,12 +103,6 @@
       "source": "/health/db",
       "destination": {
         "service": "core"
-      }
-    },
-    {
-      "source": "/api/maintenance-bank-rebuild/(.*)",
-      "destination": {
-        "service": "maintenance"
       }
     },
     {
