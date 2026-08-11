@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -31,6 +31,12 @@ from app.services.bank_multi_allocation import (
     build_p2_dashboard,
     transaction_summaries,
 )
+from app.services.bank_partner_match import (
+    customer_match_center,
+    enrich_reconciliation_dashboard,
+    remove_customer_link,
+    save_customer_link,
+)
 from app.services.bank_reconciliation_engine import allocate, confirm_single, reverse
 from app.services.permissions import require_permission
 
@@ -44,6 +50,7 @@ def get_bank_auto_reconciliation_dashboard(
     _user: AuthUser = Depends(require_current_user),
 ) -> BankAutoReconciliationDashboard:
     result = filter_cumulative_bank_suggestions(db, build_dashboard(db, limit=limit))
+    result = enrich_reconciliation_dashboard(db, result)
     confirmed_count, confirmed_amount = db.execute(
         select(
             func.count(BankReconciliationMatch.id),
@@ -53,6 +60,54 @@ def get_bank_auto_reconciliation_dashboard(
     result["stats"]["confirmed_matches"] = int(confirmed_count or 0)
     result["stats"]["confirmed_amount"] = round(float(confirmed_amount or 0), 2)
     return BankAutoReconciliationDashboard.model_validate(result)
+
+
+@router.get("/customer-center")
+def get_customer_match_center(
+    db: Session = Depends(get_db),
+    _user: AuthUser = Depends(require_current_user),
+) -> dict:
+    """按银行对方户名聚合流水，并返回客户中心简称/匹配状态。"""
+    return customer_match_center(db)
+
+
+@router.post("/customer-links")
+def save_customer_match_link(
+    payload: dict,
+    db: Session = Depends(get_db),
+    user: AuthUser = Depends(require_permission("funds.manage")),
+) -> dict:
+    counterparty_name = str(payload.get("counterparty_name") or "").strip()
+    partner_id = str(payload.get("partner_id") or "").strip()
+    if not counterparty_name or not partner_id:
+        raise HTTPException(status_code=422, detail="请选择银行对方户名和客户")
+    try:
+        return save_customer_link(
+            db,
+            counterparty_name=counterparty_name,
+            partner_id=partner_id,
+            user=user,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/customer-links/unlink")
+def unlink_customer_match(
+    payload: dict,
+    db: Session = Depends(get_db),
+    _user: AuthUser = Depends(require_permission("funds.manage")),
+) -> dict:
+    counterparty_name = str(payload.get("counterparty_name") or "").strip()
+    if not counterparty_name:
+        raise HTTPException(status_code=422, detail="请填写银行对方户名")
+    return {
+        "ok": True,
+        "removed": remove_customer_link(db, counterparty_name=counterparty_name),
+        "counterparty_name": counterparty_name,
+    }
 
 
 @router.get("/p2-dashboard", response_model=P2Dashboard)
