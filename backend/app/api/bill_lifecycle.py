@@ -1,8 +1,8 @@
-"""账单状态流转与锁单状态 API。"""
+"""账单状态流转、锁单状态与轻量归档 API。"""
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_db
@@ -10,6 +10,7 @@ from app.core.security import require_current_user
 from app.models.user import AuthUser
 from app.schemas.bill_lifecycle import BillLifecycleRead, BillTransitionRequest
 from app.services import bill_lock_guard as _bill_lock_guard  # noqa: F401  注册 SQLAlchemy 锁单守卫
+from app.services.bill_archive import archive_bill, archive_snapshot, unarchive_bill
 from app.services.bill_lifecycle import build_lifecycle_snapshot, load_bill, transition_bill
 
 router = APIRouter()
@@ -62,6 +63,37 @@ def _snapshot(db: Session, bill_type: str, bill, user: AuthUser) -> dict:
                 option["available"] = False
                 option["blocked_reason"] = reason
     return snapshot
+
+
+@router.get("/archive")
+def get_bill_archive_snapshot(
+    bill_type: str = Query(..., pattern="^(rd|channel)$"),
+    auto: bool = Query(default=True),
+    db: Session = Depends(get_db),
+    user: AuthUser = Depends(require_current_user),
+) -> dict:
+    del user
+    return archive_snapshot(db, bill_type, run_auto=auto)
+
+
+@router.post("/archive/{bill_type}/{bill_id}")
+def archive_one_bill(
+    bill_type: str,
+    bill_id: str,
+    db: Session = Depends(get_db),
+    user: AuthUser = Depends(require_current_user),
+) -> dict:
+    return archive_bill(db, bill_type, bill_id, user=user, source="manual")
+
+
+@router.delete("/archive/{bill_type}/{bill_id}")
+def unarchive_one_bill(
+    bill_type: str,
+    bill_id: str,
+    db: Session = Depends(get_db),
+    user: AuthUser = Depends(require_current_user),
+) -> dict:
+    return unarchive_bill(db, bill_type, bill_id, user=user)
 
 
 @router.get("/{bill_type}/{bill_id}", response_model=BillLifecycleRead)
