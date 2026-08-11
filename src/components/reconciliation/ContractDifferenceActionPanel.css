@@ -1,0 +1,358 @@
+.contract-difference-panel {
+  margin: 18px 0 0;
+  border: 1px solid var(--admin-border, #e5e7eb);
+  border-radius: 18px;
+  background: var(--admin-surface, #fff);
+  overflow: hidden;
+}
+
+.contract-difference-panel.is-loading {
+  padding: 20px;
+  color: #667085;
+}
+
+.contract-difference-panel__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 20px 22px;
+  border-bottom: 1px solid #edf0f3;
+  background: linear-gradient(180deg, rgba(248, 250, 252, .96), rgba(255, 255, 255, .96));
+}
+
+.contract-difference-panel__head span,
+.contract-difference-panel__head small {
+  color: #667085;
+  font-size: 12px;
+}
+
+.contract-difference-panel__head h3 {
+  margin: 4px 0 4px;
+  font-size: 18px;
+  color: #111827;
+}
+
+.contract-difference-panel__head p {
+  margin: 0;
+  color: #667085;
+  font-size: 13px;
+}
+
+.contract-difference-panel__summary {
+  text-align: right;
+}
+
+.contract-difference-panel__summary strong,
+.contract-difference-panel__summary small {
+  display: block;
+}
+
+.contract-difference-panel__summary strong {
+  color: #b42318;
+  font-size: 15px;
+}
+
+.contract-difference-message {
+  margin: 14px 18px 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #f8fafc;
+  color: #475467;
+  font-size: 13px;
+}
+
+.contract-difference-list {
+  display: grid;
+  gap: 12px;
+  padding: 16px 18px 20px;
+}
+
+.contract-difference-card {
+  border: 1px solid #eaecf0;
+  border-radius: 14px;
+  background: #fff;
+  padding: 16px;
+}
+
+.contract-difference-card.is-pending {
+  border-color: #fecdca;
+  box-shadow: inset 3px 0 0 #d92d20;
+}
+
+.contract-difference-card.is-processing {
+  border-color: #fedf89;
+  box-shadow: inset 3px 0 0 #f79009;
+}
+
+.contract-difference-card.is-resolved {
+  border-color: #abefc6;
+  box-shadow: inset 3px 0 0 #12b76a;
+}
+
+.contract-difference-card__top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.contract-difference-card__top > div:first-child > span,
+.contract-difference-card__top > div:first-child > small {
+  display: block;
+  color: #667085;
+  font-size: 12px;
+}
+
+.contract-difference-card__top > div:first-child > strong {
+  display: block;
+  margin: 4px 0;
+  color: #b42318;
+  font-size: 19px;
+}
+
+.contract-difference-card__status {
+  text-align: right;
+}
+
+.contract-difference-card__status em,
+.contract-difference-card__status small {
+  display: block;
+  font-style: normal;
+}
+
+.contract-difference-card__status em {
+  font-size: 12px;
+  font-weight: 700;
+  color: #344054;
+}
+
+.contract-difference-card__status small {
+  margin-top: 3px;
+  color: #667085;
+  font-size: 11px;
+}
+
+.contract-difference-card__trace {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #f8fafc;
+  color: #475467;
+  font-size: 12px;
+}
+
+.contract-difference-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.contract-difference-card button {
+  border: 1px solid #d0d5dd;
+  border-radius: 9px;
+  background: #fff;
+  color: #344054;
+  padding: 8px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.contract-difference-card button:hover:not(:disabled) {
+  border-color: #98a2b3;
+  background: #f9fafb;
+}
+
+.contract-difference-card button:disabled {
+  opacity: .55;
+  cursor: not-allowed;
+}
+
+.contract-difference-card button.is-primary {
+  border-color: #111827;
+  background: #111827;
+  color: #fff;
+}
+
+.contract-difference-card button.is-muted {
+  color: #667085;
+}
+
+.contract-difference-editor {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+  padding: 14px;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.contract-difference-editor label,
+.contract-difference-complete label {
+  display: grid;
+  gap: 6px;
+  color: #475467;
+  font-size: 12px;
+}
+
+.contract-difference-editor label.is-wide,
+.contract-difference-complete label.is-wide {
+  grid-column: 1 / -1;
+}
+
+.contract-difference-editor input,
+.contract-difference-editor select,
+.contract-difference-editor textarea,
+.contract-difference-complete input {
+  width: 100%;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  background: #fff;
+  padding: 8px 10px;
+  color: #101828;
+  font: inherit;
+  box-sizing: border-box;
+}
+
+.contract-difference-editor textarea {
+  min-height: 74px;
+  resize: vertical;
+}
+
+.contract-difference-editor__actions {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.contract-difference-detail {
+  display: grid;
+  gap: 16px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #eaecf0;
+}
+
+.contract-difference-adjustments,
+.contract-difference-carries {
+  display: grid;
+  gap: 8px;
+}
+
+.contract-difference-adjustments > strong,
+.contract-difference-carries > strong,
+.contract-difference-timeline > strong {
+  color: #344054;
+  font-size: 13px;
+}
+
+.contract-difference-adjustments > div:not(.contract-difference-complete),
+.contract-difference-carries > div {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 9px 10px;
+  border-radius: 9px;
+  background: #f9fafb;
+  color: #475467;
+  font-size: 12px;
+}
+
+.contract-difference-adjustments em,
+.contract-difference-carries em {
+  font-style: normal;
+  color: #667085;
+}
+
+.contract-difference-complete {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  padding: 12px;
+  border: 1px dashed #d0d5dd;
+  border-radius: 10px;
+}
+
+.contract-difference-complete button {
+  grid-column: 1 / -1;
+  justify-self: start;
+}
+
+.contract-difference-timeline {
+  display: grid;
+  gap: 10px;
+}
+
+.contract-difference-timeline__item {
+  display: grid;
+  grid-template-columns: 12px 1fr;
+  gap: 10px;
+}
+
+.contract-difference-timeline__item > span {
+  width: 8px;
+  height: 8px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: #667085;
+}
+
+.contract-difference-timeline__item strong,
+.contract-difference-timeline__item p,
+.contract-difference-timeline__item small {
+  display: block;
+  margin: 0;
+}
+
+.contract-difference-timeline__item strong {
+  color: #344054;
+  font-size: 12px;
+}
+
+.contract-difference-timeline__item p {
+  margin-top: 2px;
+  color: #475467;
+  font-size: 12px;
+}
+
+.contract-difference-timeline__item small {
+  margin-top: 3px;
+  color: #98a2b3;
+  font-size: 11px;
+}
+
+@media (max-width: 760px) {
+  .contract-difference-panel__head,
+  .contract-difference-card__top {
+    flex-direction: column;
+  }
+
+  .contract-difference-panel__summary,
+  .contract-difference-card__status {
+    text-align: left;
+  }
+
+  .contract-difference-editor,
+  .contract-difference-complete {
+    grid-template-columns: 1fr;
+  }
+
+  .contract-difference-editor label.is-wide,
+  .contract-difference-complete label.is-wide,
+  .contract-difference-editor__actions,
+  .contract-difference-complete button {
+    grid-column: auto;
+  }
+
+  .contract-difference-adjustments > div:not(.contract-difference-complete),
+  .contract-difference-carries > div {
+    grid-template-columns: 1fr;
+  }
+}
