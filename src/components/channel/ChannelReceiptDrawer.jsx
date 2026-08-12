@@ -6,6 +6,17 @@ import {
   getChannelUnpaidAmount,
   isChannelReceiptSettled
 } from '@/domain/channel/channelAggregates.js'
+import {
+  DEFAULT_RECEIVING_ACCOUNT_ID,
+  DEFAULT_RECEIVING_ENTITY_ID,
+  RECEIVING_ENTITIES,
+  findReceivingAccount,
+  findReceivingEntity,
+  manualReceivingAccountStorageValue,
+  receivingAccountOptionLabel,
+  receivingAccountStorageValue
+} from '@/domain/channel/channelReceiptAccounts.js'
+import './ChannelReceiptDrawer.css'
 
 function formatMoney(amount) {
   const n = parseFloat(amount)
@@ -13,29 +24,13 @@ function formatMoney(amount) {
   return `¥${n.toFixed(2)}`
 }
 
-function buildBankPresetOptions(partyA, partyB) {
-  const opts = []
-  const add = (prefix, bankName, account) => {
-    const b = (bankName || '').trim()
-    const a = (account || '').trim()
-    if (!b && !a) return
-    const line = [b, a].filter(Boolean).join(' ')
-    opts.push({ value: line, label: `${prefix}${line}` })
-  }
-  add('甲方 · ', partyA?.bankName, partyA?.bankAccount)
-  add('乙方 · ', partyB?.bankName, partyB?.bankAccount)
-  return opts
-}
-
 /**
- * 渠道对账收款登记：写入 channel_receipts 并刷新主表已收/状态
+ * 渠道对账收款登记：这里选择的是“我方收款主体/收款账户”，
+ * 不复用合同甲乙方银行资料，避免把付款方与收款方混在一起。
  */
 function ChannelReceiptDrawer({
   open,
   record,
-  quickFull = false,
-  partyA,
-  partyB,
   channelApiEnabled,
   showToast,
   onClose,
@@ -43,29 +38,35 @@ function ChannelReceiptDrawer({
 }) {
   const [amount, setAmount] = useState('')
   const [receiptDate, setReceiptDate] = useState(() => new Date().toISOString().slice(0, 10))
-  const [bankSelect, setBankSelect] = useState('')
-  const [bankCustom, setBankCustom] = useState('')
+  const [entityId, setEntityId] = useState(DEFAULT_RECEIVING_ENTITY_ID)
+  const [bankSelect, setBankSelect] = useState(DEFAULT_RECEIVING_ACCOUNT_ID)
+  const [manualBankName, setManualBankName] = useState('')
+  const [manualAccountNumber, setManualAccountNumber] = useState('')
   const [remark, setRemark] = useState('')
   const [file, setFile] = useState(null)
   const [submitting, setSubmitting] = useState(false)
 
-  const bankPresets = useMemo(() => buildBankPresetOptions(partyA, partyB), [partyA, partyB])
+  const receivingEntity = useMemo(() => findReceivingEntity(entityId), [entityId])
+  const receivingAccounts = receivingEntity?.accounts || []
+  const selectedAccount = useMemo(
+    () => (bankSelect === '__custom__' ? null : findReceivingAccount(receivingEntity, bankSelect)),
+    [receivingEntity, bankSelect]
+  )
 
   useEffect(() => {
     if (!open || !record) return
     const today = new Date().toISOString().slice(0, 10)
     const unpaid = getChannelUnpaidAmount(record)
-    if (quickFull && unpaid > 1e-6) {
-      setAmount(unpaid.toFixed(2))
-    } else {
-      setAmount('')
-    }
+    // 普通“收款登记”也默认带入未收金额；财务仍可手动修改为部分收款。
+    setAmount(unpaid > 1e-6 ? unpaid.toFixed(2) : '')
     setReceiptDate(today)
-    setBankSelect(bankPresets.length ? bankPresets[0].value : '__custom__')
-    setBankCustom('')
+    setEntityId(DEFAULT_RECEIVING_ENTITY_ID)
+    setBankSelect(DEFAULT_RECEIVING_ACCOUNT_ID)
+    setManualBankName('')
+    setManualAccountNumber('')
     setRemark('')
     setFile(null)
-  }, [open, record, record?.id, quickFull, bankPresets])
+  }, [open, record, record?.id])
 
   useEffect(() => {
     if (!open) return
@@ -86,8 +87,23 @@ function ChannelReceiptDrawer({
   const settled = isChannelReceiptSettled(record)
 
   const resolveBankAccount = () => {
-    if (bankSelect === '__custom__') return bankCustom.trim() || null
-    return bankSelect.trim() || null
+    if (bankSelect === '__custom__') {
+      if (!manualBankName.trim() || !manualAccountNumber.trim()) return null
+      return manualReceivingAccountStorageValue(
+        receivingEntity,
+        manualBankName,
+        manualAccountNumber
+      )
+    }
+    return receivingAccountStorageValue(receivingEntity, selectedAccount) || null
+  }
+
+  const handleEntityChange = (nextEntityId) => {
+    const entity = findReceivingEntity(nextEntityId)
+    setEntityId(nextEntityId)
+    setBankSelect(entity?.accounts?.[0]?.id || '__custom__')
+    setManualBankName('')
+    setManualAccountNumber('')
   }
 
   const handleSubmit = async (e) => {
@@ -97,9 +113,16 @@ function ChannelReceiptDrawer({
       showToast?.('请输入大于 0 的收款金额', 'error')
       return
     }
+    if (amt - unpaid > 0.01) {
+      showToast?.(`本次收款不能超过未收金额 ${formatMoney(unpaid)}`, 'error')
+      return
+    }
     const bank_account = resolveBankAccount()
     if (!bank_account) {
-      showToast?.('请选择或填写收款账户', 'error')
+      showToast?.(
+        bankSelect === '__custom__' ? '请填写完整的开户行和收款账号' : '请选择我方收款账户',
+        'error'
+      )
       return
     }
     if (!channelApiEnabled) {
@@ -188,12 +211,14 @@ function ChannelReceiptDrawer({
                   className="admin-input"
                   step="0.01"
                   min="0.01"
+                  max={unpaid > 0 ? unpaid.toFixed(2) : undefined}
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                   placeholder="元"
                   required
                   disabled={settled}
                 />
+                <div className="channel-receipt-field-hint">默认带入未收金额，可修改为本次实际部分收款。</div>
               </div>
               <div className="form-group">
                 <label htmlFor="channel-receipt-date">收款日期</label>
@@ -206,8 +231,26 @@ function ChannelReceiptDrawer({
                   disabled={settled}
                 />
               </div>
+
               <div className="form-group full-width">
-                <label htmlFor="channel-receipt-bank">收款账户 *</label>
+                <label htmlFor="channel-receipt-entity">收款主体 *</label>
+                <select
+                  id="channel-receipt-entity"
+                  className="admin-input"
+                  value={entityId}
+                  onChange={(e) => handleEntityChange(e.target.value)}
+                  disabled={settled}
+                >
+                  {RECEIVING_ENTITIES.map((entity) => (
+                    <option key={entity.id} value={entity.id}>
+                      {entity.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="form-group full-width">
+                <label htmlFor="channel-receipt-bank">我方收款账户 *</label>
                 <select
                   id="channel-receipt-bank"
                   className="admin-input"
@@ -215,30 +258,59 @@ function ChannelReceiptDrawer({
                   onChange={(e) => setBankSelect(e.target.value)}
                   disabled={settled}
                 >
-                  {bankPresets.length === 0 ? (
-                    <option value="__custom__">手动填写账户</option>
-                  ) : (
-                    bankPresets.map((o) => (
-                      <option key={o.value} value={o.value}>
-                        {o.label}
-                      </option>
-                    ))
-                  )}
-                  {bankPresets.length > 0 ? (
-                    <option value="__custom__">手动填写</option>
-                  ) : null}
+                  {receivingAccounts.map((account) => (
+                    <option key={account.id} value={account.id}>
+                      {receivingAccountOptionLabel(account)}
+                    </option>
+                  ))}
+                  <option value="__custom__">+ 手动录入临时收款账户</option>
                 </select>
+
                 {bankSelect === '__custom__' ? (
-                  <input
-                    type="text"
-                    className="admin-input channel-receipt-bank-custom"
-                    value={bankCustom}
-                    onChange={(e) => setBankCustom(e.target.value)}
-                    placeholder="开户行 / 账号"
-                    disabled={settled}
-                  />
+                  <div className="channel-receipt-manual-grid">
+                    <input
+                      type="text"
+                      className="admin-input"
+                      value={manualBankName}
+                      onChange={(e) => setManualBankName(e.target.value)}
+                      placeholder="开户银行，例如：中国工商银行广州XX支行"
+                      disabled={settled}
+                    />
+                    <input
+                      type="text"
+                      className="admin-input"
+                      value={manualAccountNumber}
+                      onChange={(e) => setManualAccountNumber(e.target.value)}
+                      placeholder="收款账号"
+                      disabled={settled}
+                    />
+                  </div>
+                ) : selectedAccount ? (
+                  <div className="channel-receipt-account-card">
+                    <div className="channel-receipt-account-card__entity">{receivingEntity?.name}</div>
+                    <div className="channel-receipt-account-card__row">
+                      <span>开户行</span>
+                      <span>{selectedAccount.bankName}</span>
+                    </div>
+                    <div className="channel-receipt-account-card__row">
+                      <span>账号</span>
+                      <span>{selectedAccount.accountNumber}</span>
+                    </div>
+                    <div className="channel-receipt-account-card__row">
+                      <span>税号</span>
+                      <span>{receivingEntity?.taxId}</span>
+                    </div>
+                    <div className="channel-receipt-account-card__row">
+                      <span>开户地址</span>
+                      <span>{receivingEntity?.registeredAddressPhone}</span>
+                    </div>
+                  </div>
                 ) : null}
+                <div className="channel-receipt-field-hint">
+                  此处仅选择我方实际收款账户；付款方/来款账户应通过银行流水单独核对。
+                </div>
               </div>
+
               <div className="form-group full-width">
                 <label htmlFor="channel-receipt-remark">备注</label>
                 <input
