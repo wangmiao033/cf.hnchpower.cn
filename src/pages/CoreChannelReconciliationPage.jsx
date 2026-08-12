@@ -109,7 +109,8 @@ function CoreChannelReconciliationPage() {
     showToast,
     setActiveView,
     openChannelReconciliationEdit,
-    openBill360
+    openBill360,
+    prefetchBill360
   } = useAppState()
   const fileRef = useRef(null)
   const [month, setMonth] = useState('')
@@ -542,7 +543,7 @@ function CoreChannelReconciliationPage() {
                     <td className="core-recon-money core-recon-money--received"><strong style={{ display: 'block', fontWeight: 700 }}>{money(received)}</strong><small style={{ display: 'block', marginTop: 2, color: '#8a98aa', fontSize: 10 }}>未收 {money(unpaid)}</small></td>
                     <td><span className={`v4-list-closure is-${closure.tone}`}><strong>{closure.label}</strong><small>{closure.detail} · {STATUS_LABELS[row.status] || row.status || '待处理'}</small></span></td>
                     <td><div className="core-recon-row-actions">
-                      <button type="button" onClick={() => openBill360('channel', String(row.id), row)}>360°</button>
+                      <button type="button" onMouseEnter={() => prefetchBill360?.('channel', String(row.id))} onFocus={() => prefetchBill360?.('channel', String(row.id))} onClick={() => openBill360('channel', String(row.id), row)}>360°</button>
                       {archived ? (
                         <button type="button" disabled={archiveWorkingId === String(row.id)} onClick={() => void handleUnarchive(row)}>{archiveWorkingId === String(row.id) ? '处理中…' : '取消归档'}</button>
                       ) : (

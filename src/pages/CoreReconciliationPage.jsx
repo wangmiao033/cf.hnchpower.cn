@@ -93,7 +93,8 @@ function CoreReconciliationPage() {
     showToast,
     setActiveView,
     openReconciliationEdit,
-    openBill360
+    openBill360,
+    prefetchBill360
   } = useAppState()
   const fileRef = useRef(null)
   const [month, setMonth] = useState('')
@@ -631,7 +632,7 @@ function CoreReconciliationPage() {
                       </td>
                       <td>
                         <div className="core-recon-row-actions">
-                          <button type="button" onClick={() => openBill360('rd', String(row.id), row)}>
+                          <button type="button" onMouseEnter={() => prefetchBill360?.('rd', String(row.id))} onFocus={() => prefetchBill360?.('rd', String(row.id))} onClick={() => openBill360('rd', String(row.id), row)}>
                             360°
                           </button>
                           {archived ? (

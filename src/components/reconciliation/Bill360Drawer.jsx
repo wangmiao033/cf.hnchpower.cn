@@ -9,6 +9,7 @@ import ContractDifferenceActionPanel from './ContractDifferenceActionPanel.jsx'
 import ChannelCumulativeSettlementCard from '@/components/channel/ChannelCumulativeSettlementCard.jsx'
 import { getContractBillReconciliation } from '@/lib/api/contractTerms.ts'
 import { getChannelCumulativeBillCondition } from '@/lib/api/channelCumulativeSettlement.ts'
+import { loadBill360Resource, peekBill360Resource } from '@/lib/api/bill360Performance.ts'
 import { billDueInfo, dueStatusText } from '@/domain/reconciliation/billDueDate.js'
 import './Bill360ContractAware.css'
 import './Bill360FundingPanel.css'
@@ -24,7 +25,7 @@ function money(value) {
 function launcherText(summary, loading, unavailable) {
   if (loading) return '正在核验合同…'
   if (unavailable) return '合同核验不可用'
-  if (!summary) return '合同自动核验'
+  if (!summary) return '合同核验 · 点击加载'
   if (summary.unresolved_difference_lines) return `合同核验：${summary.unresolved_difference_lines} 条待处置差异`
   if (summary.handled_difference_lines) return `合同核验：${summary.handled_difference_lines} 条差异处理中`
   if (summary.fail_count) return `合同核验：${summary.fail_count} 条差异`
@@ -105,12 +106,16 @@ function Bill360Drawer({ target, onClose }) {
   const billType = target?.billType === 'channel' ? 'channel' : 'rd'
   const billId = String(target?.billId || '')
 
-  const loadContractCheck = useCallback(async () => {
+  const loadContractCheck = useCallback(async (force = false) => {
     if (!billId) return null
     setCheckLoading(true)
     setCheckUnavailable(false)
     try {
-      const result = await getContractBillReconciliation(billType, billId)
+      const result = await loadBill360Resource(
+        `contract-check:${billType}:${billId}`,
+        () => getContractBillReconciliation(billType, billId),
+        { ttlMs: 60_000, force }
+      )
       setCheckData(result)
       setCheckSummary(result.summary || null)
       setCheckVersion((value) => value + 1)
@@ -124,17 +129,21 @@ function Bill360Drawer({ target, onClose }) {
     }
   }, [billId, billType])
 
-  useEffect(() => {
-    setCheckData(null)
-    setCheckSummary(null)
-    void loadContractCheck()
-  }, [loadContractCheck])
+  const refreshContractCheck = useCallback(() => loadContractCheck(true), [loadContractCheck])
 
   useEffect(() => {
-    if (billType !== 'channel' || !billId) {
-      setCumulativeCondition(null)
-      return undefined
-    }
+    const cached = peekBill360Resource(`contract-check:${billType}:${billId}`)
+    setCheckData(cached || null)
+    setCheckSummary(cached?.summary || null)
+    setCheckUnavailable(false)
+  }, [billId, billType])
+
+  useEffect(() => {
+    setCumulativeCondition(null)
+  }, [billId, billType])
+
+  useEffect(() => {
+    if (!fundingOpen || billType !== 'channel' || !billId) return undefined
     let active = true
     void getChannelCumulativeBillCondition(billId)
       .then((result) => {
@@ -144,7 +153,7 @@ function Bill360Drawer({ target, onClose }) {
         if (active) setCumulativeCondition(null)
       })
     return () => { active = false }
-  }, [billId, billType])
+  }, [billId, billType, fundingOpen])
 
   useEffect(() => {
     setCheckOpen(false)
@@ -185,6 +194,11 @@ function Bill360Drawer({ target, onClose }) {
         ? 'pass'
         : 'neutral'
 
+  const openContractCheck = () => {
+    setCheckOpen(true)
+    if (!checkData && !checkLoading) void loadContractCheck(false)
+  }
+
   return (
     <>
       <Bill360DrawerBase target={target} onClose={onClose} />
@@ -206,7 +220,7 @@ function Bill360Drawer({ target, onClose }) {
       <button
         type="button"
         className={`bill360-contract-launcher is-${tone}`}
-        onClick={() => setCheckOpen(true)}
+        onClick={openContractCheck}
         title="按合作方、游戏、账期和授权期匹配合同合作清单，并重算合同标准结算金额"
       >
         <span aria-hidden>合</span>
@@ -306,20 +320,25 @@ function Bill360Drawer({ target, onClose }) {
                 billType={billType}
                 billId={billId}
                 reconciliation={checkData}
-                onChanged={loadContractCheck}
+                onChanged={refreshContractCheck}
               />
 
               <ContractDifferenceActionPanel
                 billType={billType}
                 billId={billId}
                 onEditBill={openBillEdit}
-                onChanged={loadContractCheck}
+                onChanged={refreshContractCheck}
               />
 
               <BillContractCheckPanelV2
                 key={`${billType}-${billId}-${checkVersion}`}
                 billType={billType}
                 billId={billId}
+                initialData={checkData}
+                onDataChange={(result) => {
+                  setCheckData(result)
+                  setCheckSummary(result?.summary || null)
+                }}
               />
             </main>
           </aside>

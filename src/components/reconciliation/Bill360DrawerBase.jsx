@@ -15,7 +15,13 @@ import {
 } from '@/lib/api/channel.ts'
 import { getBillInvoiceSummary } from '@/lib/api/billInvoiceAllocations.ts'
 import { listContracts } from '@/lib/api/contract.ts'
-import { getQuickSdkGameFlow } from '@/lib/api/quicksdk.ts'
+import { getCachedEditRecord, loadEditRecord } from '@/lib/api/editRecordCache.js'
+import {
+  getBill360QuickSdkSummary,
+  loadBill360Resource,
+  peekBill360Resource,
+  scheduleBill360Idle
+} from '@/lib/api/bill360Performance.ts'
 import {
   billAttachmentFileUrl,
   listBillAttachments
@@ -97,113 +103,248 @@ function Bill360Drawer({ target, onClose }) {
     openReconciliationEdit,
     openChannelReconciliationEdit
   } = useAppState()
+  const billType = target?.billType === 'channel' ? 'channel' : 'rd'
+  const billId = String(target?.billId || '')
+  const initialSeed = target?.initialRecord || getCachedEditRecord(billType, billId) || null
   const [activeTab, setActiveTab] = useState('overview')
-  const [record, setRecord] = useState(target?.initialRecord || null)
-  const [invoiceSummary, setInvoiceSummary] = useState(null)
+  const [record, setRecord] = useState(initialSeed)
+  const [invoiceSummary, setInvoiceSummary] = useState(() => peekBill360Resource(`invoice:${billType}:${billId}`))
   const [quickSdkRows, setQuickSdkRows] = useState([])
   const [contracts, setContracts] = useState([])
   const [attachments, setAttachments] = useState([])
   const [payments, setPayments] = useState([])
   const [bankInstruction, setBankInstruction] = useState(null)
   const [bankAttachments, setBankAttachments] = useState([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(!initialSeed)
+  const [invoiceLoading, setInvoiceLoading] = useState(!invoiceSummary)
+  const [contractsLoading, setContractsLoading] = useState(false)
+  const [quickSdkLoading, setQuickSdkLoading] = useState(false)
+  const [quickSdkLoaded, setQuickSdkLoaded] = useState(false)
+  const [paymentsLoading, setPaymentsLoading] = useState(false)
+  const [paymentsLoaded, setPaymentsLoaded] = useState(false)
+  const [attachmentsLoading, setAttachmentsLoading] = useState(false)
+  const [attachmentsLoaded, setAttachmentsLoaded] = useState(false)
   const [error, setError] = useState('')
-
-  const billType = target?.billType === 'channel' ? 'channel' : 'rd'
-  const billId = String(target?.billId || '')
 
   useEffect(() => {
     setActiveTab('overview')
   }, [billType, billId])
 
-  useEffect(() => {
-    if (!billId) return undefined
-    let cancelled = false
-    setLoading(true)
-    setError('')
+\
+      useEffect(() => {
+        if (!billId) return undefined
+        let cancelled = false
+        const seeded = target?.initialRecord || getCachedEditRecord(billType, billId) || null
+        setRecord(seeded)
+        setLoading(!seeded)
+        setError('')
+        setQuickSdkRows([])
+        setQuickSdkLoaded(false)
+        setPayments([])
+        setBankInstruction(null)
+        setPaymentsLoaded(false)
+        setAttachments([])
+        setBankAttachments([])
+        setAttachmentsLoaded(false)
 
-    void (async () => {
-      try {
-        const apiRecord = billType === 'rd'
-          ? apiRowToFrontend(await getReconciliationRecord(billId))
-          : apiChannelRowToFrontend(await getChannelRecord(billId))
-        if (cancelled) return
-        setRecord(apiRecord)
-
-        const partnerName = bill360PartnerName(billType, apiRecord)
-        const partnerId = String(apiRecord?.partnerId || '')
-        const quickKeys = bill360QuickSdkKeys(billType, apiRecord).slice(0, 30)
-
-        const invoicePromise = getBillInvoiceSummary(billType, billId).catch(() => null)
-        const contractPromise = listContracts({ q: partnerName, limit: 100, offset: 0 })
-          .then((response) => filterBill360Contracts(response.items || [], partnerName, partnerId))
-          .catch(() => [])
-        const attachmentPromise = listBillAttachments(billType, billId).catch(() => [])
-        const quickPromise = Promise.all(
-          quickKeys.map(async (item) => {
-            try {
-              const result = await getQuickSdkGameFlow({
-                settlement_month: item.month,
-                game_name: item.game
-              })
-              return { ...result, lookupKey: item.key, lookupGame: item.game, lookupMonth: item.month }
-            } catch (quickError) {
-              return {
-                lookupKey: item.key,
-                lookupGame: item.game,
-                lookupMonth: item.month,
-                total_flow: 0,
-                row_count: 0,
-                error: loadErrorLabel(quickError)
-              }
-            }
-          })
+        void loadEditRecord(
+          billType,
+          billId,
+          async () => billType === 'rd'
+            ? apiRowToFrontend(await getReconciliationRecord(billId))
+            : apiChannelRowToFrontend(await getChannelRecord(billId))
         )
+          .then((apiRecord) => {
+            if (!cancelled) setRecord(apiRecord)
+          })
+          .catch((loadError) => {
+            if (!cancelled && !seeded) setError(loadErrorLabel(loadError))
+          })
+          .finally(() => {
+            if (!cancelled) setLoading(false)
+          })
 
-        let paymentPromise
-        if (billType === 'rd') {
-          paymentPromise = Promise.all([
-            listReconciliationLinkedBankPayments(billId).catch(() => ({ items: [] })),
-            getReconciliationBankPayment(billId).catch(() => null),
-            listBankPaymentAttachments(billId).catch(() => ({ items: [] }))
+        return () => {
+          cancelled = true
+        }
+      }, [billId, billType, target?.initialRecord])
+
+      useEffect(() => {
+        if (!billId) return undefined
+        let cancelled = false
+        const key = `invoice:${billType}:${billId}`
+        const cached = peekBill360Resource(key)
+        setInvoiceSummary(cached)
+        setInvoiceLoading(!cached)
+        void loadBill360Resource(key, () => getBillInvoiceSummary(billType, billId), { ttlMs: 60_000 })
+          .then((result) => {
+            if (!cancelled) setInvoiceSummary(result)
+          })
+          .catch(() => {
+            if (!cancelled) setInvoiceSummary(null)
+          })
+          .finally(() => {
+            if (!cancelled) setInvoiceLoading(false)
+          })
+        return () => {
+          cancelled = true
+        }
+      }, [billId, billType])
+
+      useEffect(() => {
+        if (!billId || !record) return undefined
+        let cancelled = false
+        const name = bill360PartnerName(billType, record)
+        const partnerId = String(record?.partnerId || '')
+        if (!name && !partnerId) {
+          setContracts([])
+          setContractsLoading(false)
+          return undefined
+        }
+        const cacheKey = `contracts:${partnerId || name.toLowerCase()}`
+        const cached = peekBill360Resource(cacheKey)
+        if (cached) setContracts(cached)
+
+        const run = () => {
+          if (!cached) setContractsLoading(true)
+          void loadBill360Resource(
+            cacheKey,
+            () => listContracts({ q: name, limit: 100, offset: 0 })
+              .then((response) => filterBill360Contracts(response.items || [], name, partnerId)),
+            { ttlMs: 90_000 }
+          )
+            .then((result) => {
+              if (!cancelled) setContracts(result || [])
+            })
+            .catch(() => {
+              if (!cancelled && !cached) setContracts([])
+            })
+            .finally(() => {
+              if (!cancelled) setContractsLoading(false)
+            })
+        }
+
+        if (activeTab === 'contract') {
+          run()
+          return () => { cancelled = true }
+        }
+        const cancelIdle = scheduleBill360Idle(run, 650)
+        return () => {
+          cancelled = true
+          cancelIdle()
+        }
+      }, [activeTab, billId, billType, record])
+
+      useEffect(() => {
+        if (!billId || billType !== 'rd' || !record || quickSdkLoaded) return undefined
+        const quickKeys = bill360QuickSdkKeys(billType, record).slice(0, 40)
+        if (!quickKeys.length) {
+          setQuickSdkLoaded(true)
+          return undefined
+        }
+        let cancelled = false
+        const run = () => {
+          setQuickSdkLoading(true)
+          void getBill360QuickSdkSummary(
+            quickKeys.map((item) => ({
+              key: item.key,
+              settlement_month: item.month,
+              game_name: item.game
+            }))
+          )
+            .then((rows) => {
+              if (cancelled) return
+              setQuickSdkRows((rows || []).map((row) => ({
+                ...row,
+                lookupKey: row.key,
+                lookupGame: row.game_name,
+                lookupMonth: row.settlement_month
+              })))
+              setQuickSdkLoaded(true)
+            })
+            .catch(() => {
+              if (!cancelled) {
+                setQuickSdkRows([])
+                setQuickSdkLoaded(true)
+              }
+            })
+            .finally(() => {
+              if (!cancelled) setQuickSdkLoading(false)
+            })
+        }
+
+        if (activeTab === 'lines') {
+          run()
+          return () => { cancelled = true }
+        }
+        const cancelIdle = scheduleBill360Idle(run, 1_100)
+        return () => {
+          cancelled = true
+          cancelIdle()
+        }
+      }, [activeTab, billId, billType, quickSdkLoaded, record])
+
+      useEffect(() => {
+        if (activeTab !== 'payment' || !billId || paymentsLoaded) return undefined
+        let cancelled = false
+        setPaymentsLoading(true)
+        const key = `payments:${billType}:${billId}`
+        const loader = async () => {
+          if (billType === 'rd') {
+            const [linked, instruction] = await Promise.all([
+              listReconciliationLinkedBankPayments(billId).catch(() => ({ items: [] })),
+              getReconciliationBankPayment(billId).catch(() => null)
+            ])
+            return { items: linked?.items || [], instruction }
+          }
+          const result = await listChannelReceipts(billId).catch(() => ({ items: [] }))
+          return { items: result?.items || [], instruction: null }
+        }
+        void loadBill360Resource(key, loader, { ttlMs: 45_000 })
+          .then((result) => {
+            if (cancelled) return
+            setPayments(result?.items || [])
+            setBankInstruction(result?.instruction || null)
+            setPaymentsLoaded(true)
+          })
+          .catch(() => {
+            if (!cancelled) setPaymentsLoaded(true)
+          })
+          .finally(() => {
+            if (!cancelled) setPaymentsLoading(false)
+          })
+        return () => { cancelled = true }
+      }, [activeTab, billId, billType, paymentsLoaded])
+
+      useEffect(() => {
+        if (activeTab !== 'attachment' || !billId || attachmentsLoaded) return undefined
+        let cancelled = false
+        setAttachmentsLoading(true)
+        const key = `attachments:${billType}:${billId}`
+        const loader = async () => {
+          const [billFiles, bankFiles] = await Promise.all([
+            listBillAttachments(billType, billId).catch(() => []),
+            billType === 'rd'
+              ? listBankPaymentAttachments(billId).then((result) => result?.items || []).catch(() => [])
+              : Promise.resolve([])
           ])
-        } else {
-          paymentPromise = listChannelReceipts(billId).catch(() => ({ items: [] }))
+          return { billFiles, bankFiles }
         }
-
-        const [invoiceResult, contractResult, attachmentResult, quickResult, paymentResult] = await Promise.all([
-          invoicePromise,
-          contractPromise,
-          attachmentPromise,
-          quickPromise,
-          paymentPromise
-        ])
-        if (cancelled) return
-
-        setInvoiceSummary(invoiceResult)
-        setContracts(contractResult)
-        setAttachments(attachmentResult)
-        setQuickSdkRows(quickResult)
-        if (billType === 'rd') {
-          setPayments(paymentResult?.[0]?.items || [])
-          setBankInstruction(paymentResult?.[1] || null)
-          setBankAttachments(paymentResult?.[2]?.items || [])
-        } else {
-          setPayments(paymentResult?.items || [])
-          setBankInstruction(null)
-          setBankAttachments([])
-        }
-      } catch (loadError) {
-        if (!cancelled) setError(loadErrorLabel(loadError))
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
-    })()
-
-    return () => {
-      cancelled = true
-    }
-  }, [billId, billType])
+        void loadBill360Resource(key, loader, { ttlMs: 90_000 })
+          .then((result) => {
+            if (cancelled) return
+            setAttachments(result?.billFiles || [])
+            setBankAttachments(result?.bankFiles || [])
+            setAttachmentsLoaded(true)
+          })
+          .catch(() => {
+            if (!cancelled) setAttachmentsLoaded(true)
+          })
+          .finally(() => {
+            if (!cancelled) setAttachmentsLoading(false)
+          })
+        return () => { cancelled = true }
+      }, [activeTab, attachmentsLoaded, billId, billType])
 
   useEffect(() => {
     const handleKeyDown = (event) => {
@@ -323,7 +464,7 @@ function Bill360Drawer({ target, onClose }) {
                     ? '无需开票'
                     : invoiceSummary
                       ? percent(summary.invoicePercent)
-                      : loading ? '读取中…' : '-'}
+                      : invoiceLoading ? '读取中…' : '-'}
                 </strong>
                 <small>
                   {summary.isZeroSettlement
@@ -337,14 +478,14 @@ function Bill360Drawer({ target, onClose }) {
                 {billType === 'rd' ? (
                   <>
                     <strong className={summary.flowMatched === false ? 'is-danger-text' : ''}>
-                      {summary.flowMatched == null ? '暂无结果' : summary.flowMatched ? '流水一致' : `差异 ${money(summary.flowDifference)}`}
+                      {summary.flowMatched == null ? (quickSdkLoading ? '核对中…' : quickSdkLoaded ? '暂无结果' : '后台核对') : summary.flowMatched ? '流水一致' : `差异 ${money(summary.flowDifference)}`}
                     </strong>
-                    <small>QuickSDK {money(summary.databaseFlow)}</small>
+                    <small>{quickSdkLoaded ? `QuickSDK ${money(summary.databaseFlow)}` : '不阻塞首屏 · 后台批量汇总'}</small>
                   </>
                 ) : (
                   <>
-                    <strong>{contracts.some((item) => item.timeline_status === '生效中') ? '合同有效' : contracts.length ? '需核对' : '未匹配'}</strong>
-                    <small>匹配 {contracts.length} 份合同</small>
+                    <strong>{contractsLoading && !contracts.length ? '读取中…' : contracts.some((item) => item.timeline_status === '生效中') ? '合同有效' : contracts.length ? '需核对' : '未匹配'}</strong>
+                    <small>{contractsLoading && !contracts.length ? '后台读取合同，不阻塞首屏' : `匹配 ${contracts.length} 份合同`}</small>
                   </>
                 )}
               </article>
@@ -360,9 +501,9 @@ function Bill360Drawer({ target, onClose }) {
                 >
                   {label}
                   {key === 'invoice' && invoiceSummary ? <em>{invoiceSummary.allocations?.length || 0}</em> : null}
-                  {key === 'payment' ? <em>{payments.length}</em> : null}
-                  {key === 'contract' ? <em>{contracts.length}</em> : null}
-                  {key === 'attachment' ? <em>{attachments.length + bankAttachments.length}</em> : null}
+                  {key === 'payment' ? <em>{paymentsLoaded ? payments.length : '·'}</em> : null}
+                  {key === 'contract' ? <em>{contractsLoading && !contracts.length ? '·' : contracts.length}</em> : null}
+                  {key === 'attachment' ? <em>{attachmentsLoaded ? attachments.length + bankAttachments.length : '·'}</em> : null}
                 </button>
               ))}
             </nav>
@@ -381,8 +522,8 @@ function Bill360Drawer({ target, onClose }) {
                       {billType === 'rd' && (
                         <div className={summary.flowMatched ? 'is-good' : summary.flowMatched === false ? 'is-danger' : 'is-neutral'}>
                           <span>数据库流水</span>
-                          <strong>{money(summary.databaseFlow)}</strong>
-                          <small>{summary.flowMatched == null ? '暂无可核对数据' : summary.flowMatched ? '与账单流水一致' : `与账单相差 ${money(summary.flowDifference)}`}</small>
+                          <strong>{quickSdkLoaded ? money(summary.databaseFlow) : quickSdkLoading ? '核对中…' : '后台核对'}</strong>
+                          <small>{summary.flowMatched == null ? (quickSdkLoaded ? '暂无可核对数据' : 'QuickSDK 批量汇总不会阻塞账单打开') : summary.flowMatched ? '与账单流水一致' : `与账单相差 ${money(summary.flowDifference)}`}</small>
                         </div>
                       )}
                       <div className={summary.unpaidAmount <= 0.01 ? 'is-good' : 'is-warning'}>
@@ -407,8 +548,8 @@ function Bill360Drawer({ target, onClose }) {
                       </div>
                       <div className={contracts.some((item) => item.timeline_status === '生效中') ? 'is-good' : contracts.length ? 'is-warning' : 'is-neutral'}>
                         <span>合同</span>
-                        <strong>{contracts.length} 份</strong>
-                        <small>{contracts.some((item) => item.timeline_status === '生效中') ? '存在生效中合同' : contracts.length ? '当前合同需核对有效期' : '未匹配合同'}</small>
+                        <strong>{contractsLoading && !contracts.length ? '读取中…' : `${contracts.length} 份`}</strong>
+                        <small>{contractsLoading && !contracts.length ? '后台读取，不阻塞账单打开' : contracts.some((item) => item.timeline_status === '生效中') ? '存在生效中合同' : contracts.length ? '当前合同需核对有效期' : '未匹配合同'}</small>
                       </div>
                     </div>
                     {summary.isReverseSettlement ? (
@@ -453,6 +594,7 @@ function Bill360Drawer({ target, onClose }) {
                       <tbody>{lines.map((line) => <tr key={line.key}><td>{monthText(line.month)}</td><td>{line.game || '-'}</td><td className="is-right">{money(line.flow)}</td><td className="is-right">{line.discount || '-'}</td><td className="is-right">{percent(line.shareRate)}</td><td className="is-right">{percent(line.taxRate)}</td><td className="is-right is-strong">{money(line.settlementAmount)}</td></tr>)}</tbody>
                     </table>
                   </div>
+                  {billType === 'rd' && quickSdkLoading && !quickSdkRows.length ? <div className="bill360-empty-block">正在批量汇总 QuickSDK 流水…</div> : null}
                   {billType === 'rd' && quickSdkRows.length > 0 ? (
                     <div className="bill360-database-lines">
                       <h4>QuickSDK 对应流水</h4>
@@ -483,7 +625,7 @@ function Bill360Drawer({ target, onClose }) {
 
               {activeTab === 'payment' && (
                 <section className="bill360-card bill360-card--table">
-                  <div className="bill360-card-head"><div><span>资金闭环</span><h3>{summary.isZeroSettlement ? '无需收付款' : `${summary.paidLabel}记录`}</h3></div><span className="bill360-card-meta">{payments.length} 笔</span></div>
+                  <div className="bill360-card-head"><div><span>资金闭环</span><h3>{summary.isZeroSettlement ? '无需收付款' : `${summary.paidLabel}记录`}</h3></div><span className="bill360-card-meta">{paymentsLoading ? '读取中…' : `${payments.length} 笔`}</span></div>
                   {summary.isZeroSettlement ? (
                     <div className="bill360-empty-block">本期为零结算，系统不会要求补录 0 元收款或付款记录。</div>
                   ) : (
@@ -520,7 +662,7 @@ function Bill360Drawer({ target, onClose }) {
                   <div className="bill360-attachments">
                     {attachments.map((attachment) => <a key={attachment.id} href={billAttachmentFileUrl(billType, billId, attachment.id, true)} target="_blank" rel="noreferrer"><span>账</span><div><strong>{attachment.file_name}</strong><small>{attachment.file_type || '文件'} · {attachment.file_size ? `${Math.ceil(attachment.file_size / 1024)} KB` : '-'}</small></div><em>预览</em></a>)}
                     {bankAttachments.map((attachment) => <a key={attachment.id} href={attachment.file_url} target="_blank" rel="noreferrer"><span>付</span><div><strong>{attachment.file_name}</strong><small>{attachment.file_type || '付款附件'}</small></div><em>打开</em></a>)}
-                    {attachments.length + bankAttachments.length === 0 ? <div className="bill360-empty-block">当前账单没有附件。</div> : null}
+                    {attachmentsLoading ? <div className="bill360-empty-block">正在读取附件…</div> : attachments.length + bankAttachments.length === 0 ? <div className="bill360-empty-block">当前账单没有附件。</div> : null}
                   </div>
                 </section>
               )}
