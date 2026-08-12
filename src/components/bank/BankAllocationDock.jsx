@@ -6,6 +6,7 @@ import {
   getBankMultiAllocationDashboard,
   reverseBankAutoReconciliation
 } from '@/lib/api/bankAutoReconciliation.ts'
+import { buildExactBillCombination } from '@/lib/bank/bankCombinationAllocation.js'
 import './BankAllocationDock.css'
 
 function money(value) {
@@ -29,7 +30,13 @@ function newLine(candidate, amount) {
   }
 }
 
+function smartLines(combination) {
+  return (combination?.items || []).map((item) => newLine(item.candidate, item.amount))
+}
+
 function initialLines(item) {
+  const combination = buildExactBillCombination(item)
+  if (combination && !combination.ambiguous) return smartLines(combination)
   const first = item?.candidates?.[0]
   if (!first) return []
   return [newLine(first, Math.min(Number(first.recommended_amount || 0), Number(item.remaining_amount || 0)))]
@@ -96,12 +103,26 @@ export default function BankAllocationDock({ onChanged }) {
     () => new Map(candidates.map((item) => [candidateKey(item), item])),
     [candidates]
   )
+  const smartCombination = useMemo(
+    () => buildExactBillCombination(selected),
+    [selected]
+  )
 
   const selectedTotal = lines.reduce((sum, line) => sum + (Number(line.amount) || 0), 0)
   const afterAmount = Math.max(0, Number(selected?.remaining_amount || 0) - selectedTotal)
 
+  const applySmartCombination = () => {
+    if (!smartCombination || smartCombination.ambiguous) return
+    setLines(smartLines(smartCombination))
+  }
+
   const autoSplit = () => {
     if (!selected) return
+    if (smartCombination && !smartCombination.ambiguous) {
+      applySmartCombination()
+      showToast?.(`已应用 ${smartCombination.count} 张账单的精确金额组合`, 'success')
+      return
+    }
     let left = Number(selected.remaining_amount || 0)
     const next = []
     for (const candidate of candidates) {
@@ -154,7 +175,10 @@ export default function BankAllocationDock({ onChanged }) {
       showToast?.('分配金额超过当前流水剩余金额', 'error')
       return
     }
-    if (!window.confirm(`确认分配 ${allocations.length} 张账单，共 ${money(selectedTotal)}？\n\n流水剩余 ${money(selected.remaining_amount)}，本次后剩余 ${money(afterAmount)}。`)) return
+    const exactHint = Math.abs(selectedTotal - Number(selected.remaining_amount || 0)) <= 0.01 && allocations.length > 1
+      ? '\n本次将把该银行流水完整核销到这组账单。'
+      : ''
+    if (!window.confirm(`确认分配 ${allocations.length} 张账单，共 ${money(selectedTotal)}？\n\n流水剩余 ${money(selected.remaining_amount)}，本次后剩余 ${money(afterAmount)}。${exactHint}`)) return
 
     setSaving(true)
     try {
@@ -199,7 +223,7 @@ export default function BankAllocationDock({ onChanged }) {
     <>
       <button type="button" className="bank-allocation-launcher" onClick={() => setOpen(true)}>
         <span>⇄</span>
-        <div><strong>多对多核销</strong><small>拆分流水 · 部分核销 · 多账单</small></div>
+        <div><strong>多对多核销</strong><small>智能组合 · 拆分流水 · 多账单</small></div>
       </button>
       {open ? (
         <div className="bank-allocation-mask" role="presentation" onMouseDown={(event) => {
@@ -207,7 +231,7 @@ export default function BankAllocationDock({ onChanged }) {
         }}>
           <section className="bank-allocation-dialog" role="dialog" aria-modal="true" aria-label="多对多核销">
             <header>
-              <div><span>P2 · MONEY ALLOCATION</span><h2>多对多核销</h2><p>银行流水是资金事实源；允许一笔拆多账单，也允许多笔共同结清一张账单。</p></div>
+              <div><span>V3.2 · SMART MONEY ALLOCATION</span><h2>多对多核销</h2><p>自动识别“同合作方 + 多账单未结金额之和 = 银行流水”的精确组合，再由你确认入账。</p></div>
               <button type="button" onClick={() => setOpen(false)} aria-label="关闭">×</button>
             </header>
             <div className="bank-allocation-body">
@@ -236,9 +260,36 @@ export default function BankAllocationDock({ onChanged }) {
                     <section className="bank-allocation-summary">
                       <article><span>原始流水</span><strong>{money(selected.amount)}</strong><small>{selected.direction_label} · {selected.currency || 'CNY'}</small></article>
                       <article><span>已核销</span><strong>{money(selected.allocated_amount)}</strong><small>{selected.allocation_count} 条有效分配</small></article>
-                      <article className="is-focus"><span>剩余待分配</span><strong>{money(selected.remaining_amount)}</strong><small>{confidence(selected.confidence_level)}置信 · {Number(selected.top_score || 0).toFixed(0)} 分</small></article>
+                      <article className="is-focus"><span>剩余待分配</span><strong>{money(selected.remaining_amount)}</strong><small>{smartCombination ? `${confidence(smartCombination.confidenceLevel)}置信组合 · ${smartCombination.score} 分` : `${confidence(selected.confidence_level)}置信 · ${Number(selected.top_score || 0).toFixed(0)} 分`}</small></article>
                       <article><span>本次分配</span><strong>{money(selectedTotal)}</strong><small>完成后剩余 {money(afterAmount)}</small></article>
                     </section>
+
+                    {smartCombination ? (
+                      <section className={`bank-allocation-smart ${smartCombination.ambiguous ? 'is-ambiguous' : 'is-exact'}`}>
+                        <div className="bank-allocation-smart-head">
+                          <div><span>V3.2 智能组合</span><h3>{smartCombination.ambiguous ? '检测到多个精确组合，需要人工确认' : `已识别 ${smartCombination.count} 张账单的精确组合`}</h3></div>
+                          <strong>{money(smartCombination.totalAmount)} = 流水剩余</strong>
+                        </div>
+                        <div className="bank-allocation-smart-meta">
+                          <span>合作方：{smartCombination.partnerName || '待确认'}</span>
+                          <span>{confidence(smartCombination.confidenceLevel)}置信 · {smartCombination.score} 分</span>
+                          <span>{smartCombination.ambiguous ? '不会自动套用' : '已自动预填，可直接核对'}</span>
+                        </div>
+                        <div className="bank-allocation-smart-bills">
+                          {smartCombination.items.map((item, index) => (
+                            <button key={item.candidateKey} type="button" onClick={() => openBill(item.candidate.bill_type, item.candidate.bill_id)}>
+                              <i>{index + 1}</i>
+                              <span><b>{item.candidate.bill_number}</b><small>{item.candidate.settlement_month || '-'} · {item.candidate.game_name || '未填游戏'}</small></span>
+                              <strong>{money(item.amount)}</strong>
+                            </button>
+                          ))}
+                        </div>
+                        <div className="bank-allocation-smart-reasons">
+                          {smartCombination.reasons.map((reason) => <span key={reason}>✓ {reason}</span>)}
+                        </div>
+                        {!smartCombination.ambiguous ? <button type="button" className="bank-allocation-smart-apply" onClick={applySmartCombination}>重新应用精确组合</button> : null}
+                      </section>
+                    ) : null}
 
                     {selected.existing_allocations?.length ? (
                       <section className="bank-allocation-existing">
@@ -256,7 +307,7 @@ export default function BankAllocationDock({ onChanged }) {
                     <section className="bank-allocation-editor">
                       <div className="bank-allocation-section-title">
                         <div><span>本次操作</span><h3>新增分配</h3></div>
-                        <div><button type="button" onClick={autoSplit}>按推荐自动拆分</button><button type="button" onClick={addLine}>＋ 添加账单</button></div>
+                        <div><button type="button" onClick={autoSplit}>{smartCombination && !smartCombination.ambiguous ? '应用智能组合' : '按推荐自动拆分'}</button><button type="button" onClick={addLine}>＋ 添加账单</button></div>
                       </div>
                       {lines.length === 0 ? <div className="bank-allocation-empty">当前没有可加入的候选账单。</div> : lines.map((line, index) => {
                         const candidate = candidateMap.get(line.candidateKey)
@@ -279,7 +330,7 @@ export default function BankAllocationDock({ onChanged }) {
               </main>
             </div>
             <footer>
-              <span>真实核销事实写入 bank_reconciliation_matches；银行原始金额不会被拆改。</span>
+              <span>确认后逐张账单写入核销事实，并同步收款状态与 Bill 360；银行原始流水金额不会被拆改。</span>
               <div><button type="button" onClick={() => setOpen(false)}>关闭</button><button type="button" className="is-primary" disabled={!selected || saving || !lines.length || selectedTotal <= 0} onClick={submit}>{saving ? '正在核销…' : `确认分配 ${money(selectedTotal)}`}</button></div>
             </footer>
           </section>
