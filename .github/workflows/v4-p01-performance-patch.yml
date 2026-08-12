@@ -1,4 +1,4 @@
-name: V4 P0.1 Apply Performance Refactor
+name: V4 P0.1 Performance Regression
 
 on:
   push:
@@ -8,31 +8,34 @@ on:
       - '.github/workflows/v4-p01-performance-patch.yml'
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  patch:
+  frontend:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           ref: codex/v4-p01-bill360-performance
-          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
 
-      - name: Apply performance post-fix
-        run: python scripts/v4_p01_postfix.py
-
-      - name: Verify refactor scope
-        run: |
-          git diff --check
-          ! grep -n '^\\$' src/components/reconciliation/Bill360DrawerBase.jsx
-          grep -q "primeBill360Resource" src/components/reconciliation/Bill360Drawer.jsx
-          grep -q "onDataChange={handleContractDataChange}" src/components/reconciliation/Bill360Drawer.jsx
-
-      - name: Commit performance post-fix
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -- src/components/reconciliation/Bill360DrawerBase.jsx src/components/reconciliation/Bill360Drawer.jsx
-          git commit -m "perf: remove duplicate contract fetch and fix progressive drawer syntax"
-          git push origin HEAD:codex/v4-p01-bill360-performance
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/v4-p01-bill360-performance
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r backend/requirements.txt
+      - run: python -m compileall -q backend/app
+      - name: Run backend tests
+        working-directory: backend
+        run: python -m unittest discover -s tests -p 'test_*.py'
