@@ -7,6 +7,7 @@ import ErrorBoundary from './components/ErrorBoundary.jsx'
 import { ThemeProvider } from './contexts/ThemeContext.jsx'
 import { AuthProvider } from '@/features/auth/AuthContext.jsx'
 import './index.css'
+import './styles/V4SystemPolish.css'
 
 const PRELOAD_RECOVERY_KEY = 'cf-preload-recovery'
 
