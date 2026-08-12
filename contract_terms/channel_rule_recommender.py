@@ -422,6 +422,14 @@ def recommend_channel_rules(
         else:
             overall_auto = False
 
+    # A partner-level baseline is useful only before precise game rows exist, or
+    # after every precise row has independently resolved. If any entered game is
+    # unmatched/ambiguous/incomplete/out-of-range, returning a baseline would let
+    # the UI silently overwrite that row with another game's rule.
+    precise_rows_fully_resolved = not results or len(auto_lines) == len(results)
+    safe_partner_auto_apply = bool(partner_summary["auto_apply"] and precise_rows_fully_resolved)
+    safe_partner_recommendation = partner_summary["recommendation"] if safe_partner_auto_apply else None
+
     if overall_auto and header:
         warning_bits: list[str] = []
         if any(item.get("authorization_warning") for item in auto_lines):
@@ -432,7 +440,7 @@ def recommend_channel_rules(
             message = f"当前游戏与合同匹配已明确；{'、'.join(warning_bits)}仅提示补录，不影响已知结算数字带入"
         else:
             message = "当前游戏与账期的合同匹配已明确，可自动带入"
-    elif partner_summary["auto_apply"]:
+    elif safe_partner_auto_apply:
         message = partner_summary["message"]
     elif results:
         message = "合同规则存在歧义或结算字段不完整，请按具体游戏/账期确认"
@@ -440,15 +448,15 @@ def recommend_channel_rules(
         message = partner_summary["message"]
 
     return {
-        "version": "contract-channel-rule-v2.4",
+        "version": "contract-channel-rule-v2.5",
         "auto_apply": bool(overall_auto and header),
         "matched_lines": len(matched),
         "total_lines": len(results),
         "header_recommendation": header,
         "lines": results,
         "partner_rule_status": partner_summary["status"],
-        "partner_auto_apply": partner_summary["auto_apply"],
-        "partner_recommendation": partner_summary["recommendation"],
+        "partner_auto_apply": safe_partner_auto_apply,
+        "partner_recommendation": safe_partner_recommendation,
         "partner_contract_count": partner_summary["contract_count"],
         "partner_contracts": partner_summary["contracts"],
         "partner_ignored_incomplete_count": partner_summary["ignored_incomplete_count"],
