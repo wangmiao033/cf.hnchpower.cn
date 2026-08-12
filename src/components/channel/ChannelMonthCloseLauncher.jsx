@@ -74,8 +74,18 @@ function writeSeed(seed) {
   }
 }
 
+function contractLooksChannel(contract, channelPartnerKeys) {
+  const identityKeys = [contract?.partner_name, contract?.partner_short_name, contract?.counterparty]
+    .map(normalizeChannelTextKey)
+    .filter(Boolean)
+  if (identityKeys.some((key) => channelPartnerKeys.has(key))) return true
+  if ((contract?.access_items || []).some((item) => String(item?.channel_name || '').trim())) return true
+  return /渠道|联运|平台|channel|platform/i.test(String(contract?.contract_type || ''))
+}
+
 export default function ChannelMonthCloseLauncher({
   channelRecords = [],
+  partners = [],
   onNavigate,
   onOpenEdit,
   onNotice
@@ -83,6 +93,18 @@ export default function ChannelMonthCloseLauncher({
   const [month, setMonth] = useState(currentMonth)
   const [expanded, setExpanded] = useState(true)
   const [contractState, setContractState] = useState({ loading: true, items: [], error: '' })
+
+  const channelPartnerKeys = useMemo(() => {
+    const keys = new Set()
+    ;(partners || []).forEach((partner) => {
+      if (!String(partner?.category || '').includes('渠道')) return
+      ;[partner?.name, partner?.shortName, partner?.short_name].forEach((value) => {
+        const key = normalizeChannelTextKey(value)
+        if (key) keys.add(key)
+      })
+    })
+    return keys
+  }, [partners])
 
   useEffect(() => {
     let cancelled = false
@@ -103,6 +125,7 @@ export default function ChannelMonthCloseLauncher({
     const map = new Map()
     for (const contract of contractState.items || []) {
       if (['已过期'].includes(String(contract?.timeline_status || ''))) continue
+      if (!contractLooksChannel(contract, channelPartnerKeys)) continue
       const partnerName = contractPartner(contract)
       if (!partnerName) continue
       for (const accessItem of contract?.access_items || []) {
@@ -169,7 +192,7 @@ export default function ChannelMonthCloseLauncher({
       if (leftRisk !== rightRisk) return rightRisk - leftRisk
       return left.channelName.localeCompare(right.channelName, 'zh-CN')
     })
-  }, [contractState.items, channelRecords, month])
+  }, [contractState.items, channelRecords, month, channelPartnerKeys])
 
   const summary = useMemo(() => groups.reduce((acc, group) => {
     acc.expected += group.expectedCount
