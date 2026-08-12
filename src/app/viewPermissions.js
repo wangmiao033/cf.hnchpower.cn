@@ -14,6 +14,7 @@ export const VIEW_PERMISSIONS = Object.freeze({
   [VIEWS.RECON_CREATE]: 'reconciliation.manage',
   [VIEWS.RECON_EDIT]: 'reconciliation.manage',
   [VIEWS.RECON_CHANNEL]: 'reconciliation.view',
+  [VIEWS.RECON_MONTH_CLOSE]: 'reconciliation.view',
   [VIEWS.CHANNEL_RECON_CREATE]: 'reconciliation.manage',
   [VIEWS.CHANNEL_RECON_EDIT]: 'reconciliation.manage',
   [VIEWS.CONTRACTS]: 'contracts.view',
