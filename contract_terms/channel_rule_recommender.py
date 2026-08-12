@@ -88,8 +88,8 @@ def _status_key(value: Any) -> str:
 def _candidate_explicitly_disabled(candidate: dict) -> bool:
     """Ignore only explicit negative states; free-text positive states are not guessed.
 
-    Contract/access status fields are free text in the current data model.  We
-    therefore never maintain an allow-list of "active" labels.  Only explicit
+    Contract/access status fields are free text in the current data model. We
+    therefore never maintain an allow-list of "active" labels. Only explicit
     stop/void/disable values are excluded, which avoids making historical
     backdated bills impossible to inspect merely because wording differs.
     """
@@ -234,7 +234,7 @@ def _selection_pool(ranked: list[tuple[dict, dict, dict]]) -> list[tuple[dict, d
     in_range = [item for item in ranked if item[1].get("authorization_status") != "out_of_range"]
     pool = in_range or ranked
     # Within the relevant time pool, complete financial rules are preferred over
-    # stale/auxiliary duplicates with missing fields.  If all are incomplete we
+    # stale/auxiliary duplicates with missing fields. If all are incomplete we
     # retain them so the UI can correctly request manual completion.
     complete = [item for item in pool if item[2].get("fields_complete")]
     return complete or pool
@@ -261,6 +261,10 @@ def recommend_channel_rules(
     unstructured/unknown (not explicitly out of range), complete contract
     financial fields are safe to auto-apply. Missing authorization dates should
     create a warning, not erase known settlement terms.
+
+    Multiple simultaneously usable complete contracts remain an identity
+    ambiguity unless the top candidate has a clear score margin. Equal financial
+    numbers alone never authorize selecting one contract over another.
     """
     partner_summary = _partner_rule_summary(partner_name, candidates)
     results: list[dict] = []
@@ -315,13 +319,10 @@ def recommend_channel_rules(
         second_score = float(pool[1][1].get("score") or 0) if len(pool) > 1 else 0.0
         top_score = float(scored.get("score") or 0)
         margin = round(top_score - second_score, 1)
-        complete_signatures = {
-            _rule_signature(rule)
-            for _, _, rule in pool
-            if rule.get("fields_complete")
-        }
-        same_financial_rule = bool(complete_signatures) and len(complete_signatures) == 1
-        financially_unambiguous = margin >= 10 or same_financial_rule
+        # The margin represents contract-identity certainty, not merely whether
+        # two contracts happen to carry equal money fields. Preserve the safety
+        # boundary that equal-score duplicate contracts require human review.
+        financially_unambiguous = margin >= 10
         authorization_status = scored.get("authorization_status")
         exact_identity = _partner_matches(partner_name, candidate) and _exact_game_matches(game_name, candidate)
         identity_confident = scored.get("confidence") == "high" or exact_identity
@@ -335,9 +336,7 @@ def recommend_channel_rules(
         public_recommended = _public_rule(recommended)
 
         if auto_apply and authorization_status == "unknown":
-            line_message = "合同合作项财务规则唯一明确，授权期未结构化；已带入合同结算数字，授权期单独待确认"
-        elif auto_apply and len(pool) > 1 and same_financial_rule:
-            line_message = "存在多个合同候选，但结算规则一致；已按一致的合同财务规则自动带入"
+            line_message = "合同合作项匹配明确，授权期未结构化；已带入合同结算数字，授权期单独待确认"
         elif auto_apply:
             line_message = "合同匹配明确，可自动带入结算规则"
         elif authorization_status == "out_of_range":
@@ -345,7 +344,7 @@ def recommend_channel_rules(
         elif not recommended.get("fields_complete"):
             line_message = "已找到具体合同，但该合作项的分成、通道费或税率结构化字段不完整"
         elif not financially_unambiguous:
-            line_message = "当前游戏/账期存在多套不同的完整合同结算规则，需要先确认合同归属"
+            line_message = "当前游戏/账期仍有多个有效合同候选，需要先确认合同归属"
         else:
             line_message = "已找到合同，但候选身份仍需人工确认"
 
@@ -416,9 +415,9 @@ def recommend_channel_rules(
 
     if overall_auto and header:
         if any(item.get("authorization_warning") for item in auto_lines):
-            message = "当前游戏与合同财务规则已明确；授权期未结构化的条目已单独提示，不影响已知结算数字带入"
+            message = "当前游戏与合同匹配已明确；授权期未结构化的条目已单独提示，不影响已知结算数字带入"
         else:
-            message = "当前游戏与账期的合同财务规则已明确，可自动带入"
+            message = "当前游戏与账期的合同匹配已明确，可自动带入"
     elif partner_summary["auto_apply"]:
         message = partner_summary["message"]
     elif results:
@@ -427,7 +426,7 @@ def recommend_channel_rules(
         message = partner_summary["message"]
 
     return {
-        "version": "contract-channel-rule-v2.2",
+        "version": "contract-channel-rule-v2.3",
         "auto_apply": bool(overall_auto and header),
         "matched_lines": len(matched),
         "total_lines": len(results),
