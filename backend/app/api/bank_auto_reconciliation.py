@@ -25,6 +25,7 @@ from app.schemas.bank_multi_allocation import (
     P2TransactionSummaryResponse,
 )
 from app.services.bank_auto_reconciliation import build_dashboard
+from app.services.bank_combination_match import enrich_auto_dashboard_with_p2
 from app.services.bank_cumulative_filter import filter_cumulative_bank_suggestions
 from app.services.bank_multi_allocation import (
     bill_summary,
@@ -50,6 +51,10 @@ def get_bank_auto_reconciliation_dashboard(
     _user: AuthUser = Depends(require_current_user),
 ) -> BankAutoReconciliationDashboard:
     result = filter_cumulative_bank_suggestions(db, build_dashboard(db, limit=limit))
+    # 主表仍保留原一对一引擎；同时读取 P2 候选，把唯一精确多账单组合注入同一响应。
+    # 这样银行中心主表即可直接处理“一笔流水 -> 多张账单”，无需切换旁路入口。
+    p2_result = filter_cumulative_bank_suggestions(db, build_p2_dashboard(db, limit=limit))
+    result = enrich_auto_dashboard_with_p2(result, p2_result)
     result = enrich_reconciliation_dashboard(db, result)
     confirmed_count, confirmed_amount = db.execute(
         select(
