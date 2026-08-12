@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import {
   CHANNEL_RULE_PRESETS,
+  XIAN_WEIZHEN_9917_RULE,
   initialHeaderForm,
   initialLineItem,
   calculateBillingAmount,
@@ -14,6 +15,7 @@ import {
   recordToHeaderForm,
   recordToLineForms,
   applyChannelRulePreset,
+  applyTargetedChannelRule,
   detectChannelRulePreset,
   ruleFormulaText
 } from '@/domain/channel/channelBillingForm.js'
@@ -124,7 +126,7 @@ function ChannelBillingForm({
     const matched = findExactPartner(partners, header.partnerName || header.channelName)
     if (!matched) return
     setPartnerId(String(matched.id || ''))
-    setHeader((current) => ({ ...current, partnerName: current.partnerName || matched.name, channelName: current.channelName || matched.shortName || matched.name }))
+    setHeader((current) => applyTargetedChannelRule({ ...current, partnerName: current.partnerName || matched.name, channelName: current.channelName || matched.shortName || matched.name }))
   }, [partners, header.partnerName, header.channelName, partnerId])
 
   useEffect(() => {
@@ -173,7 +175,7 @@ function ChannelBillingForm({
           }
 
           const recommendation = result.header_recommendation
-          setHeader((current) => ({
+          setHeader((current) => applyTargetedChannelRule({
             ...current,
             settlementRuleCode: recommendation.settlement_rule_code,
             channelFeeMode: recommendation.channel_fee_mode,
@@ -225,7 +227,7 @@ function ChannelBillingForm({
     setHeader((current) => {
       const base = { ...current, partnerName, channelName: selected && nextPartnerId ? selected.shortName || selected.name : partnerName }
       const preset = detectChannelRulePreset(base.channelName || base.partnerName)
-      return preset && mode === 'add' ? applyChannelRulePreset(base, preset) : base
+      return preset && mode === 'add' ? applyChannelRulePreset(base, preset) : applyTargetedChannelRule(base)
     })
   }
 
@@ -269,7 +271,9 @@ function ChannelBillingForm({
     if (submitIntentRef) submitIntentRef.current = 'back'
   }
 
-  const feeMode = header.channelFeeMode || 'fixed'
+  const effectiveRuleHeader = applyTargetedChannelRule(header)
+  const feeMode = effectiveRuleHeader.channelFeeMode || 'fixed'
+  const targetedRuleLocked = effectiveRuleHeader.settlementRuleCode === XIAN_WEIZHEN_9917_RULE
   const validationTone = totals.validationStatus === 'fail' ? 'is-danger' : totals.validationStatus === 'pass' ? 'is-good' : ''
 
   return (
@@ -288,8 +292,8 @@ function ChannelBillingForm({
 
         <section className="channel-rule-panel">
           <div className="channel-rule-panel__head">
-            <div><span>结算规则引擎</span><strong>合同优先驱动，人工可覆盖</strong></div>
-            <small>选择合作方并填写游戏、账期后，系统优先按合同合作清单带入分成和通道费；平台结算额仍用于最终校验。</small>
+            <div><span>结算规则引擎</span><strong>{targetedRuleLocked ? '渠道专属规则已锁定' : '合同优先驱动，人工可覆盖'}</strong></div>
+            <small>{targetedRuleLocked ? '西安维真（客户 9917）：代金券、福利币仅记录；其余原扣减项保持现有规则，分成后扣 5% 通道费，税率仅记录。' : '选择合作方并填写游戏、账期后，系统优先按合同合作清单带入分成和通道费；平台结算额仍用于最终校验。'}</small>
           </div>
           {mode === 'add' && (contractRuleState.loading || contractRuleState.message) ? (
             <div className={`channel-contract-rule-status is-${contractRuleState.tone || 'idle'}`}>
@@ -302,13 +306,13 @@ function ChannelBillingForm({
             </div>
           ) : null}
           <div className="channel-rule-grid">
-            <label><span>规则模板</span><select value={header.settlementRuleCode} onChange={(e) => setHeader((current) => applyChannelRulePreset(current, e.target.value))}>{Object.entries(CHANNEL_RULE_PRESETS).map(([key, preset]) => <option key={key} value={key}>{preset.label}</option>)}</select></label>
-            <label><span>渠道费模式</span><select value={header.channelFeeMode} onChange={(e) => handleRuleFieldChange('channelFeeMode', e.target.value)}><option value="none">不扣渠道费</option><option value="percent">百分比</option><option value="fixed">固定金额/行</option></select></label>
-            <label><span>渠道费率%</span><input type="number" step="0.01" min="0" max="100" value={header.channelFeeRate} disabled={feeMode !== 'percent'} onChange={(e) => handleRuleFieldChange('channelFeeRate', e.target.value)} placeholder={feeMode === 'percent' ? '如 5' : '当前不使用'} /></label>
-            <label><span>税处理</span><select value={header.taxMode} onChange={(e) => handleRuleFieldChange('taxMode', e.target.value)}><option value="none">仅记录，不参与</option><option value="share">按分成额扣税</option><option value="after_fee">渠道费后再扣税</option></select></label>
+            <label><span>规则模板</span><select value={effectiveRuleHeader.settlementRuleCode} disabled={targetedRuleLocked} onChange={(e) => setHeader((current) => applyChannelRulePreset(current, e.target.value))}>{Object.entries(CHANNEL_RULE_PRESETS).map(([key, preset]) => <option key={key} value={key}>{preset.label}</option>)}</select></label>
+            <label><span>渠道费模式</span><select value={effectiveRuleHeader.channelFeeMode} disabled={targetedRuleLocked} onChange={(e) => handleRuleFieldChange('channelFeeMode', e.target.value)}><option value="none">不扣渠道费</option><option value="percent">百分比</option><option value="fixed">固定金额/行</option></select></label>
+            <label><span>渠道费率%</span><input type="number" step="0.01" min="0" max="100" value={effectiveRuleHeader.channelFeeRate} disabled={targetedRuleLocked || feeMode !== 'percent'} onChange={(e) => handleRuleFieldChange('channelFeeRate', e.target.value)} placeholder={feeMode === 'percent' ? '如 5' : '当前不使用'} /></label>
+            <label><span>税处理</span><select value={effectiveRuleHeader.taxMode} disabled={targetedRuleLocked} onChange={(e) => handleRuleFieldChange('taxMode', e.target.value)}><option value="none">仅记录，不参与</option><option value="share">按分成额扣税</option><option value="after_fee">渠道费后再扣税</option></select></label>
             <label><span>差异容差（元）</span><input type="number" step="0.01" min="0" value={header.validationTolerance} onChange={(e) => handleRuleFieldChange('validationTolerance', e.target.value)} /></label>
           </div>
-          <div className="channel-rule-formula"><span>当前公式</span><strong>{ruleFormulaText(header)}</strong></div>
+          <div className="channel-rule-formula"><span>当前公式</span><strong>{ruleFormulaText(effectiveRuleHeader)}</strong></div>
         </section>
       </div>
 
@@ -318,7 +322,7 @@ function ChannelBillingForm({
           <table className="channel-line-items-table">
             <thead><tr><th>结算月份</th><th>游戏名称</th><th>后台流水</th><th>折扣系数</th><th>总流水</th><th>代金券</th><th>无忧试</th><th>玩家退款</th><th>测试费</th><th>福利币</th><th>其他扣减</th><th>分成%</th><th>税率%</th><th>{feeMode === 'fixed' ? '固定通道费' : '通道费'}</th><th>计费额</th><th>分成额</th><th>系统结算</th><th>平台结算</th><th>差异</th><th>校验</th><th>操作</th></tr></thead>
             <tbody>{lines.map((row, index) => {
-              const details = calculateSettlementDetails(row, header)
+              const details = calculateSettlementDetails(row, effectiveRuleHeader)
               return (
                 <tr key={row.id || `line-${index}`}>
                   <td style={{ minWidth: 132 }}><input type="month" className="admin-input" value={normalizeChannelSettlementCycle(row.settlementCycle)} onChange={(e) => handleLineChange(index, 'settlementCycle', e.target.value)} required /></td>
@@ -335,8 +339,8 @@ function ChannelBillingForm({
                   <td><input type="number" step="0.01" className="admin-input" value={row.shareRate} onChange={(e) => handleLineChange(index, 'shareRate', e.target.value)} /></td>
                   <td><input type="number" step="0.01" className="admin-input" value={row.taxRate} onChange={(e) => handleLineChange(index, 'taxRate', e.target.value)} /></td>
                   <td><input type="number" step="0.01" className="admin-input" value={row.gatewayCost} disabled={feeMode !== 'fixed'} onChange={(e) => handleLineChange(index, 'gatewayCost', e.target.value)} placeholder={feeMode === 'fixed' ? '元' : '由规则计算'} /></td>
-                  <td className="channel-line-num">{formatMoney(calculateBillingAmount(row))}</td>
-                  <td className="channel-line-num">{formatMoney(calculateShareAmount(row))}</td>
+                  <td className="channel-line-num">{formatMoney(calculateBillingAmount(row, effectiveRuleHeader))}</td>
+                  <td className="channel-line-num">{formatMoney(calculateShareAmount(row, effectiveRuleHeader))}</td>
                   <td className="channel-system-amount">{formatMoney(details.systemSettlementAmount)}</td>
                   <td><input type="number" step="0.01" className="admin-input channel-platform-input" value={row.platformSettlementAmount} onChange={(e) => handleLineChange(index, 'platformSettlementAmount', e.target.value)} placeholder="平台账单金额" /></td>
                   <td className={`channel-line-diff is-${details.validationStatus}`}>{details.settlementDifference == null ? '-' : `${details.settlementDifference >= 0 ? '+' : ''}${formatMoney(details.settlementDifference)}`}</td>

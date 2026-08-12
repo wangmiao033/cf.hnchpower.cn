@@ -1,10 +1,13 @@
 /** 渠道账单表单计算与规则校验。 */
 import { getChannelLineItems } from '@/domain/channel/channelAggregates.js'
 
+export const XIAN_WEIZHEN_9917_RULE = 'xian_weizhen_9917'
+
 export const CHANNEL_RULE_PRESETS = {
   legacy_fixed_fee_tax: { label: '固定通道费 + 分成税（旧规则）', feeMode: 'fixed', taxMode: 'share' },
   five_percent_gateway_share: { label: '5%支付通道费后分成（不扣税）', feeMode: 'percent', taxMode: 'none', feeRate: 5 },
   xiaomi_percent_fee: { label: '百分比渠道费，税率仅记录（小米类）', feeMode: 'percent', taxMode: 'none', feeRate: 5 },
+  [XIAN_WEIZHEN_9917_RULE]: { label: '西安维真（9917）专属规则', feeMode: 'percent', taxMode: 'none', feeRate: 5 },
   percent_fee_after_tax: { label: '百分比渠道费后再扣税', feeMode: 'percent', taxMode: 'after_fee' },
   share_only: { label: '仅按可分成金额 × 分成比例', feeMode: 'none', taxMode: 'none' },
   custom: { label: '自定义规则', feeMode: 'fixed', taxMode: 'share' }
@@ -28,6 +31,7 @@ function optionalNumber(value) { if (value === '' || value == null) return null;
 
 export function detectChannelRulePreset(name) {
   const text = String(name || '').replace(/\s/g, '').toLowerCase()
+  if (text.includes('西安维真') || text.includes('维真视界')) return XIAN_WEIZHEN_9917_RULE
   return text.includes('小米') || text.includes('xiaomi') || text.includes('瓦力') ? 'xiaomi_percent_fee' : ''
 }
 
@@ -42,10 +46,20 @@ export function applyChannelRulePreset(header, code) {
   }
 }
 
+export function applyTargetedChannelRule(header = initialHeaderForm) {
+  const preset = detectChannelRulePreset(header.partnerName || header.channelName)
+  if (preset !== XIAN_WEIZHEN_9917_RULE) return header
+  return applyChannelRulePreset(header, XIAN_WEIZHEN_9917_RULE)
+}
+
 export function ruleFormulaText(header) {
-  const feeMode = header.channelFeeMode || 'fixed'
-  const taxMode = header.taxMode || 'share'
-  const fee = feeMode === 'percent' ? ` × (1 - ${Number(header.channelFeeRate || 0)}%)` : feeMode === 'fixed' ? ' - 固定通道费' : ''
+  const effectiveHeader = applyTargetedChannelRule(header)
+  if (effectiveHeader.settlementRuleCode === XIAN_WEIZHEN_9917_RULE) {
+    return '西安维真9917：代金券/福利币仅记录；其余原扣减项参与 × 分成比例 × (1 - 5%通道费)，税率仅记录'
+  }
+  const feeMode = effectiveHeader.channelFeeMode || 'fixed'
+  const taxMode = effectiveHeader.taxMode || 'share'
+  const fee = feeMode === 'percent' ? ` × (1 - ${Number(effectiveHeader.channelFeeRate || 0)}%)` : feeMode === 'fixed' ? ' - 固定通道费' : ''
   const tax = taxMode === 'share' ? ' - 分成额 × 税率' : taxMode === 'after_fee' ? ' × (1 - 税率)' : ''
   return `可分成金额 × 分成比例${fee}${tax}`
 }
@@ -77,16 +91,25 @@ export const initialForm = { ...initialHeaderForm, ...initialLineItem() }
 export function resolveDiscountFactor(data) { const n = Number(data.discountFactor); return Number.isFinite(n) && n > 0 ? n : 1 }
 export function effectiveLineFlowFromFormData(data) { return round2(Number(data.flow || 0) * resolveDiscountFactor(data)) }
 
-export function calculateBillingAmount(data) {
-  return effectiveLineFlowFromFormData(data) - ['voucherCost','noWorryCost','refundCost','testCost','welfareCost','coinCost'].reduce((sum, key) => sum + Number(data[key] || 0), 0)
+function deductionFieldsForHeader(header = initialHeaderForm) {
+  const effectiveHeader = applyTargetedChannelRule(header)
+  if (effectiveHeader.settlementRuleCode === XIAN_WEIZHEN_9917_RULE) {
+    return ['noWorryCost', 'refundCost', 'testCost', 'coinCost']
+  }
+  return ['voucherCost', 'noWorryCost', 'refundCost', 'testCost', 'welfareCost', 'coinCost']
 }
-export function calculateShareAmount(data) { return calculateBillingAmount(data) * Number(data.shareRate || 0) / 100 }
+
+export function calculateBillingAmount(data, header = initialHeaderForm) {
+  return effectiveLineFlowFromFormData(data) - deductionFieldsForHeader(header).reduce((sum, key) => sum + Number(data[key] || 0), 0)
+}
+export function calculateShareAmount(data, header = initialHeaderForm) { return calculateBillingAmount(data, header) * Number(data.shareRate || 0) / 100 }
 
 function calculateSettlementRaw(data, header = initialHeaderForm) {
-  const shareAmount = calculateShareAmount(data)
-  const feeMode = header.channelFeeMode || 'fixed'; const taxMode = header.taxMode || 'share'
+  const effectiveHeader = applyTargetedChannelRule(header)
+  const shareAmount = calculateShareAmount(data, effectiveHeader)
+  const feeMode = effectiveHeader.channelFeeMode || 'fixed'; const taxMode = effectiveHeader.taxMode || 'share'
   let afterFee = shareAmount
-  if (feeMode === 'percent') afterFee = shareAmount * (1 - Number(header.channelFeeRate || 0) / 100)
+  if (feeMode === 'percent') afterFee = shareAmount * (1 - Number(effectiveHeader.channelFeeRate || 0) / 100)
   else if (feeMode === 'fixed') afterFee = shareAmount - Number(data.gatewayCost || 0)
   const taxRate = Number(data.taxRate || 0) / 100
   if (taxMode === 'share') return afterFee - shareAmount * taxRate
@@ -95,22 +118,24 @@ function calculateSettlementRaw(data, header = initialHeaderForm) {
 }
 
 export function calculateSettlementDetails(data, header = initialHeaderForm) {
-  const system = round2(calculateSettlementRaw(data, header))
+  const effectiveHeader = applyTargetedChannelRule(header)
+  const system = round2(calculateSettlementRaw(data, effectiveHeader))
   const platform = optionalNumber(data.platformSettlementAmount)
   const difference = platform == null ? null : round2(system - platform)
-  const tolerance = Math.max(0, Number(header.validationTolerance || 0.05))
+  const tolerance = Math.max(0, Number(effectiveHeader.validationTolerance || 0.05))
   const validationStatus = platform == null ? 'unvalidated' : Math.abs(difference) <= tolerance ? 'pass' : 'fail'
   return { systemSettlementAmount: system, platformSettlementAmount: platform, settlementDifference: difference, validationStatus, settlementAmount: platform == null ? system : round2(platform) }
 }
 export function calculateSettlement(data, header = initialHeaderForm) { return calculateSettlementRaw(data, header) }
 
 export function buildLineRecordFromForm(fd, headerForm = initialHeaderForm) {
-  const details = calculateSettlementDetails(fd, headerForm)
+  const effectiveHeader = applyTargetedChannelRule(headerForm)
+  const details = calculateSettlementDetails(fd, effectiveHeader)
   return {
     settlementCycle: normalizeChannelSettlementCycle(fd.settlementCycle || fd.settlementMonth), gameName: fd.gameName != null ? String(fd.gameName) : '',
     flow: Number(fd.flow || 0), discountFactor: resolveDiscountFactor(fd), effectiveFlow: effectiveLineFlowFromFormData(fd),
     voucherCost: Number(fd.voucherCost || 0), noWorryCost: Number(fd.noWorryCost || 0), refundCost: Number(fd.refundCost || 0), testCost: Number(fd.testCost || 0), welfareCost: Number(fd.welfareCost || 0), coinCost: Number(fd.coinCost || 0),
-    billingAmount: round2(calculateBillingAmount(fd)), shareRate: Number(fd.shareRate || 0), shareAmount: round2(calculateShareAmount(fd)), taxRate: Number(fd.taxRate || 0), gatewayCost: Number(fd.gatewayCost || 0),
+    billingAmount: round2(calculateBillingAmount(fd, effectiveHeader)), shareRate: Number(fd.shareRate || 0), shareAmount: round2(calculateShareAmount(fd, effectiveHeader)), taxRate: Number(fd.taxRate || 0), gatewayCost: Number(fd.gatewayCost || 0),
     ...details
   }
 }
@@ -118,15 +143,16 @@ export function buildLineRecordFromForm(fd, headerForm = initialHeaderForm) {
 function parseOptionalNum(v) { return optionalNumber(v) }
 
 export function buildFullChannelRecord(headerForm, lineFormList) {
-  const items = lineFormList.map((row) => buildLineRecordFromForm(row, headerForm)); const sum = (key) => round2(items.reduce((s, it) => s + Number(it[key] || 0), 0))
-  const period = channelSettlementPeriodFromLines(items, headerForm.settlementMonth)
+  const effectiveHeader = applyTargetedChannelRule(headerForm)
+  const items = lineFormList.map((row) => buildLineRecordFromForm(row, effectiveHeader)); const sum = (key) => round2(items.reduce((s, it) => s + Number(it[key] || 0), 0))
+  const period = channelSettlementPeriodFromLines(items, effectiveHeader.settlementMonth)
   const platformRows = items.filter((i) => i.platformSettlementAmount != null)
   const validationStatus = items.some((i) => i.validationStatus === 'fail') ? 'fail' : items.length && items.every((i) => i.validationStatus === 'pass') ? 'pass' : platformRows.length ? 'partial' : 'unvalidated'
   return {
-    channelName: headerForm.channelName, partnerName: headerForm.partnerName || '', settlementMonth: period.settlementMonth || normalizeChannelSettlementCycle(headerForm.settlementMonth), invoiceStatus: headerForm.invoiceStatus || 'pending_invoice', invoice_status: headerForm.invoiceStatus || 'pending_invoice',
-    startDate: period.startDate || headerForm.startDate || '', endDate: period.endDate || headerForm.endDate || '', remark: headerForm.remark || '', status: headerForm.status || 'pending', serverCost: parseOptionalNum(headerForm.serverCost), discountType: headerForm.discountType || null,
-    channelFeeRate: parseOptionalNum(headerForm.channelFeeRate), devShareRate: parseOptionalNum(headerForm.devShareRate), profitRate: parseOptionalNum(headerForm.profitRate),
-    settlementRuleCode: headerForm.settlementRuleCode || 'legacy_fixed_fee_tax', channelFeeMode: headerForm.channelFeeMode || 'fixed', taxMode: headerForm.taxMode || 'share', validationTolerance: Math.max(0, Number(headerForm.validationTolerance || 0.05)),
+    channelName: effectiveHeader.channelName, partnerName: effectiveHeader.partnerName || '', settlementMonth: period.settlementMonth || normalizeChannelSettlementCycle(effectiveHeader.settlementMonth), invoiceStatus: effectiveHeader.invoiceStatus || 'pending_invoice', invoice_status: effectiveHeader.invoiceStatus || 'pending_invoice',
+    startDate: period.startDate || effectiveHeader.startDate || '', endDate: period.endDate || effectiveHeader.endDate || '', remark: effectiveHeader.remark || '', status: effectiveHeader.status || 'pending', serverCost: parseOptionalNum(effectiveHeader.serverCost), discountType: effectiveHeader.discountType || null,
+    channelFeeRate: parseOptionalNum(effectiveHeader.channelFeeRate), devShareRate: parseOptionalNum(effectiveHeader.devShareRate), profitRate: parseOptionalNum(effectiveHeader.profitRate),
+    settlementRuleCode: effectiveHeader.settlementRuleCode || 'legacy_fixed_fee_tax', channelFeeMode: effectiveHeader.channelFeeMode || 'fixed', taxMode: effectiveHeader.taxMode || 'share', validationTolerance: Math.max(0, Number(effectiveHeader.validationTolerance || 0.05)),
     items, gameName: items.map((i) => i.gameName).filter(Boolean).join('、'), rawFlowTotal: sum('flow'), flow: sum('effectiveFlow'), voucherCost: sum('voucherCost'), noWorryCost: sum('noWorryCost'), refundCost: sum('refundCost'), testCost: sum('testCost'), welfareCost: sum('welfareCost'), coinCost: sum('coinCost'), billingAmount: sum('billingAmount'), shareAmount: sum('shareAmount'),
     taxRate: items[0]?.taxRate || 0, shareRate: items[0]?.shareRate || 0, gatewayCost: sum('gatewayCost'), systemSettlementAmount: sum('systemSettlementAmount'), platformSettlementAmount: platformRows.length ? round2(platformRows.reduce((s, i) => s + i.platformSettlementAmount, 0)) : null, settlementDifference: platformRows.length ? round2(platformRows.reduce((s, i) => s + Number(i.settlementDifference || 0), 0)) : null, validationStatus, settlementAmount: sum('settlementAmount')
   }
@@ -139,10 +165,11 @@ export function buildChannelBillFromSingleGameForm(fd) {
 export function buildRecordFromForm(fd) { const line = buildLineRecordFromForm(fd, fd); return { ...fd, ...line, channelName: fd.channelName, startDate: fd.startDate, endDate: fd.endDate, remark: fd.remark } }
 
 export function recordToHeaderForm(record) {
-  return {
+  const base = {
     channelName: record.channelName || '', partnerName: record.partnerName || '', settlementMonth: record.settlementMonth || '', invoiceStatus: record.invoiceStatus || record.invoice_status || 'pending_invoice', startDate: record.startDate || '', endDate: record.endDate || '', remark: record.remark || '', status: record.status || 'pending', serverCost: record.serverCost != null ? String(record.serverCost) : '', discountType: record.discountType || '', channelFeeRate: record.channelFeeRate != null ? String(record.channelFeeRate) : '', devShareRate: record.devShareRate != null ? String(record.devShareRate) : '', profitRate: record.profitRate != null ? String(record.profitRate) : '',
     settlementRuleCode: record.settlementRuleCode || 'legacy_fixed_fee_tax', channelFeeMode: record.channelFeeMode || 'fixed', taxMode: record.taxMode || 'share', validationTolerance: record.validationTolerance != null ? String(record.validationTolerance) : '0.05'
   }
+  return applyTargetedChannelRule(base)
 }
 
 export function recordToLineForms(record) {
