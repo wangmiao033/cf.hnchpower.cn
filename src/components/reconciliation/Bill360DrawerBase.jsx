@@ -130,8 +130,7 @@ function Bill360Drawer({ target, onClose }) {
     setActiveTab('overview')
   }, [billType, billId])
 
-\
-      useEffect(() => {
+  useEffect(() => {
         if (!billId) return undefined
         let cancelled = false
         const seeded = target?.initialRecord || getCachedEditRecord(billType, billId) || null

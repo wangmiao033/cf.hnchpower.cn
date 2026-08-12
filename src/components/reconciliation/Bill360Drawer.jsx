@@ -9,7 +9,7 @@ import ContractDifferenceActionPanel from './ContractDifferenceActionPanel.jsx'
 import ChannelCumulativeSettlementCard from '@/components/channel/ChannelCumulativeSettlementCard.jsx'
 import { getContractBillReconciliation } from '@/lib/api/contractTerms.ts'
 import { getChannelCumulativeBillCondition } from '@/lib/api/channelCumulativeSettlement.ts'
-import { loadBill360Resource, peekBill360Resource } from '@/lib/api/bill360Performance.ts'
+import { loadBill360Resource, peekBill360Resource, primeBill360Resource } from '@/lib/api/bill360Performance.ts'
 import { billDueInfo, dueStatusText } from '@/domain/reconciliation/billDueDate.js'
 import './Bill360ContractAware.css'
 import './Bill360FundingPanel.css'
@@ -199,6 +199,12 @@ function Bill360Drawer({ target, onClose }) {
     if (!checkData && !checkLoading) void loadContractCheck(false)
   }
 
+  const handleContractDataChange = useCallback((result) => {
+    setCheckData(result || null)
+    setCheckSummary(result?.summary || null)
+    if (result) primeBill360Resource(`contract-check:${billType}:${billId}`, result, 60_000)
+  }, [billId, billType])
+
   return (
     <>
       <Bill360DrawerBase target={target} onClose={onClose} />
@@ -330,16 +336,19 @@ function Bill360Drawer({ target, onClose }) {
                 onChanged={refreshContractCheck}
               />
 
-              <BillContractCheckPanelV2
-                key={`${billType}-${billId}-${checkVersion}`}
-                billType={billType}
-                billId={billId}
-                initialData={checkData}
-                onDataChange={(result) => {
-                  setCheckData(result)
-                  setCheckSummary(result?.summary || null)
-                }}
-              />
+              {checkData ? (
+                <BillContractCheckPanelV2
+                  key={`${billType}-${billId}-${checkVersion}`}
+                  billType={billType}
+                  billId={billId}
+                  initialData={checkData}
+                  onDataChange={handleContractDataChange}
+                />
+              ) : (
+                <div className="bill360-funding-state">
+                  {checkLoading ? '正在读取合同核验结果…' : checkUnavailable ? '合同核验暂不可用，请稍后重试。' : '点击合同核验后加载详细条款。'}
+                </div>
+              )}
             </main>
           </aside>
         </div>
