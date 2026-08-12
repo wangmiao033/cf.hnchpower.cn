@@ -88,6 +88,7 @@ export default function ChannelMonthCloseLauncher({
   partners = [],
   onNavigate,
   onOpenEdit,
+  onOpenView,
   onNotice
 }) {
   const [month, setMonth] = useState(currentMonth)
@@ -219,8 +220,9 @@ export default function ChannelMonthCloseLauncher({
       return
     }
     if (group.viewRecord?.id) {
-      onNotice?.('本月账单已经确认/锁定，先打开查看；不会为了补清单自动新建重复账单。', 'info')
-      onOpenEdit?.(String(group.viewRecord.id))
+      onNotice?.('本月账单已经确认/锁定，已用 Bill360 只读查看；不会自动新建重复账单。', 'info')
+      if (onOpenView) onOpenView(String(group.viewRecord.id))
+      else onOpenEdit?.(String(group.viewRecord.id))
       return
     }
     const seed = {
