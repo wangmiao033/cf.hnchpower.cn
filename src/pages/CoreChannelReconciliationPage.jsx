@@ -9,7 +9,8 @@ export default function CoreChannelReconciliationPage() {
     settings,
     showToast,
     setActiveView,
-    openChannelReconciliationEdit
+    openChannelReconciliationEdit,
+    openBill360
   } = useAppState()
 
   return (
@@ -20,6 +21,7 @@ export default function CoreChannelReconciliationPage() {
           partners={settings?.partners || []}
           onNavigate={setActiveView}
           onOpenEdit={openChannelReconciliationEdit}
+          onOpenView={(billId) => openBill360?.('channel', billId)}
           onNotice={(message, tone = 'info') => showToast(message, tone)}
         />
       </div>
