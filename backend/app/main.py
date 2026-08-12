@@ -15,6 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.api.anomaly import router as anomaly_router
+from app.api.bill360_performance import router as bill360_performance_router
 from app.api.bill_lifecycle import router as bill_lifecycle_router
 from app.api.business_dashboard import router as business_dashboard_router
 from app.api.channel import router as channel_router
@@ -228,6 +229,7 @@ app.include_router(workbench_router, prefix="/api/workbench", tags=["workbench"]
 app.include_router(global_search_router, prefix="/api/global-search", tags=["global-search"])
 app.include_router(finance_invoice_task_router, prefix="/api/finance-tasks", tags=["finance-tasks"])
 app.include_router(reconciliation_router, prefix="/api/reconciliation", tags=["reconciliation"], dependencies=[reconciliation_access])
+app.include_router(bill360_performance_router, prefix="/api/reconciliation", tags=["bill360-performance"], dependencies=[reconciliation_access])
 app.include_router(reconciliation_period_router, prefix="/api/reconciliation-periods", tags=["reconciliation-periods"], dependencies=[reconciliation_access])
 app.include_router(channel_router, prefix="/api/channel-records", tags=["channel-records"], dependencies=[reconciliation_access])
 app.include_router(channel_cumulative_settlement_router, prefix="/api/channel-cumulative-settlement", tags=["channel-cumulative-settlement"])

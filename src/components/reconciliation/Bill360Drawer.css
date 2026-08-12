@@ -5,7 +5,7 @@
   display: flex;
   justify-content: flex-end;
   background: rgba(15, 23, 42, 0.34);
-  backdrop-filter: blur(4px);
+  backdrop-filter: none;
 }
 
 .bill360-drawer {
@@ -16,6 +16,8 @@
   box-shadow: -24px 0 70px rgba(15, 23, 42, 0.2);
   display: flex;
   flex-direction: column;
+  contain: layout paint;
+  transform: translateZ(0);
 }
 
 .bill360-header {

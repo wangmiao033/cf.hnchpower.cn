@@ -76,11 +76,11 @@ function candidateLabel(candidate) {
   return `${title || candidate.access_item_id}${score}${auth}`
 }
 
-export default function BillContractCheckPanelV2({ billType, billId }) {
+export default function BillContractCheckPanelV2({ billType, billId, initialData = null, onDataChange }) {
   const { can } = useAuth()
   const canManage = can('contracts.manage')
-  const [data, setData] = useState(null)
-  const [loading, setLoading] = useState(true)
+  const [data, setData] = useState(initialData)
+  const [loading, setLoading] = useState(!initialData)
   const [error, setError] = useState('')
   const [expandedLineId, setExpandedLineId] = useState(null)
   const [selectedByLine, setSelectedByLine] = useState({})
@@ -94,6 +94,7 @@ export default function BillContractCheckPanelV2({ billType, billId }) {
     try {
       const result = await getContractBillReconciliation(billType, billId)
       setData(result)
+      onDataChange?.(result)
       setSelectedByLine((current) => {
         const next = { ...current }
         for (const line of result.lines || []) {
@@ -117,38 +118,34 @@ export default function BillContractCheckPanelV2({ billType, billId }) {
     } finally {
       setLoading(false)
     }
-  }, [billId, billType])
+  }, [billId, billType, onDataChange])
 
   useEffect(() => {
-    let active = true
-    setData(null)
     setSelectedByLine({})
     setExpandedLineId(null)
     setActionMessage('')
+    setError('')
     if (!billId) return undefined
-    void getContractBillReconciliation(billType, billId)
-      .then((result) => {
-        if (!active) return
-        setData(result)
-        const defaults = {}
-        for (const line of result.lines || []) {
-          defaults[line.line_id] = line.binding?.access_item_id || line.match?.access_item_id || ''
-        }
-        setSelectedByLine(defaults)
-        const firstIssue = result.lines?.find((line) => line.status !== 'pass')
-        setExpandedLineId(firstIssue?.line_id || result.lines?.[0]?.line_id || null)
-      })
-      .catch((loadError) => {
-        if (!active) return
-        setError(loadError instanceof Error ? loadError.message : '合同自动核验读取失败')
-      })
-      .finally(() => {
-        if (active) setLoading(false)
-      })
-    return () => {
-      active = false
+    if (initialData) {
+      setData(initialData)
+      setLoading(false)
+      const defaults = {}
+      for (const line of initialData.lines || []) {
+        defaults[line.line_id] = line.binding?.access_item_id || line.match?.access_item_id || ''
+      }
+      setSelectedByLine(defaults)
+      const firstIssue = initialData.lines?.find((line) => line.status !== 'pass')
+      setExpandedLineId(firstIssue?.line_id || initialData.lines?.[0]?.line_id || null)
+      return undefined
     }
-  }, [billId, billType])
+    let active = true
+    setData(null)
+    setLoading(true)
+    void load({ preserveExpanded: false }).finally(() => {
+      if (active) setLoading(false)
+    })
+    return () => { active = false }
+  }, [billId, billType, initialData, load])
 
   const summary = data?.summary
   const lineRows = data?.lines || []
@@ -169,6 +166,7 @@ export default function BillContractCheckPanelV2({ billType, billId }) {
     try {
       const result = await autoLockBillContractLines(billType, billId)
       setData(result.reconciliation)
+      onDataChange?.(result.reconciliation)
       const count = Number(result.locked_count || 0)
       setActionMessage(count ? `已锁定 ${count} 条高置信合同匹配。` : '当前没有新的高置信匹配需要锁定。')
     } catch (actionError) {

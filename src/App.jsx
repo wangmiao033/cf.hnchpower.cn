@@ -344,6 +344,18 @@ function App() {
     navigate(VIEWS.CHANNEL_RECON_EDIT)
   }, [navigate])
 
+  const prefetchBill360 = useCallback((billType, id) => {
+    if (!can('reconciliation.view')) return
+    void PAGE_LOADERS.bill360().catch(() => {})
+    const billId = String(id || '')
+    if (!billId) return
+    if (billType === 'channel') {
+      void prefetchEditRecord('channel', billId, async () => apiChannelRowToFrontend(await getChannelRecord(billId)))
+    } else {
+      void prefetchEditRecord('rd', billId, async () => apiRowToFrontend(await getReconciliationRecord(billId)))
+    }
+  }, [can])
+
   const openBill360 = useCallback((billType, id, initialRecord = null) => {
     if (!can('reconciliation.view')) {
       showToast('当前账号没有查看账单详情的权限', 'error')
@@ -363,7 +375,7 @@ function App() {
     setNavigationBlocker, clearNavigationBlocker,
     reconEditRecordId, reconReturnView, openReconciliationEdit,
     channelEditRecordId, channelReturnView, openChannelReconciliationEdit,
-    openBill360, invoiceEditId, openInvoiceEdit, navigateBankPaymentForReconciliation
+    openBill360, prefetchBill360, invoiceEditId, openInvoiceEdit, navigateBankPaymentForReconciliation
   }
 
   const handleHeaderSettingsChange = (s) => {
