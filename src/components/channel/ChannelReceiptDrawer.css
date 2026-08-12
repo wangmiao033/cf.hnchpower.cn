@@ -1,0 +1,45 @@
+.channel-receipt-account-card {
+  margin-top: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--border-color, #e5e7eb);
+  border-radius: 10px;
+  background: rgba(248, 250, 252, 0.92);
+}
+
+.channel-receipt-account-card__entity {
+  font-weight: 700;
+  color: var(--text-primary, #111827);
+  margin-bottom: 8px;
+}
+
+.channel-receipt-account-card__row {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 8px;
+  padding: 2px 0;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.channel-receipt-account-card__row span:first-child {
+  color: var(--text-secondary, #64748b);
+}
+
+.channel-receipt-account-card__row span:last-child {
+  color: var(--text-primary, #1f2937);
+  overflow-wrap: anywhere;
+}
+
+.channel-receipt-manual-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.channel-receipt-field-hint {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-secondary, #64748b);
+  line-height: 1.5;
+}
