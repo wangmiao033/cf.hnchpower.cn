@@ -62,17 +62,7 @@ function monthLines(record, month) {
 }
 
 function bestEditableRecord(records) {
-  const candidates = [...records].filter((record) => String(record?.status || '') !== 'cancelled')
-  return candidates.sort((left, right) => {
-    const score = (record) => {
-      const status = String(record?.status || 'pending')
-      if (status === 'pending' || status === 'draft' || !status) return 0
-      if (status === 'confirmed') return 1
-      if (status === 'completed') return 2
-      return 3
-    }
-    return score(left) - score(right)
-  })[0] || null
+  return [...records].find((record) => ['pending', 'draft', ''].includes(String(record?.status || 'pending'))) || null
 }
 
 function writeSeed(seed) {
@@ -156,6 +146,7 @@ export default function ChannelMonthCloseLauncher({
       const expectedBuiltCount = [...group.expectedGames.keys()].filter((key) => actualGames.has(key)).length
       const missingFlowLines = actualLines.filter((line) => resolveChannelFlowInputState(line) === CHANNEL_FLOW_INPUT_STATE.MISSING)
       const editableRecord = bestEditableRecord(records)
+      const viewRecord = editableRecord || records[0] || null
       const pendingBills = records.filter((record) => ['pending', 'draft', ''].includes(String(record?.status || 'pending'))).length
       return {
         ...group,
@@ -169,6 +160,7 @@ export default function ChannelMonthCloseLauncher({
         missingFlowGames: missingFlowLines.map((line) => String(line.gameName || '').trim()).filter(Boolean),
         records,
         editableRecord,
+        viewRecord,
         pendingBills
       }
     }).sort((left, right) => {
@@ -189,20 +181,35 @@ export default function ChannelMonthCloseLauncher({
   }, { expected: 0, built: 0, missing: 0, missingFlow: 0, pendingBills: 0 }), [groups])
 
   const openGroup = (group) => {
+    if (group.editableRecord?.id) {
+      const seed = {
+        version: 1,
+        month,
+        partnerName: group.partnerName,
+        channelName: group.channelName,
+        games: group.missingGames.length ? group.missingGames : group.expectedGameList,
+        source: 'month-close',
+        billId: String(group.editableRecord.id)
+      }
+      writeSeed(seed)
+      onOpenEdit?.(String(group.editableRecord.id))
+      return
+    }
+    if (group.viewRecord?.id) {
+      onNotice?.('本月账单已经确认/锁定，先打开查看；不会为了补清单自动新建重复账单。', 'info')
+      onOpenEdit?.(String(group.viewRecord.id))
+      return
+    }
     const seed = {
       version: 1,
       month,
       partnerName: group.partnerName,
       channelName: group.channelName,
-      games: group.missingGames.length ? group.missingGames : group.expectedGameList,
+      games: group.expectedGameList,
       source: 'month-close',
-      billId: group.editableRecord?.id ? String(group.editableRecord.id) : ''
+      billId: ''
     }
     writeSeed(seed)
-    if (group.editableRecord?.id) {
-      onOpenEdit?.(String(group.editableRecord.id))
-      return
-    }
     onNavigate?.(VIEWS.CHANNEL_RECON_CREATE)
   }
 
@@ -247,8 +254,13 @@ export default function ChannelMonthCloseLauncher({
                   : group.pendingBills
                     ? `${group.pendingBills} 张待核对`
                     : hasRisk
-                      ? '资料未齐'
+                      ? '已确认账单存在资料缺口'
                       : '本月已齐'
+                const actionLabel = !group.records.length
+                  ? '创建本月账单'
+                  : group.editableRecord
+                    ? '继续本月账单'
+                    : '查看已确认账单'
                 return (
                   <tr key={group.key} className={hasRisk ? 'has-risk' : ''}>
                     <td><strong>{group.channelName}</strong><small>{group.partnerName}</small><em>{group.contractList.slice(0, 2).join(' · ') || '合同清单'}</em></td>
@@ -257,7 +269,7 @@ export default function ChannelMonthCloseLauncher({
                     <td className={group.missingGames.length ? 'is-risk' : ''}><strong>{group.missingGames.length}</strong><small>{group.missingGames.join('、') || '—'}</small></td>
                     <td className={group.missingFlowCount ? 'is-warning' : ''}><strong>{group.missingFlowCount}</strong><small>{group.missingFlowGames.join('、') || '—'}</small></td>
                     <td><span className={hasRisk || group.pendingBills ? 'is-open' : 'is-done'}>{statusLabel}</span></td>
-                    <td>{hasRisk || group.pendingBills || !group.records.length ? <button type="button" onClick={() => openGroup(group)}>{group.records.length ? '继续本月账单' : '创建本月账单'}</button> : <span className="is-done-text">✓ 已齐</span>}</td>
+                    <td>{hasRisk || group.pendingBills || !group.records.length ? <button type="button" onClick={() => openGroup(group)}>{actionLabel}</button> : <span className="is-done-text">✓ 已齐</span>}</td>
                   </tr>
                 )
               })}
