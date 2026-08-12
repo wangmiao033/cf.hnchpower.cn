@@ -243,10 +243,10 @@ export default function ContractDrivenRdEntry(props) {
     })
     if (signature === lastRequestSignatureRef.current) return undefined
 
+    setRecommendationLoading(true)
+    setRecommendationError('')
     const timer = window.setTimeout(async () => {
       const seq = ++requestSeqRef.current
-      setRecommendationLoading(true)
-      setRecommendationError('')
       try {
         const result = await recommendRdContractRules({ partner_name: partner, lines: requestLines })
         if (seq !== requestSeqRef.current) return
