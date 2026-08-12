@@ -68,7 +68,6 @@ function payloadFlowInputState(line: Record<string, unknown>): Exclude<ChannelFl
   if (amount > 0) return 'entered'
   if (amount === 0) {
     if (rawState === 'confirmed_zero' || rawState === 'confirmed') return 'confirmed_zero'
-    if (!rawState) return 'confirmed_zero'
     return 'missing'
   }
   return 'missing'
