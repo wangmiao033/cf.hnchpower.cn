@@ -32,6 +32,15 @@ const CATEGORY_LABELS = {
   ...ANOMALY_CATEGORY_LABELS
 }
 
+const ACTION_LABELS = {
+  payment: '核对资金闭环',
+  invoice: '处理发票覆盖',
+  contract: '核对合同依据',
+  data: '补齐数据源',
+  quality: '补全账单资料',
+  duplicate: '核对重复记录'
+}
+
 function money(value) {
   if (value == null || value === '') return '-'
   const amount = Number(value || 0)
@@ -47,6 +56,17 @@ function sourceLabel(state) {
   if (state === 'ready') return '已读取'
   if (state === 'error') return '读取失败'
   return '读取中'
+}
+
+function nextActionLabel(item) {
+  return ACTION_LABELS[item?.category] || '核对并处理'
+}
+
+function relatedActionLabel(item) {
+  if (item?.category === 'invoice') return '去发票中心'
+  if (item?.category === 'contract') return '去合同中心'
+  if (item?.category === 'data') return '去数据中心'
+  return '去对应模块'
 }
 
 export default function AnomalyCenterPage() {
@@ -155,7 +175,8 @@ export default function AnomalyCenterPage() {
         item.billNumber,
         item.partnerName,
         item.gameName,
-        item.settlementMonth
+        item.settlementMonth,
+        nextActionLabel(item)
       ]
         .filter(Boolean)
         .join(' ')
@@ -181,8 +202,13 @@ export default function AnomalyCenterPage() {
     }
   }
 
-  const openBill = (item) => {
-    if (!item.billId) return
+  const openBillOverview = (item) => {
+    if (!item?.billId || !item?.billType) return
+    openBill360(item.billType, String(item.billId), null)
+  }
+
+  const editBill = (item) => {
+    if (!item?.billId) return
     if (item.billType === 'rd') {
       openReconciliationEdit(String(item.billId), VIEWS.ANOMALIES)
       return
@@ -203,13 +229,22 @@ export default function AnomalyCenterPage() {
     setActiveView(view)
   }
 
+  const shouldOfferEdit = (item) => Boolean(
+    item?.billId && (item.category === 'quality' || item.category === 'duplicate')
+  )
+
+  const shouldOfferRelated = (item) => Boolean(
+    item?.targetView &&
+    item.targetView !== (item.billType === 'rd' ? VIEWS.RECON_RD : VIEWS.RECON_CHANNEL)
+  )
+
   return (
     <PageContainer hideHeader className="anomaly-center-page">
       <section className="anomaly-head">
         <div>
-          <span>工作台 · 自动巡检 + 智能风险分析</span>
-          <h1>异常中心</h1>
-          <p>自动汇总收付款、发票、合同、QuickSDK、银行核销和经营风险；先巡检，再按风险优先级给出可解释诊断。</p>
+          <span>V4.0 · FINANCE ACTION INBOX</span>
+          <h1>待办与异常</h1>
+          <p>把合同、账单、发票、资金和数据问题转成可执行待办。先告诉你“下一步做什么”，再进入对应模块处理。</p>
         </div>
         <button type="button" onClick={loadSnapshot} disabled={loading}>
           {loading ? '巡检中…' : '重新巡检'}
@@ -218,19 +253,19 @@ export default function AnomalyCenterPage() {
 
       <section className="anomaly-summary" aria-label="异常统计">
         <button type="button" onClick={() => { setStatus('pending'); setSeverity('all'); setCategory('all') }}>
-          <span>待处理</span><strong>{summary.pending}</strong><small>全部未处理问题</small>
+          <span>待办总数</span><strong>{summary.pending}</strong><small>全部未处理事项</small>
         </button>
         <button type="button" className="is-critical" onClick={() => { setStatus('pending'); setSeverity('critical'); setCategory('all') }}>
-          <span>严重异常</span><strong>{summary.critical}</strong><small>优先处理</small>
+          <span>必须优先处理</span><strong>{summary.critical}</strong><small>会影响金额或闭环</small>
         </button>
         <button type="button" className="is-warning" onClick={() => { setStatus('pending'); setSeverity('warning'); setCategory('all') }}>
-          <span>待处理风险</span><strong>{summary.warning}</strong><small>需要核对</small>
+          <span>需要处理</span><strong>{summary.warning}</strong><small>建议本期解决</small>
         </button>
         <button type="button" className="is-info" onClick={() => { setStatus('pending'); setSeverity('info'); setCategory('all') }}>
-          <span>提醒</span><strong>{summary.info}</strong><small>建议关注</small>
+          <span>资料提醒</span><strong>{summary.info}</strong><small>不直接阻断结算</small>
         </button>
         <button type="button" onClick={() => { setStatus('resolved'); setSeverity('all'); setCategory('all') }}>
-          <span>已解决</span><strong>{summary.resolved}</strong><small>历史处理</small>
+          <span>已解决</span><strong>{summary.resolved}</strong><small>保留处理历史</small>
         </button>
       </section>
 
@@ -278,7 +313,7 @@ export default function AnomalyCenterPage() {
             type="search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="账单编号、客户、游戏或问题"
+            placeholder="账单、客户、游戏、问题或下一步动作"
             disabled={category === 'contract_difference'}
           />
         </label>
@@ -302,18 +337,18 @@ export default function AnomalyCenterPage() {
         <section className="anomaly-panel">
           <div className="anomaly-panel-head">
             <div>
-              <h2>巡检结果</h2>
-              <p>当前筛选显示 {visible.length} 条，共识别 {anomalies.length} 条。</p>
+              <h2>财务待办清单</h2>
+              <p>当前筛选 {visible.length} 条；每条事项都给出下一步动作，不需要再猜应该去哪个页面。</p>
             </div>
-            <span>{loading ? '正在更新' : '最近巡检完成'}</span>
+            <span>{loading ? '正在更新' : `共识别 ${anomalies.length} 条`}</span>
           </div>
 
           <div className="anomaly-table-wrap">
             <table className="anomaly-table">
               <thead>
                 <tr>
-                  <th>级别</th>
-                  <th>问题</th>
+                  <th>优先级</th>
+                  <th>问题 / 下一步</th>
                   <th>关联对象</th>
                   <th>账期</th>
                   <th className="is-right">影响金额</th>
@@ -325,7 +360,7 @@ export default function AnomalyCenterPage() {
                 {visible.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="anomaly-empty">
-                      {loading ? '正在巡检数据…' : status === 'pending' ? '当前筛选范围没有待处理异常。' : '当前筛选范围暂无记录。'}
+                      {loading ? '正在巡检数据…' : status === 'pending' ? '当前筛选范围没有待处理事项。' : '当前筛选范围暂无记录。'}
                     </td>
                   </tr>
                 ) : visible.map((item) => (
@@ -337,6 +372,7 @@ export default function AnomalyCenterPage() {
                     <td className="anomaly-problem">
                       <strong>{item.title}</strong>
                       <span>{item.detail}</span>
+                      <span className="anomaly-next-action">下一步：{nextActionLabel(item)}</span>
                     </td>
                     <td className="anomaly-object">
                       <strong>{item.billNumber || item.partnerName || '系统数据'}</strong>
@@ -347,10 +383,11 @@ export default function AnomalyCenterPage() {
                     <td><span className={`anomaly-status is-${item.status}`}>{STATUS_LABELS[item.status] || item.status}</span></td>
                     <td>
                       <div className="anomaly-actions">
-                        {item.billId ? <button type="button" onClick={() => openBill(item)}>查看账单</button> : null}
-                        {item.targetView && item.targetView !== (item.billType === 'rd' ? VIEWS.RECON_RD : VIEWS.RECON_CHANNEL) ? (
-                          <button type="button" onClick={() => openRelated(item)}>去处理</button>
+                        {item.billId ? <button type="button" className="is-primary-action" onClick={() => openBillOverview(item)}>360°核对</button> : null}
+                        {shouldOfferRelated(item) ? (
+                          <button type="button" onClick={() => openRelated(item)}>{relatedActionLabel(item)}</button>
                         ) : null}
+                        {shouldOfferEdit(item) ? <button type="button" onClick={() => editBill(item)}>修复账单</button> : null}
                         {item.status === 'pending' ? (
                           <>
                             <button type="button" disabled={updatingId === item.id} onClick={() => updateStatus(item, 'resolved')}>已解决</button>
