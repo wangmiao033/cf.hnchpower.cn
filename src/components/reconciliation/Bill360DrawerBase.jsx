@@ -29,6 +29,8 @@ import {
   summarizeBill360
 } from '@/domain/reconciliation/bill360.js'
 import BillOperationTimeline from './BillOperationTimeline.jsx'
+import BillClosureRail from './BillClosureRail.jsx'
+import { buildBillClosureStatus } from '@/domain/reconciliation/closureStatus.js'
 import './Bill360Drawer.css'
 
 const TABS = [
@@ -253,6 +255,16 @@ function Bill360Drawer({ target, onClose }) {
     : summary.cashDirection === 'receivable'
       ? '收款进度'
       : '付款进度'
+  const closure = useMemo(
+    () => buildBillClosureStatus({ record, summary, invoiceSummary, contracts }),
+    [contracts, invoiceSummary, record, summary]
+  )
+  const openClosureStage = (stage) => {
+    if (stage === 'contract') setActiveTab('contract')
+    else if (stage === 'invoice') setActiveTab('invoice')
+    else if (stage === 'funding') setActiveTab('payment')
+    else setActiveTab('overview')
+  }
 
   return (
     <div className="bill360-backdrop" role="presentation" onMouseDown={(event) => {
@@ -287,6 +299,7 @@ function Bill360Drawer({ target, onClose }) {
           </div>
         ) : (
           <>
+            <BillClosureRail closure={closure} onStage={openClosureStage} />
             <section className="bill360-kpis">
               <article>
                 <span>结算金额</span>

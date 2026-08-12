@@ -17,6 +17,7 @@ import {
 } from '@/lib/api/reconciliation.ts'
 import { getQuickSdkGameFlow } from '@/lib/api/quicksdk.ts'
 import { transitionBillLifecycle } from '@/lib/api/billLifecycle.ts'
+import { listFundingClosureStatus } from '@/domain/reconciliation/closureStatus.js'
 import { archiveBill, getBillArchiveSnapshot, unarchiveBill } from '@/lib/api/billArchive.ts'
 import './CoreReconciliationPages.css'
 import '@/components/reconciliation/reconciliation-admin.css'
@@ -551,7 +552,7 @@ function CoreReconciliationPage() {
                 <th className="core-recon-align-right">分成比例</th>
                 <th className="core-recon-align-right">结算金额</th>
                 <th className="core-recon-align-right">已付 / 未付</th>
-                <th>状态</th>
+                <th>闭环状态</th>
                 <th>操作</th>
               </tr>
             </thead>
@@ -570,6 +571,12 @@ function CoreReconciliationPage() {
                   const isCancelled = String(row.status || '') === 'cancelled'
                   const archived = archivedIds.has(String(row.id))
                   const canArchive = eligibleIds.has(String(row.id))
+                  const closure = listFundingClosureStatus({
+                    amount: recordSettlementAmount(row),
+                    paid,
+                    lifecycleStatus: row.status,
+                    archived
+                  })
                   return (
                     <tr
                       key={row.id}
@@ -617,13 +624,10 @@ function CoreReconciliationPage() {
                         <small style={{ display: 'block', marginTop: 2, color: '#8a98aa', fontSize: 10 }}>未付 {money(unpaid)}</small>
                       </td>
                       <td>
-                        {archived ? (
-                          <span className="core-recon-status core-recon-status--completed">已归档</span>
-                        ) : (
-                          <span className={`core-recon-status core-recon-status--${row.status || 'pending'}`}>
-                            {STATUS_LABELS[row.status] || row.status || '待处理'}
-                          </span>
-                        )}
+                        <span className={`v4-list-closure is-${closure.tone}`}>
+                          <strong>{closure.label}</strong>
+                          <small>{closure.detail} · {STATUS_LABELS[row.status] || row.status || '待处理'}</small>
+                        </span>
                       </td>
                       <td>
                         <div className="core-recon-row-actions">

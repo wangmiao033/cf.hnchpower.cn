@@ -18,6 +18,7 @@ import {
 import { parseChannelStatementWorkbook } from '@/domain/channel/channelStatementImport.js'
 import { getChannelBillNumber } from '@/utils/channelBillNumber.js'
 import { transitionBillLifecycle } from '@/lib/api/billLifecycle.ts'
+import { listFundingClosureStatus } from '@/domain/reconciliation/closureStatus.js'
 import { archiveBill, getBillArchiveSnapshot, unarchiveBill } from '@/lib/api/billArchive.ts'
 import '@/components/reconciliation/reconciliation-admin.css'
 import './CoreReconciliationPages.css'
@@ -504,7 +505,7 @@ function CoreChannelReconciliationPage() {
                 <th><label className="core-recon-select-all"><input ref={(node) => { if (node) node.indeterminate = partiallyVisibleSelected }} type="checkbox" aria-label="全选当前筛选结果" checked={allVisibleSelected} disabled={!selectableRows.length || isWorking} onChange={toggleSelectAll} /><span>结算周期</span></label></th>
                 <th>编号</th><th>渠道</th><th>合作方</th><th>产品</th>
                 <th className="core-recon-align-right">计费流水</th><th className="core-recon-align-right">分成金额</th>
-                <th className="core-recon-align-right">渠道应收</th><th className="core-recon-align-right">已收 / 未收</th><th>状态</th><th>操作</th>
+                <th className="core-recon-align-right">渠道应收</th><th className="core-recon-align-right">已收 / 未收</th><th>闭环状态</th><th>操作</th>
               </tr>
             </thead>
             <tbody>
@@ -517,6 +518,12 @@ function CoreChannelReconciliationPage() {
                 const cancelled = String(row.status || '') === 'cancelled'
                 const archived = archivedIds.has(String(row.id))
                 const canArchive = eligibleIds.has(String(row.id))
+                const closure = listFundingClosureStatus({
+                  amount: totals.settlementAmount,
+                  paid: received,
+                  lifecycleStatus: row.status,
+                  archived
+                })
                 const gameText = games.join('、')
                 const periodText = channelPeriodLabel(row)
                 return (
@@ -533,7 +540,7 @@ function CoreChannelReconciliationPage() {
                     <td className="core-recon-money">{money(sumChannelNumericLines(row, 'shareAmount'))}</td>
                     <td className="core-recon-money core-recon-money--settlement">{money(totals.settlementAmount)}</td>
                     <td className="core-recon-money core-recon-money--received"><strong style={{ display: 'block', fontWeight: 700 }}>{money(received)}</strong><small style={{ display: 'block', marginTop: 2, color: '#8a98aa', fontSize: 10 }}>未收 {money(unpaid)}</small></td>
-                    <td>{archived ? <span className="core-recon-status core-recon-status--completed">已归档</span> : <span className={`core-recon-status core-recon-status--${row.status || 'pending'}`}>{STATUS_LABELS[row.status] || row.status || '待处理'}</span>}</td>
+                    <td><span className={`v4-list-closure is-${closure.tone}`}><strong>{closure.label}</strong><small>{closure.detail} · {STATUS_LABELS[row.status] || row.status || '待处理'}</small></span></td>
                     <td><div className="core-recon-row-actions">
                       <button type="button" onClick={() => openBill360('channel', String(row.id), row)}>360°</button>
                       {archived ? (
