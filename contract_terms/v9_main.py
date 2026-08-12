@@ -16,12 +16,14 @@ try:
     from .v4_main import _database_url, _require_permission
     from .extended_main import _candidate_rows
     from .v2_main import _ensure_v2_tables
+    from .matcher import score_candidate
     from .rd_rule_recommender import recommend_rd_rules
 except ImportError:
     from v8_main import app as _v8_app, reconcile_bill_contract_v3_compat as _v8_reconcile
     from v4_main import _database_url, _require_permission
     from extended_main import _candidate_rows
     from v2_main import _ensure_v2_tables
+    from matcher import score_candidate
     from rd_rule_recommender import recommend_rd_rules
 
 
@@ -87,7 +89,10 @@ def _metadata_payload(value: object) -> list[dict]:
         if not isinstance(raw, dict):
             continue
         item = dict(raw)
-        item["line_index"] = int(item.get("line_index") or 0)
+        try:
+            item["line_index"] = int(item.get("line_index") or 0)
+        except (TypeError, ValueError):
+            item["line_index"] = 0
         if "override_reason" in item:
             item["override_reason"] = _text(item.get("override_reason"), 1000)
         out.append(item)
@@ -136,7 +141,7 @@ def _finalize_pending_entry(
 
     bill = conn.execute(
         """
-        SELECT id, statement_no
+        SELECT id, statement_no, settlement_month, partner_name
         FROM reconciliation_records
         WHERE statement_no = %s
         """,
@@ -156,6 +161,7 @@ def _finalize_pending_entry(
     ).fetchall()
     metadata = list(pending.get("metadata_json") or [])
     _ensure_v2_tables(conn)
+    candidate_map = {str(row.get("access_item_id") or ""): row for row in _candidate_rows(conn)}
 
     finalized_metadata: list[dict] = []
     for position, source in enumerate(metadata):
@@ -173,6 +179,29 @@ def _finalize_pending_entry(
 
         access_item_id = _text(item.get("access_item_id"), 128)
         if not line_row or not access_item_id or not bool(item.get("binding_allowed")):
+            continue
+        candidate = candidate_map.get(access_item_id)
+        scored = score_candidate(
+            {
+                "partner_name": bill.get("partner_name") or "",
+                "channel_name": "",
+                "settlement_month": bill.get("settlement_month") or "",
+            },
+            {
+                "game_name": line_row.get("game_name") or "",
+                "settlement_cycle": line_row.get("settlement_cycle") or bill.get("settlement_month") or "",
+            },
+            candidate or {},
+        )
+        safe_binding = (
+            candidate is not None
+            and scored.get("confidence") == "high"
+            and scored.get("authorization_status") == "covered"
+            and float(scored.get("score") or 0) >= 82
+        )
+        if not safe_binding:
+            item["binding_allowed"] = False
+            item["binding_rejected_reason"] = "保存后复核未达到自动锁定阈值，未写入合同绑定"
             continue
         conn.execute(
             """
@@ -245,7 +274,7 @@ def recommend_rd_rule(request: Request, payload: dict) -> dict:
     with psycopg.connect(_database_url(), connect_timeout=15, row_factory=dict_row) as conn:
         candidates = _candidate_rows(conn)
         result = recommend_rd_rules(partner_name, lines, candidates)
-    return {**result, "generated_at": datetime.now(timezone.utc).isoformat()}
+    return {**result, "partner_name": partner_name, "generated_at": datetime.now(timezone.utc).isoformat()}
 
 
 @app.post("/api/contract-terms/rd-entry/prepare")
