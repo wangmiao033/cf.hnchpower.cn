@@ -42,6 +42,7 @@ const PAGE_LOADERS = Object.freeze({
   reconciliationCreate: () => import('./pages/ReconciliationCreatePage.jsx'),
   reconciliationEdit: () => import('./pages/ReconciliationEditPage.jsx'),
   channelReconciliation: () => import('./pages/CoreChannelReconciliationPage.jsx'),
+  channelMonthClose: () => import('./pages/ChannelMonthClosePage.jsx'),
   channelReconciliationCreate: () => import('./pages/ChannelReconciliationCreatePage.jsx'),
   channelReconciliationEdit: () => import('./pages/ChannelReconciliationEditPage.jsx'),
   contracts: () => import('./pages/ContractManagementPage.jsx'),
@@ -69,6 +70,7 @@ const RdReconciliationProgressPage = lazy(PAGE_LOADERS.reconciliationProgress)
 const ReconciliationCreatePage = lazy(PAGE_LOADERS.reconciliationCreate)
 const ReconciliationEditPage = lazy(PAGE_LOADERS.reconciliationEdit)
 const CoreChannelReconciliationPage = lazy(PAGE_LOADERS.channelReconciliation)
+const ChannelMonthClosePage = lazy(PAGE_LOADERS.channelMonthClose)
 const ChannelReconciliationCreatePage = lazy(PAGE_LOADERS.channelReconciliationCreate)
 const ChannelReconciliationEditPage = lazy(PAGE_LOADERS.channelReconciliationEdit)
 const ContractManagementPage = lazy(PAGE_LOADERS.contracts)
@@ -91,6 +93,7 @@ const RECON_DATA_VIEWS = new Set([
   VIEWS.RECON_CREATE,
   VIEWS.RECON_EDIT,
   VIEWS.RECON_CHANNEL,
+  VIEWS.RECON_MONTH_CLOSE,
   VIEWS.CHANNEL_RECON_CREATE,
   VIEWS.CHANNEL_RECON_EDIT,
   VIEWS.BANK_RECONCILIATION,
@@ -398,6 +401,7 @@ function App() {
       case VIEWS.RECON_CREATE: return <ReconciliationCreatePage />
       case VIEWS.RECON_EDIT: return <ReconciliationEditPage />
       case VIEWS.RECON_CHANNEL: return <CoreChannelReconciliationPage />
+      case VIEWS.RECON_MONTH_CLOSE: return <ChannelMonthClosePage />
       case VIEWS.CHANNEL_RECON_CREATE: return <ChannelReconciliationCreatePage />
       case VIEWS.CHANNEL_RECON_EDIT: return <ChannelReconciliationEditPage />
       case VIEWS.CONTRACTS: return <ContractManagementPage />
