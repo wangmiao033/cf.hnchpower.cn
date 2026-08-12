@@ -208,22 +208,29 @@ def recommend_rd_rules(
     auto_lines = [item for item in results if item.get("auto_apply") and item.get("recommended")]
     header = None
     if auto_lines:
-        fee_values = [item["recommended"].get("channel_fee_rate") for item in auto_lines]
-        fees = {round(float(value), 4) for value in fee_values if value is not None}
-        if len(fees) == 1 and all(value is not None for value in fee_values):
-            header = {"channel_fee_rate": next(iter(fees)), "compatible": True}
-        elif any(value is None for value in fee_values):
+        if len(auto_lines) != len(results):
             header = {
                 "channel_fee_rate": None,
                 "compatible": True,
-                "message": "部分合同未结构化通道费率，保留当前整单通道费并提示人工复核。",
+                "message": "存在未自动匹配的研发明细，整单通道费暂不自动覆盖。",
             }
         else:
-            header = {
-                "channel_fee_rate": None,
-                "compatible": False,
-                "message": "同一研发账单内匹配到不同合同通道费率，请拆分账单后再保存。",
-            }
+            fee_values = [item["recommended"].get("channel_fee_rate") for item in auto_lines]
+            fees = {round(float(value), 4) for value in fee_values if value is not None}
+            if len(fees) == 1 and all(value is not None for value in fee_values):
+                header = {"channel_fee_rate": next(iter(fees)), "compatible": True}
+            elif any(value is None for value in fee_values):
+                header = {
+                    "channel_fee_rate": None,
+                    "compatible": True,
+                    "message": "部分合同未结构化通道费率，保留当前整单通道费并提示人工复核。",
+                }
+            else:
+                header = {
+                    "channel_fee_rate": None,
+                    "compatible": False,
+                    "message": "同一研发账单内匹配到不同合同通道费率，请拆分账单后再保存。",
+                }
 
     return {
         "version": "contract-rd-entry-v1",
