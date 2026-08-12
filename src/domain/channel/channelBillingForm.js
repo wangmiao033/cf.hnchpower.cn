@@ -22,12 +22,14 @@ export const initialHeaderForm = {
 export function initialLineItem() {
   return {
     id: '', settlementCycle: '', gameName: '', flow: '', discountFactor: '1', voucherCost: '', noWorryCost: '', refundCost: '', testCost: '', welfareCost: '', coinCost: '',
-    shareRate: '30', taxRate: '5', gatewayCost: '', platformSettlementAmount: '', systemSettlementAmount: '', settlementDifference: '', validationStatus: 'unvalidated', settlementAmount: ''
+    shareRate: '30', taxRate: '5', gatewayCost: '', platformSettlementAmount: '', systemSettlementAmount: '', settlementDifference: '', validationStatus: 'unvalidated', settlementAmount: '',
+    settlementRuleCode: '', channelFeeMode: '', channelFeeRate: '', taxMode: '', validationTolerance: ''
   }
 }
 
 function round2(value) { return Math.round((Number(value) + Number.EPSILON) * 100) / 100 }
 function optionalNumber(value) { if (value === '' || value == null) return null; const n = Number(value); return Number.isFinite(n) ? n : null }
+function hasLineRuleValue(value) { return value !== undefined && value !== null && String(value).trim() !== '' }
 
 export function detectChannelRulePreset(name) {
   const text = String(name || '').replace(/\s/g, '').toLowerCase()
@@ -50,6 +52,24 @@ export function applyTargetedChannelRule(header = initialHeaderForm) {
   const preset = detectChannelRulePreset(header.partnerName || header.channelName)
   if (preset !== XIAN_WEIZHEN_9917_RULE) return header
   return applyChannelRulePreset(header, XIAN_WEIZHEN_9917_RULE)
+}
+
+export function resolveChannelLineRuleHeader(data = {}, header = initialHeaderForm) {
+  const effectiveHeader = applyTargetedChannelRule(header)
+  if (effectiveHeader.settlementRuleCode === XIAN_WEIZHEN_9917_RULE) return effectiveHeader
+
+  const hasLineRule = ['settlementRuleCode', 'channelFeeMode', 'channelFeeRate', 'taxMode', 'validationTolerance']
+    .some((key) => hasLineRuleValue(data?.[key]))
+  if (!hasLineRule) return effectiveHeader
+
+  return {
+    ...effectiveHeader,
+    settlementRuleCode: hasLineRuleValue(data.settlementRuleCode) ? data.settlementRuleCode : effectiveHeader.settlementRuleCode,
+    channelFeeMode: hasLineRuleValue(data.channelFeeMode) ? data.channelFeeMode : effectiveHeader.channelFeeMode,
+    channelFeeRate: hasLineRuleValue(data.channelFeeRate) ? data.channelFeeRate : effectiveHeader.channelFeeRate,
+    taxMode: hasLineRuleValue(data.taxMode) ? data.taxMode : effectiveHeader.taxMode,
+    validationTolerance: hasLineRuleValue(data.validationTolerance) ? data.validationTolerance : effectiveHeader.validationTolerance
+  }
 }
 
 export function ruleFormulaText(header) {
@@ -100,12 +120,13 @@ function deductionFieldsForHeader(header = initialHeaderForm) {
 }
 
 export function calculateBillingAmount(data, header = initialHeaderForm) {
-  return effectiveLineFlowFromFormData(data) - deductionFieldsForHeader(header).reduce((sum, key) => sum + Number(data[key] || 0), 0)
+  const effectiveHeader = resolveChannelLineRuleHeader(data, header)
+  return effectiveLineFlowFromFormData(data) - deductionFieldsForHeader(effectiveHeader).reduce((sum, key) => sum + Number(data[key] || 0), 0)
 }
 export function calculateShareAmount(data, header = initialHeaderForm) { return calculateBillingAmount(data, header) * Number(data.shareRate || 0) / 100 }
 
 function calculateSettlementRaw(data, header = initialHeaderForm) {
-  const effectiveHeader = applyTargetedChannelRule(header)
+  const effectiveHeader = resolveChannelLineRuleHeader(data, header)
   const shareAmount = calculateShareAmount(data, effectiveHeader)
   const feeMode = effectiveHeader.channelFeeMode || 'fixed'; const taxMode = effectiveHeader.taxMode || 'share'
   let afterFee = shareAmount
@@ -118,7 +139,7 @@ function calculateSettlementRaw(data, header = initialHeaderForm) {
 }
 
 export function calculateSettlementDetails(data, header = initialHeaderForm) {
-  const effectiveHeader = applyTargetedChannelRule(header)
+  const effectiveHeader = resolveChannelLineRuleHeader(data, header)
   const system = round2(calculateSettlementRaw(data, effectiveHeader))
   const platform = optionalNumber(data.platformSettlementAmount)
   const difference = platform == null ? null : round2(system - platform)
@@ -129,13 +150,14 @@ export function calculateSettlementDetails(data, header = initialHeaderForm) {
 export function calculateSettlement(data, header = initialHeaderForm) { return calculateSettlementRaw(data, header) }
 
 export function buildLineRecordFromForm(fd, headerForm = initialHeaderForm) {
-  const effectiveHeader = applyTargetedChannelRule(headerForm)
+  const effectiveHeader = resolveChannelLineRuleHeader(fd, headerForm)
   const details = calculateSettlementDetails(fd, effectiveHeader)
   return {
     settlementCycle: normalizeChannelSettlementCycle(fd.settlementCycle || fd.settlementMonth), gameName: fd.gameName != null ? String(fd.gameName) : '',
     flow: Number(fd.flow || 0), discountFactor: resolveDiscountFactor(fd), effectiveFlow: effectiveLineFlowFromFormData(fd),
     voucherCost: Number(fd.voucherCost || 0), noWorryCost: Number(fd.noWorryCost || 0), refundCost: Number(fd.refundCost || 0), testCost: Number(fd.testCost || 0), welfareCost: Number(fd.welfareCost || 0), coinCost: Number(fd.coinCost || 0),
     billingAmount: round2(calculateBillingAmount(fd, effectiveHeader)), shareRate: Number(fd.shareRate || 0), shareAmount: round2(calculateShareAmount(fd, effectiveHeader)), taxRate: Number(fd.taxRate || 0), gatewayCost: Number(fd.gatewayCost || 0),
+    settlementRuleCode: effectiveHeader.settlementRuleCode || '', channelFeeMode: effectiveHeader.channelFeeMode || '', channelFeeRate: parseOptionalNum(effectiveHeader.channelFeeRate), taxMode: effectiveHeader.taxMode || '', validationTolerance: Math.max(0, Number(effectiveHeader.validationTolerance || 0.05)),
     ...details
   }
 }
@@ -174,7 +196,8 @@ export function recordToHeaderForm(record) {
 
 export function recordToLineForms(record) {
   return getChannelLineItems(record).map((line) => ({
-    id: line.id != null ? String(line.id) : '', settlementCycle: normalizeChannelSettlementCycle(line.settlementCycle || record.settlementMonth), gameName: line.gameName || '', flow: String(line.flow ?? ''), discountFactor: line.discountFactor != null ? String(line.discountFactor) : '1', voucherCost: String(line.voucherCost ?? ''), noWorryCost: String(line.noWorryCost ?? ''), refundCost: String(line.refundCost ?? ''), testCost: String(line.testCost ?? ''), welfareCost: String(line.welfareCost ?? ''), coinCost: String(line.coinCost ?? ''), shareRate: String(line.shareRate ?? '30'), taxRate: String(line.taxRate ?? '5'), gatewayCost: String(line.gatewayCost ?? ''), platformSettlementAmount: line.platformSettlementAmount != null ? String(line.platformSettlementAmount) : '', systemSettlementAmount: String(line.systemSettlementAmount ?? ''), settlementDifference: line.settlementDifference != null ? String(line.settlementDifference) : '', validationStatus: line.validationStatus || 'unvalidated', settlementAmount: String(line.settlementAmount ?? '')
+    id: line.id != null ? String(line.id) : '', settlementCycle: normalizeChannelSettlementCycle(line.settlementCycle || record.settlementMonth), gameName: line.gameName || '', flow: String(line.flow ?? ''), discountFactor: line.discountFactor != null ? String(line.discountFactor) : '1', voucherCost: String(line.voucherCost ?? ''), noWorryCost: String(line.noWorryCost ?? ''), refundCost: String(line.refundCost ?? ''), testCost: String(line.testCost ?? ''), welfareCost: String(line.welfareCost ?? ''), coinCost: String(line.coinCost ?? ''), shareRate: String(line.shareRate ?? '30'), taxRate: String(line.taxRate ?? '5'), gatewayCost: String(line.gatewayCost ?? ''), platformSettlementAmount: line.platformSettlementAmount != null ? String(line.platformSettlementAmount) : '', systemSettlementAmount: String(line.systemSettlementAmount ?? ''), settlementDifference: line.settlementDifference != null ? String(line.settlementDifference) : '', validationStatus: line.validationStatus || 'unvalidated', settlementAmount: String(line.settlementAmount ?? ''),
+    settlementRuleCode: line.settlementRuleCode || '', channelFeeMode: line.channelFeeMode || '', channelFeeRate: line.channelFeeRate != null ? String(line.channelFeeRate) : '', taxMode: line.taxMode || '', validationTolerance: line.validationTolerance != null ? String(line.validationTolerance) : ''
   }))
 }
 export function recordToFormData(record) { const h = recordToHeaderForm(record); const first = recordToLineForms(record)[0] || initialLineItem(); return { ...h, ...first } }
