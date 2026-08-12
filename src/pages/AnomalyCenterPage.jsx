@@ -3,6 +3,7 @@ import { useAppState } from '@/app/AppStateContext.jsx'
 import { VIEWS } from '@/app/routes.js'
 import PageContainer from '@/components/layout/PageContainer.jsx'
 import AnomalyAiInsightPanel from '@/components/anomalies/AnomalyAiInsightPanel.jsx'
+import ContractDifferenceLedgerPanel from '@/components/exceptions/ContractDifferenceLedgerPanel.jsx'
 import {
   ANOMALY_CATEGORY_LABELS,
   buildReconciliationAnomalies,
@@ -24,6 +25,11 @@ const STATUS_LABELS = {
   pending: '待处理',
   ignored: '已忽略',
   resolved: '已解决'
+}
+
+const CATEGORY_LABELS = {
+  contract_difference: '合同差异',
+  ...ANOMALY_CATEGORY_LABELS
 }
 
 function money(value) {
@@ -48,6 +54,7 @@ export default function AnomalyCenterPage() {
     recon,
     showToast,
     setActiveView,
+    openBill360,
     openReconciliationEdit,
     openChannelReconciliationEdit
   } = useAppState()
@@ -72,6 +79,7 @@ export default function AnomalyCenterPage() {
   const [category, setCategory] = useState('all')
   const [status, setStatus] = useState('pending')
   const [query, setQuery] = useState('')
+  const [ledgerRefresh, setLedgerRefresh] = useState(0)
 
   const billRefs = useMemo(
     () => [
@@ -112,6 +120,7 @@ export default function AnomalyCenterPage() {
       quicksdk: quickSdkResult.status === 'fulfilled' ? 'ready' : 'error',
       status: statusResult.status === 'fulfilled' ? 'ready' : 'error'
     })
+    setLedgerRefresh((value) => value + 1)
     setLoading(false)
   }, [billRefsKey])
 
@@ -133,6 +142,7 @@ export default function AnomalyCenterPage() {
   const summary = useMemo(() => summarizeAnomalies(anomalies), [anomalies])
 
   const visible = useMemo(() => {
+    if (category === 'contract_difference') return []
     const keyword = query.trim().toLowerCase()
     return anomalies.filter((item) => {
       if (severity !== 'all' && item.severity !== severity) return false
@@ -182,6 +192,11 @@ export default function AnomalyCenterPage() {
     }
   }
 
+  const openDifferenceBill = (item) => {
+    if (!item?.bill_id) return
+    openBill360(item.bill_type, String(item.bill_id), null)
+  }
+
   const openRelated = (item) => {
     const view = item.targetView
     if (!view) return
@@ -202,19 +217,19 @@ export default function AnomalyCenterPage() {
       </section>
 
       <section className="anomaly-summary" aria-label="异常统计">
-        <button type="button" onClick={() => { setStatus('pending'); setSeverity('all') }}>
+        <button type="button" onClick={() => { setStatus('pending'); setSeverity('all'); setCategory('all') }}>
           <span>待处理</span><strong>{summary.pending}</strong><small>全部未处理问题</small>
         </button>
-        <button type="button" className="is-critical" onClick={() => { setStatus('pending'); setSeverity('critical') }}>
+        <button type="button" className="is-critical" onClick={() => { setStatus('pending'); setSeverity('critical'); setCategory('all') }}>
           <span>严重异常</span><strong>{summary.critical}</strong><small>优先处理</small>
         </button>
-        <button type="button" className="is-warning" onClick={() => { setStatus('pending'); setSeverity('warning') }}>
+        <button type="button" className="is-warning" onClick={() => { setStatus('pending'); setSeverity('warning'); setCategory('all') }}>
           <span>待处理风险</span><strong>{summary.warning}</strong><small>需要核对</small>
         </button>
-        <button type="button" className="is-info" onClick={() => { setStatus('pending'); setSeverity('info') }}>
+        <button type="button" className="is-info" onClick={() => { setStatus('pending'); setSeverity('info'); setCategory('all') }}>
           <span>提醒</span><strong>{summary.info}</strong><small>建议关注</small>
         </button>
-        <button type="button" onClick={() => { setStatus('resolved'); setSeverity('all') }}>
+        <button type="button" onClick={() => { setStatus('resolved'); setSeverity('all'); setCategory('all') }}>
           <span>已解决</span><strong>{summary.resolved}</strong><small>历史处理</small>
         </button>
       </section>
@@ -232,7 +247,7 @@ export default function AnomalyCenterPage() {
       <section className="anomaly-toolbar">
         <label>
           <span>状态</span>
-          <select value={status} onChange={(event) => setStatus(event.target.value)}>
+          <select value={status} onChange={(event) => setStatus(event.target.value)} disabled={category === 'contract_difference'}>
             <option value="pending">待处理</option>
             <option value="resolved">已解决</option>
             <option value="ignored">已忽略</option>
@@ -241,7 +256,7 @@ export default function AnomalyCenterPage() {
         </label>
         <label>
           <span>级别</span>
-          <select value={severity} onChange={(event) => setSeverity(event.target.value)}>
+          <select value={severity} onChange={(event) => setSeverity(event.target.value)} disabled={category === 'contract_difference'}>
             <option value="all">全部级别</option>
             <option value="critical">严重</option>
             <option value="warning">待处理</option>
@@ -252,7 +267,7 @@ export default function AnomalyCenterPage() {
           <span>类型</span>
           <select value={category} onChange={(event) => setCategory(event.target.value)}>
             <option value="all">全部类型</option>
-            {Object.entries(ANOMALY_CATEGORY_LABELS).map(([value, label]) => (
+            {Object.entries(CATEGORY_LABELS).map(([value, label]) => (
               <option key={value} value={value}>{label}</option>
             ))}
           </select>
@@ -264,6 +279,7 @@ export default function AnomalyCenterPage() {
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="账单编号、客户、游戏或问题"
+            disabled={category === 'contract_difference'}
           />
         </label>
         <button type="button" className="anomaly-reset" onClick={() => {
@@ -276,74 +292,82 @@ export default function AnomalyCenterPage() {
         </button>
       </section>
 
-      <section className="anomaly-panel">
-        <div className="anomaly-panel-head">
-          <div>
-            <h2>巡检结果</h2>
-            <p>当前筛选显示 {visible.length} 条，共识别 {anomalies.length} 条。</p>
-          </div>
-          <span>{loading ? '正在更新' : '最近巡检完成'}</span>
-        </div>
+      <ContractDifferenceLedgerPanel
+        visible={category === 'all' || category === 'contract_difference'}
+        onOpenBill={openDifferenceBill}
+        refreshToken={ledgerRefresh}
+      />
 
-        <div className="anomaly-table-wrap">
-          <table className="anomaly-table">
-            <thead>
-              <tr>
-                <th>级别</th>
-                <th>问题</th>
-                <th>关联对象</th>
-                <th>账期</th>
-                <th className="is-right">影响金额</th>
-                <th>状态</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              {visible.length === 0 ? (
+      {category !== 'contract_difference' ? (
+        <section className="anomaly-panel">
+          <div className="anomaly-panel-head">
+            <div>
+              <h2>巡检结果</h2>
+              <p>当前筛选显示 {visible.length} 条，共识别 {anomalies.length} 条。</p>
+            </div>
+            <span>{loading ? '正在更新' : '最近巡检完成'}</span>
+          </div>
+
+          <div className="anomaly-table-wrap">
+            <table className="anomaly-table">
+              <thead>
                 <tr>
-                  <td colSpan={7} className="anomaly-empty">
-                    {loading ? '正在巡检数据…' : status === 'pending' ? '当前筛选范围没有待处理异常。' : '当前筛选范围暂无记录。'}
-                  </td>
+                  <th>级别</th>
+                  <th>问题</th>
+                  <th>关联对象</th>
+                  <th>账期</th>
+                  <th className="is-right">影响金额</th>
+                  <th>状态</th>
+                  <th>操作</th>
                 </tr>
-              ) : visible.map((item) => (
-                <tr key={item.id}>
-                  <td>
-                    <span className={`anomaly-severity is-${item.severity}`}>{SEVERITY_LABELS[item.severity]}</span>
-                    <small>{ANOMALY_CATEGORY_LABELS[item.category] || item.category}</small>
-                  </td>
-                  <td className="anomaly-problem">
-                    <strong>{item.title}</strong>
-                    <span>{item.detail}</span>
-                  </td>
-                  <td className="anomaly-object">
-                    <strong>{item.billNumber || item.partnerName || '系统数据'}</strong>
-                    <span>{[item.partnerName, item.gameName].filter(Boolean).join(' · ') || '-'}</span>
-                  </td>
-                  <td>{monthText(item.settlementMonth)}</td>
-                  <td className="is-right anomaly-money">{money(item.amount)}</td>
-                  <td><span className={`anomaly-status is-${item.status}`}>{STATUS_LABELS[item.status] || item.status}</span></td>
-                  <td>
-                    <div className="anomaly-actions">
-                      {item.billId ? <button type="button" onClick={() => openBill(item)}>查看账单</button> : null}
-                      {item.targetView && item.targetView !== (item.billType === 'rd' ? VIEWS.RECON_RD : VIEWS.RECON_CHANNEL) ? (
-                        <button type="button" onClick={() => openRelated(item)}>去处理</button>
-                      ) : null}
-                      {item.status === 'pending' ? (
-                        <>
-                          <button type="button" disabled={updatingId === item.id} onClick={() => updateStatus(item, 'resolved')}>已解决</button>
-                          <button type="button" className="is-muted" disabled={updatingId === item.id} onClick={() => updateStatus(item, 'ignored')}>忽略</button>
-                        </>
-                      ) : (
-                        <button type="button" disabled={updatingId === item.id} onClick={() => updateStatus(item, 'pending')}>重新打开</button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
+              </thead>
+              <tbody>
+                {visible.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="anomaly-empty">
+                      {loading ? '正在巡检数据…' : status === 'pending' ? '当前筛选范围没有待处理异常。' : '当前筛选范围暂无记录。'}
+                    </td>
+                  </tr>
+                ) : visible.map((item) => (
+                  <tr key={item.id}>
+                    <td>
+                      <span className={`anomaly-severity is-${item.severity}`}>{SEVERITY_LABELS[item.severity]}</span>
+                      <small>{CATEGORY_LABELS[item.category] || item.category}</small>
+                    </td>
+                    <td className="anomaly-problem">
+                      <strong>{item.title}</strong>
+                      <span>{item.detail}</span>
+                    </td>
+                    <td className="anomaly-object">
+                      <strong>{item.billNumber || item.partnerName || '系统数据'}</strong>
+                      <span>{[item.partnerName, item.gameName].filter(Boolean).join(' · ') || '-'}</span>
+                    </td>
+                    <td>{monthText(item.settlementMonth)}</td>
+                    <td className="is-right anomaly-money">{money(item.amount)}</td>
+                    <td><span className={`anomaly-status is-${item.status}`}>{STATUS_LABELS[item.status] || item.status}</span></td>
+                    <td>
+                      <div className="anomaly-actions">
+                        {item.billId ? <button type="button" onClick={() => openBill(item)}>查看账单</button> : null}
+                        {item.targetView && item.targetView !== (item.billType === 'rd' ? VIEWS.RECON_RD : VIEWS.RECON_CHANNEL) ? (
+                          <button type="button" onClick={() => openRelated(item)}>去处理</button>
+                        ) : null}
+                        {item.status === 'pending' ? (
+                          <>
+                            <button type="button" disabled={updatingId === item.id} onClick={() => updateStatus(item, 'resolved')}>已解决</button>
+                            <button type="button" className="is-muted" disabled={updatingId === item.id} onClick={() => updateStatus(item, 'ignored')}>忽略</button>
+                          </>
+                        ) : (
+                          <button type="button" disabled={updatingId === item.id} onClick={() => updateStatus(item, 'pending')}>重新打开</button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      ) : null}
     </PageContainer>
   )
 }

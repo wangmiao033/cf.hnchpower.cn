@@ -1,0 +1,222 @@
+.contract-difference-ledger {
+  margin: 18px 0;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.contract-difference-ledger__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 18px;
+  padding: 18px 20px;
+  border-bottom: 1px solid #edf0f3;
+}
+
+.contract-difference-ledger__head span {
+  color: #667085;
+  font-size: 12px;
+}
+
+.contract-difference-ledger__head h2 {
+  margin: 4px 0;
+  color: #111827;
+  font-size: 18px;
+}
+
+.contract-difference-ledger__head p {
+  margin: 0;
+  color: #667085;
+  font-size: 13px;
+}
+
+.contract-difference-ledger__head button,
+.contract-difference-ledger__table button {
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  background: #fff;
+  color: #344054;
+  padding: 8px 11px;
+  cursor: pointer;
+}
+
+.contract-difference-ledger__summary {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+  padding: 14px 18px;
+  background: #f8fafc;
+  border-bottom: 1px solid #edf0f3;
+}
+
+.contract-difference-ledger__summary > div {
+  padding: 10px 12px;
+  border: 1px solid #eaecf0;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.contract-difference-ledger__summary span,
+.contract-difference-ledger__summary strong {
+  display: block;
+}
+
+.contract-difference-ledger__summary span {
+  color: #667085;
+  font-size: 11px;
+}
+
+.contract-difference-ledger__summary strong {
+  margin-top: 3px;
+  color: #101828;
+  font-size: 16px;
+}
+
+.contract-difference-ledger__summary .is-under strong {
+  color: #b42318;
+}
+
+.contract-difference-ledger__summary .is-over strong {
+  color: #b54708;
+}
+
+.contract-difference-ledger__toolbar {
+  display: flex;
+  align-items: end;
+  gap: 12px;
+  padding: 14px 18px;
+  border-bottom: 1px solid #edf0f3;
+}
+
+.contract-difference-ledger__toolbar label {
+  display: grid;
+  gap: 5px;
+  min-width: 170px;
+}
+
+.contract-difference-ledger__toolbar label.is-search {
+  flex: 1;
+}
+
+.contract-difference-ledger__toolbar span,
+.contract-difference-ledger__toolbar small {
+  color: #667085;
+  font-size: 11px;
+}
+
+.contract-difference-ledger__toolbar input,
+.contract-difference-ledger__toolbar select {
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  background: #fff;
+  padding: 8px 10px;
+  color: #101828;
+}
+
+.contract-difference-ledger__table-wrap {
+  overflow-x: auto;
+}
+
+.contract-difference-ledger__table {
+  width: 100%;
+  min-width: 980px;
+  border-collapse: collapse;
+}
+
+.contract-difference-ledger__table th,
+.contract-difference-ledger__table td {
+  padding: 12px 14px;
+  border-bottom: 1px solid #f0f2f5;
+  vertical-align: top;
+  text-align: left;
+  font-size: 12px;
+  color: #475467;
+}
+
+.contract-difference-ledger__table th {
+  background: #fbfcfd;
+  color: #667085;
+  font-weight: 600;
+}
+
+.contract-difference-ledger__table td strong,
+.contract-difference-ledger__table td span {
+  display: block;
+}
+
+.contract-difference-ledger__table td strong {
+  color: #344054;
+}
+
+.contract-difference-ledger__table td span {
+  margin-top: 3px;
+  color: #98a2b3;
+  font-size: 11px;
+}
+
+.contract-difference-ledger__table .is-right {
+  text-align: right;
+}
+
+.contract-difference-ledger__table .is-variance.is-under {
+  color: #b42318;
+  font-weight: 700;
+}
+
+.contract-difference-ledger__table .is-variance.is-over {
+  color: #b54708;
+  font-weight: 700;
+}
+
+.contract-difference-ledger__status {
+  display: inline-flex !important;
+  width: max-content;
+  padding: 3px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+}
+
+.contract-difference-ledger__status.is-pending {
+  background: #fef3f2;
+  color: #b42318 !important;
+}
+
+.contract-difference-ledger__status.is-processing {
+  background: #fffaeb;
+  color: #b54708 !important;
+}
+
+.contract-difference-ledger__status.is-resolved {
+  background: #ecfdf3;
+  color: #027a48 !important;
+}
+
+.contract-difference-ledger__empty,
+.contract-difference-ledger__error {
+  padding: 18px;
+  color: #667085;
+  text-align: center;
+}
+
+.contract-difference-ledger__error {
+  color: #b42318;
+  background: #fef3f2;
+}
+
+@media (max-width: 900px) {
+  .contract-difference-ledger__summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .contract-difference-ledger__toolbar,
+  .contract-difference-ledger__head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .contract-difference-ledger__toolbar label {
+    min-width: 0;
+  }
+}
