@@ -6,6 +6,7 @@ import CoreChannelReconciliationPageBase from './CoreChannelReconciliationPageBa
 export default function CoreChannelReconciliationPage() {
   const {
     recon,
+    settings,
     showToast,
     setActiveView,
     openChannelReconciliationEdit
@@ -16,6 +17,7 @@ export default function CoreChannelReconciliationPage() {
       <div style={{ padding: '16px 20px 0' }}>
         <ChannelMonthCloseLauncher
           channelRecords={recon.channelRecords || []}
+          partners={settings?.partners || []}
           onNavigate={setActiveView}
           onOpenEdit={openChannelReconciliationEdit}
           onNotice={(message, tone = 'info') => showToast(message, tone)}
