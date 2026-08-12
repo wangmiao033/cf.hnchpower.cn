@@ -59,7 +59,8 @@ export const SIDEBAR_GROUPS = [
     items: [
       { view: VIEWS.RECON_RD, label: '研发账单' },
       { view: VIEWS.RECON_PROGRESS, label: '对账进度' },
-      { view: VIEWS.RECON_CHANNEL, label: '渠道账单' }
+      { view: VIEWS.RECON_CHANNEL, label: '渠道账单' },
+      { view: VIEWS.CHANNEL_RECON_CREATE, label: '智能录入' }
     ]
   },
   {
