@@ -5,9 +5,9 @@ from __future__ import annotations
 from typing import Any
 
 try:
-    from .matcher import normalize_company, score_candidate
+    from .matcher import normalize_company, normalize_game, score_candidate
 except ImportError:  # Vercel service-root import.
-    from matcher import normalize_company, score_candidate
+    from matcher import normalize_company, normalize_game, score_candidate
 
 EPS = 0.01
 
@@ -75,6 +75,12 @@ def _partner_matches(partner_name: str, candidate: dict) -> bool:
     return False
 
 
+def _exact_game_matches(game_name: str, candidate: dict) -> bool:
+    target = normalize_game(game_name)
+    product = normalize_game(candidate.get("product_name"))
+    return bool(target and product and target == product)
+
+
 def _rule_signature(rule: dict) -> tuple:
     return (
         rule.get("settlement_rule_code"),
@@ -107,7 +113,7 @@ def _partner_rule_summary(partner_name: str, candidates: list[dict]) -> dict:
             "recommendation": None,
             "contract_count": len(matched),
             "contracts": contracts,
-            "message": "合同合作清单存在未结构化的分成、通道费或税率，不能用旧默认值代替，请完善合同或按具体游戏人工确认。",
+            "message": "合同合作清单存在未结构化的分成、通道费或税率；选择具体游戏和账期后，系统会优先带入该条合同中已经明确的规则。",
         }
 
     signatures = {_rule_signature(rule) for rule in rules}
@@ -152,6 +158,11 @@ def recommend_channel_rules(
     2) line-level match: game + settlement month locks the exact access item.
 
     A legacy 30%/5% UI default is never treated as contract evidence.
+
+    If the exact partner + game identity is unique and authorization is merely
+    unstructured/unknown (not explicitly out of range), complete contract
+    financial fields are safe to auto-apply. Missing authorization dates should
+    create a warning, not erase known settlement terms.
     """
     partner_summary = _partner_rule_summary(partner_name, candidates)
     results: list[dict] = []
@@ -206,14 +217,30 @@ def recommend_channel_rules(
         top_score = float(scored.get("score") or 0)
         margin = round(top_score - second_score, 1)
         recommended = _rule_fields(candidate)
+        authorization_status = scored.get("authorization_status")
+        exact_identity = _partner_matches(partner_name, candidate) and _exact_game_matches(game_name, candidate)
+        identity_confident = scored.get("confidence") == "high" or exact_identity
+        authorization_allowed = authorization_status != "out_of_range"
         auto_apply = (
-            scored.get("confidence") == "high"
-            and scored.get("authorization_status") == "covered"
+            identity_confident
+            and authorization_allowed
             and margin >= 10
             and bool(recommended.get("fields_complete"))
         )
         public_recommended = dict(recommended)
         public_recommended.pop("fields_complete", None)
+
+        if auto_apply and authorization_status == "unknown":
+            line_message = "合同合作项唯一明确，授权期未结构化；已带入合同结算数字，授权期单独待确认"
+        elif auto_apply:
+            line_message = "合同匹配明确，可自动带入结算规则"
+        elif authorization_status == "out_of_range":
+            line_message = "已找到合同，但当前账期明确不在授权期内，不能自动带入"
+        elif not recommended.get("fields_complete"):
+            line_message = "已找到具体合同，但该合作项的分成、通道费或税率结构化字段不完整"
+        else:
+            line_message = "已找到合同，但候选存在歧义，需人工确认"
+
         results.append(
             {
                 "line_index": source_index,
@@ -223,11 +250,8 @@ def recommend_channel_rules(
                 "confidence": scored.get("confidence"),
                 "score": top_score,
                 "ambiguity_margin": margin,
-                "message": (
-                    "合同匹配明确，可自动带入结算规则"
-                    if auto_apply
-                    else "已找到合同，但匹配有歧义、授权期不覆盖或合同数字字段不完整"
-                ),
+                "authorization_warning": authorization_status == "unknown",
+                "message": line_message,
                 "match": {
                     "contract_id": candidate.get("contract_id"),
                     "contract_name": candidate.get("contract_name"),
@@ -276,7 +300,10 @@ def recommend_channel_rules(
             overall_auto = False
 
     if overall_auto and header:
-        message = "当前游戏与账期的合同规则已明确，可自动带入"
+        if any(item.get("authorization_warning") for item in auto_lines):
+            message = "当前游戏与合同合作项唯一匹配；授权期未结构化，已先按合同数字带入，授权期仍需补录/确认"
+        else:
+            message = "当前游戏与账期的合同规则已明确，可自动带入"
     elif partner_summary["auto_apply"]:
         message = partner_summary["message"]
     elif results:
@@ -285,7 +312,7 @@ def recommend_channel_rules(
         message = partner_summary["message"]
 
     return {
-        "version": "contract-channel-rule-v2",
+        "version": "contract-channel-rule-v2.1",
         "auto_apply": bool(overall_auto and header),
         "matched_lines": len(matched),
         "total_lines": len(results),
