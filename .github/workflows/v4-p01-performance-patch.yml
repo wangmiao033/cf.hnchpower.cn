@@ -19,25 +19,20 @@ jobs:
           ref: codex/v4-p01-bill360-performance
           fetch-depth: 0
 
-      - name: Apply performance refactor
-        run: |
-          python scripts/v4_p01_patch_fix.py
-          python scripts/v4_p01_patch.py
+      - name: Apply performance post-fix
+        run: python scripts/v4_p01_postfix.py
 
       - name: Verify refactor scope
         run: |
           git diff --check
-          git diff --stat
-          grep -q "bill360_performance_router" backend/app/main.py
-          grep -q "getBill360QuickSdkSummary" src/components/reconciliation/Bill360DrawerBase.jsx
-          grep -q "合同核验 · 点击加载" src/components/reconciliation/Bill360Drawer.jsx
-          grep -q "initialData={checkData}" src/components/reconciliation/Bill360Drawer.jsx
-          grep -q "prefetchBill360" src/App.jsx
+          ! grep -n '^\\$' src/components/reconciliation/Bill360DrawerBase.jsx
+          grep -q "primeBill360Resource" src/components/reconciliation/Bill360Drawer.jsx
+          grep -q "onDataChange={handleContractDataChange}" src/components/reconciliation/Bill360Drawer.jsx
 
-      - name: Commit performance refactor
+      - name: Commit performance post-fix
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -- backend/app/main.py src/App.jsx src/components/reconciliation/Bill360DrawerBase.jsx src/components/reconciliation/Bill360Drawer.jsx src/components/reconciliation/BillContractCheckPanelV2.jsx src/components/reconciliation/Bill360Drawer.css src/pages/CoreReconciliationPage.jsx src/pages/CoreChannelReconciliationPage.jsx
-          git commit -m "perf: make Bill360 progressive and lazy-loaded"
+          git add -- src/components/reconciliation/Bill360DrawerBase.jsx src/components/reconciliation/Bill360Drawer.jsx
+          git commit -m "perf: remove duplicate contract fetch and fix progressive drawer syntax"
           git push origin HEAD:codex/v4-p01-bill360-performance
