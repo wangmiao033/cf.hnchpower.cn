@@ -1,0 +1,123 @@
+name: V4 P0 Apply Large Patches
+
+on:
+  push:
+    branches:
+      - codex/v4-p0-finance-closure
+    paths:
+      - '.github/workflows/v4-p0-apply-large-patches.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/v4-p0-finance-closure
+          fetch-depth: 0
+
+      - name: Apply V4 closure integrations
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new, label):
+              p = Path(path)
+              text = p.read_text(encoding='utf-8')
+              if old not in text:
+                  raise SystemExit(f'{label}: target not found in {path}')
+              if text.count(old) != 1:
+                  raise SystemExit(f'{label}: expected one target, found {text.count(old)} in {path}')
+              p.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          # Bill360: one visual closure rail using the facts already loaded by the drawer.
+          replace_once(
+              'src/components/reconciliation/Bill360DrawerBase.jsx',
+              "import BillOperationTimeline from './BillOperationTimeline.jsx'\n",
+              "import BillOperationTimeline from './BillOperationTimeline.jsx'\nimport BillClosureRail from './BillClosureRail.jsx'\nimport { buildBillClosureStatus } from '@/domain/reconciliation/closureStatus.js'\n",
+              'bill360 imports'
+          )
+
+          replace_once(
+              'src/components/reconciliation/Bill360DrawerBase.jsx',
+              "  const paymentProgressLabel = summary.isZeroSettlement\n    ? '无需资金动作'\n    : summary.cashDirection === 'receivable'\n      ? '收款进度'\n      : '付款进度'\n\n  return (",
+              "  const paymentProgressLabel = summary.isZeroSettlement\n    ? '无需资金动作'\n    : summary.cashDirection === 'receivable'\n      ? '收款进度'\n      : '付款进度'\n  const closure = useMemo(\n    () => buildBillClosureStatus({ record, summary, invoiceSummary, contracts }),\n    [contracts, invoiceSummary, record, summary]\n  )\n  const openClosureStage = (stage) => {\n    if (stage === 'contract') setActiveTab('contract')\n    else if (stage === 'invoice') setActiveTab('invoice')\n    else if (stage === 'funding') setActiveTab('payment')\n    else setActiveTab('overview')\n  }\n\n  return (",
+              'bill360 closure state'
+          )
+
+          replace_once(
+              'src/components/reconciliation/Bill360DrawerBase.jsx',
+              "          <>\n            <section className=\"bill360-kpis\">",
+              "          <>\n            <BillClosureRail closure={closure} onStage={openClosureStage} />\n            <section className=\"bill360-kpis\">",
+              'bill360 closure rail'
+          )
+
+          # R&D ledger: replace implementation lifecycle badge with the actual closure/funding status.
+          replace_once(
+              'src/pages/CoreReconciliationPage.jsx',
+              "import { transitionBillLifecycle } from '@/lib/api/billLifecycle.ts'\n",
+              "import { transitionBillLifecycle } from '@/lib/api/billLifecycle.ts'\nimport { listFundingClosureStatus } from '@/domain/reconciliation/closureStatus.js'\n",
+              'rd closure import'
+          )
+          replace_once(
+              'src/pages/CoreReconciliationPage.jsx',
+              "                <th>状态</th>\n",
+              "                <th>闭环状态</th>\n",
+              'rd closure heading'
+          )
+          replace_once(
+              'src/pages/CoreReconciliationPage.jsx',
+              "                  const isCancelled = String(row.status || '') === 'cancelled'\n                  const archived = archivedIds.has(String(row.id))\n                  const canArchive = eligibleIds.has(String(row.id))\n                  return (",
+              "                  const isCancelled = String(row.status || '') === 'cancelled'\n                  const archived = archivedIds.has(String(row.id))\n                  const canArchive = eligibleIds.has(String(row.id))\n                  const closure = listFundingClosureStatus({\n                    amount: recordSettlementAmount(row),\n                    paid,\n                    lifecycleStatus: row.status,\n                    archived\n                  })\n                  return (",
+              'rd closure calculation'
+          )
+          replace_once(
+              'src/pages/CoreReconciliationPage.jsx',
+              "                      <td>\n                        {archived ? (\n                          <span className=\"core-recon-status core-recon-status--completed\">已归档</span>\n                        ) : (\n                          <span className={`core-recon-status core-recon-status--${row.status || 'pending'}`}>\n                            {STATUS_LABELS[row.status] || row.status || '待处理'}\n                          </span>\n                        )}\n                      </td>",
+              "                      <td>\n                        <span className={`v4-list-closure is-${closure.tone}`}>\n                          <strong>{closure.label}</strong>\n                          <small>{closure.detail} · {STATUS_LABELS[row.status] || row.status || '待处理'}</small>\n                        </span>\n                      </td>",
+              'rd closure badge'
+          )
+
+          # Channel ledger: same closure language, using received amount as the funding fact.
+          replace_once(
+              'src/pages/CoreChannelReconciliationPage.jsx',
+              "import { transitionBillLifecycle } from '@/lib/api/billLifecycle.ts'\n",
+              "import { transitionBillLifecycle } from '@/lib/api/billLifecycle.ts'\nimport { listFundingClosureStatus } from '@/domain/reconciliation/closureStatus.js'\n",
+              'channel closure import'
+          )
+          replace_once(
+              'src/pages/CoreChannelReconciliationPage.jsx',
+              "<th>状态</th><th>操作</th>",
+              "<th>闭环状态</th><th>操作</th>",
+              'channel closure heading'
+          )
+          replace_once(
+              'src/pages/CoreChannelReconciliationPage.jsx',
+              "                const cancelled = String(row.status || '') === 'cancelled'\n                const archived = archivedIds.has(String(row.id))\n                const canArchive = eligibleIds.has(String(row.id))\n                const gameText = games.join('、')",
+              "                const cancelled = String(row.status || '') === 'cancelled'\n                const archived = archivedIds.has(String(row.id))\n                const canArchive = eligibleIds.has(String(row.id))\n                const closure = listFundingClosureStatus({\n                  amount: totals.settlementAmount,\n                  paid: received,\n                  lifecycleStatus: row.status,\n                  archived\n                })\n                const gameText = games.join('、')",
+              'channel closure calculation'
+          )
+          replace_once(
+              'src/pages/CoreChannelReconciliationPage.jsx',
+              "                    <td>{archived ? <span className=\"core-recon-status core-recon-status--completed\">已归档</span> : <span className={`core-recon-status core-recon-status--${row.status || 'pending'}`}>{STATUS_LABELS[row.status] || row.status || '待处理'}</span>}</td>",
+              "                    <td><span className={`v4-list-closure is-${closure.tone}`}><strong>{closure.label}</strong><small>{closure.detail} · {STATUS_LABELS[row.status] || row.status || '待处理'}</small></span></td>",
+              'channel closure badge'
+          )
+          PY
+
+      - name: Verify patch scope
+        run: |
+          git diff --check
+          git diff -- src/components/reconciliation/Bill360DrawerBase.jsx src/pages/CoreReconciliationPage.jsx src/pages/CoreChannelReconciliationPage.jsx
+
+      - name: Commit V4 closure integrations
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- src/components/reconciliation/Bill360DrawerBase.jsx src/pages/CoreReconciliationPage.jsx src/pages/CoreChannelReconciliationPage.jsx
+          git commit -m "v4: integrate closure status into bills and Bill360"
+          git push origin HEAD:codex/v4-p0-finance-closure
