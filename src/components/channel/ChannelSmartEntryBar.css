@@ -1,0 +1,336 @@
+.channel-smart-entry {
+  margin: 0 0 16px;
+  border: 1px solid #dce6f2;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #f8fbff 0%, #ffffff 100%);
+  box-shadow: 0 8px 24px rgba(30, 64, 105, 0.06);
+  overflow: hidden;
+}
+
+.channel-smart-entry__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 16px 18px 13px;
+  border-bottom: 1px solid #e6edf5;
+}
+
+.channel-smart-entry__head > div {
+  display: grid;
+  gap: 4px;
+}
+
+.channel-smart-entry__head span {
+  color: #5d75a0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.channel-smart-entry__head strong {
+  color: #172033;
+  font-size: 16px;
+}
+
+.channel-smart-entry__head small {
+  color: #6b778c;
+  font-size: 12px;
+}
+
+.channel-smart-entry__head em {
+  flex: 0 0 auto;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: #edf7f1;
+  color: #237a49;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.channel-smart-entry__controls {
+  display: grid;
+  grid-template-columns: minmax(190px, 0.7fr) minmax(280px, 1fr) minmax(220px, 1fr);
+  align-items: end;
+  gap: 12px;
+  padding: 14px 18px;
+}
+
+.channel-smart-entry__controls label,
+.channel-smart-entry__dialog label {
+  display: grid;
+  gap: 6px;
+}
+
+.channel-smart-entry__controls label > span,
+.channel-smart-entry__dialog label > span {
+  color: #58657a;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.channel-smart-entry__controls input,
+.channel-smart-entry__dialog input,
+.channel-smart-entry__dialog select {
+  width: 100%;
+  min-height: 36px;
+  box-sizing: border-box;
+  border: 1px solid #d8e0ea;
+  border-radius: 8px;
+  background: #fff;
+  color: #1d2738;
+  padding: 7px 10px;
+  outline: none;
+}
+
+.channel-smart-entry__controls input:focus,
+.channel-smart-entry__dialog input:focus,
+.channel-smart-entry__dialog select:focus {
+  border-color: #7da2d6;
+  box-shadow: 0 0 0 3px rgba(72, 116, 180, 0.1);
+}
+
+.channel-smart-entry__actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.channel-smart-entry button {
+  min-height: 34px;
+  border: 1px solid #d6dfeb;
+  border-radius: 8px;
+  background: #fff;
+  color: #344258;
+  padding: 7px 12px;
+  cursor: pointer;
+}
+
+.channel-smart-entry button:hover:not(:disabled) {
+  border-color: #9bb2cf;
+  background: #f7faff;
+}
+
+.channel-smart-entry button.is-primary {
+  border-color: #315e9f;
+  background: #315e9f;
+  color: #fff;
+  font-weight: 700;
+}
+
+.channel-smart-entry button.is-primary:hover:not(:disabled) {
+  background: #294f87;
+}
+
+.channel-smart-entry button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.channel-smart-entry__source {
+  display: grid;
+  gap: 3px;
+  align-self: center;
+  min-width: 0;
+}
+
+.channel-smart-entry__source strong {
+  overflow: hidden;
+  color: #27344a;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.channel-smart-entry__source span {
+  color: #7a8798;
+  font-size: 12px;
+}
+
+.channel-smart-entry__notice {
+  margin: 0 18px 14px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.channel-smart-entry__notice.is-warning {
+  border: 1px solid #f0d89c;
+  background: #fffaf0;
+  color: #7a5a16;
+}
+
+.channel-smart-entry__missing {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin: 0 18px 14px;
+  padding: 11px 12px;
+  border: 1px solid #f0d8aa;
+  border-radius: 9px;
+  background: #fffaf2;
+}
+
+.channel-smart-entry__missing > div:first-child {
+  display: grid;
+  gap: 3px;
+  min-width: 180px;
+}
+
+.channel-smart-entry__missing strong {
+  color: #744c08;
+  font-size: 13px;
+}
+
+.channel-smart-entry__missing span {
+  color: #8b7449;
+  font-size: 12px;
+}
+
+.channel-smart-entry__chips {
+  display: flex;
+  justify-content: flex-end;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.channel-smart-entry__chips button {
+  min-height: 30px;
+  border-color: #e8c779;
+  background: #fff;
+  color: #7a570d;
+  padding: 5px 9px;
+  font-size: 12px;
+}
+
+.channel-smart-entry__mask {
+  position: fixed;
+  inset: 0;
+  z-index: 320;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(22, 33, 50, 0.4);
+}
+
+.channel-smart-entry__dialog {
+  width: min(720px, 94vw);
+  max-height: 88vh;
+  overflow: auto;
+  border: 1px solid #dfe6ef;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 28px 80px rgba(17, 31, 50, 0.25);
+}
+
+.channel-smart-entry__dialog header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid #e7edf4;
+}
+
+.channel-smart-entry__dialog header > div {
+  display: grid;
+  gap: 4px;
+}
+
+.channel-smart-entry__dialog header span {
+  color: #607aa4;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.channel-smart-entry__dialog h3,
+.channel-smart-entry__dialog p {
+  margin: 0;
+}
+
+.channel-smart-entry__dialog h3 {
+  color: #172033;
+  font-size: 18px;
+}
+
+.channel-smart-entry__dialog p {
+  color: #748095;
+  font-size: 12px;
+}
+
+.channel-smart-entry__dialog header > button {
+  width: 34px;
+  min-height: 34px;
+  padding: 0;
+  font-size: 20px;
+}
+
+.channel-smart-entry__dialog-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 18px 20px;
+}
+
+.channel-smart-entry__dialog-grid .is-wide {
+  grid-column: 1 / -1;
+}
+
+.channel-smart-entry__dialog footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 13px 20px 16px;
+  border-top: 1px solid #e7edf4;
+  background: #fafbfd;
+}
+
+.channel-smart-entry__dialog footer > span {
+  color: #6e7b8f;
+  font-size: 11px;
+}
+
+.channel-smart-entry__dialog footer > div {
+  display: flex;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+@media (max-width: 900px) {
+  .channel-smart-entry__controls {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .channel-smart-entry__source {
+    align-self: auto;
+  }
+
+  .channel-smart-entry__missing,
+  .channel-smart-entry__dialog footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .channel-smart-entry__chips {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 620px) {
+  .channel-smart-entry__head {
+    flex-direction: column;
+  }
+
+  .channel-smart-entry__dialog-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .channel-smart-entry__dialog-grid .is-wide {
+    grid-column: auto;
+  }
+}
