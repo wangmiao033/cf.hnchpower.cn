@@ -1,0 +1,452 @@
+/* V4.0 P0 · unified finance console surface
+ *
+ * This layer deliberately reuses existing admin tokens.  It changes hierarchy
+ * and density, not business calculation or data semantics.
+ */
+
+:root {
+  --v4-radius-lg: 14px;
+  --v4-radius-md: 10px;
+  --v4-radius-sm: 7px;
+  --v4-surface: var(--admin-card-bg, #fff);
+  --v4-page: var(--admin-page-bg, #f5f7fa);
+  --v4-border: var(--admin-border, #dde5ee);
+  --v4-border-soft: #edf1f5;
+  --v4-text: var(--admin-text, #27384d);
+  --v4-muted: var(--admin-text-muted, #7d8998);
+  --v4-primary: var(--admin-primary, #3977b7);
+  --v4-good: #2f7657;
+  --v4-good-bg: #edf8f2;
+  --v4-warn: #986526;
+  --v4-warn-bg: #fff7e9;
+  --v4-danger: #a44d4d;
+  --v4-danger-bg: #fff0ef;
+  --v4-pending: #62758d;
+  --v4-pending-bg: #f1f4f8;
+  --v4-shadow: 0 8px 28px rgba(28, 48, 73, .06);
+}
+
+[data-theme='dark'] {
+  --v4-border-soft: color-mix(in srgb, var(--admin-border, #394759) 70%, transparent);
+  --v4-good-bg: rgba(47, 118, 87, .14);
+  --v4-warn-bg: rgba(152, 101, 38, .14);
+  --v4-danger-bg: rgba(164, 77, 77, .14);
+  --v4-pending-bg: rgba(98, 117, 141, .12);
+  --v4-shadow: none;
+}
+
+/* ---------- Global shell / navigation ---------- */
+.app-sidebar-inner {
+  gap: 8px;
+}
+
+.sidebar-brand {
+  padding-bottom: 13px;
+  border-bottom: 1px solid var(--v4-border-soft);
+}
+
+.sidebar-nav {
+  gap: 5px;
+}
+
+.sidebar-group {
+  border-radius: 10px;
+}
+
+.sidebar-group.active {
+  background: color-mix(in srgb, var(--v4-primary) 4%, transparent);
+}
+
+.sidebar-group-entry,
+.sidebar-item {
+  min-height: 36px;
+  border-radius: 8px;
+  transition: background .14s ease, color .14s ease, border-color .14s ease, transform .14s ease;
+}
+
+.sidebar-group-entry:hover,
+.sidebar-item:hover {
+  transform: translateX(1px);
+}
+
+.sidebar-group-entry.active,
+.sidebar-item.active {
+  font-weight: 650;
+}
+
+.sidebar-item--nested {
+  min-height: 33px;
+}
+
+/* ---------- Shared page surfaces ---------- */
+.page-container-body {
+  gap: 11px;
+}
+
+.core-recon-workbar,
+.core-recon-stats,
+.core-recon-panel,
+.bank-v2-filterbar,
+.bank-v2-card,
+.anomaly-head,
+.anomaly-summary,
+.anomaly-toolbar,
+.anomaly-panel,
+.anomaly-source-state {
+  box-shadow: var(--v4-shadow);
+}
+
+.core-recon-workbar,
+.core-recon-panel,
+.bank-v2-filterbar,
+.bank-v2-card,
+.anomaly-head,
+.anomaly-panel {
+  border-radius: var(--v4-radius-lg) !important;
+}
+
+.core-recon-workbar {
+  overflow: hidden;
+}
+
+.core-recon-head {
+  min-height: 48px;
+}
+
+.core-recon-title h1,
+.bank-v2-head h1,
+.anomaly-head h1 {
+  letter-spacing: -.02em;
+}
+
+.core-recon-filters,
+.bank-v2-filterbar__row,
+.anomaly-toolbar {
+  background: color-mix(in srgb, var(--v4-surface) 97%, var(--v4-page));
+}
+
+.core-recon-filter-control input,
+.core-recon-filter-control select,
+.bank-v2-filterbar input,
+.bank-v2-filterbar select,
+.anomaly-toolbar input,
+.anomaly-toolbar select {
+  border-radius: var(--v4-radius-sm) !important;
+}
+
+.core-recon-stats {
+  overflow: hidden;
+  border-radius: var(--v4-radius-lg);
+  border: 1px solid var(--v4-border);
+  background: var(--v4-surface);
+}
+
+.core-recon-stats > div {
+  min-height: 69px;
+  border-right-color: var(--v4-border-soft) !important;
+}
+
+.core-recon-stats > div strong {
+  letter-spacing: -.02em;
+}
+
+.core-recon-panel-head,
+.bank-v2-card-head,
+.anomaly-panel-head {
+  min-height: 48px;
+  border-bottom-color: var(--v4-border-soft) !important;
+}
+
+.core-recon-table thead th,
+.bank-v2-table thead th,
+.anomaly-table thead th {
+  background: color-mix(in srgb, var(--v4-page) 72%, var(--v4-surface));
+  color: var(--v4-muted);
+  font-weight: 650;
+  letter-spacing: .015em;
+}
+
+.core-recon-table tbody tr,
+.bank-v2-table tbody tr,
+.anomaly-table tbody tr {
+  transition: background .12s ease;
+}
+
+.core-recon-table tbody tr:hover,
+.bank-v2-table tbody tr:hover,
+.anomaly-table tbody tr:hover {
+  background: color-mix(in srgb, var(--v4-primary) 3.5%, var(--v4-surface));
+}
+
+.core-recon-row-actions,
+.bank-center-row-actions,
+.anomaly-actions {
+  gap: 5px;
+}
+
+.core-recon-row-actions button,
+.bank-center-row-actions button,
+.anomaly-actions button {
+  border-radius: 7px !important;
+}
+
+/* Lifecycle pills stay compact; the V4 closure wording is surfaced next to funding facts. */
+.core-recon-status,
+.bank-center-confidence,
+.anomaly-status,
+.anomaly-severity {
+  border-radius: 999px !important;
+  white-space: nowrap;
+}
+
+/* ---------- V4 list closure badge ---------- */
+.v4-list-closure {
+  display: inline-grid;
+  gap: 2px;
+  min-width: 86px;
+  padding: 5px 8px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  vertical-align: middle;
+}
+
+.v4-list-closure strong {
+  font-size: 10px;
+  line-height: 1.2;
+  font-weight: 700;
+}
+
+.v4-list-closure small {
+  font-size: 8px;
+  line-height: 1.2;
+  opacity: .78;
+}
+
+.v4-list-closure.is-closed {
+  color: var(--v4-good);
+  background: var(--v4-good-bg);
+  border-color: color-mix(in srgb, var(--v4-good) 20%, transparent);
+}
+
+.v4-list-closure.is-attention {
+  color: var(--v4-warn);
+  background: var(--v4-warn-bg);
+  border-color: color-mix(in srgb, var(--v4-warn) 20%, transparent);
+}
+
+.v4-list-closure.is-pending {
+  color: var(--v4-pending);
+  background: var(--v4-pending-bg);
+  border-color: color-mix(in srgb, var(--v4-pending) 16%, transparent);
+}
+
+.v4-list-closure.is-blocked {
+  color: var(--v4-danger);
+  background: var(--v4-danger-bg);
+  border-color: color-mix(in srgb, var(--v4-danger) 20%, transparent);
+}
+
+/* ---------- Bill360 closure rail ---------- */
+.bill360-closure-shell {
+  display: grid;
+  gap: 8px;
+  padding: 11px 14px 12px;
+  border-bottom: 1px solid var(--v4-border-soft);
+  background: color-mix(in srgb, var(--v4-surface) 96%, var(--v4-page));
+}
+
+.bill360-closure-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.bill360-closure-head > div {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.bill360-closure-head span {
+  color: var(--v4-muted);
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: .05em;
+}
+
+.bill360-closure-head strong {
+  color: var(--v4-text);
+  font-size: 11px;
+}
+
+.bill360-closure-head em {
+  padding: 3px 7px;
+  border-radius: 999px;
+  color: var(--v4-muted);
+  background: var(--v4-pending-bg);
+  font-size: 8px;
+  font-style: normal;
+}
+
+.bill360-closure-head em.is-closed {
+  color: var(--v4-good);
+  background: var(--v4-good-bg);
+}
+
+.bill360-closure-head em.is-attention {
+  color: var(--v4-warn);
+  background: var(--v4-warn-bg);
+}
+
+.bill360-closure-head em.is-blocked {
+  color: var(--v4-danger);
+  background: var(--v4-danger-bg);
+}
+
+.bill360-closure-rail {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.bill360-closure-step {
+  position: relative;
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  column-gap: 7px;
+  row-gap: 1px;
+  min-height: 52px;
+  padding: 8px 9px;
+  border: 1px solid var(--v4-border-soft);
+  border-radius: 9px;
+  background: var(--v4-surface);
+  color: var(--v4-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.bill360-closure-step > i {
+  grid-row: 1 / 3;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin-top: 1px;
+  border-radius: 50%;
+  background: var(--v4-pending-bg);
+  color: var(--v4-pending);
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 750;
+}
+
+.bill360-closure-step strong {
+  overflow: hidden;
+  color: inherit;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bill360-closure-step small {
+  overflow: hidden;
+  color: var(--v4-muted);
+  font-size: 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bill360-closure-step.is-pass {
+  border-color: color-mix(in srgb, var(--v4-good) 19%, var(--v4-border));
+  background: color-mix(in srgb, var(--v4-good-bg) 70%, var(--v4-surface));
+}
+
+.bill360-closure-step.is-pass > i {
+  background: color-mix(in srgb, var(--v4-good) 12%, transparent);
+  color: var(--v4-good);
+}
+
+.bill360-closure-step.is-warning {
+  border-color: color-mix(in srgb, var(--v4-warn) 20%, var(--v4-border));
+  background: color-mix(in srgb, var(--v4-warn-bg) 70%, var(--v4-surface));
+}
+
+.bill360-closure-step.is-warning > i {
+  background: color-mix(in srgb, var(--v4-warn) 12%, transparent);
+  color: var(--v4-warn);
+}
+
+.bill360-closure-step.is-blocked {
+  border-color: color-mix(in srgb, var(--v4-danger) 22%, var(--v4-border));
+  background: color-mix(in srgb, var(--v4-danger-bg) 75%, var(--v4-surface));
+}
+
+.bill360-closure-step.is-blocked > i {
+  background: color-mix(in srgb, var(--v4-danger) 12%, transparent);
+  color: var(--v4-danger);
+}
+
+/* ---------- Actionable anomaly center ---------- */
+.anomaly-next-action {
+  display: flex !important;
+  align-items: center;
+  gap: 5px;
+  margin-top: 5px;
+  color: var(--v4-primary) !important;
+  font-size: 9px !important;
+  font-weight: 650;
+}
+
+.anomaly-next-action::before {
+  content: '→';
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--v4-primary) 10%, transparent);
+}
+
+.anomaly-actions .is-primary-action {
+  border-color: color-mix(in srgb, var(--v4-primary) 35%, var(--v4-border));
+  color: var(--v4-primary);
+  background: color-mix(in srgb, var(--v4-primary) 5%, var(--v4-surface));
+}
+
+/* ---------- Bank center: main page is the canonical allocation surface ---------- */
+.bank-v2-head {
+  border-bottom: 1px solid var(--v4-border-soft);
+}
+
+.bank-v2-metrics {
+  gap: 8px;
+}
+
+.bank-v2-metric {
+  border-radius: var(--v4-radius-lg) !important;
+  box-shadow: var(--v4-shadow);
+}
+
+/* Customer identity matching remains a secondary utility, not a second reconciliation flow. */
+.bank-customer-launcher {
+  min-width: 150px !important;
+  opacity: .9;
+}
+
+.bank-customer-launcher:hover {
+  opacity: 1;
+}
+
+@media (max-width: 1100px) {
+  .bill360-closure-rail {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .bill360-closure-rail {
+    grid-template-columns: 1fr;
+  }
+}
