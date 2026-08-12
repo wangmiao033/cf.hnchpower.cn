@@ -78,11 +78,11 @@ def _recommended(candidate: dict, raw: dict) -> dict:
     if share is None:
         warnings.append("合同未维护分成比例")
     if fee is None:
-        warnings.append("合同未结构化通道费率，暂按0%显示")
+        warnings.append("合同未结构化通道费率，保留当前账单值")
     if tax is None:
-        warnings.append("合同未结构化税率，暂按0%显示")
+        warnings.append("合同未结构化税率，保留当前账单值")
     if testing is None:
-        warnings.append("合同未结构化测试费，暂按0元显示")
+        warnings.append("合同未结构化测试费，保留当前账单值")
     if basis_mode == "ambiguous" and abs(product_discount - 1.0) > EPS:
         warnings.append("合同未明确按实付还是折后流水，折扣不自动改写")
 
@@ -94,9 +94,9 @@ def _recommended(candidate: dict, raw: dict) -> dict:
         "settlement_discount_rate": settlement_discount,
         "discount_policy": discount_policy,
         "share_ratio": share,
-        "channel_fee_rate": 0.0 if fee is None else round(fee, 4),
-        "tax_rate": 0.0 if tax is None else round(tax, 4),
-        "test_fee": 0.0 if testing is None else round(testing, 2),
+        "channel_fee_rate": None if fee is None else round(fee, 4),
+        "tax_rate": None if tax is None else round(tax, 4),
+        "test_fee": None if testing is None else round(testing, 2),
         "warnings": warnings,
     }
 
@@ -180,7 +180,7 @@ def recommend_rd_rules(
         }
         contract_amount = calculate_contract_standard_amount_v4(
             "rd",
-            {"channel_fee_rate": recommended["channel_fee_rate"], "validation_tolerance": 0.05},
+            {"channel_fee_rate": _safe_number(raw.get("channel_fee_rate")), "validation_tolerance": 0.05},
             raw_line,
             candidate,
             tolerance=0.05,
@@ -208,9 +208,16 @@ def recommend_rd_rules(
     auto_lines = [item for item in results if item.get("auto_apply") and item.get("recommended")]
     header = None
     if auto_lines:
-        fees = {round(float(item["recommended"]["channel_fee_rate"]), 4) for item in auto_lines}
-        if len(fees) == 1:
+        fee_values = [item["recommended"].get("channel_fee_rate") for item in auto_lines]
+        fees = {round(float(value), 4) for value in fee_values if value is not None}
+        if len(fees) == 1 and all(value is not None for value in fee_values):
             header = {"channel_fee_rate": next(iter(fees)), "compatible": True}
+        elif any(value is None for value in fee_values):
+            header = {
+                "channel_fee_rate": None,
+                "compatible": True,
+                "message": "部分合同未结构化通道费率，保留当前整单通道费并提示人工复核。",
+            }
         else:
             header = {
                 "channel_fee_rate": None,
