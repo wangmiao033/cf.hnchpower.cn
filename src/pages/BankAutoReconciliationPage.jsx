@@ -1,5 +1,4 @@
 import React, { useState } from 'react'
-import BankAllocationDock from '@/components/bank/BankAllocationDock.jsx'
 import BankCustomerMatchDock from '@/components/bank/BankCustomerMatchDock.jsx'
 import BankCenterPageV2 from './BankCenterPageV2.jsx'
 
@@ -10,7 +9,6 @@ export default function BankAutoReconciliationPage() {
     <>
       <BankCenterPageV2 key={revision} />
       <BankCustomerMatchDock onChanged={refresh} />
-      <BankAllocationDock onChanged={refresh} />
     </>
   )
 }
