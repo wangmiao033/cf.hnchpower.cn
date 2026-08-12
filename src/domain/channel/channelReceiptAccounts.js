@@ -1,5 +1,5 @@
 export const DEFAULT_RECEIVING_ENTITY_ID = 'xiongdong-guangzhou'
-export const DEFAULT_RECEIVING_ACCOUNT_ID = 'icbc-guangzhou-xinghua-5769'
+export const DEFAULT_RECEIVING_ACCOUNT_ID = 'icbc-guangzhou-xinghua-7769'
 
 export const RECEIVING_ENTITIES = Object.freeze([
   Object.freeze({
