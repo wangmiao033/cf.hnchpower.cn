@@ -20,7 +20,9 @@ jobs:
           fetch-depth: 0
 
       - name: Apply performance refactor
-        run: python scripts/v4_p01_patch.py
+        run: |
+          python scripts/v4_p01_patch_fix.py
+          python scripts/v4_p01_patch.py
 
       - name: Verify refactor scope
         run: |
