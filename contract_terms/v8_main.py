@@ -16,6 +16,7 @@ try:
         complete_adjustment as _complete_adjustment,
         apply_carry_forward as _apply_carry_forward,
     )
+    from .channel_line_verification import apply_channel_line_fee_authority
     from .matcher import summarize_results
     from .settlement_recalculator_v4 import calculate_contract_standard_amount_v4
 except ImportError:
@@ -30,6 +31,7 @@ except ImportError:
         complete_adjustment as _complete_adjustment,
         apply_carry_forward as _apply_carry_forward,
     )
+    from channel_line_verification import apply_channel_line_fee_authority
     from matcher import summarize_results
     from settlement_recalculator_v4 import calculate_contract_standard_amount_v4
 
@@ -133,6 +135,11 @@ def reconcile_bill_contract_v3_compat(
     with psycopg.connect(_database_url(), connect_timeout=15, row_factory=dict_row) as conn:
         _ensure_difference_tables(conn)
         result = _reconcile_data_v4(conn, bill_type, bill_id, actor)
+        # P0: the legacy verifier compared every channel line to the bill-header
+        # channel fee. Correct that false positive using the saved line rule (or,
+        # for pre-migration history, a deterministic passing contract amount)
+        # before the final confirmation policy summarizes blocking differences.
+        result = apply_channel_line_fee_authority(conn, bill_type, bill_id, result)
         result = _apply_confirmation_policy(result)
         conn.commit()
     return result
