@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { useAppState } from '@/app/AppStateContext.jsx'
 import PageContainer from '@/components/layout/PageContainer.jsx'
 import BillScanAttachments from '@/components/billing/BillScanAttachments.jsx'
-import ReconciliationLineItemsForm from '@/components/reconciliation/ReconciliationLineItemsForm.jsx'
+import ContractDrivenRdEntry from '@/components/reconciliation/ContractDrivenRdEntry.jsx'
 import { CoreBillLoadingState } from '@/pages/CoreBillLoadingState.jsx'
 import { VIEWS } from '@/app/routes.js'
 import {
@@ -241,12 +241,12 @@ function CoreRdBillFormPage({ mode }) {
           <div className="core-bill-form-title-row">
             <span className="core-bill-form-kind">研发账单</span>
             <h1>{isEdit ? '编辑研发账单' : '新增研发账单'}</h1>
-            <span className={`core-bill-state-tag ${isEdit ? 'is-pending' : ''}`}>{isEdit ? '待核对' : '新建账单'}</span>
+            <span className={`core-bill-state-tag ${isEdit ? 'is-pending' : ''}`}>{isEdit ? '待核对' : '合同驱动录入'}</span>
           </div>
           <span className="core-bill-form-tip">
-            {isEdit ? '修改完成后可直接“保存并确认核对”，确认后系统自动锁定账单。' : '先确认合作方和账期，再录入游戏流水。保存后账单进入待核对。'}
+            {isEdit ? '历史账单默认不自动改写合同字段；如需调整，可先对照合同后保存并确认核对。' : '先选择合作方、游戏和账期，系统自动匹配合同并带入结算规则，再录入/核对流水。'}
           </span>
-          {isEdit ? <span className="core-bill-review-hint">日常只需要“确认核对”与“退回修改”两个动作</span> : null}
+          {isEdit ? <span className="core-bill-review-hint">合同字段发生人工偏离时，保存前必须填写调整原因</span> : null}
           <div className={`core-bill-draft-state ${safety.dirty ? 'is-dirty' : 'is-clean'}`}>
             <span aria-hidden="true" />
             <strong>{safety.statusText}</strong>
@@ -254,13 +254,13 @@ function CoreRdBillFormPage({ mode }) {
           </div>
         </div>
         <div className="core-bill-form-total" aria-live="polite">
-          <span>预估结算</span>
+          <span>当前账单结算</span>
           <strong>{money(previewAmount)}</strong>
         </div>
       </section>
 
       <section className="core-bill-card core-bill-card--embedded">
-        <ReconciliationLineItemsForm
+        <ContractDrivenRdEntry
           key={`${mode}-${reconEditRecordId || 'new'}-${safety.resetVersion}`}
           formId={FORM_ID}
           layout="createPage"
@@ -276,6 +276,8 @@ function CoreRdBillFormPage({ mode }) {
           onUpdateRecord={recon.updateRecord}
           settlementMonth={settings.settlementMonth}
           settlementCycles={(recon.records || []).map((row) => row.settlementMonth)}
+          existingRecords={recon.records || []}
+          settlementNumberFormat={settings.settlementNumberFormat}
           onError={(msg) => showToast(msg, 'error')}
           quickFillData={isEdit ? null : recon.quickFillData}
           partners={settings.partners || []}
