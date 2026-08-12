@@ -18,7 +18,7 @@ describe('channel receipt receiving accounts', () => {
     expect(entity.taxId).toBe('91440104MABURP0XXA')
     expect(account.bankName).toBe('中国工商银行股份有限公司广州兴华支行')
     expect(account.accountNumber).toBe('3602841509200157769')
-    expect(receivingAccountOptionLabel(account)).toBe('工商银行广州兴华支行｜尾号5769')
+    expect(receivingAccountOptionLabel(account)).toBe('工商银行广州兴华支行｜尾号7769')
   })
 
   it('stores receiving entity and account without contract party labels', () => {
