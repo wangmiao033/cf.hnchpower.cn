@@ -156,11 +156,28 @@ function CoreRdBillFormPage({ mode }) {
     setLoadAttempt((value) => value + 1)
   }
 
-  const handleSubmitted = (intent) => {
+  const handleSubmitted = async (intent) => {
+    const shouldConfirm = isEdit && submitIntentRef.current === 'confirm'
+    submitIntentRef.current = 'back'
     safety.clearAfterSubmit()
     if (isEdit && reconEditRecordId) {
       invalidateEditRecord('rd', String(reconEditRecordId))
     }
+
+    if (shouldConfirm && reconEditRecordId) {
+      try {
+        await transitionBillLifecycle('rd', String(reconEditRecordId), 'confirmed', '')
+        await recon.refetchReconciliationFromApi?.()
+        showToast('核对完成，账单已锁定', 'success')
+        goList()
+      } catch (error) {
+        showToast(error instanceof Error ? error.message : '账单已保存，但确认核对失败，请稍后重试。', 'error')
+      } finally {
+        setReviewing(false)
+      }
+      return
+    }
+
     if (intent === 'continue') {
       recon.setQuickFillData(null)
       showToast('已保存，可继续新增下一张研发账单', 'success')
@@ -169,7 +186,7 @@ function CoreRdBillFormPage({ mode }) {
     goList()
   }
 
-  const confirmReview = async () => {
+  const confirmReview = () => {
     if (!isEdit || !reconEditRecordId || reviewing) return
     const candidate = safety.currentRecord || safety.draftRecord || stableEditRecord
     const validationMessage = reviewValidation(candidate)
@@ -178,32 +195,13 @@ function CoreRdBillFormPage({ mode }) {
       return
     }
     const confirmed = window.confirm(
-      `确认核对这张研发账单吗？\n\n结算金额：${money(candidate?.settlementAmount || previewAmount)}\n\n确认后账单会自动锁定；如需再修改，可点击“退回修改”。`
+      `确认核对这张研发账单吗？\n\n结算金额：${money(candidate?.settlementAmount || previewAmount)}\n\n系统会先按 V3.1 合同驱动规则保存并固化合同快照，再执行确认核对。`
     )
     if (!confirmed) return
 
     setReviewing(true)
-    const billId = String(reconEditRecordId)
-    try {
-      const saved = await recon.updateRecord(billId, {
-        ...stableEditRecord,
-        ...candidate,
-        id: billId,
-        status: stableEditRecord?.status || 'pending'
-      })
-      if (saved === false) return
-      safety.clearAfterSubmit()
-      invalidateEditRecord('rd', billId)
-
-      await transitionBillLifecycle('rd', billId, 'confirmed', '')
-      await recon.refetchReconciliationFromApi?.()
-      showToast('核对完成，账单已锁定', 'success')
-      goList()
-    } catch (error) {
-      showToast(error instanceof Error ? error.message : '账单已保存，但确认核对失败，请稍后重试。', 'error')
-    } finally {
-      setReviewing(false)
-    }
+    submitIntentRef.current = 'confirm'
+    document.getElementById(FORM_ID)?.requestSubmit()
   }
 
   const discardDraft = () => {
@@ -278,7 +276,11 @@ function CoreRdBillFormPage({ mode }) {
           settlementCycles={(recon.records || []).map((row) => row.settlementMonth)}
           existingRecords={recon.records || []}
           settlementNumberFormat={settings.settlementNumberFormat}
-          onError={(msg) => showToast(msg, 'error')}
+          onError={(msg) => {
+            submitIntentRef.current = 'back'
+            setReviewing(false)
+            showToast(msg, 'error')
+          }}
           quickFillData={isEdit ? null : recon.quickFillData}
           partners={settings.partners || []}
           onAddPartner={async (name) => {
@@ -334,7 +336,7 @@ function CoreRdBillFormPage({ mode }) {
             {isEdit ? '保存修改' : '保存账单'}
           </button>
           {isEdit ? (
-            <button type="button" className="confirm-review" disabled={reviewing} onClick={() => void confirmReview()}>
+            <button type="button" className="confirm-review" disabled={reviewing} onClick={confirmReview}>
               {reviewing ? '正在确认…' : '保存并确认核对'}
             </button>
           ) : null}
