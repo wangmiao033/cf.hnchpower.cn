@@ -45,11 +45,50 @@ function validationText(status) {
 }
 
 function contractRuleLabel(state) {
-  if (state.loading) return '正在匹配合同规则…'
-  if (state.tone === 'applied') return '已从合同自动带入'
+  if (state.loading) return '正在读取合同清单…'
+  if (state.tone === 'applied') return '已按合同清单带入'
   if (state.tone === 'review') return '合同规则需确认'
   if (state.tone === 'error') return '合同规则读取失败'
   return '合同规则自动匹配'
+}
+
+function emptyContractRuleState() {
+  return { loading: false, tone: 'idle', message: '', contracts: [], recommendation: null, fingerprint: '' }
+}
+
+function sameNumber(left, right, tolerance = 0.0001) {
+  if (left == null || right == null || String(left).trim() === '' || String(right).trim() === '') return false
+  const a = Number(left)
+  const b = Number(right)
+  return Number.isFinite(a) && Number.isFinite(b) && Math.abs(a - b) <= tolerance
+}
+
+function identityRows(lines) {
+  return (lines || []).map((row, index) => ({
+    line_index: index,
+    game_name: String(row.gameName || '').trim(),
+    settlement_cycle: normalizeChannelSettlementCycle(row.settlementCycle)
+  })).filter((row) => row.game_name && row.settlement_cycle)
+}
+
+function recommendationFingerprint(partnerName, channelName, lines) {
+  return JSON.stringify({
+    partnerName: String(partnerName || '').trim(),
+    channelName: String(channelName || '').trim(),
+    lines: identityRows(lines).map((row) => [row.line_index, row.game_name, row.settlement_cycle])
+  })
+}
+
+function fallbackHeader(base) {
+  const preset = detectChannelRulePreset(base.channelName || base.partnerName)
+  if (preset) return applyChannelRulePreset(base, preset)
+  return {
+    ...base,
+    settlementRuleCode: 'legacy_fixed_fee_tax',
+    channelFeeMode: 'fixed',
+    channelFeeRate: '',
+    taxMode: 'share'
+  }
 }
 
 function ChannelBillingForm({
@@ -72,9 +111,10 @@ function ChannelBillingForm({
   const [header, setHeader] = useState(initialHeaderForm)
   const [lines, setLines] = useState([initialLineItem()])
   const [partnerId, setPartnerId] = useState('')
-  const [contractRuleState, setContractRuleState] = useState({ loading: false, tone: 'idle', message: '', contracts: [] })
+  const [contractRuleState, setContractRuleState] = useState(emptyContractRuleState)
   const [contractRuleRevision, setContractRuleRevision] = useState(0)
   const [lastContractRuleKey, setLastContractRuleKey] = useState('')
+  const [contractOverrideReason, setContractOverrideReason] = useState('')
 
   const fullRecord = useMemo(
     () => buildFullChannelRecord({ ...header, status: header.status || 'pending' }, lines),
@@ -101,6 +141,30 @@ function ChannelBillingForm({
     return findExactPartner(partners, header.partnerName || header.channelName)
   }, [partners, partnerId, header.partnerName, header.channelName])
 
+  const effectiveRuleHeader = applyTargetedChannelRule(header)
+  const feeMode = effectiveRuleHeader.channelFeeMode || 'fixed'
+  const targetedRuleLocked = effectiveRuleHeader.settlementRuleCode === XIAN_WEIZHEN_9917_RULE
+
+  const contractRuleNeedsOverride = useMemo(() => {
+    if (mode !== 'add' || targetedRuleLocked) return false
+    const result = contractRuleState.recommendation
+    if (!result) return false
+    if (result.partner_rule_status === 'none') return false
+    for (let index = 0; index < lines.length; index += 1) {
+      const row = lines[index]
+      if (!String(row.gameName || '').trim() || !normalizeChannelSettlementCycle(row.settlementCycle)) continue
+      const item = (result.lines || []).find((candidate) => candidate.line_index === index)
+      if (!item?.match || !item.auto_apply || !item.recommended) return true
+      const rec = item.recommended
+      if (rec.share_rate != null && !sameNumber(row.shareRate, rec.share_rate)) return true
+      if (rec.tax_rate != null && !sameNumber(row.taxRate, rec.tax_rate)) return true
+      if (rec.channel_fee_mode && effectiveRuleHeader.channelFeeMode !== rec.channel_fee_mode) return true
+      if (rec.channel_fee_rate != null && !sameNumber(effectiveRuleHeader.channelFeeRate, rec.channel_fee_rate)) return true
+      if (rec.tax_mode && effectiveRuleHeader.taxMode !== rec.tax_mode) return true
+    }
+    return false
+  }, [contractRuleState.recommendation, effectiveRuleHeader.channelFeeMode, effectiveRuleHeader.channelFeeRate, effectiveRuleHeader.taxMode, lines, mode, targetedRuleLocked])
+
   useEffect(() => { onPreviewChange?.(previewSettlement) }, [previewSettlement, onPreviewChange])
 
   useEffect(() => {
@@ -110,15 +174,17 @@ function ChannelBillingForm({
       setHeader(recordToHeaderForm(stateRecord))
       const lineForms = recordToLineForms(stateRecord)
       setLines(lineForms.length ? lineForms : [initialLineItem()])
-      setContractRuleState({ loading: false, tone: 'idle', message: '', contracts: [] })
+      setContractRuleState(emptyContractRuleState())
       setLastContractRuleKey('')
+      setContractOverrideReason('')
       return
     }
     setHeader({ ...initialHeaderForm })
     setPartnerId('')
     setLines([{ ...initialLineItem() }])
-    setContractRuleState({ loading: false, tone: 'idle', message: '', contracts: [] })
+    setContractRuleState(emptyContractRuleState())
     setLastContractRuleKey('')
+    setContractOverrideReason('')
   }, [mode, sourceRecord?.id, draftRecord])
 
   useEffect(() => {
@@ -132,72 +198,105 @@ function ChannelBillingForm({
   useEffect(() => {
     if (mode !== 'add') return undefined
     const partnerName = String(header.partnerName || '').trim()
-    const draftLines = lines
-      .map((row, index) => ({
-        index,
-        game_name: String(row.gameName || '').trim(),
-        settlement_cycle: normalizeChannelSettlementCycle(row.settlementCycle)
-      }))
-      .filter((row) => row.game_name)
-    if (!partnerName || !draftLines.length || draftLines.some((row) => !row.settlement_cycle)) {
-      setContractRuleState((current) => current.loading ? { loading: false, tone: 'idle', message: '', contracts: [] } : current)
-      return undefined
-    }
+    if (!partnerName) return undefined
 
-    const fingerprint = JSON.stringify({
-      partnerName,
-      channelName: String(header.channelName || '').trim(),
-      lines: draftLines.map((row) => [row.game_name, row.settlement_cycle])
-    })
+    const preciseLines = identityRows(lines)
+    const fingerprint = recommendationFingerprint(partnerName, header.channelName, lines)
     const requestKey = `${fingerprint}:${contractRuleRevision}`
     if (requestKey === lastContractRuleKey) return undefined
 
+    setContractRuleState((current) => ({
+      ...current,
+      loading: true,
+      tone: 'idle',
+      message: preciseLines.length ? '正在按合作方、游戏和账期匹配合同合作清单…' : '正在读取合作方合同清单默认结算规则…'
+    }))
+
     let cancelled = false
     const timer = window.setTimeout(() => {
-      setContractRuleState((current) => ({ ...current, loading: true, tone: 'idle', message: '正在根据合作方、游戏和授权期匹配合同…' }))
       recommendChannelContractRules({
         partner_name: partnerName,
         channel_name: String(header.channelName || '').trim(),
-        lines: draftLines.map((row) => ({ game_name: row.game_name, settlement_cycle: row.settlement_cycle }))
+        lines: preciseLines.length ? preciseLines : [{ line_index: -1, game_name: '', settlement_cycle: '' }]
       })
         .then((result) => {
           if (cancelled) return
-          const contractNames = [...new Set((result.lines || []).map((item) => item.match?.contract_name).filter(Boolean))]
+          const contractNames = [...new Set([
+            ...(result.partner_contracts || []),
+            ...(result.lines || []).map((item) => item.match?.contract_name).filter(Boolean)
+          ])]
           setLastContractRuleKey(requestKey)
-          if (!result.auto_apply || !result.header_recommendation) {
+
+          const targeted = detectChannelRulePreset(header.partnerName || header.channelName) === XIAN_WEIZHEN_9917_RULE
+          const preciseHeader = result.auto_apply && result.header_recommendation ? result.header_recommendation : null
+          const baseline = result.partner_auto_apply && result.partner_recommendation ? result.partner_recommendation : null
+          const chosenHeader = preciseHeader || baseline
+
+          if (chosenHeader) {
+            setHeader((current) => targeted ? applyTargetedChannelRule(current) : ({
+              ...current,
+              settlementRuleCode: chosenHeader.settlement_rule_code,
+              channelFeeMode: chosenHeader.channel_fee_mode,
+              channelFeeRate: String(chosenHeader.channel_fee_rate ?? ''),
+              taxMode: chosenHeader.tax_mode,
+              validationTolerance: String(chosenHeader.validation_tolerance ?? 0.05)
+            }))
+            setLines((current) => current.map((row, index) => {
+              const precise = (result.lines || []).find((item) => item.line_index === index && item.auto_apply)?.recommended
+              const rec = precise || baseline
+              if (!rec) return row
+              return {
+                ...row,
+                shareRate: rec.share_rate != null ? String(rec.share_rate) : row.shareRate,
+                taxRate: rec.tax_rate != null ? String(rec.tax_rate) : row.taxRate,
+                gatewayCost: rec.channel_fee_mode === 'fixed' ? row.gatewayCost : ''
+              }
+            }))
             setContractRuleState({
               loading: false,
-              tone: 'review',
-              message: result.message || '已找到合同，但规则存在歧义，请人工确认。',
-              contracts: contractNames
+              tone: 'applied',
+              message: preciseHeader
+                ? `${result.message}；当前明细已按具体合同合作清单填充。`
+                : `${result.partner_rule_message}；选择游戏和账期后还会再次精确核对。`,
+              contracts: contractNames,
+              recommendation: result,
+              fingerprint
             })
             return
           }
 
-          const recommendation = result.header_recommendation
-          setHeader((current) => applyTargetedChannelRule({
-            ...current,
-            settlementRuleCode: recommendation.settlement_rule_code,
-            channelFeeMode: recommendation.channel_fee_mode,
-            channelFeeRate: String(recommendation.channel_fee_rate ?? ''),
-            taxMode: recommendation.tax_mode,
-            validationTolerance: String(recommendation.validation_tolerance ?? 0.05)
-          }))
-          setLines((current) => current.map((row, index) => {
-            const lineRecommendation = (result.lines || []).find((item) => item.line_index === index && item.auto_apply)?.recommended
-            if (!lineRecommendation) return row
-            return {
+          if (result.partner_rule_status === 'none') {
+            setHeader((current) => fallbackHeader(current))
+            setLines((current) => current.map((row) => ({
               ...row,
-              shareRate: lineRecommendation.share_rate != null ? String(lineRecommendation.share_rate) : row.shareRate,
-              taxRate: lineRecommendation.tax_rate != null ? String(lineRecommendation.tax_rate) : row.taxRate,
-              gatewayCost: recommendation.channel_fee_mode === 'fixed' ? row.gatewayCost : ''
-            }
+              shareRate: String(row.shareRate || '30'),
+              taxRate: String(row.taxRate || '5')
+            })))
+            setContractRuleState({
+              loading: false,
+              tone: 'review',
+              message: '未找到该合作方合同清单，已回退到原有人工/渠道规则；本次不会把旧默认值冒充合同值。',
+              contracts: contractNames,
+              recommendation: result,
+              fingerprint
+            })
+            return
+          }
+
+          setHeader((current) => targeted ? applyTargetedChannelRule(current) : ({
+            ...current,
+            settlementRuleCode: 'custom',
+            channelFeeMode: 'none',
+            channelFeeRate: '',
+            taxMode: 'none'
           }))
           setContractRuleState({
             loading: false,
-            tone: 'applied',
-            message: `${result.message || '合同规则已自动带入'}；分成、通道费和税率记录已按合同合作清单填充。`,
-            contracts: contractNames
+            tone: 'review',
+            message: result.partner_rule_message || result.message || '合同规则存在歧义，请按具体游戏和账期确认。',
+            contracts: contractNames,
+            recommendation: result,
+            fingerprint
           })
         })
         .catch((error) => {
@@ -205,11 +304,13 @@ function ChannelBillingForm({
           setContractRuleState({
             loading: false,
             tone: 'error',
-            message: error instanceof Error ? error.message : '合同规则读取失败，请手工选择结算规则。',
-            contracts: []
+            message: error instanceof Error ? error.message : '合同规则读取失败，请重新匹配后再保存。',
+            contracts: [],
+            recommendation: null,
+            fingerprint: ''
           })
         })
-    }, 450)
+    }, 250)
 
     return () => {
       cancelled = true
@@ -223,11 +324,24 @@ function ChannelBillingForm({
   const handlePartnerChange = (partnerName, nextPartnerId = '', selected = null) => {
     setPartnerId(nextPartnerId)
     setLastContractRuleKey('')
-    setContractRuleState({ loading: false, tone: 'idle', message: '', contracts: [] })
+    setContractRuleState(emptyContractRuleState())
+    setContractOverrideReason('')
+    const channelName = selected && nextPartnerId ? selected.shortName || selected.name : partnerName
+    const preset = detectChannelRulePreset(channelName || partnerName)
+    if (mode === 'add' && preset !== XIAN_WEIZHEN_9917_RULE) {
+      setLines((current) => current.map((row) => ({ ...row, shareRate: '', taxRate: '' })))
+    }
     setHeader((current) => {
-      const base = { ...current, partnerName, channelName: selected && nextPartnerId ? selected.shortName || selected.name : partnerName }
-      const preset = detectChannelRulePreset(base.channelName || base.partnerName)
-      return preset && mode === 'add' ? applyChannelRulePreset(base, preset) : applyTargetedChannelRule(base)
+      const base = { ...current, partnerName, channelName }
+      if (mode !== 'add') return applyTargetedChannelRule(base)
+      if (preset === XIAN_WEIZHEN_9917_RULE) return applyChannelRulePreset(base, preset)
+      return {
+        ...base,
+        settlementRuleCode: 'custom',
+        channelFeeMode: 'none',
+        channelFeeRate: '',
+        taxMode: 'none'
+      }
     })
   }
 
@@ -236,8 +350,15 @@ function ChannelBillingForm({
   }
 
   const addLine = () => {
-    const lastCycle = normalizeChannelSettlementCycle(lines[lines.length - 1]?.settlementCycle)
-    setLines((current) => [...current, { ...initialLineItem(), settlementCycle: lastCycle }])
+    const last = lines[lines.length - 1] || {}
+    const lastCycle = normalizeChannelSettlementCycle(last.settlementCycle)
+    const baseline = contractRuleState.recommendation?.partner_recommendation
+    const next = { ...initialLineItem(), settlementCycle: lastCycle }
+    if (!targetedRuleLocked) {
+      next.shareRate = baseline?.share_rate != null ? String(baseline.share_rate) : String(last.shareRate ?? '')
+      next.taxRate = baseline?.tax_rate != null ? String(baseline.tax_rate) : String(last.taxRate ?? '')
+    }
+    setLines((current) => [...current, next])
   }
   const removeLine = (index) => setLines((current) => current.length <= 1 ? current : current.filter((_, rowIndex) => rowIndex !== index))
 
@@ -253,9 +374,36 @@ function ChannelBillingForm({
       const row = lines[i]
       if (!normalizeChannelSettlementCycle(row.settlementCycle)) { const msg = `第 ${i + 1} 行：请选择结算月份`; onError?.(msg) ?? window.alert(msg); return }
       if (!row.gameName?.trim()) { const msg = `第 ${i + 1} 行：请填写游戏名称`; onError?.(msg) ?? window.alert(msg); return }
+      if (mode === 'add' && !targetedRuleLocked && String(row.shareRate ?? '').trim() === '') { const msg = `第 ${i + 1} 行：分成比例尚未由合同确定，请等待合同匹配或人工填写`; onError?.(msg) ?? window.alert(msg); return }
+      if (mode === 'add' && !targetedRuleLocked && String(row.taxRate ?? '').trim() === '') { const msg = `第 ${i + 1} 行：税率尚未由合同确定，请等待合同匹配或人工填写 0`; onError?.(msg) ?? window.alert(msg); return }
     }
+
+    if (mode === 'add' && !targetedRuleLocked) {
+      const currentFingerprint = recommendationFingerprint(header.partnerName, header.channelName, lines)
+      if (contractRuleState.loading || contractRuleState.fingerprint !== currentFingerprint) {
+        const msg = '合同清单正在按当前合作方、游戏和账期重新匹配，请完成本轮匹配后再保存。'
+        onError?.(msg) ?? window.alert(msg); return
+      }
+      if (contractRuleState.tone === 'error') {
+        const msg = '合同规则读取失败，不能直接用旧默认值保存；请重新匹配合同。'
+        onError?.(msg) ?? window.alert(msg); return
+      }
+      if (contractRuleNeedsOverride && !contractOverrideReason.trim()) {
+        const msg = '当前结算规则与合同清单不完全一致；如需人工覆盖，请先填写“人工覆盖合同原因”。'
+        onError?.(msg) ?? window.alert(msg); return
+      }
+    }
+
     const intent = submitIntentRef?.current ?? 'back'
-    const record = buildFullChannelRecord({ ...header, status: channelStatusForSubmit(header.status, intent) }, lines)
+    const overrideNote = contractRuleNeedsOverride && contractOverrideReason.trim()
+      ? `合同人工覆盖：${contractOverrideReason.trim()}`
+      : ''
+    const recordHeader = {
+      ...header,
+      status: channelStatusForSubmit(header.status, intent),
+      remark: [String(header.remark || '').trim(), overrideNote].filter(Boolean).join('；')
+    }
+    const record = buildFullChannelRecord(recordHeader, lines)
     try {
       if (mode === 'edit' && recordId != null) {
         const pendingResult = onUpdateRecord?.(recordId, { ...record, id: recordId })
@@ -264,16 +412,20 @@ function ChannelBillingForm({
         onAfterSubmit?.(intent)
       } else {
         const result = onAddRecord?.(record); if (result && typeof result.then === 'function') await result
-        if (intent === 'continue') { setHeader({ ...initialHeaderForm }); setPartnerId(''); setLines([{ ...initialLineItem() }]); setLastContractRuleKey(''); setContractRuleState({ loading: false, tone: 'idle', message: '', contracts: [] }) }
+        if (intent === 'continue') {
+          setHeader({ ...initialHeaderForm })
+          setPartnerId('')
+          setLines([{ ...initialLineItem() }])
+          setLastContractRuleKey('')
+          setContractRuleState(emptyContractRuleState())
+          setContractOverrideReason('')
+        }
         onAfterSubmit?.(intent)
       }
     } catch { return }
     if (submitIntentRef) submitIntentRef.current = 'back'
   }
 
-  const effectiveRuleHeader = applyTargetedChannelRule(header)
-  const feeMode = effectiveRuleHeader.channelFeeMode || 'fixed'
-  const targetedRuleLocked = effectiveRuleHeader.settlementRuleCode === XIAN_WEIZHEN_9917_RULE
   const validationTone = totals.validationStatus === 'fail' ? 'is-danger' : totals.validationStatus === 'pass' ? 'is-good' : ''
 
   return (
@@ -292,8 +444,8 @@ function ChannelBillingForm({
 
         <section className="channel-rule-panel">
           <div className="channel-rule-panel__head">
-            <div><span>结算规则引擎</span><strong>{targetedRuleLocked ? '渠道专属规则已锁定' : '合同优先驱动，人工可覆盖'}</strong></div>
-            <small>{targetedRuleLocked ? '西安维真（客户 9917）：代金券、福利币仅记录；其余原扣减项保持现有规则，分成后扣 5% 通道费，税率仅记录。' : '选择合作方并填写游戏、账期后，系统优先按合同合作清单带入分成和通道费；平台结算额仍用于最终校验。'}</small>
+            <div><span>结算规则引擎</span><strong>{targetedRuleLocked ? '渠道专属规则已锁定' : '合同清单优先，人工覆盖需留痕'}</strong></div>
+            <small>{targetedRuleLocked ? '西安维真（客户 9917）：代金券、福利币仅记录；其余原扣减项保持现有规则，分成后扣 5% 通道费，税率仅记录。' : '选择合作方后先读取合同清单统一规则；填写游戏和账期后再锁定具体合作清单。旧 30%/5% 默认值不会再冒充合同值。'}</small>
           </div>
           {mode === 'add' && (contractRuleState.loading || contractRuleState.message) ? (
             <div className={`channel-contract-rule-status is-${contractRuleState.tone || 'idle'}`}>
@@ -303,6 +455,12 @@ function ChannelBillingForm({
                 {contractRuleState.contracts?.length ? <small>{contractRuleState.contracts.join(' · ')}</small> : null}
               </div>
               <button type="button" onClick={() => { setLastContractRuleKey(''); setContractRuleRevision((value) => value + 1) }} disabled={contractRuleState.loading}>重新匹配</button>
+            </div>
+          ) : null}
+          {mode === 'add' && contractRuleNeedsOverride && !targetedRuleLocked ? (
+            <div className="channel-contract-rule-override">
+              <div><strong>当前值未完全按合同清单</strong><span>如确需人工覆盖，必须填写原因；该原因会随账单备注保存。</span></div>
+              <input type="text" value={contractOverrideReason} onChange={(event) => setContractOverrideReason(event.target.value)} placeholder="例如：商务临时约定、历史口径、合同清单待补录" />
             </div>
           ) : null}
           <div className="channel-rule-grid">
@@ -336,8 +494,8 @@ function ChannelBillingForm({
                   <td><input type="number" step="0.01" className="admin-input" value={row.testCost} onChange={(e) => handleLineChange(index, 'testCost', e.target.value)} /></td>
                   <td><input type="number" step="0.01" className="admin-input" value={row.welfareCost} onChange={(e) => handleLineChange(index, 'welfareCost', e.target.value)} /></td>
                   <td><input type="number" step="0.01" className="admin-input" value={row.coinCost} onChange={(e) => handleLineChange(index, 'coinCost', e.target.value)} /></td>
-                  <td><input type="number" step="0.01" className="admin-input" value={row.shareRate} onChange={(e) => handleLineChange(index, 'shareRate', e.target.value)} /></td>
-                  <td><input type="number" step="0.01" className="admin-input" value={row.taxRate} onChange={(e) => handleLineChange(index, 'taxRate', e.target.value)} /></td>
+                  <td><input type="number" step="0.01" className="admin-input" value={row.shareRate} onChange={(e) => handleLineChange(index, 'shareRate', e.target.value)} placeholder="合同带入/人工填写" /></td>
+                  <td><input type="number" step="0.01" className="admin-input" value={row.taxRate} onChange={(e) => handleLineChange(index, 'taxRate', e.target.value)} placeholder="合同带入/填0" /></td>
                   <td><input type="number" step="0.01" className="admin-input" value={row.gatewayCost} disabled={feeMode !== 'fixed'} onChange={(e) => handleLineChange(index, 'gatewayCost', e.target.value)} placeholder={feeMode === 'fixed' ? '元' : '由规则计算'} /></td>
                   <td className="channel-line-num">{formatMoney(calculateBillingAmount(row, effectiveRuleHeader))}</td>
                   <td className="channel-line-num">{formatMoney(calculateShareAmount(row, effectiveRuleHeader))}</td>
