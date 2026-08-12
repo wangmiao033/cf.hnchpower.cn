@@ -71,8 +71,8 @@ function applyMonthCloseSeed(baseRecord, seed) {
     }))
   return {
     ...(baseRecord || {}),
-    partnerName: String(baseRecord?.partnerName || seed?.partnerName || '').trim(),
-    channelName: String(baseRecord?.channelName || seed?.channelName || seed?.partnerName || '').trim(),
+    partnerName: String(seed?.partnerName || baseRecord?.partnerName || '').trim(),
+    channelName: String(seed?.channelName || baseRecord?.channelName || seed?.partnerName || '').trim(),
     settlementMonth: month || baseRecord?.settlementMonth || '',
     items: [...currentItems, ...added]
   }
@@ -202,7 +202,7 @@ function CoreChannelBillFormPage({ mode }) {
         return
       }
     }
-    const base = isEdit ? stableRecord : (safety.draftRecord || {})
+    const base = isEdit ? stableRecord : {}
     const nextRecord = applyMonthCloseSeed(base, monthCloseSeed)
     setSmartRecord(nextRecord)
     setSmartRevision((value) => value + 1)
@@ -214,7 +214,7 @@ function CoreChannelBillFormPage({ mode }) {
         : '已打开本月账单，继续补流水或核对即可。',
       'info'
     )
-  }, [monthCloseSeed, isEdit, stableRecord, channelEditRecordId, safety.draftRecord, showToast])
+  }, [monthCloseSeed, isEdit, stableRecord, channelEditRecordId, showToast])
 
   const listSnapshot = isEdit
     ? (recon.channelRecords || []).find(
