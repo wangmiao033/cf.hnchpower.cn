@@ -80,6 +80,7 @@ export type RdContractRuleLine = {
 
 export type RdContractRuleRecommendation = {
   version: string
+  partner_name: string
   auto_apply: boolean
   matched_lines: number
   auto_apply_lines: number
