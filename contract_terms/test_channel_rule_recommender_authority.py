@@ -257,6 +257,33 @@ class ChannelContractAuthorityTests(unittest.TestCase):
         self.assertTrue(precise["auto_apply"])
         self.assertEqual(precise["lines"][0]["recommended"]["share_rate"], 25)
 
+    def test_missing_invoice_tax_does_not_block_known_mixed_channel_fees(self):
+        candidates = [
+            self.candidate(access_id="A1", game="龙吟大陆", share=30, fee=0, tax=None),
+            self.candidate(access_id="A2", game="圣树唤歌", share=30, fee=6, tax=None),
+            self.candidate(access_id="A3", game="一起来修仙", share=30, fee=6, tax=None),
+        ]
+        result = recommend_channel_rules(
+            self.partner,
+            "天盛（重庆天盛）",
+            [
+                {"line_index": 0, "game_name": "龙吟大陆", "settlement_cycle": "2026-01"},
+                {"line_index": 1, "game_name": "圣树唤歌", "settlement_cycle": "2026-01"},
+                {"line_index": 2, "game_name": "一起来修仙", "settlement_cycle": "2026-01"},
+            ],
+            candidates,
+        )
+
+        self.assertFalse(result["partner_auto_apply"])
+        self.assertEqual(result["partner_rule_status"], "ambiguous")
+        self.assertFalse(result["auto_apply"])
+        self.assertEqual(
+            [row["recommended"]["channel_fee_rate"] for row in result["lines"]],
+            [0, 6, 6],
+        )
+        self.assertTrue(all(row["auto_apply"] for row in result["lines"]))
+        self.assertTrue(all(row["tax_rate_warning"] for row in result["lines"]))
+
     def test_missing_structured_fee_never_turns_into_false_zero_contract_rule(self):
         candidates = [self.candidate(access_id="A1", game="龙吟大陆", fee=None)]
         result = recommend_channel_rules(

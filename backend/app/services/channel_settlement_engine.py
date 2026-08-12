@@ -9,6 +9,7 @@ XIAN_WEIZHEN_9917_RULE = "xian_weizhen_9917"
 VALID_RULES = {
     "legacy_fixed_fee_tax",
     "xiaomi_percent_fee",
+    "five_percent_gateway_share",
     "percent_fee_after_tax",
     "share_only",
     XIAN_WEIZHEN_9917_RULE,
@@ -43,21 +44,34 @@ def _money(value: Decimal) -> Decimal:
     return value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
-def resolve_rule_settings(record: Any) -> dict[str, Any]:
-    code = str(getattr(record, "settlement_rule_code", None) or "legacy_fixed_fee_tax").strip()
+def _value(record: Any, field: str, fallback: Any = None) -> Any:
+    value = getattr(record, field, None)
+    if value not in (None, ""):
+        return value
+    return getattr(fallback, field, None) if fallback is not None else None
+
+
+def resolve_rule_settings(record: Any, fallback: Any = None) -> dict[str, Any]:
+    """Resolve one rule source, optionally inheriting missing fields from a parent.
+
+    Channel bill lines can now persist their exact contract rule.  When a line
+    has no stored override (legacy data), the parent bill remains the fallback.
+    An explicit zero is never treated as missing.
+    """
+    code = str(_value(record, "settlement_rule_code", fallback) or "legacy_fixed_fee_tax").strip()
     if code not in VALID_RULES:
         code = "custom"
-    fee_mode = str(getattr(record, "channel_fee_mode", None) or "fixed").strip()
-    tax_mode = str(getattr(record, "tax_mode", None) or "share").strip()
-    fee_rate = _d(getattr(record, "channel_fee_rate", None))
-    tolerance = max(Decimal("0"), _d(getattr(record, "validation_tolerance", None), "0.05"))
+    fee_mode = str(_value(record, "channel_fee_mode", fallback) or "fixed").strip()
+    tax_mode = str(_value(record, "tax_mode", fallback) or "share").strip()
+    fee_rate = _d(_value(record, "channel_fee_rate", fallback))
+    tolerance = max(Decimal("0"), _d(_value(record, "validation_tolerance", fallback), "0.05"))
 
     if code == XIAN_WEIZHEN_9917_RULE:
         # 西安维真（客户 9917）平台账单口径：
         # 代金券、福利币仅记录，不从可分成金额扣减；
         # 其余原扣减项仍参与；分成后统一扣 5% 通道费；税率仅记录。
         fee_mode, tax_mode, fee_rate = "percent", "none", Decimal("5")
-    elif code == "xiaomi_percent_fee":
+    elif code in {"xiaomi_percent_fee", "five_percent_gateway_share"}:
         fee_mode, tax_mode = "percent", "none"
         if fee_rate <= 0:
             fee_rate = Decimal("5")
@@ -76,7 +90,9 @@ def resolve_rule_settings(record: Any) -> dict[str, Any]:
 
 
 def calculate_channel_line(item: Any, record: Any) -> dict[str, Any]:
-    settings = resolve_rule_settings(record)
+    # P0: contract rules belong to the game line, not only to the bill header.
+    # Legacy rows with null line-rule columns still fall back to the parent.
+    settings = resolve_rule_settings(item, record)
     flow = _d(getattr(item, "billing_flow", None))
     discount = _d(getattr(item, "discount_factor", None), "1")
     if discount <= 0:

@@ -53,6 +53,47 @@ class ChannelSettlementEngineTests(unittest.TestCase):
         self.assertEqual(result["validation_status"], "fail")
         self.assertAlmostEqual(float(result["settlement_difference"]), -103.82, places=2)
 
+    def test_line_contract_rule_overrides_parent_header_rule(self):
+        parent = SimpleNamespace(
+            settlement_rule_code="share_only",
+            channel_fee_mode="none",
+            channel_fee_rate=0,
+            tax_mode="none",
+            validation_tolerance=0.05,
+        )
+        line = self.line(1000, 0, None, tax=0)
+        line.share_rate = 30
+        line.settlement_rule_code = "custom"
+        line.channel_fee_mode = "percent"
+        line.channel_fee_rate = 6
+        line.tax_mode = "none"
+        line.validation_tolerance = 0.05
+
+        result = calculate_channel_line(line, parent)
+
+        self.assertEqual(float(result["system_settlement_amount"]), 282.0)
+        self.assertEqual(result["validation_status"], "unvalidated")
+
+    def test_explicit_zero_line_fee_is_not_replaced_by_parent_fee(self):
+        parent = SimpleNamespace(
+            settlement_rule_code="five_percent_gateway_share",
+            channel_fee_mode="percent",
+            channel_fee_rate=5,
+            tax_mode="none",
+            validation_tolerance=0.05,
+        )
+        line = self.line(1000, 0, None, tax=0)
+        line.share_rate = 30
+        line.settlement_rule_code = "share_only"
+        line.channel_fee_mode = "none"
+        line.channel_fee_rate = 0
+        line.tax_mode = "none"
+        line.validation_tolerance = 0.05
+
+        result = calculate_channel_line(line, parent)
+
+        self.assertEqual(float(result["system_settlement_amount"]), 300.0)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -47,7 +47,12 @@ def _rule_fields(candidate: dict) -> dict:
     fee = _number(candidate.get("channel_fee_rate"))
     tax = _number(candidate.get("invoice_tax_rate"))
     share = _number(candidate.get("share_rate"))
-    fields_complete = fee is not None and tax is not None and share is not None
+
+    # P0: invoice_tax_rate is display/audit metadata. The channel settlement
+    # engine defaults tax_mode to "none", so a missing invoice tax rate must not
+    # suppress known contract share/channel-fee numbers. Only the fields that
+    # actually determine the default settlement calculation are blocking here.
+    fields_complete = fee is not None and share is not None
 
     if fee is None:
         rule_code = "custom"
@@ -78,6 +83,7 @@ def _rule_fields(candidate: dict) -> dict:
         "share_rate": round(share, 4) if share is not None else None,
         "validation_tolerance": 0.05,
         "fields_complete": fields_complete,
+        "tax_rate_missing": tax is None,
     }
 
 
@@ -134,7 +140,13 @@ def _rule_signature(rule: dict) -> tuple:
 def _public_rule(rule: dict) -> dict:
     public = dict(rule)
     public.pop("fields_complete", None)
+    public.pop("tax_rate_missing", None)
     return public
+
+
+def _rate_label(value: Any) -> str:
+    number = _number(value)
+    return "未录入" if number is None else f"{number:g}%"
 
 
 def _partner_rule_summary(partner_name: str, candidates: list[dict]) -> dict:
@@ -166,12 +178,12 @@ def _partner_rule_summary(partner_name: str, candidates: list[dict]) -> dict:
             "contracts": contracts,
             "ignored_incomplete_count": incomplete_count,
             "ignored_disabled_count": disabled_count,
-            "message": "当前合作方可用合同合作清单的分成、通道费或税率尚未完整结构化；请选择具体游戏和账期后按对应合同核对。",
+            "message": "当前合作方可用合同合作清单的分成或通道费尚未完整结构化；请选择具体游戏和账期后按对应合同核对。",
         }
 
     signatures = {_rule_signature(rule) for _, rule in complete_pairs}
     if len(signatures) != 1:
-        suffix = f"；另有 {incomplete_count} 条字段不完整记录不参与默认规则判断" if incomplete_count else ""
+        suffix = f"；另有 {incomplete_count} 条结算字段不完整记录不参与默认规则判断" if incomplete_count else ""
         return {
             "status": "ambiguous",
             "auto_apply": False,
@@ -180,13 +192,13 @@ def _partner_rule_summary(partner_name: str, candidates: list[dict]) -> dict:
             "contracts": contracts,
             "ignored_incomplete_count": incomplete_count,
             "ignored_disabled_count": disabled_count,
-            "message": f"该合作方存在多套完整合同结算规则，请选择游戏和账期后按具体合同合作清单自动确认{suffix}。",
+            "message": f"该合作方存在多套合同结算规则，请选择游戏和账期后按具体合同合作清单自动确认{suffix}。",
         }
 
     recommendation = _public_rule(complete_pairs[0][1])
     ignored_bits: list[str] = []
     if incomplete_count:
-        ignored_bits.append(f"{incomplete_count} 条字段不完整历史/辅助记录")
+        ignored_bits.append(f"{incomplete_count} 条结算字段不完整历史/辅助记录")
     if disabled_count:
         ignored_bits.append(f"{disabled_count} 条停用/作废记录")
     ignored_text = f"；已忽略{'、'.join(ignored_bits)}" if ignored_bits else ""
@@ -199,10 +211,10 @@ def _partner_rule_summary(partner_name: str, candidates: list[dict]) -> dict:
         "ignored_incomplete_count": incomplete_count,
         "ignored_disabled_count": disabled_count,
         "message": (
-            "已读取合作方完整合同清单统一规则："
-            f"分成 {recommendation['share_rate']:g}% / "
-            f"通道费 {recommendation['channel_fee_rate']:g}% / "
-            f"税率 {recommendation['tax_rate']:g}%"
+            "已读取合作方合同清单统一规则："
+            f"分成 {_rate_label(recommendation['share_rate'])} / "
+            f"通道费 {_rate_label(recommendation['channel_fee_rate'])} / "
+            f"发票税率 {_rate_label(recommendation['tax_rate'])}"
             f"{ignored_text}"
         ),
     }
@@ -226,16 +238,24 @@ def _rank_candidates(bill: dict, line: dict, candidates: list[dict]) -> list[tup
     return ranked
 
 
-def _selection_pool(ranked: list[tuple[dict, dict, dict]]) -> list[tuple[dict, dict, dict]]:
+def _selection_pool(ranked: list[tuple[dict, dict, dict]], game_name: str) -> list[tuple[dict, dict, dict]]:
     if not ranked:
         return []
-    # If any candidate is not explicitly out of range, an old/expired candidate
-    # must not beat it just because its fields are more complete.
-    in_range = [item for item in ranked if item[1].get("authorization_status") != "out_of_range"]
-    pool = in_range or ranked
-    # Within the relevant time pool, complete financial rules are preferred over
-    # stale/auxiliary duplicates with missing fields. If all are incomplete we
-    # retain them so the UI can correctly request manual completion.
+
+    # Contract identity outranks data completeness. If an exact game access item
+    # exists, never substitute another game's complete rule just because the
+    # exact row is missing a field; expose the missing field for review instead.
+    exact_game = [item for item in ranked if _exact_game_matches(game_name, item[0])]
+    identity_pool = exact_game or ranked
+
+    # If any candidate within that identity pool is not explicitly out of range,
+    # an old/expired candidate must not beat it just because fields are complete.
+    in_range = [item for item in identity_pool if item[1].get("authorization_status") != "out_of_range"]
+    pool = in_range or identity_pool
+
+    # Within the same relevant identity/time pool, complete settlement-driving
+    # rules may win over stale/auxiliary duplicates. Missing invoice tax is not
+    # blocking because tax is record-only under the default channel calculation.
     complete = [item for item in pool if item[2].get("fields_complete")]
     return complete or pool
 
@@ -249,22 +269,12 @@ def recommend_channel_rules(
     """Return contract-authoritative recommendations for a draft channel bill.
 
     Two stages are intentionally separated:
-    1) partner-level baseline: complete, usable access items define the baseline;
-       incomplete/disabled historical rows never poison an otherwise consistent
-       current rule;
-    2) line-level match: game + settlement month locks the exact access item,
-       preferring non-expired and complete rule candidates.
+    1) partner-level baseline: usable access items define the baseline;
+    2) line-level match: game + settlement month locks the exact access item.
 
-    A legacy 30%/5% UI default is never treated as contract evidence.
-
-    If the exact partner + game identity is unique and authorization is merely
-    unstructured/unknown (not explicitly out of range), complete contract
-    financial fields are safe to auto-apply. Missing authorization dates should
-    create a warning, not erase known settlement terms.
-
-    Multiple simultaneously usable complete contracts remain an identity
-    ambiguity unless the top candidate has a clear score margin. Equal financial
-    numbers alone never authorize selecting one contract over another.
+    A legacy 30%/5% UI default is never treated as contract evidence. Missing
+    non-settlement metadata (for example invoice tax) is a warning only and must
+    never erase known share/channel-fee values from the contract list.
     """
     partner_summary = _partner_rule_summary(partner_name, candidates)
     results: list[dict] = []
@@ -293,7 +303,7 @@ def recommend_channel_rules(
             "settlement_cycle": cycle,
         }
         ranked = _rank_candidates(bill, line, candidates)
-        pool = _selection_pool(ranked)
+        pool = _selection_pool(ranked, game_name)
         if not pool:
             results.append(
                 {
@@ -305,6 +315,7 @@ def recommend_channel_rules(
                     "score": 0,
                     "authorization_status": "unknown",
                     "authorization_warning": False,
+                    "tax_rate_warning": False,
                     "rule_fields_complete": False,
                     "financially_unambiguous": False,
                     "message": "该游戏/账期未找到匹配的可用合同合作清单",
@@ -333,16 +344,21 @@ def recommend_channel_rules(
             and financially_unambiguous
             and bool(recommended.get("fields_complete"))
         )
+        tax_rate_warning = bool(recommended.get("tax_rate_missing"))
         public_recommended = _public_rule(recommended)
 
-        if auto_apply and authorization_status == "unknown":
+        if auto_apply and authorization_status == "unknown" and tax_rate_warning:
+            line_message = "合同合作项匹配明确，分成/通道费已带入；授权期与发票税率未结构化，均仅提示补录"
+        elif auto_apply and authorization_status == "unknown":
             line_message = "合同合作项匹配明确，授权期未结构化；已带入合同结算数字，授权期单独待确认"
+        elif auto_apply and tax_rate_warning:
+            line_message = "合同匹配明确，分成/通道费已带入；发票税率未结构化，仅提示补录，不影响结算"
         elif auto_apply:
             line_message = "合同匹配明确，可自动带入结算规则"
         elif authorization_status == "out_of_range":
             line_message = "已找到合同，但当前账期明确不在授权期内，不能自动带入"
         elif not recommended.get("fields_complete"):
-            line_message = "已找到具体合同，但该合作项的分成、通道费或税率结构化字段不完整"
+            line_message = "已找到具体合同，但该合作项的分成或通道费结构化字段不完整"
         elif not financially_unambiguous:
             line_message = "当前游戏/账期仍有多个有效合同候选，需要先确认合同归属"
         else:
@@ -359,6 +375,7 @@ def recommend_channel_rules(
                 "ambiguity_margin": margin,
                 "authorization_status": authorization_status,
                 "authorization_warning": authorization_status == "unknown",
+                "tax_rate_warning": tax_rate_warning,
                 "rule_fields_complete": bool(recommended.get("fields_complete")),
                 "financially_unambiguous": financially_unambiguous,
                 "candidate_count": len(ranked),
@@ -413,28 +430,41 @@ def recommend_channel_rules(
         else:
             overall_auto = False
 
+    # A partner-level baseline is useful only before precise game rows exist, or
+    # after every precise row has independently resolved. If any entered game is
+    # unmatched/ambiguous/incomplete/out-of-range, returning a baseline would let
+    # the UI silently overwrite that row with another game's rule.
+    precise_rows_fully_resolved = not results or len(auto_lines) == len(results)
+    safe_partner_auto_apply = bool(partner_summary["auto_apply"] and precise_rows_fully_resolved)
+    safe_partner_recommendation = partner_summary["recommendation"] if safe_partner_auto_apply else None
+
     if overall_auto and header:
+        warning_bits: list[str] = []
         if any(item.get("authorization_warning") for item in auto_lines):
-            message = "当前游戏与合同匹配已明确；授权期未结构化的条目已单独提示，不影响已知结算数字带入"
+            warning_bits.append("授权期未结构化")
+        if any(item.get("tax_rate_warning") for item in auto_lines):
+            warning_bits.append("发票税率未结构化")
+        if warning_bits:
+            message = f"当前游戏与合同匹配已明确；{'、'.join(warning_bits)}仅提示补录，不影响已知结算数字带入"
         else:
             message = "当前游戏与账期的合同匹配已明确，可自动带入"
-    elif partner_summary["auto_apply"]:
+    elif safe_partner_auto_apply:
         message = partner_summary["message"]
     elif results:
-        message = "合同规则存在歧义或资料不完整，请按具体游戏/账期确认"
+        message = "合同规则存在歧义或结算字段不完整，请按具体游戏/账期确认"
     else:
         message = partner_summary["message"]
 
     return {
-        "version": "contract-channel-rule-v2.3",
+        "version": "contract-channel-rule-v2.6",
         "auto_apply": bool(overall_auto and header),
         "matched_lines": len(matched),
         "total_lines": len(results),
         "header_recommendation": header,
         "lines": results,
         "partner_rule_status": partner_summary["status"],
-        "partner_auto_apply": partner_summary["auto_apply"],
-        "partner_recommendation": partner_summary["recommendation"],
+        "partner_auto_apply": safe_partner_auto_apply,
+        "partner_recommendation": safe_partner_recommendation,
         "partner_contract_count": partner_summary["contract_count"],
         "partner_contracts": partner_summary["contracts"],
         "partner_ignored_incomplete_count": partner_summary["ignored_incomplete_count"],

@@ -48,6 +48,11 @@ class ChannelLineItemCreate(BaseModel):
     share_amount: float = 0
     tax_rate: float = Field(default=0, ge=0, le=100)
     gateway_cost: float = 0
+    settlement_rule_code: str | None = None
+    channel_fee_mode: str | None = None
+    channel_fee_rate: float | None = Field(default=None, ge=0, le=100)
+    tax_mode: str | None = None
+    validation_tolerance: float | None = Field(default=None, ge=0, le=1000)
     platform_settlement_amount: float | None = None
     system_settlement_amount: float = 0
     settlement_difference: float | None = None
@@ -75,6 +80,11 @@ class ChannelLineItemRead(BaseModel):
     share_amount: float
     tax_rate: float
     gateway_cost: float
+    settlement_rule_code: str | None = None
+    channel_fee_mode: str | None = None
+    channel_fee_rate: float | None = None
+    tax_mode: str | None = None
+    validation_tolerance: float | None = None
     platform_settlement_amount: float | None = None
     system_settlement_amount: float = 0
     settlement_difference: float | None = None
