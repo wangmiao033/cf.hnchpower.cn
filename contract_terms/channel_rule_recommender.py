@@ -10,6 +10,27 @@ except ImportError:  # Vercel service-root import.
     from matcher import normalize_company, normalize_game, score_candidate
 
 EPS = 0.01
+EXPLICITLY_DISABLED_STATUSES = {
+    "停用",
+    "已停用",
+    "禁用",
+    "已禁用",
+    "作废",
+    "已作废",
+    "终止",
+    "已终止",
+    "取消",
+    "已取消",
+    "失效",
+    "已失效",
+    "disabled",
+    "inactive",
+    "terminated",
+    "cancelled",
+    "canceled",
+    "void",
+    "voided",
+}
 
 
 def _number(value: Any) -> float | None:
@@ -60,6 +81,24 @@ def _rule_fields(candidate: dict) -> dict:
     }
 
 
+def _status_key(value: Any) -> str:
+    return str(value or "").strip().lower().replace(" ", "")
+
+
+def _candidate_explicitly_disabled(candidate: dict) -> bool:
+    """Ignore only explicit negative states; free-text positive states are not guessed.
+
+    Contract/access status fields are free text in the current data model. We
+    therefore never maintain an allow-list of "active" labels. Only explicit
+    stop/void/disable values are excluded, which avoids making historical
+    backdated bills impossible to inspect merely because wording differs.
+    """
+    for field in ("access_status", "performance_status"):
+        if _status_key(candidate.get(field)) in EXPLICITLY_DISABLED_STATUSES:
+            return True
+    return False
+
+
 def _partner_matches(partner_name: str, candidate: dict) -> bool:
     target = normalize_company(partner_name)
     if not target:
@@ -92,8 +131,16 @@ def _rule_signature(rule: dict) -> tuple:
     )
 
 
+def _public_rule(rule: dict) -> dict:
+    public = dict(rule)
+    public.pop("fields_complete", None)
+    return public
+
+
 def _partner_rule_summary(partner_name: str, candidates: list[dict]) -> dict:
-    matched = [candidate for candidate in candidates if _partner_matches(partner_name, candidate)]
+    all_matched = [candidate for candidate in candidates if _partner_matches(partner_name, candidate)]
+    disabled_count = sum(1 for candidate in all_matched if _candidate_explicitly_disabled(candidate))
+    matched = [candidate for candidate in all_matched if not _candidate_explicitly_disabled(candidate)]
     contracts = sorted({str(item.get("contract_name") or "").strip() for item in matched if item.get("contract_name")})
     if not matched:
         return {
@@ -102,46 +149,95 @@ def _partner_rule_summary(partner_name: str, candidates: list[dict]) -> dict:
             "recommendation": None,
             "contract_count": 0,
             "contracts": [],
-            "message": "当前合作方未找到合同合作清单，保留现有人工/渠道规则。",
+            "ignored_incomplete_count": 0,
+            "ignored_disabled_count": disabled_count,
+            "message": "当前合作方未找到可用于结算匹配的合同合作清单，保留现有人工/渠道规则。",
         }
 
-    rules = [_rule_fields(candidate) for candidate in matched]
-    if any(not rule.get("fields_complete") for rule in rules):
+    pairs = [(candidate, _rule_fields(candidate)) for candidate in matched]
+    complete_pairs = [(candidate, rule) for candidate, rule in pairs if rule.get("fields_complete")]
+    incomplete_count = len(pairs) - len(complete_pairs)
+    if not complete_pairs:
         return {
             "status": "incomplete",
             "auto_apply": False,
             "recommendation": None,
             "contract_count": len(matched),
             "contracts": contracts,
-            "message": "合同合作清单存在未结构化的分成、通道费或税率；选择具体游戏和账期后，系统会优先带入该条合同中已经明确的规则。",
+            "ignored_incomplete_count": incomplete_count,
+            "ignored_disabled_count": disabled_count,
+            "message": "当前合作方可用合同合作清单的分成、通道费或税率尚未完整结构化；请选择具体游戏和账期后按对应合同核对。",
         }
 
-    signatures = {_rule_signature(rule) for rule in rules}
+    signatures = {_rule_signature(rule) for _, rule in complete_pairs}
     if len(signatures) != 1:
+        suffix = f"；另有 {incomplete_count} 条字段不完整记录不参与默认规则判断" if incomplete_count else ""
         return {
             "status": "ambiguous",
             "auto_apply": False,
             "recommendation": None,
             "contract_count": len(matched),
             "contracts": contracts,
-            "message": "该合作方存在多套合同结算规则，请选择游戏和账期后按具体合同合作清单自动确认。",
+            "ignored_incomplete_count": incomplete_count,
+            "ignored_disabled_count": disabled_count,
+            "message": f"该合作方存在多套完整合同结算规则，请选择游戏和账期后按具体合同合作清单自动确认{suffix}。",
         }
 
-    recommendation = dict(rules[0])
-    recommendation.pop("fields_complete", None)
+    recommendation = _public_rule(complete_pairs[0][1])
+    ignored_bits: list[str] = []
+    if incomplete_count:
+        ignored_bits.append(f"{incomplete_count} 条字段不完整历史/辅助记录")
+    if disabled_count:
+        ignored_bits.append(f"{disabled_count} 条停用/作废记录")
+    ignored_text = f"；已忽略{'、'.join(ignored_bits)}" if ignored_bits else ""
     return {
         "status": "uniform",
         "auto_apply": True,
         "recommendation": recommendation,
         "contract_count": len(matched),
         "contracts": contracts,
+        "ignored_incomplete_count": incomplete_count,
+        "ignored_disabled_count": disabled_count,
         "message": (
-            "已读取合作方合同清单统一规则："
+            "已读取合作方完整合同清单统一规则："
             f"分成 {recommendation['share_rate']:g}% / "
             f"通道费 {recommendation['channel_fee_rate']:g}% / "
             f"税率 {recommendation['tax_rate']:g}%"
+            f"{ignored_text}"
         ),
     }
+
+
+def _rank_candidates(bill: dict, line: dict, candidates: list[dict]) -> list[tuple[dict, dict, dict]]:
+    ranked: list[tuple[dict, dict, dict]] = []
+    for candidate in candidates:
+        if _candidate_explicitly_disabled(candidate):
+            continue
+        score = score_candidate(bill, line, candidate)
+        if score.get("eligible"):
+            ranked.append((candidate, score, _rule_fields(candidate)))
+    ranked.sort(
+        key=lambda item: (
+            float(item[1].get("score") or 0),
+            1 if item[2].get("fields_complete") else 0,
+        ),
+        reverse=True,
+    )
+    return ranked
+
+
+def _selection_pool(ranked: list[tuple[dict, dict, dict]]) -> list[tuple[dict, dict, dict]]:
+    if not ranked:
+        return []
+    # If any candidate is not explicitly out of range, an old/expired candidate
+    # must not beat it just because its fields are more complete.
+    in_range = [item for item in ranked if item[1].get("authorization_status") != "out_of_range"]
+    pool = in_range or ranked
+    # Within the relevant time pool, complete financial rules are preferred over
+    # stale/auxiliary duplicates with missing fields. If all are incomplete we
+    # retain them so the UI can correctly request manual completion.
+    complete = [item for item in pool if item[2].get("fields_complete")]
+    return complete or pool
 
 
 def recommend_channel_rules(
@@ -153,9 +249,11 @@ def recommend_channel_rules(
     """Return contract-authoritative recommendations for a draft channel bill.
 
     Two stages are intentionally separated:
-    1) partner-level baseline: if every access item for the partner carries the
-       same complete rule, it can be shown immediately after selecting partner;
-    2) line-level match: game + settlement month locks the exact access item.
+    1) partner-level baseline: complete, usable access items define the baseline;
+       incomplete/disabled historical rows never poison an otherwise consistent
+       current rule;
+    2) line-level match: game + settlement month locks the exact access item,
+       preferring non-expired and complete rule candidates.
 
     A legacy 30%/5% UI default is never treated as contract evidence.
 
@@ -163,6 +261,10 @@ def recommend_channel_rules(
     unstructured/unknown (not explicitly out of range), complete contract
     financial fields are safe to auto-apply. Missing authorization dates should
     create a warning, not erase known settlement terms.
+
+    Multiple simultaneously usable complete contracts remain an identity
+    ambiguity unless the top candidate has a clear score margin. Equal financial
+    numbers alone never authorize selecting one contract over another.
     """
     partner_summary = _partner_rule_summary(partner_name, candidates)
     results: list[dict] = []
@@ -190,13 +292,9 @@ def recommend_channel_rules(
             "game_name": game_name,
             "settlement_cycle": cycle,
         }
-        ranked: list[tuple[dict, dict]] = []
-        for candidate in candidates:
-            score = score_candidate(bill, line, candidate)
-            if score.get("eligible"):
-                ranked.append((candidate, score))
-        ranked.sort(key=lambda item: float(item[1].get("score") or 0), reverse=True)
-        if not ranked:
+        ranked = _rank_candidates(bill, line, candidates)
+        pool = _selection_pool(ranked)
+        if not pool:
             results.append(
                 {
                     "line_index": source_index,
@@ -205,18 +303,26 @@ def recommend_channel_rules(
                     "auto_apply": False,
                     "confidence": "none",
                     "score": 0,
-                    "message": "该游戏/账期未找到匹配的合同合作清单",
+                    "authorization_status": "unknown",
+                    "authorization_warning": False,
+                    "rule_fields_complete": False,
+                    "financially_unambiguous": False,
+                    "message": "该游戏/账期未找到匹配的可用合同合作清单",
                     "match": None,
                     "recommended": None,
                 }
             )
             continue
 
-        candidate, scored = ranked[0]
-        second_score = float(ranked[1][1].get("score") or 0) if len(ranked) > 1 else 0.0
+        pool.sort(key=lambda item: float(item[1].get("score") or 0), reverse=True)
+        candidate, scored, recommended = pool[0]
+        second_score = float(pool[1][1].get("score") or 0) if len(pool) > 1 else 0.0
         top_score = float(scored.get("score") or 0)
         margin = round(top_score - second_score, 1)
-        recommended = _rule_fields(candidate)
+        # The margin represents contract-identity certainty, not merely whether
+        # two contracts happen to carry equal money fields. Preserve the safety
+        # boundary that equal-score duplicate contracts require human review.
+        financially_unambiguous = margin >= 10
         authorization_status = scored.get("authorization_status")
         exact_identity = _partner_matches(partner_name, candidate) and _exact_game_matches(game_name, candidate)
         identity_confident = scored.get("confidence") == "high" or exact_identity
@@ -224,22 +330,23 @@ def recommend_channel_rules(
         auto_apply = (
             identity_confident
             and authorization_allowed
-            and margin >= 10
+            and financially_unambiguous
             and bool(recommended.get("fields_complete"))
         )
-        public_recommended = dict(recommended)
-        public_recommended.pop("fields_complete", None)
+        public_recommended = _public_rule(recommended)
 
         if auto_apply and authorization_status == "unknown":
-            line_message = "合同合作项唯一明确，授权期未结构化；已带入合同结算数字，授权期单独待确认"
+            line_message = "合同合作项匹配明确，授权期未结构化；已带入合同结算数字，授权期单独待确认"
         elif auto_apply:
             line_message = "合同匹配明确，可自动带入结算规则"
         elif authorization_status == "out_of_range":
             line_message = "已找到合同，但当前账期明确不在授权期内，不能自动带入"
         elif not recommended.get("fields_complete"):
             line_message = "已找到具体合同，但该合作项的分成、通道费或税率结构化字段不完整"
+        elif not financially_unambiguous:
+            line_message = "当前游戏/账期仍有多个有效合同候选，需要先确认合同归属"
         else:
-            line_message = "已找到合同，但候选存在歧义，需人工确认"
+            line_message = "已找到合同，但候选身份仍需人工确认"
 
         results.append(
             {
@@ -250,7 +357,12 @@ def recommend_channel_rules(
                 "confidence": scored.get("confidence"),
                 "score": top_score,
                 "ambiguity_margin": margin,
+                "authorization_status": authorization_status,
                 "authorization_warning": authorization_status == "unknown",
+                "rule_fields_complete": bool(recommended.get("fields_complete")),
+                "financially_unambiguous": financially_unambiguous,
+                "candidate_count": len(ranked),
+                "usable_candidate_count": len(pool),
                 "message": line_message,
                 "match": {
                     "contract_id": candidate.get("contract_id"),
@@ -267,6 +379,8 @@ def recommend_channel_rules(
                     "settlement_mode": candidate.get("settlement_mode"),
                     "settlement_basis": candidate.get("settlement_basis"),
                     "payment_terms": candidate.get("payment_terms"),
+                    "access_status": candidate.get("access_status"),
+                    "performance_status": candidate.get("performance_status"),
                     "reasons": scored.get("reasons") or [],
                 },
                 "recommended": public_recommended,
@@ -301,9 +415,9 @@ def recommend_channel_rules(
 
     if overall_auto and header:
         if any(item.get("authorization_warning") for item in auto_lines):
-            message = "当前游戏与合同合作项唯一匹配；授权期未结构化，已先按合同数字带入，授权期仍需补录/确认"
+            message = "当前游戏与合同匹配已明确；授权期未结构化的条目已单独提示，不影响已知结算数字带入"
         else:
-            message = "当前游戏与账期的合同规则已明确，可自动带入"
+            message = "当前游戏与账期的合同匹配已明确，可自动带入"
     elif partner_summary["auto_apply"]:
         message = partner_summary["message"]
     elif results:
@@ -312,7 +426,7 @@ def recommend_channel_rules(
         message = partner_summary["message"]
 
     return {
-        "version": "contract-channel-rule-v2.1",
+        "version": "contract-channel-rule-v2.3",
         "auto_apply": bool(overall_auto and header),
         "matched_lines": len(matched),
         "total_lines": len(results),
@@ -323,6 +437,8 @@ def recommend_channel_rules(
         "partner_recommendation": partner_summary["recommendation"],
         "partner_contract_count": partner_summary["contract_count"],
         "partner_contracts": partner_summary["contracts"],
+        "partner_ignored_incomplete_count": partner_summary["ignored_incomplete_count"],
+        "partner_ignored_disabled_count": partner_summary["ignored_disabled_count"],
         "partner_rule_message": partner_summary["message"],
         "message": message,
     }
