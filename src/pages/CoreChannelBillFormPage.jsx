@@ -4,6 +4,7 @@ import PageContainer from '@/components/layout/PageContainer.jsx'
 import BillScanAttachments from '@/components/billing/BillScanAttachments.jsx'
 import ChannelBillingForm from '@/components/channel/ChannelBillingForm.jsx'
 import ChannelCumulativeSettlementCard from '@/components/channel/ChannelCumulativeSettlementCard.jsx'
+import ChannelSmartEntryBar from '@/components/channel/ChannelSmartEntryBar.jsx'
 import { CoreBillLoadingState } from '@/pages/CoreBillLoadingState.jsx'
 import { VIEWS } from '@/app/routes.js'
 import { apiChannelRowToFrontend, getChannelRecord } from '@/lib/api/channel.ts'
@@ -70,6 +71,13 @@ function CoreChannelBillFormPage({ mode }) {
   const [loadError, setLoadError] = useState('')
   const [loadAttempt, setLoadAttempt] = useState(0)
   const [reviewing, setReviewing] = useState(false)
+  const [smartRecord, setSmartRecord] = useState(null)
+  const [smartRevision, setSmartRevision] = useState(0)
+
+  useEffect(() => {
+    setSmartRecord(null)
+    setSmartRevision(0)
+  }, [mode, channelEditRecordId])
 
   useEffect(() => {
     if (!isEdit) return
@@ -162,6 +170,8 @@ function CoreChannelBillFormPage({ mode }) {
 
   const handleAfterSubmit = (intent) => {
     safety.clearAfterSubmit()
+    setSmartRecord(null)
+    setSmartRevision((value) => value + 1)
     if (isEdit && channelEditRecordId) {
       invalidateEditRecord('channel', String(channelEditRecordId))
     }
@@ -172,9 +182,15 @@ function CoreChannelBillFormPage({ mode }) {
     goList()
   }
 
+  const applySmartRecord = (nextRecord, message = '', tone = 'success') => {
+    setSmartRecord(nextRecord)
+    setSmartRevision((value) => value + 1)
+    if (message) showToast(message, tone)
+  }
+
   const confirmReview = async () => {
     if (!isEdit || !channelEditRecordId || reviewing) return
-    const candidate = safety.currentRecord || safety.draftRecord || stableRecord
+    const candidate = safety.currentRecord || smartRecord || safety.draftRecord || stableRecord
     const validationMessage = reviewValidation(candidate)
     if (validationMessage) {
       showToast(validationMessage, 'error')
@@ -201,6 +217,7 @@ function CoreChannelBillFormPage({ mode }) {
       })
       if (saved === false) return
       safety.clearAfterSubmit()
+      setSmartRecord(null)
       invalidateEditRecord('channel', billId)
 
       const lifecycle = await transitionBillLifecycle('channel', billId, 'confirmed', '')
@@ -227,7 +244,11 @@ function CoreChannelBillFormPage({ mode }) {
 
   const discardDraft = () => {
     const confirmed = window.confirm('确定清除当前本机草稿并恢复为空白/服务器版本吗？')
-    if (confirmed) safety.discardDraft()
+    if (confirmed) {
+      setSmartRecord(null)
+      setSmartRevision((value) => value + 1)
+      safety.discardDraft()
+    }
   }
 
   if (isEdit && !channelEditRecordId) {
@@ -251,7 +272,7 @@ function CoreChannelBillFormPage({ mode }) {
   }
 
   const zeroSettlementPreview = isZeroSettlement(previewAmount)
-  const currentRecord = safety.currentRecord || safety.draftRecord || stableRecord || {}
+  const currentRecord = safety.currentRecord || smartRecord || safety.draftRecord || stableRecord || {}
 
   return (
     <PageContainer
@@ -272,7 +293,7 @@ function CoreChannelBillFormPage({ mode }) {
               ? zeroSettlementPreview
                 ? '当前为零结算账单，可直接“确认核对并结清”，系统会跳过开票与收款环节。'
                 : '修改完成后可直接“保存并确认核对”；累计结算合作方会在核对后自动进入累计池。'
-              : '先选择合作方和账期，再录入游戏明细。保存后账单进入待核对。'}
+              : '选择合作方后，V3.2 会按合同/上月自动准备游戏清单；充值流水仍由你手工填写。'}
           </span>
           {isEdit ? <span className="core-bill-review-hint">账单核对与实际结算已分离：未达累计门槛也可以正常完成核对</span> : null}
           <div className={`core-bill-draft-state ${safety.dirty ? 'is-dirty' : 'is-clean'}`}>
@@ -287,14 +308,23 @@ function CoreChannelBillFormPage({ mode }) {
         </div>
       </section>
 
+      {!isEdit ? (
+        <ChannelSmartEntryBar
+          record={currentRecord}
+          channelRecords={recon.channelRecords || []}
+          onApply={applySmartRecord}
+          onNotice={(message, tone = 'info') => showToast(message, tone)}
+        />
+      ) : null}
+
       <section className="core-bill-card core-bill-card--embedded">
         <ChannelBillingForm
-          key={`${mode}-${channelEditRecordId || 'new'}-${safety.resetVersion}`}
+          key={`${mode}-${channelEditRecordId || 'new'}-${safety.resetVersion}-${smartRevision}`}
           formId={FORM_ID}
           mode={isEdit ? 'edit' : 'add'}
           recordId={stableRecord?.id}
           sourceRecord={stableRecord}
-          draftRecord={safety.draftRecord}
+          draftRecord={smartRecord || safety.draftRecord}
           onAddRecord={recon.onChannelAddRecord}
           onUpdateRecord={recon.onChannelUpdateRecord}
           submitIntentRef={submitIntentRef}
