@@ -238,16 +238,24 @@ def _rank_candidates(bill: dict, line: dict, candidates: list[dict]) -> list[tup
     return ranked
 
 
-def _selection_pool(ranked: list[tuple[dict, dict, dict]]) -> list[tuple[dict, dict, dict]]:
+def _selection_pool(ranked: list[tuple[dict, dict, dict]], game_name: str) -> list[tuple[dict, dict, dict]]:
     if not ranked:
         return []
-    # If any candidate is not explicitly out of range, an old/expired candidate
-    # must not beat it just because its fields are more complete.
-    in_range = [item for item in ranked if item[1].get("authorization_status") != "out_of_range"]
-    pool = in_range or ranked
-    # Within the relevant time pool, complete settlement-driving rules are
-    # preferred. Missing invoice tax is not blocking because tax is record-only
-    # under the default channel calculation.
+
+    # Contract identity outranks data completeness. If an exact game access item
+    # exists, never substitute another game's complete rule just because the
+    # exact row is missing a field; expose the missing field for review instead.
+    exact_game = [item for item in ranked if _exact_game_matches(game_name, item[0])]
+    identity_pool = exact_game or ranked
+
+    # If any candidate within that identity pool is not explicitly out of range,
+    # an old/expired candidate must not beat it just because fields are complete.
+    in_range = [item for item in identity_pool if item[1].get("authorization_status") != "out_of_range"]
+    pool = in_range or identity_pool
+
+    # Within the same relevant identity/time pool, complete settlement-driving
+    # rules may win over stale/auxiliary duplicates. Missing invoice tax is not
+    # blocking because tax is record-only under the default channel calculation.
     complete = [item for item in pool if item[2].get("fields_complete")]
     return complete or pool
 
@@ -295,7 +303,7 @@ def recommend_channel_rules(
             "settlement_cycle": cycle,
         }
         ranked = _rank_candidates(bill, line, candidates)
-        pool = _selection_pool(ranked)
+        pool = _selection_pool(ranked, game_name)
         if not pool:
             results.append(
                 {
@@ -448,7 +456,7 @@ def recommend_channel_rules(
         message = partner_summary["message"]
 
     return {
-        "version": "contract-channel-rule-v2.5",
+        "version": "contract-channel-rule-v2.6",
         "auto_apply": bool(overall_auto and header),
         "matched_lines": len(matched),
         "total_lines": len(results),
