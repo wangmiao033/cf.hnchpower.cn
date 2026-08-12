@@ -21,17 +21,14 @@ export function resolveChannelFlowInputState(row = {}) {
   const hasFlow = rawFlow !== '' && rawFlow !== null && rawFlow !== undefined
   const value = hasFlow ? Number(rawFlow) : Number.NaN
 
-  if (rawState === CHANNEL_FLOW_INPUT_STATE.MISSING) return CHANNEL_FLOW_INPUT_STATE.MISSING
-  if (rawState === CHANNEL_FLOW_INPUT_STATE.CONFIRMED_ZERO) return CHANNEL_FLOW_INPUT_STATE.CONFIRMED_ZERO
-  if (rawState === CHANNEL_FLOW_INPUT_STATE.ENTERED) return CHANNEL_FLOW_INPUT_STATE.ENTERED
-  if (rawState === CHANNEL_FLOW_INPUT_STATE.CONFIRMED) {
-    return Number.isFinite(value) && value === 0
-      ? CHANNEL_FLOW_INPUT_STATE.CONFIRMED_ZERO
-      : CHANNEL_FLOW_INPUT_STATE.ENTERED
-  }
-
   if (!hasFlow || !Number.isFinite(value)) return CHANNEL_FLOW_INPUT_STATE.MISSING
   if (value > 0) return CHANNEL_FLOW_INPUT_STATE.ENTERED
+  if (value === 0) {
+    if (rawState === CHANNEL_FLOW_INPUT_STATE.CONFIRMED_ZERO || rawState === CHANNEL_FLOW_INPUT_STATE.CONFIRMED) {
+      return CHANNEL_FLOW_INPUT_STATE.CONFIRMED_ZERO
+    }
+    return CHANNEL_FLOW_INPUT_STATE.MISSING
+  }
   return CHANNEL_FLOW_INPUT_STATE.MISSING
 }
 
