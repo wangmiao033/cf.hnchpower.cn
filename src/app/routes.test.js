@@ -48,9 +48,17 @@ describe('统一对账进度路由', () => {
     expect(group.items.map((item) => item.view)).toEqual([
       VIEWS.RECON_RD,
       VIEWS.RECON_PROGRESS,
-      VIEWS.RECON_CHANNEL
+      VIEWS.RECON_CHANNEL,
+      VIEWS.CHANNEL_RECON_CREATE
     ])
     expect(getTabView(VIEWS.RECON_PROGRESS)).toBe(VIEWS.RECON_PROGRESS)
+  })
+
+  it('渠道智能录入直接复用现有新增渠道账单页面', () => {
+    const group = getGroupForView(VIEWS.CHANNEL_RECON_CREATE)
+    expect(group.id).toBe('reconciliation')
+    expect(group.items.find((item) => item.view === VIEWS.CHANNEL_RECON_CREATE)?.label).toBe('智能录入')
+    expect(getTabView(VIEWS.CHANNEL_RECON_CREATE)).toBe(VIEWS.RECON_CHANNEL)
   })
 
   it('提供独立页面文案', () => {
