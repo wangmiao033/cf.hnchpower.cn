@@ -78,6 +78,23 @@ function buildRequestLines(record, productDiscountRefs, previousRecommendation) 
   })
 }
 
+function recommendationMatchesRecord(record, recommendation) {
+  if (!record || !recommendation) return false
+  if (String(recommendation.partner_name || '').trim() !== String(record.partner || '').trim()) return false
+  const rows = Array.isArray(record.items) ? record.items : []
+  for (let index = 0; index < rows.length; index += 1) {
+    const row = rows[index]
+    const game = String(row?.gameName || '').trim()
+    if (!game) continue
+    const cycle = String(row?.settlementCycle || record.settlementMonth || '').trim()
+    const matched = recommendation.lines?.find((item) => item.line_index === index)
+    if (!matched) return false
+    if (String(matched.game_name || '').trim() !== game) return false
+    if (String(matched.settlement_cycle || '').trim() !== cycle) return false
+  }
+  return true
+}
+
 function deviationsFor(record, lineIndex, recommendationLine) {
   const line = Array.isArray(record?.items) ? record.items[lineIndex] : null
   const recommended = recommendationLine?.recommended
@@ -222,7 +239,9 @@ export default function ContractDrivenRdEntry(props) {
         d: line.discount_rate,
         cp: line.coupon_amount,
         e: line.extra_fee,
-        f: line.channel_fee_rate
+        f: line.channel_fee_rate,
+        t: line.test_fee,
+        tx: line.tax_rate
       }))
     })
     if (signature === lastRequestSignatureRef.current) return undefined
@@ -248,7 +267,7 @@ export default function ContractDrivenRdEntry(props) {
   }, [formState])
 
   const forceApplyRecommendation = useCallback(() => {
-    if (!formState || !recommendation) return
+    if (!formState || !recommendation || !recommendationMatchesRecord(formState, recommendation)) return
     if (recommendation.header_recommendation?.compatible === false) {
       onError?.(recommendation.header_recommendation.message || '合同通道费率不一致，请拆分研发账单')
       return
@@ -270,7 +289,7 @@ export default function ContractDrivenRdEntry(props) {
   }, [formState, mode, onError, recommendation])
 
   useEffect(() => {
-    if (mode !== 'add' || !recommendation || !formState) return
+    if (mode !== 'add' || !recommendation || !formState || !recommendationMatchesRecord(formState, recommendation)) return
     if (recommendation.header_recommendation?.compatible === false) return
     const signature = JSON.stringify(
       recommendation.lines?.map((item) => [item.line_index, item.match?.access_item_id, item.auto_apply]) || []
@@ -287,6 +306,7 @@ export default function ContractDrivenRdEntry(props) {
     return amounts.length ? amounts.reduce((sum, value) => sum + value, 0) : null
   }, [recommendation])
 
+  const recommendationCurrent = recommendationMatchesRecord(formState, recommendation)
   const currentFinal = num(formState?.settlementAmount, 0)
   const adjustment = contractExpected == null ? null : currentFinal - contractExpected
   const activeRows = Array.isArray(formState?.items) ? formState.items : []
@@ -347,6 +367,8 @@ export default function ContractDrivenRdEntry(props) {
   }, [overrideReasons, recommendation])
 
   const validateContractEntry = useCallback((record) => {
+    if (recommendationLoading) return '合同正在重新匹配，请完成本轮匹配后再保存。'
+    if (recommendation && !recommendationMatchesRecord(record, recommendation)) return '合同匹配结果已过期，正在按当前合作方/游戏/账期重新匹配，请稍后保存。'
     if (recommendation?.header_recommendation?.compatible === false) {
       return recommendation.header_recommendation.message || '同一账单匹配到不同合同通道费率，请拆分账单'
     }
@@ -359,7 +381,7 @@ export default function ContractDrivenRdEntry(props) {
       }
     }
     return ''
-  }, [overrideReasons, recommendation])
+  }, [overrideReasons, recommendation, recommendationLoading])
 
   const prepareForSave = useCallback(async (record) => {
     const validation = validateContractEntry(record)
@@ -432,11 +454,12 @@ export default function ContractDrivenRdEntry(props) {
             <p>合作方 + 游戏 + 账期确定后，自动匹配合同合作清单并带入分成、税率、测试费和结算基数；历史账单不会因打开编辑页被自动改写。</p>
           </div>
           <div className="rd-contract-entry-panel__status">
-            <strong>{recommendationLoading ? '正在匹配合同…' : recommendationError ? '合同服务暂不可用' : recommendation?.message || '等待合作方和游戏'}</strong>
+            <strong>{recommendationLoading ? '正在匹配合同…' : recommendationError ? '合同服务暂不可用' : recommendation && !recommendationCurrent ? '匹配结果待刷新' : recommendation?.message || '等待合作方和游戏'}</strong>
             {snapshotInfo?.created_at ? <small>最近录入快照：{String(snapshotInfo.created_at).replace('T', ' ').slice(0, 19)}</small> : null}
           </div>
         </div>
 
+        {recommendation && !recommendationCurrent && !recommendationLoading ? <div className="rd-contract-entry-alert is-warning">合作方、游戏或账期已变化，旧合同推荐不会用于保存，系统正在重新匹配。</div> : null}
         {recommendationError ? <div className="rd-contract-entry-alert is-error">{recommendationError}。本次仍可保存为待核对账单，确认核对前会再次走合同核验。</div> : null}
         {recommendation?.header_recommendation?.message ? (
           <div className={`rd-contract-entry-alert ${recommendation.header_recommendation.compatible === false ? 'is-error' : 'is-warning'}`}>
@@ -509,7 +532,7 @@ export default function ContractDrivenRdEntry(props) {
             <div className={adjustment != null && Math.abs(adjustment) > 0.01 ? 'is-diff' : ''}>
               <span>人工调整</span><strong>{adjustment == null ? '-' : `${adjustment >= 0 ? '+' : ''}${money(adjustment)}`}</strong>
             </div>
-            <button type="button" onClick={forceApplyRecommendation} disabled={!recommendation.lines?.some((item) => item.auto_apply)}>
+            <button type="button" onClick={forceApplyRecommendation} disabled={!recommendationCurrent || !recommendation.lines?.some((item) => item.auto_apply)}>
               {mode === 'edit' ? '恢复为合同值' : '重新带入合同值'}
             </button>
           </div>
