@@ -12,6 +12,7 @@ export type RdContractEntryLineInput = {
   extra_fee: number
   share_ratio: number
   tax_rate: number
+  channel_fee_rate: number
   settlement_amount: number
 }
 
@@ -45,9 +46,9 @@ export type RdContractRuleRecommended = {
   settlement_discount_rate: number
   discount_policy: 'reference_only' | 'participates' | 'manual' | string
   share_ratio: number | null
-  channel_fee_rate: number
-  tax_rate: number
-  test_fee: number
+  channel_fee_rate: number | null
+  tax_rate: number | null
+  test_fee: number | null
   warnings: string[]
 }
 
