@@ -5,9 +5,31 @@ from __future__ import annotations
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Any
 
-VALID_RULES = {"legacy_fixed_fee_tax", "xiaomi_percent_fee", "percent_fee_after_tax", "share_only", "custom"}
+XIAN_WEIZHEN_9917_RULE = "xian_weizhen_9917"
+VALID_RULES = {
+    "legacy_fixed_fee_tax",
+    "xiaomi_percent_fee",
+    "percent_fee_after_tax",
+    "share_only",
+    XIAN_WEIZHEN_9917_RULE,
+    "custom",
+}
 VALID_FEE_MODES = {"none", "percent", "fixed"}
 VALID_TAX_MODES = {"none", "share", "after_fee"}
+DEFAULT_DEDUCTION_FIELDS = (
+    "voucher_cost",
+    "no_worry_cost",
+    "refund_cost",
+    "test_cost",
+    "welfare_cost",
+    "coin_cost",
+)
+XIAN_WEIZHEN_9917_DEDUCTION_FIELDS = (
+    "no_worry_cost",
+    "refund_cost",
+    "test_cost",
+    "coin_cost",
+)
 
 
 def _d(value: Any, default: str = "0") -> Decimal:
@@ -30,7 +52,12 @@ def resolve_rule_settings(record: Any) -> dict[str, Any]:
     fee_rate = _d(getattr(record, "channel_fee_rate", None))
     tolerance = max(Decimal("0"), _d(getattr(record, "validation_tolerance", None), "0.05"))
 
-    if code == "xiaomi_percent_fee":
+    if code == XIAN_WEIZHEN_9917_RULE:
+        # 西安维真（客户 9917）平台账单口径：
+        # 代金券、福利币仅记录，不从可分成金额扣减；
+        # 其余原扣减项仍参与；分成后统一扣 5% 通道费；税率仅记录。
+        fee_mode, tax_mode, fee_rate = "percent", "none", Decimal("5")
+    elif code == "xiaomi_percent_fee":
         fee_mode, tax_mode = "percent", "none"
         if fee_rate <= 0:
             fee_rate = Decimal("5")
@@ -55,8 +82,13 @@ def calculate_channel_line(item: Any, record: Any) -> dict[str, Any]:
     if discount <= 0:
         discount = Decimal("1")
     effective_flow = _money(flow * discount)
+    deduction_fields = (
+        XIAN_WEIZHEN_9917_DEDUCTION_FIELDS
+        if settings["rule_code"] == XIAN_WEIZHEN_9917_RULE
+        else DEFAULT_DEDUCTION_FIELDS
+    )
     billing_amount = effective_flow - sum(
-        (_d(getattr(item, field, None)) for field in ("voucher_cost", "no_worry_cost", "refund_cost", "test_cost", "welfare_cost", "coin_cost")),
+        (_d(getattr(item, field, None)) for field in deduction_fields),
         Decimal("0"),
     )
     share_rate = _d(getattr(item, "share_rate", None)) / Decimal("100")
