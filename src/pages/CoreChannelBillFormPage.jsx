@@ -5,8 +5,12 @@ import BillScanAttachments from '@/components/billing/BillScanAttachments.jsx'
 import ChannelBillingForm from '@/components/channel/ChannelBillingForm.jsx'
 import ChannelCumulativeSettlementCard from '@/components/channel/ChannelCumulativeSettlementCard.jsx'
 import ChannelSmartEntryBar from '@/components/channel/ChannelSmartEntryBar.jsx'
+import ChannelFlowInputPanel from '@/components/channel/ChannelFlowInputPanel.jsx'
+import { CHANNEL_MONTH_CLOSE_SEED_KEY } from '@/components/channel/ChannelMonthCloseLauncher.jsx'
 import { CoreBillLoadingState } from '@/pages/CoreBillLoadingState.jsx'
 import { VIEWS } from '@/app/routes.js'
+import { initialLineItem } from '@/domain/channel/channelBillingForm.js'
+import { channelFlowCompletion, normalizeChannelTextKey } from '@/domain/channel/channelFlowInput.js'
 import { apiChannelRowToFrontend, getChannelRecord } from '@/lib/api/channel.ts'
 import { transitionBillLifecycle } from '@/lib/api/billLifecycle.ts'
 import {
@@ -39,12 +43,53 @@ function isZeroSettlement(value) {
   return normalizedAmount(value) === 0
 }
 
+function readMonthCloseSeed() {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = window.sessionStorage.getItem(CHANNEL_MONTH_CLOSE_SEED_KEY)
+    if (!raw) return null
+    window.sessionStorage.removeItem(CHANNEL_MONTH_CLOSE_SEED_KEY)
+    const parsed = JSON.parse(raw)
+    return parsed && parsed.source === 'month-close' ? parsed : null
+  } catch {
+    return null
+  }
+}
+
+function applyMonthCloseSeed(baseRecord, seed) {
+  const month = String(seed?.month || '').trim()
+  const games = [...new Set((seed?.games || []).map((value) => String(value || '').trim()).filter(Boolean))]
+  const currentItems = Array.isArray(baseRecord?.items) ? baseRecord.items : []
+  const keys = new Set(currentItems.map((item) => normalizeChannelTextKey(item?.gameName)).filter(Boolean))
+  const added = games
+    .filter((gameName) => !keys.has(normalizeChannelTextKey(gameName)))
+    .map((gameName) => ({
+      ...initialLineItem(),
+      gameName,
+      settlementCycle: month,
+      flowInputState: 'missing'
+    }))
+  return {
+    ...(baseRecord || {}),
+    partnerName: String(seed?.partnerName || baseRecord?.partnerName || '').trim(),
+    channelName: String(seed?.channelName || baseRecord?.channelName || seed?.partnerName || '').trim(),
+    settlementMonth: month || baseRecord?.settlementMonth || '',
+    items: [...currentItems, ...added]
+  }
+}
+
 function reviewValidation(record) {
   if (!String(record?.partnerName || record?.channelName || '').trim()) return '请先选择合作方。'
   if (!String(record?.settlementMonth || '').trim()) return '请先选择账单月份。'
   const items = Array.isArray(record?.items) ? record.items : []
   const validItems = items.filter((item) => String(item?.gameName || '').trim())
   if (!validItems.length) return '请至少填写一条游戏明细。'
+  const flowCompletion = channelFlowCompletion({ items: validItems })
+  if (flowCompletion.missingCount) {
+    const names = flowCompletion.missingGames.slice(0, 5).join('、')
+    const suffix = flowCompletion.missingCount > 5 ? ` 等 ${flowCompletion.missingCount} 个游戏` : ''
+    return `后台流水尚未录完：${names}${suffix}。请填写金额，或明确点击“确认本期为 0”。`
+  }
   if (normalizedAmount(record?.settlementAmount) < 0) {
     return '结算金额为负，请先检查退款、冲抵或费用配置；负数账单不能按普通应收流程确认。'
   }
@@ -73,10 +118,12 @@ function CoreChannelBillFormPage({ mode }) {
   const [reviewing, setReviewing] = useState(false)
   const [smartRecord, setSmartRecord] = useState(null)
   const [smartRevision, setSmartRevision] = useState(0)
+  const [monthCloseSeed, setMonthCloseSeed] = useState(null)
 
   useEffect(() => {
     setSmartRecord(null)
     setSmartRevision(0)
+    setMonthCloseSeed(readMonthCloseSeed())
   }, [mode, channelEditRecordId])
 
   useEffect(() => {
@@ -146,6 +193,29 @@ function CoreChannelBillFormPage({ mode }) {
     clearNavigationBlocker
   })
 
+  useEffect(() => {
+    if (!monthCloseSeed) return
+    if (isEdit) {
+      if (!stableRecord) return
+      if (monthCloseSeed.billId && String(monthCloseSeed.billId) !== String(channelEditRecordId || '')) {
+        setMonthCloseSeed(null)
+        return
+      }
+    }
+    const base = isEdit ? stableRecord : {}
+    const nextRecord = applyMonthCloseSeed(base, monthCloseSeed)
+    setSmartRecord(nextRecord)
+    setSmartRevision((value) => value + 1)
+    setMonthCloseSeed(null)
+    const addedCount = Math.max(0, (nextRecord.items?.length || 0) - (base?.items?.length || 0))
+    showToast(
+      addedCount
+        ? `月结任务已带入 ${addedCount} 个缺失游戏；流水仍保持未录状态。`
+        : '已打开本月账单，继续补流水或核对即可。',
+      'info'
+    )
+  }, [monthCloseSeed, isEdit, stableRecord, channelEditRecordId, showToast])
+
   const listSnapshot = isEdit
     ? (recon.channelRecords || []).find(
         (row) => String(row?.id || '') === String(channelEditRecordId || '')
@@ -201,7 +271,7 @@ function CoreChannelBillFormPage({ mode }) {
     const zeroSettlement = isZeroSettlement(settlementAmount)
     const confirmed = window.confirm(
       zeroSettlement
-        ? `确认核对并结清这张零结算账单吗？\n\n结算金额：${money(settlementAmount)}\n\n本期无需开票和收款，确认后账单将直接完成并锁定。`
+        ? `确认核对并结清这张零结算账单吗？\n\n所有游戏流水均已明确录入/确认 0。\n结算金额：${money(settlementAmount)}\n\n本期无需开票和收款，确认后账单将直接完成并锁定。`
         : `确认核对这张渠道账单吗？\n\n结算金额：${money(settlementAmount)}\n\n确认后账单会自动锁定；如合作方启用了累计结算，本期会进入累计池而不是立即催收/开票。`
     )
     if (!confirmed) return
@@ -271,8 +341,9 @@ function CoreChannelBillFormPage({ mode }) {
     return <EmptyState title="未找到渠道账单" onBack={goList} />
   }
 
-  const zeroSettlementPreview = isZeroSettlement(previewAmount)
   const currentRecord = safety.currentRecord || smartRecord || safety.draftRecord || stableRecord || {}
+  const flowCompletion = channelFlowCompletion(currentRecord)
+  const zeroSettlementPreview = flowCompletion.complete && isZeroSettlement(previewAmount)
 
   return (
     <PageContainer
@@ -289,11 +360,13 @@ function CoreChannelBillFormPage({ mode }) {
             </span>
           </div>
           <span className="core-bill-form-tip">
-            {isEdit
-              ? zeroSettlementPreview
-                ? '当前为零结算账单，可直接“确认核对并结清”，系统会跳过开票与收款环节。'
-                : '修改完成后可直接“保存并确认核对”；累计结算合作方会在核对后自动进入累计池。'
-              : '选择合作方后，V3.2 会按合同/上月自动准备游戏清单；充值流水仍由你手工填写。'}
+            {flowCompletion.missingCount
+              ? `还有 ${flowCompletion.missingCount} 个游戏的后台流水未明确；保存草稿可以，确认核对前必须填写金额或确认 0。`
+              : isEdit
+                ? zeroSettlementPreview
+                  ? '所有游戏流水已明确，本期为零结算账单；确认后会跳过开票与收款环节。'
+                  : '流水已明确，修改完成后可直接保存并确认核对。'
+                : 'V3.3 会按合同/月结任务准备游戏清单；充值流水始终由你手工填写。'}
           </span>
           {isEdit ? <span className="core-bill-review-hint">账单核对与实际结算已分离：未达累计门槛也可以正常完成核对</span> : null}
           <div className={`core-bill-draft-state ${safety.dirty ? 'is-dirty' : 'is-clean'}`}>
@@ -303,7 +376,7 @@ function CoreChannelBillFormPage({ mode }) {
           </div>
         </div>
         <div className="core-bill-form-total" aria-live="polite">
-          <span>{zeroSettlementPreview ? '零结算' : '预估结算'}</span>
+          <span>{flowCompletion.missingCount ? '暂估结算' : zeroSettlementPreview ? '零结算' : '预估结算'}</span>
           <strong>{money(previewAmount)}</strong>
         </div>
       </section>
@@ -316,6 +389,12 @@ function CoreChannelBillFormPage({ mode }) {
           onNotice={(message, tone = 'info') => showToast(message, tone)}
         />
       ) : null}
+
+      <ChannelFlowInputPanel
+        record={currentRecord}
+        onApply={applySmartRecord}
+        onNotice={(message, tone = 'info') => showToast(message, tone)}
+      />
 
       <section className="core-bill-card core-bill-card--embedded">
         <ChannelBillingForm
@@ -361,7 +440,7 @@ function CoreChannelBillFormPage({ mode }) {
 
       <section className="core-bill-footer">
         <div className="core-bill-footer-summary">
-          <span>{zeroSettlementPreview ? '零结算' : '当前结算'}</span>
+          <span>{flowCompletion.missingCount ? `待录流水 ${flowCompletion.missingCount}` : zeroSettlementPreview ? '零结算' : '当前结算'}</span>
           <strong>{money(previewAmount)}</strong>
         </div>
         <div className="core-bill-footer-actions">
@@ -394,8 +473,14 @@ function CoreChannelBillFormPage({ mode }) {
             {isEdit ? '保存修改' : '保存账单'}
           </button>
           {isEdit ? (
-            <button type="button" className="confirm-review" disabled={reviewing} onClick={() => void confirmReview()}>
-              {reviewing ? '正在确认…' : zeroSettlementPreview ? '确认核对并结清' : '保存并确认核对'}
+            <button
+              type="button"
+              className="confirm-review"
+              disabled={reviewing || flowCompletion.missingCount > 0}
+              title={flowCompletion.missingCount ? '还有游戏流水未录入/未确认 0' : '保存并确认核对'}
+              onClick={() => void confirmReview()}
+            >
+              {reviewing ? '正在确认…' : flowCompletion.missingCount ? `先补流水（${flowCompletion.missingCount}）` : zeroSettlementPreview ? '确认核对并结清' : '保存并确认核对'}
             </button>
           ) : null}
         </div>

@@ -1,5 +1,6 @@
 /** 渠道账单表单计算与规则校验。 */
 import { getChannelLineItems } from '@/domain/channel/channelAggregates.js'
+import { resolveChannelFlowInputState } from '@/domain/channel/channelFlowInput.js'
 
 export const XIAN_WEIZHEN_9917_RULE = 'xian_weizhen_9917'
 
@@ -21,7 +22,7 @@ export const initialHeaderForm = {
 
 export function initialLineItem() {
   return {
-    id: '', settlementCycle: '', gameName: '', flow: '', discountFactor: '1', voucherCost: '', noWorryCost: '', refundCost: '', testCost: '', welfareCost: '', coinCost: '',
+    id: '', settlementCycle: '', gameName: '', flow: '', flowInputState: 'missing', discountFactor: '1', voucherCost: '', noWorryCost: '', refundCost: '', testCost: '', welfareCost: '', coinCost: '',
     shareRate: '30', taxRate: '5', gatewayCost: '', platformSettlementAmount: '', systemSettlementAmount: '', settlementDifference: '', validationStatus: 'unvalidated', settlementAmount: '',
     settlementRuleCode: '', channelFeeMode: '', channelFeeRate: '', taxMode: '', validationTolerance: ''
   }
@@ -154,7 +155,7 @@ export function buildLineRecordFromForm(fd, headerForm = initialHeaderForm) {
   const details = calculateSettlementDetails(fd, effectiveHeader)
   return {
     settlementCycle: normalizeChannelSettlementCycle(fd.settlementCycle || fd.settlementMonth), gameName: fd.gameName != null ? String(fd.gameName) : '',
-    flow: Number(fd.flow || 0), discountFactor: resolveDiscountFactor(fd), effectiveFlow: effectiveLineFlowFromFormData(fd),
+    flow: Number(fd.flow || 0), flowInputState: resolveChannelFlowInputState(fd), discountFactor: resolveDiscountFactor(fd), effectiveFlow: effectiveLineFlowFromFormData(fd),
     voucherCost: Number(fd.voucherCost || 0), noWorryCost: Number(fd.noWorryCost || 0), refundCost: Number(fd.refundCost || 0), testCost: Number(fd.testCost || 0), welfareCost: Number(fd.welfareCost || 0), coinCost: Number(fd.coinCost || 0),
     billingAmount: round2(calculateBillingAmount(fd, effectiveHeader)), shareRate: Number(fd.shareRate || 0), shareAmount: round2(calculateShareAmount(fd, effectiveHeader)), taxRate: Number(fd.taxRate || 0), gatewayCost: Number(fd.gatewayCost || 0),
     settlementRuleCode: effectiveHeader.settlementRuleCode || '', channelFeeMode: effectiveHeader.channelFeeMode || '', channelFeeRate: parseOptionalNum(effectiveHeader.channelFeeRate), taxMode: effectiveHeader.taxMode || '', validationTolerance: Math.max(0, Number(effectiveHeader.validationTolerance || 0.05)),
@@ -196,7 +197,7 @@ export function recordToHeaderForm(record) {
 
 export function recordToLineForms(record) {
   return getChannelLineItems(record).map((line) => ({
-    id: line.id != null ? String(line.id) : '', settlementCycle: normalizeChannelSettlementCycle(line.settlementCycle || record.settlementMonth), gameName: line.gameName || '', flow: String(line.flow ?? ''), discountFactor: line.discountFactor != null ? String(line.discountFactor) : '1', voucherCost: String(line.voucherCost ?? ''), noWorryCost: String(line.noWorryCost ?? ''), refundCost: String(line.refundCost ?? ''), testCost: String(line.testCost ?? ''), welfareCost: String(line.welfareCost ?? ''), coinCost: String(line.coinCost ?? ''), shareRate: String(line.shareRate ?? '30'), taxRate: String(line.taxRate ?? '5'), gatewayCost: String(line.gatewayCost ?? ''), platformSettlementAmount: line.platformSettlementAmount != null ? String(line.platformSettlementAmount) : '', systemSettlementAmount: String(line.systemSettlementAmount ?? ''), settlementDifference: line.settlementDifference != null ? String(line.settlementDifference) : '', validationStatus: line.validationStatus || 'unvalidated', settlementAmount: String(line.settlementAmount ?? ''),
+    id: line.id != null ? String(line.id) : '', settlementCycle: normalizeChannelSettlementCycle(line.settlementCycle || record.settlementMonth), gameName: line.gameName || '', flow: String(line.flow ?? ''), flowInputState: resolveChannelFlowInputState(line), discountFactor: line.discountFactor != null ? String(line.discountFactor) : '1', voucherCost: String(line.voucherCost ?? ''), noWorryCost: String(line.noWorryCost ?? ''), refundCost: String(line.refundCost ?? ''), testCost: String(line.testCost ?? ''), welfareCost: String(line.welfareCost ?? ''), coinCost: String(line.coinCost ?? ''), shareRate: String(line.shareRate ?? '30'), taxRate: String(line.taxRate ?? '5'), gatewayCost: String(line.gatewayCost ?? ''), platformSettlementAmount: line.platformSettlementAmount != null ? String(line.platformSettlementAmount) : '', systemSettlementAmount: String(line.systemSettlementAmount ?? ''), settlementDifference: line.settlementDifference != null ? String(line.settlementDifference) : '', validationStatus: line.validationStatus || 'unvalidated', settlementAmount: String(line.settlementAmount ?? ''),
     settlementRuleCode: line.settlementRuleCode || '', channelFeeMode: line.channelFeeMode || '', channelFeeRate: line.channelFeeRate != null ? String(line.channelFeeRate) : '', taxMode: line.taxMode || '', validationTolerance: line.validationTolerance != null ? String(line.validationTolerance) : ''
   }))
 }

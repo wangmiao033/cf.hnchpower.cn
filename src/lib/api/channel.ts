@@ -2,9 +2,11 @@
 import { apiDelete, apiGet, apiPost, apiPostMultipart, apiPut } from '@/lib/api/client.ts'
 import { getChannelBillNumber } from '@/utils/channelBillNumber.js'
 
+export type ChannelFlowInputState = 'missing' | 'confirmed_zero' | 'entered' | 'confirmed'
+
 export type ApiChannelLineItem = {
   id: string; channel_record_id: string; sort_order: number; settlement_cycle: string | null; game_name: string | null;
-  billing_flow: number; discount_factor: number; voucher_cost: number; no_worry_cost: number; refund_cost: number; test_cost: number; welfare_cost: number; coin_cost: number;
+  billing_flow: number; flow_input_state?: ChannelFlowInputState; discount_factor: number; voucher_cost: number; no_worry_cost: number; refund_cost: number; test_cost: number; welfare_cost: number; coin_cost: number;
   share_rate: number; billing_amount: number; share_amount: number; tax_rate: number; gateway_cost: number;
   settlement_rule_code: string | null; channel_fee_mode: string | null; channel_fee_rate: number | null; tax_mode: string | null; validation_tolerance: number | null;
   platform_settlement_amount: number | null; system_settlement_amount: number; settlement_difference: number | null; validation_status: string; settlement_amount: number;
@@ -21,7 +23,7 @@ export type ApiChannelRow = {
 
 export type ChannelListResponse = { items: ApiChannelRow[]; total: number }
 export type ChannelLinePayload = {
-  settlement_cycle?: string | null; game_name?: string | null; billing_flow: number; discount_factor: number; voucher_cost: number; no_worry_cost: number; refund_cost: number; test_cost: number; welfare_cost: number; coin_cost: number;
+  settlement_cycle?: string | null; game_name?: string | null; billing_flow: number; flow_input_state?: ChannelFlowInputState; discount_factor: number; voucher_cost: number; no_worry_cost: number; refund_cost: number; test_cost: number; welfare_cost: number; coin_cost: number;
   share_rate: number; billing_amount: number; share_amount: number; tax_rate: number; gateway_cost: number;
   settlement_rule_code?: string | null; channel_fee_mode?: string | null; channel_fee_rate?: number | null; tax_mode?: string | null; validation_tolerance?: number | null;
   platform_settlement_amount?: number | null; system_settlement_amount?: number; settlement_difference?: number | null; validation_status?: string; settlement_amount: number
@@ -50,12 +52,32 @@ export function deleteChannelReceipt(recordId: string, receiptId: string): Promi
 
 function numOrNull(v: unknown): number | null { if (v === undefined || v === null || v === '') return null; const n = typeof v === 'number' ? v : parseFloat(String(v)); return Number.isFinite(n) ? n : null }
 function textOrNull(v: unknown): string | null { const value = String(v ?? '').trim(); return value || null }
+function restoredFlowInputState(state: unknown, amount: unknown): Exclude<ChannelFlowInputState, 'confirmed'> {
+  const raw = String(state || '').trim().toLowerCase()
+  if (raw === 'missing') return 'missing'
+  if (raw === 'confirmed_zero') return 'confirmed_zero'
+  if (raw === 'entered') return 'entered'
+  return Number(amount || 0) === 0 ? 'confirmed_zero' : 'entered'
+}
+function payloadFlowInputState(line: Record<string, unknown>): Exclude<ChannelFlowInputState, 'confirmed'> {
+  const rawState = String(line.flowInputState ?? '').trim().toLowerCase()
+  const rawFlow = line.flow
+  const hasFlow = rawFlow !== undefined && rawFlow !== null && rawFlow !== ''
+  const amount = hasFlow ? Number(rawFlow) : Number.NaN
+  if (!hasFlow || !Number.isFinite(amount)) return 'missing'
+  if (amount > 0) return 'entered'
+  if (amount === 0) {
+    if (rawState === 'confirmed_zero' || rawState === 'confirmed') return 'confirmed_zero'
+    return 'missing'
+  }
+  return 'missing'
+}
 function apiLineToFrontend(row: ApiChannelLineItem): Record<string, unknown> {
-  return { id: String(row.id ?? ''), channelRecordId: row.channel_record_id, sortOrder: row.sort_order, settlementCycle: row.settlement_cycle ?? '', gameName: row.game_name ?? '', flow: row.billing_flow, discountFactor: row.discount_factor ?? 1, voucherCost: row.voucher_cost, noWorryCost: row.no_worry_cost, refundCost: row.refund_cost, testCost: row.test_cost, welfareCost: row.welfare_cost, coinCost: row.coin_cost ?? 0, shareRate: row.share_rate, billingAmount: row.billing_amount, shareAmount: row.share_amount, taxRate: row.tax_rate, gatewayCost: row.gateway_cost, settlementRuleCode: row.settlement_rule_code ?? '', channelFeeMode: row.channel_fee_mode ?? '', channelFeeRate: row.channel_fee_rate, taxMode: row.tax_mode ?? '', validationTolerance: row.validation_tolerance, platformSettlementAmount: row.platform_settlement_amount, systemSettlementAmount: row.system_settlement_amount, settlementDifference: row.settlement_difference, validationStatus: row.validation_status, settlementAmount: row.settlement_amount }
+  return { id: String(row.id ?? ''), channelRecordId: row.channel_record_id, sortOrder: row.sort_order, settlementCycle: row.settlement_cycle ?? '', gameName: row.game_name ?? '', flow: row.billing_flow, flowInputState: restoredFlowInputState(row.flow_input_state, row.billing_flow), discountFactor: row.discount_factor ?? 1, voucherCost: row.voucher_cost, noWorryCost: row.no_worry_cost, refundCost: row.refund_cost, testCost: row.test_cost, welfareCost: row.welfare_cost, coinCost: row.coin_cost ?? 0, shareRate: row.share_rate, billingAmount: row.billing_amount, shareAmount: row.share_amount, taxRate: row.tax_rate, gatewayCost: row.gateway_cost, settlementRuleCode: row.settlement_rule_code ?? '', channelFeeMode: row.channel_fee_mode ?? '', channelFeeRate: row.channel_fee_rate, taxMode: row.tax_mode ?? '', validationTolerance: row.validation_tolerance, platformSettlementAmount: row.platform_settlement_amount, systemSettlementAmount: row.system_settlement_amount, settlementDifference: row.settlement_difference, validationStatus: row.validation_status, settlementAmount: row.settlement_amount }
 }
 function frontendLineToPayload(line: Record<string, unknown>): ChannelLinePayload {
   const df = parseFloat(String(line.discountFactor ?? 1)); const discount_factor = Number.isFinite(df) && df > 0 ? df : 1
-  return { settlement_cycle: line.settlementCycle != null && String(line.settlementCycle).trim() ? String(line.settlementCycle).trim() : null, game_name: (line.gameName as string) || null, billing_flow: Number(line.flow || 0), discount_factor, voucher_cost: Number(line.voucherCost || 0), no_worry_cost: Number(line.noWorryCost || 0), refund_cost: Number(line.refundCost || 0), test_cost: Number(line.testCost || 0), welfare_cost: Number(line.welfareCost || 0), coin_cost: Number(line.coinCost || 0), share_rate: Number(line.shareRate || 0), billing_amount: Number(line.billingAmount || 0), share_amount: Number(line.shareAmount || 0), tax_rate: Number(line.taxRate || 0), gateway_cost: Number(line.gatewayCost || 0), settlement_rule_code: textOrNull(line.settlementRuleCode), channel_fee_mode: textOrNull(line.channelFeeMode), channel_fee_rate: numOrNull(line.channelFeeRate), tax_mode: textOrNull(line.taxMode), validation_tolerance: numOrNull(line.validationTolerance), platform_settlement_amount: numOrNull(line.platformSettlementAmount), system_settlement_amount: Number(line.systemSettlementAmount || 0), settlement_difference: numOrNull(line.settlementDifference), validation_status: String(line.validationStatus || 'unvalidated'), settlement_amount: Number(line.settlementAmount || 0) }
+  return { settlement_cycle: line.settlementCycle != null && String(line.settlementCycle).trim() ? String(line.settlementCycle).trim() : null, game_name: (line.gameName as string) || null, billing_flow: Number(line.flow || 0), flow_input_state: payloadFlowInputState(line), discount_factor, voucher_cost: Number(line.voucherCost || 0), no_worry_cost: Number(line.noWorryCost || 0), refund_cost: Number(line.refundCost || 0), test_cost: Number(line.testCost || 0), welfare_cost: Number(line.welfareCost || 0), coin_cost: Number(line.coinCost || 0), share_rate: Number(line.shareRate || 0), billing_amount: Number(line.billingAmount || 0), share_amount: Number(line.shareAmount || 0), tax_rate: Number(line.taxRate || 0), gateway_cost: Number(line.gatewayCost || 0), settlement_rule_code: textOrNull(line.settlementRuleCode), channel_fee_mode: textOrNull(line.channelFeeMode), channel_fee_rate: numOrNull(line.channelFeeRate), tax_mode: textOrNull(line.taxMode), validation_tolerance: numOrNull(line.validationTolerance), platform_settlement_amount: numOrNull(line.platformSettlementAmount), system_settlement_amount: Number(line.systemSettlementAmount || 0), settlement_difference: numOrNull(line.settlementDifference), validation_status: String(line.validationStatus || 'unvalidated'), settlement_amount: Number(line.settlementAmount || 0) }
 }
 
 export function apiChannelRowToFrontend(row: ApiChannelRow): Record<string, unknown> {
