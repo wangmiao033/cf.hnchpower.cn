@@ -71,6 +71,13 @@ def _rule_fields(candidate: dict) -> dict:
         fee_mode = "percent"
         fee_value = round(fee, 4)
 
+    # tax_mode="none" means invoice tax is record-only and never changes the
+    # settlement result. The channel form persists tax_rate as a non-null number,
+    # so use the neutral value 0 when the contract has no structured invoice tax.
+    # Keep tax_rate_missing=True so the UI/audit layer can still tell users that
+    # the contract metadata itself has not been structured yet.
+    neutral_tax_rate = round(tax, 4) if tax is not None else (0.0 if fields_complete else None)
+
     return {
         "settlement_rule_code": rule_code,
         "channel_fee_mode": fee_mode,
@@ -79,7 +86,7 @@ def _rule_fields(candidate: dict) -> dict:
         # reduce settlement. Record it on the line, but default calculation to
         # "not participating" unless the user explicitly changes the rule.
         "tax_mode": "none",
-        "tax_rate": round(tax, 4) if tax is not None else None,
+        "tax_rate": neutral_tax_rate,
         "share_rate": round(share, 4) if share is not None else None,
         "validation_tolerance": 0.05,
         "fields_complete": fields_complete,
@@ -348,11 +355,11 @@ def recommend_channel_rules(
         public_recommended = _public_rule(recommended)
 
         if auto_apply and authorization_status == "unknown" and tax_rate_warning:
-            line_message = "合同合作项匹配明确，分成/通道费已带入；授权期与发票税率未结构化，均仅提示补录"
+            line_message = "合同合作项匹配明确，分成/通道费已带入；授权期与发票税率未结构化，按0记录且不参与结算"
         elif auto_apply and authorization_status == "unknown":
             line_message = "合同合作项匹配明确，授权期未结构化；已带入合同结算数字，授权期单独待确认"
         elif auto_apply and tax_rate_warning:
-            line_message = "合同匹配明确，分成/通道费已带入；发票税率未结构化，仅提示补录，不影响结算"
+            line_message = "合同匹配明确，分成/通道费已带入；发票税率未结构化，按0记录且不参与结算"
         elif auto_apply:
             line_message = "合同匹配明确，可自动带入结算规则"
         elif authorization_status == "out_of_range":
@@ -443,9 +450,9 @@ def recommend_channel_rules(
         if any(item.get("authorization_warning") for item in auto_lines):
             warning_bits.append("授权期未结构化")
         if any(item.get("tax_rate_warning") for item in auto_lines):
-            warning_bits.append("发票税率未结构化")
+            warning_bits.append("发票税率未结构化（按0记录，不参与结算）")
         if warning_bits:
-            message = f"当前游戏与合同匹配已明确；{'、'.join(warning_bits)}仅提示补录，不影响已知结算数字带入"
+            message = f"当前游戏与合同匹配已明确；{'、'.join(warning_bits)}，不影响已知结算数字带入"
         else:
             message = "当前游戏与账期的合同匹配已明确，可自动带入"
     elif safe_partner_auto_apply:
@@ -456,7 +463,7 @@ def recommend_channel_rules(
         message = partner_summary["message"]
 
     return {
-        "version": "contract-channel-rule-v2.6",
+        "version": "contract-channel-rule-v2.7",
         "auto_apply": bool(overall_auto and header),
         "matched_lines": len(matched),
         "total_lines": len(results),
