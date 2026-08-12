@@ -8,8 +8,40 @@ import {
   VIEWS
 } from './routes.js'
 
+describe('V4 工作流导航', () => {
+  it('收口为六个核心业务域', () => {
+    expect(SIDEBAR_GROUPS.map((group) => group.label)).toEqual([
+      '工作台',
+      '对账中心',
+      '合同与客户',
+      '发票',
+      '银行资金',
+      '数据'
+    ])
+  })
+
+  it('财务待办、经营、利润、异常和服务器成本统一归入工作台', () => {
+    expect(getGroupForView(VIEWS.FINANCE_WORKBENCH)?.id).toBe('workbench')
+    expect(getGroupForView(VIEWS.BUSINESS_DASHBOARD)?.id).toBe('workbench')
+    expect(getGroupForView(VIEWS.PROFIT_ANALYSIS)?.id).toBe('workbench')
+    expect(getGroupForView(VIEWS.ANOMALIES)?.id).toBe('workbench')
+    expect(getGroupForView(VIEWS.SERVER_COSTS)?.id).toBe('workbench')
+  })
+
+  it('客户库与合同台账共享合同与客户域', () => {
+    expect(getGroupForView(VIEWS.CONTRACTS)?.id).toBe('contracts')
+    expect(getGroupForView(VIEWS.PARTNER_CONTACTS)?.id).toBe('contracts')
+  })
+
+  it('银行兼容入口始终回到唯一银行资金域', () => {
+    expect(getGroupForView(VIEWS.BANK_RECONCILIATION)?.id).toBe('funds')
+    expect(getGroupForView(VIEWS.BANK_TRANSACTIONS_LEDGER)?.id).toBe('funds')
+    expect(getGroupForView(VIEWS.BANK_STATEMENT_IMPORT)?.id).toBe('funds')
+  })
+})
+
 describe('统一对账进度路由', () => {
-  it('作为核心对账中的独立页面展示', () => {
+  it('作为对账中心中的独立页面展示', () => {
     const group = getGroupForView(VIEWS.RECON_PROGRESS)
 
     expect(group.id).toBe('reconciliation')
@@ -32,8 +64,8 @@ describe('统一对账进度路由', () => {
   })
 })
 
-describe('QuickSDK 数据源路由', () => {
-  it('作为数据中心中的独立原始台账展示', () => {
+describe('QuickSDK 数据路由', () => {
+  it('数据域只保留数据库、数据源和游戏/渠道数据', () => {
     const group = getGroupForView(VIEWS.PRODUCT_SOURCES)
 
     expect(group.id).toBe('data')
@@ -41,16 +73,15 @@ describe('QuickSDK 数据源路由', () => {
       VIEWS.QUICKSDK_LIBRARY,
       VIEWS.PRODUCT_SOURCES,
       VIEWS.QUICKSDK_GAMES,
-      VIEWS.QUICKSDK_CHANNELS,
-      VIEWS.PARTNER_CONTACTS
+      VIEWS.QUICKSDK_CHANNELS
     ])
     expect(getPageTitle(VIEWS.PRODUCT_SOURCES)).toBe('数据源')
     expect(getPageDescription(VIEWS.PRODUCT_SOURCES)).toContain('ProductCode')
   })
 })
 
-describe('发票中心路由', () => {
-  it('销项和进项发票均在发票中心，并让新增/编辑复用销项标签页', () => {
+describe('发票路由', () => {
+  it('销项和进项发票均在发票域，并让新增/编辑复用销项标签页', () => {
     const group = getGroupForView(VIEWS.INVOICE_INPUT)
 
     expect(group.id).toBe('invoices')
