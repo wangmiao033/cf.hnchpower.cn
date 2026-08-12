@@ -53,31 +53,10 @@ def _channel_validation_reason(bill_type: str, bill) -> str | None:
     return f"系统计算与平台账单存在差异 {difference:+.2f} 元，请先修正结算规则或平台金额。"
 
 
-def _channel_flow_input_reason(bill_type: str, bill) -> str | None:
-    if bill_type != "channel":
-        return None
-    items = list(getattr(bill, "line_items", None) or [])
-    missing = [
-        item
-        for item in items
-        if str(getattr(item, "flow_input_state", "confirmed") or "confirmed").strip().lower() == "missing"
-    ]
-    if not missing:
-        return None
-    names = [str(getattr(item, "game_name", "") or "").strip() or "未命名游戏" for item in missing]
-    sample = "、".join(names[:5])
-    suffix = f" 等 {len(names)} 个游戏" if len(names) > 5 else ""
-    return f"后台流水尚未录完：{sample}{suffix}。请填写流水金额，或明确确认本期流水为 0。"
-
-
-def _channel_confirm_reason(bill_type: str, bill) -> str | None:
-    return _channel_flow_input_reason(bill_type, bill) or _channel_validation_reason(bill_type, bill)
-
-
 def _snapshot(db: Session, bill_type: str, bill, user: AuthUser) -> dict:
     _prefer_channel_line_item_settlement(bill_type, bill)
     snapshot = _apply_cross_link_guards(build_lifecycle_snapshot(db, bill_type, bill, user))
-    reason = _channel_confirm_reason(bill_type, bill)
+    reason = _channel_validation_reason(bill_type, bill)
     if reason:
         for option in snapshot.get("transitions") or []:
             if option.get("status") == "confirmed":
@@ -141,11 +120,11 @@ def transition_bill_status(
     target = str(payload.to_status or "").strip().lower()
 
     if target == "confirmed":
-        reason = _channel_confirm_reason(bill_type, bill)
+        reason = _channel_validation_reason(bill_type, bill)
         if reason:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail={"error": "channel_confirmation_blocked", "message": reason},
+                detail={"error": "settlement_validation_failed", "message": reason},
             )
 
     if target == "cancelled":

@@ -17,7 +17,6 @@ export const VIEWS = {
   RECON_CREATE: 'recon-create',
   RECON_EDIT: 'recon-edit',
   RECON_CHANNEL: 'recon-channel',
-  RECON_MONTH_CLOSE: 'recon-month-close',
   CHANNEL_RECON_CREATE: 'channel-recon-create',
   CHANNEL_RECON_EDIT: 'channel-recon-edit',
   CONTRACTS: 'contracts',
@@ -33,6 +32,14 @@ export const VIEWS = {
   USER_CENTER: 'user-center'
 }
 
+/**
+ * V4.0 P0 information architecture.
+ *
+ * Keep all existing views/routes for backwards compatibility, but group them by
+ * the operator's real workflow rather than by the implementation history of each
+ * module.  This keeps deep links stable while removing the feeling of many
+ * independent mini-systems.
+ */
 export const SIDEBAR_GROUPS = [
   {
     id: 'workbench',
@@ -52,8 +59,7 @@ export const SIDEBAR_GROUPS = [
     items: [
       { view: VIEWS.RECON_RD, label: '研发账单' },
       { view: VIEWS.RECON_PROGRESS, label: '对账进度' },
-      { view: VIEWS.RECON_CHANNEL, label: '渠道账单' },
-      { view: VIEWS.RECON_MONTH_CLOSE, label: '月结管理' }
+      { view: VIEWS.RECON_CHANNEL, label: '渠道账单' }
     ]
   },
   {
@@ -106,7 +112,6 @@ const VIEW_TITLES = {
   [VIEWS.RECON_CREATE]: '新增研发账单',
   [VIEWS.RECON_EDIT]: '编辑研发账单',
   [VIEWS.RECON_CHANNEL]: '渠道账单',
-  [VIEWS.RECON_MONTH_CLOSE]: '月结管理',
   [VIEWS.CHANNEL_RECON_CREATE]: '新增渠道账单',
   [VIEWS.CHANNEL_RECON_EDIT]: '编辑渠道账单',
   [VIEWS.CONTRACTS]: '合同台账',
@@ -137,7 +142,6 @@ const VIEW_DESCRIPTIONS = {
   [VIEWS.RECON_CREATE]: '按合同和结算依据新增研发账单。',
   [VIEWS.RECON_EDIT]: '维护研发账单及其结算依据。',
   [VIEWS.RECON_CHANNEL]: '统一查看渠道应收、收款进度、异常和账单闭环状态。',
-  [VIEWS.RECON_MONTH_CLOSE]: '按月份集中查看合同应有、缺账、待录流水和待核对账单，完成渠道月结。',
   [VIEWS.CHANNEL_RECON_CREATE]: '按合同和平台结算依据新增渠道账单。',
   [VIEWS.CHANNEL_RECON_EDIT]: '维护渠道账单及其结算依据。',
   [VIEWS.CONTRACTS]: '统一维护合同、合作清单、履约状态、到期提醒和客户关联。',
@@ -168,7 +172,6 @@ export const VIEW_ICONS = {
   [VIEWS.RECON_CREATE]: '增',
   [VIEWS.RECON_EDIT]: '编',
   [VIEWS.RECON_CHANNEL]: '渠',
-  [VIEWS.RECON_MONTH_CLOSE]: '月',
   [VIEWS.CHANNEL_RECON_CREATE]: '增',
   [VIEWS.CHANNEL_RECON_EDIT]: '编',
   [VIEWS.CONTRACTS]: '合',

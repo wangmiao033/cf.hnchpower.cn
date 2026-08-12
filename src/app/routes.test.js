@@ -48,11 +48,9 @@ describe('统一对账进度路由', () => {
     expect(group.items.map((item) => item.view)).toEqual([
       VIEWS.RECON_RD,
       VIEWS.RECON_PROGRESS,
-      VIEWS.RECON_CHANNEL,
-      VIEWS.RECON_MONTH_CLOSE
+      VIEWS.RECON_CHANNEL
     ])
     expect(getTabView(VIEWS.RECON_PROGRESS)).toBe(VIEWS.RECON_PROGRESS)
-    expect(getTabView(VIEWS.RECON_MONTH_CLOSE)).toBe(VIEWS.RECON_MONTH_CLOSE)
   })
 
   it('提供独立页面文案', () => {
@@ -63,7 +61,6 @@ describe('统一对账进度路由', () => {
         .flatMap((group) => group.items)
         .find((item) => item.view === VIEWS.RECON_PROGRESS)?.label
     ).toBe('对账进度')
-    expect(getPageTitle(VIEWS.RECON_MONTH_CLOSE)).toBe('月结管理')
   })
 })
 
