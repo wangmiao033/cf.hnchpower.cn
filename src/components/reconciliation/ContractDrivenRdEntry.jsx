@@ -238,10 +238,7 @@ export default function ContractDrivenRdEntry(props) {
         r: line.revenue,
         d: line.discount_rate,
         cp: line.coupon_amount,
-        e: line.extra_fee,
-        f: line.channel_fee_rate,
-        t: line.test_fee,
-        tx: line.tax_rate
+        e: line.extra_fee
       }))
     })
     if (signature === lastRequestSignatureRef.current) return undefined
@@ -283,18 +280,14 @@ export default function ContractDrivenRdEntry(props) {
     } else {
       setContractDraftOverride(patched)
     }
-    lastAppliedSignatureRef.current = JSON.stringify(
-      recommendation.lines?.map((item) => [item.line_index, item.match?.access_item_id, item.auto_apply]) || []
-    )
+    lastAppliedSignatureRef.current = String(recommendation.generated_at || '')
   }, [formState, mode, onError, recommendation])
 
   useEffect(() => {
     if (mode !== 'add' || !recommendation || !formState || !recommendationMatchesRecord(formState, recommendation)) return
     if (recommendation.header_recommendation?.compatible === false) return
-    const signature = JSON.stringify(
-      recommendation.lines?.map((item) => [item.line_index, item.match?.access_item_id, item.auto_apply]) || []
-    )
-    if (!signature || signature === '[]' || signature === lastAppliedSignatureRef.current) return
+    const signature = String(recommendation.generated_at || '')
+    if (!signature || signature === lastAppliedSignatureRef.current) return
     if (!recommendation.lines?.some((item) => item.auto_apply)) return
     forceApplyRecommendation()
   }, [forceApplyRecommendation, formState, mode, recommendation])
