@@ -76,6 +76,50 @@ class ChannelContractAuthorityTests(unittest.TestCase):
         self.assertEqual(row["recommended"]["tax_rate"], 0)
         self.assertEqual(row["recommended"]["channel_fee_rate"], 0)
 
+    def test_exact_identity_can_apply_when_authorization_dates_are_unstructured(self):
+        candidates = [
+            self.candidate(
+                access_id="A1",
+                game="龙吟大陆（内置0.1折正版放置手游）",
+                start=None,
+                end=None,
+            )
+        ]
+        result = recommend_channel_rules(
+            self.partner,
+            "天盛（重庆天盛）",
+            [{"line_index": 0, "game_name": "龙吟大陆", "settlement_cycle": "2026-01"}],
+            candidates,
+        )
+        self.assertTrue(result["auto_apply"])
+        row = result["lines"][0]
+        self.assertTrue(row["auto_apply"])
+        self.assertTrue(row["authorization_warning"])
+        self.assertEqual(row["recommended"]["share_rate"], 25)
+        self.assertEqual(row["recommended"]["channel_fee_rate"], 0)
+        self.assertEqual(row["recommended"]["tax_rate"], 0)
+        self.assertIn("授权期未结构化", result["message"])
+
+    def test_explicit_out_of_range_authorization_still_blocks_auto_apply(self):
+        candidates = [
+            self.candidate(
+                access_id="A1",
+                game="龙吟大陆",
+                start="2025-01-01",
+                end="2025-12-31",
+            )
+        ]
+        result = recommend_channel_rules(
+            self.partner,
+            "天盛（重庆天盛）",
+            [{"line_index": 0, "game_name": "龙吟大陆", "settlement_cycle": "2026-01"}],
+            candidates,
+        )
+        self.assertFalse(result["auto_apply"])
+        row = result["lines"][0]
+        self.assertFalse(row["auto_apply"])
+        self.assertIn("不在授权期内", row["message"])
+
     def test_partner_with_multiple_contract_rules_does_not_guess_baseline(self):
         candidates = self.uniform_candidates()
         candidates[-1] = self.candidate(access_id="A4", game="圣树唤歌", share=30)
