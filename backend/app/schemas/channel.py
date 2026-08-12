@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+
+FlowInputState = Literal["missing", "confirmed_zero", "entered", "confirmed"]
 
 
 class ChannelReceiptCreate(BaseModel):
@@ -36,6 +38,7 @@ class ChannelLineItemCreate(BaseModel):
     settlement_cycle: str | None = None
     game_name: str | None = None
     billing_flow: float = Field(default=0, ge=0)
+    flow_input_state: FlowInputState = "confirmed"
     discount_factor: float = Field(default=1, ge=0, le=1)
     voucher_cost: float = 0
     no_worry_cost: float = 0
@@ -68,6 +71,7 @@ class ChannelLineItemRead(BaseModel):
     settlement_cycle: str | None = None
     game_name: str | None
     billing_flow: float
+    flow_input_state: FlowInputState = "confirmed"
     discount_factor: float = 1
     voucher_cost: float
     no_worry_cost: float
