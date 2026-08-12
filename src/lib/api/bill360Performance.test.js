@@ -28,6 +28,7 @@ describe('Bill360 performance resource cache', () => {
 
     const first = loadBill360Resource('contracts:partner-a', loader)
     const second = loadBill360Resource('contracts:partner-a', loader)
+    await Promise.resolve()
 
     expect(loader).toHaveBeenCalledTimes(1)
     resolveLoader([{ id: 'contract-1' }])
