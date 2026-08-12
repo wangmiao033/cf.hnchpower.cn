@@ -1,0 +1,28 @@
+name: Channel Receipt Feature Quality
+
+on:
+  push:
+    branches:
+      - codex/channel-receipt-account-cleanup
+
+permissions:
+  contents: read
+
+concurrency:
+  group: channel-receipt-feature-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    name: Frontend tests and production build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
