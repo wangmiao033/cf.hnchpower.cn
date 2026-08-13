@@ -12,6 +12,28 @@ export type InternalContractNumbersResponse = {
   total: number
 }
 
+const TTL_MS = 10_000
+let cached: { value: InternalContractNumbersResponse; expiresAt: number } | null = null
+let inflight: Promise<InternalContractNumbersResponse> | null = null
+
+export function clearInternalContractNumbersCache() {
+  cached = null
+  inflight = null
+}
+
 export function listInternalContractNumbers() {
-  return apiGet<InternalContractNumbersResponse>('/api/contracts/internal-numbers')
+  if (cached && cached.expiresAt > Date.now()) return Promise.resolve(cached.value)
+  if (cached) cached = null
+  if (inflight) return inflight
+
+  const request = apiGet<InternalContractNumbersResponse>('/api/contracts/internal-numbers')
+    .then((value) => {
+      cached = { value, expiresAt: Date.now() + TTL_MS }
+      return value
+    })
+    .finally(() => {
+      if (inflight === request) inflight = null
+    })
+  inflight = request
+  return request
 }
