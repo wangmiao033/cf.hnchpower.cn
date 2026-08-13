@@ -15,7 +15,7 @@ import {
   apiRowToFrontend,
   getReconciliationRecord
 } from '@/lib/api/reconciliation.ts'
-import { getQuickSdkGameFlow } from '@/lib/api/quicksdk.ts'
+import { getBill360QuickSdkSummary } from '@/lib/api/bill360Performance.ts'
 import { transitionBillLifecycle } from '@/lib/api/billLifecycle.ts'
 import { listFundingClosureStatus } from '@/domain/reconciliation/closureStatus.js'
 import { archiveBill, getBillArchiveSnapshot, unarchiveBill } from '@/lib/api/billArchive.ts'
@@ -26,7 +26,7 @@ const STATUS_LABELS = {
   pending: '待处理',
   confirmed: '已确认',
   completed: '已完成',
-  cancelled: '已取消',
+  cancelled: '已作废',
   settled: '已结算',
   invoiced: '已开票',
   reconciled: '已核销'
@@ -84,6 +84,11 @@ function partnerKey(value) {
     .replace(/[（(]/g, '(')
     .replace(/[）)]/g, ')')
     .replace(/\s+/g, '')
+}
+
+function isCancelledRow(row) {
+  const current = String(row?.status || '').trim().toLowerCase()
+  return current === 'cancelled' || current === 'canceled'
 }
 
 function CoreReconciliationPage() {
@@ -188,16 +193,26 @@ function CoreReconciliationPage() {
     })
   }, [recon.records, month, partner, query, status])
 
+  const trashRows = useMemo(
+    () => scopedRows.filter(isCancelledRow),
+    [scopedRows]
+  )
+
+  const archivedRows = useMemo(
+    () => scopedRows.filter((row) => archivedIds.has(String(row.id)) && !isCancelledRow(row)),
+    [scopedRows, archivedIds]
+  )
+
   const activeRows = useMemo(
-    () => scopedRows.filter((row) => !archivedIds.has(String(row.id))),
+    () => scopedRows.filter((row) => !archivedIds.has(String(row.id)) && !isCancelledRow(row)),
     [scopedRows, archivedIds]
   )
 
   const rows = useMemo(() => {
-    if (quickFilter === 'archived') return scopedRows.filter((row) => archivedIds.has(String(row.id)))
+    if (quickFilter === 'trash') return trashRows
+    if (quickFilter === 'archived') return archivedRows
     if (quickFilter === 'all') return activeRows
     return activeRows.filter((row) => {
-      if (String(row.status || '') === 'cancelled') return false
       const { paid, unpaid } = paymentAmounts(row)
       if (quickFilter === 'unpaid') return unpaid > 0.01 && paid <= 0.01
       if (quickFilter === 'partial') return paid > 0.01 && unpaid > 0.01
@@ -205,10 +220,10 @@ function CoreReconciliationPage() {
       if (quickFilter === 'data-diff') return Boolean(dataDiffIds?.has(String(row.id)))
       return true
     })
-  }, [activeRows, scopedRows, quickFilter, dataDiffIds, archivedIds, eligibleIds])
+  }, [activeRows, archivedRows, trashRows, quickFilter, dataDiffIds, eligibleIds])
 
   const selectedRows = useMemo(
-    () => rows.filter((row) => !archivedIds.has(String(row.id)) && selectedIds.includes(String(row.id))),
+    () => rows.filter((row) => !archivedIds.has(String(row.id)) && !isCancelledRow(row) && selectedIds.includes(String(row.id))),
     [rows, selectedIds, archivedIds]
   )
 
@@ -217,20 +232,21 @@ function CoreReconciliationPage() {
     {
       key: 'unpaid',
       label: '未付款',
-      count: activeRows.filter((row) => String(row.status || '') !== 'cancelled' && paymentAmounts(row).unpaid > 0.01 && paymentAmounts(row).paid <= 0.01).length
+      count: activeRows.filter((row) => paymentAmounts(row).unpaid > 0.01 && paymentAmounts(row).paid <= 0.01).length
     },
     {
       key: 'partial',
       label: '部分付款',
       count: activeRows.filter((row) => {
         const amount = paymentAmounts(row)
-        return String(row.status || '') !== 'cancelled' && amount.paid > 0.01 && amount.unpaid > 0.01
+        return amount.paid > 0.01 && amount.unpaid > 0.01
       }).length
     },
     { key: 'settled', label: '已结清', count: activeRows.filter((row) => eligibleIds.has(String(row.id))).length },
     { key: 'data-diff', label: '数据差异', count: dataDiffIds ? activeRows.filter((row) => dataDiffIds.has(String(row.id))).length : null },
-    { key: 'archived', label: '归档账单', count: archiveLoading ? null : scopedRows.filter((row) => archivedIds.has(String(row.id))).length }
-  ], [activeRows, scopedRows, dataDiffIds, archivedIds, eligibleIds, archiveLoading])
+    { key: 'trash', label: '垃圾桶', count: trashRows.length },
+    { key: 'archived', label: '归档账单', count: archiveLoading ? null : archivedRows.length }
+  ], [activeRows, archivedRows, trashRows, dataDiffIds, eligibleIds, archiveLoading])
 
   const stats = useMemo(() => {
     const total = rows.reduce((sum, row) => sum + recordSettlementAmount(row), 0)
@@ -259,23 +275,47 @@ function CoreReconciliationPage() {
     if (dataDiffIds || dataDiffLoading) return
     setDataDiffLoading(true)
     try {
-      const results = await Promise.all((recon.records || []).map(async (row) => {
-        if (String(row.status || '') === 'cancelled') return [String(row.id), false]
+      const sourceRows = (recon.records || []).filter(
+        (row) => !isCancelledRow(row) && !archivedIds.has(String(row.id))
+      )
+      const uniqueKeys = new Map()
+      const keysByBill = new Map()
+
+      sourceRows.forEach((row) => {
         const keys = bill360QuickSdkKeys('rd', row)
-        if (!keys.length) return [String(row.id), false]
-        const quickRows = await Promise.all(keys.map(async (key) => {
-          try {
-            return await getQuickSdkGameFlow({ settlement_month: key.month, game_name: key.game })
-          } catch {
-            return null
+        keysByBill.set(String(row.id), keys)
+        keys.forEach((key) => {
+          if (!uniqueKeys.has(key.key)) {
+            uniqueKeys.set(key.key, {
+              key: key.key,
+              settlement_month: key.month,
+              game_name: key.game
+            })
           }
-        }))
-        if (!quickRows.some(Boolean)) return [String(row.id), false]
-        const databaseFlow = quickRows.reduce((sum, item) => sum + Number(item?.total_flow || 0), 0)
+        })
+      })
+
+      const allKeys = [...uniqueKeys.values()]
+      const chunks = []
+      for (let index = 0; index < allKeys.length; index += 40) {
+        chunks.push(allKeys.slice(index, index + 40))
+      }
+      const groups = chunks.length
+        ? await Promise.all(chunks.map((chunk) => getBill360QuickSdkSummary(chunk)))
+        : []
+      const quickByKey = new Map(groups.flat().map((item) => [String(item.key), item]))
+      const differentIds = new Set()
+
+      sourceRows.forEach((row) => {
+        const keys = keysByBill.get(String(row.id)) || []
+        const matchedRows = keys.map((key) => quickByKey.get(key.key)).filter(Boolean)
+        if (!matchedRows.length) return
+        const databaseFlow = matchedRows.reduce((sum, item) => sum + Number(item?.total_flow || 0), 0)
         const billFlow = bill360Lines('rd', row).reduce((sum, line) => sum + Number(line.flow || 0), 0)
-        return [String(row.id), Math.abs(databaseFlow - billFlow) > 0.01]
-      }))
-      setDataDiffIds(new Set(results.filter(([, different]) => different).map(([id]) => id)))
+        if (Math.abs(databaseFlow - billFlow) > 0.01) differentIds.add(String(row.id))
+      })
+
+      setDataDiffIds(differentIds)
     } catch (error) {
       console.error(error)
       showToast('数据差异核对失败，请稍后重试', 'error')
@@ -323,8 +363,27 @@ function CoreReconciliationPage() {
     }
   }
 
+  const handleRestoreCancelled = async (row) => {
+    if (!isCancelledRow(row) || voidingId) return
+    const id = String(row.id)
+    if (!window.confirm(`确认从垃圾桶恢复账单“${text(row.settlementNumber)}”吗？\n\n恢复后状态将回到“待处理”。`)) return
+    setVoidingId(id)
+    try {
+      await transitionBillLifecycle('rd', id, 'pending', '从垃圾桶恢复账单')
+      if (archivedIds.has(id)) await unarchiveBill('rd', id)
+      await recon.refetchReconciliationFromApi?.()
+      await refreshArchiveState(false)
+      showToast('研发账单已从垃圾桶恢复为待处理', 'success')
+    } catch (error) {
+      console.error(error)
+      showToast(error instanceof Error ? error.message : '恢复账单失败', 'error')
+    } finally {
+      setVoidingId('')
+    }
+  }
+
   const voidBill = async (row) => {
-    if (String(row.status || '') === 'cancelled' || voidingId) return
+    if (isCancelledRow(row) || voidingId) return
     const reason = window.prompt(`请输入作废账单“${text(row.settlementNumber)}”的原因：`, '')
     if (reason === null) return
     if (!reason.trim()) {
@@ -336,7 +395,7 @@ function CoreReconciliationPage() {
       await transitionBillLifecycle('rd', String(row.id), 'cancelled', reason.trim())
       await recon.refetchReconciliationFromApi?.()
       setSelectedIds((prev) => prev.filter((id) => id !== String(row.id)))
-      showToast('研发账单已作废，历史记录已保留', 'success')
+      showToast('研发账单已移入垃圾桶，主列表不再显示', 'success')
     } catch (error) {
       console.error(error)
       showToast(error instanceof Error ? error.message : '账单作废失败', 'error')
@@ -476,7 +535,13 @@ function CoreReconciliationPage() {
             <select
               value={status}
               aria-label="筛选账单状态"
-              onChange={(event) => setStatus(event.target.value)}
+              onChange={(event) => {
+                const next = event.target.value
+                setStatus(next)
+                if (next === 'cancelled') setQuickFilter('trash')
+                else if (quickFilter === 'trash') setQuickFilter('all')
+                setSelectedIds([])
+              }}
             >
               <option value="">全部状态</option>
               {Object.entries(STATUS_LABELS).map(([value, label]) => (
@@ -526,7 +591,7 @@ function CoreReconciliationPage() {
 
       <section className="core-recon-panel">
         <div className="core-recon-panel-head">
-          <h2>{quickFilter === 'archived' ? '归档账单' : '账单列表'}</h2>
+          <h2>{quickFilter === 'trash' ? '垃圾桶' : quickFilter === 'archived' ? '归档账单' : '账单列表'}</h2>
           <span>{selectedRows.length > 0 ? `已选 ${selectedRows.length} 条` : `${rows.length} 条`}</span>
         </div>
         <div className="core-recon-table-wrap">
@@ -561,7 +626,13 @@ function CoreReconciliationPage() {
               {rows.length === 0 ? (
                 <tr>
                   <td colSpan={10} className="core-recon-empty">
-                    {quickFilter === 'data-diff' && dataDiffLoading ? '正在核对 QuickSDK 数据差异…' : quickFilter === 'archived' ? '暂无归档账单' : '暂无研发账单'}
+                    {quickFilter === 'data-diff' && dataDiffLoading
+                      ? '正在批量核对 QuickSDK 数据差异…'
+                      : quickFilter === 'trash'
+                        ? '垃圾桶为空'
+                        : quickFilter === 'archived'
+                          ? '暂无归档账单'
+                          : '暂无研发账单'}
                   </td>
                 </tr>
               ) : (
@@ -569,7 +640,7 @@ function CoreReconciliationPage() {
                   const periodLabel = rdRecordSettlementPeriodLabel(row)
                   const periodCount = getRdRecordSettlementPeriods(row).length
                   const { paid, unpaid } = paymentAmounts(row)
-                  const isCancelled = String(row.status || '') === 'cancelled'
+                  const isCancelled = isCancelledRow(row)
                   const archived = archivedIds.has(String(row.id))
                   const canArchive = eligibleIds.has(String(row.id))
                   const closure = listFundingClosureStatus({
@@ -588,7 +659,7 @@ function CoreReconciliationPage() {
                           type="checkbox"
                           aria-label={`选择账单 ${text(row.settlementNumber)}`}
                           checked={selectedIds.includes(String(row.id))}
-                          disabled={archived}
+                          disabled={archived || isCancelled}
                           onChange={() => toggleSelected(row.id)}
                         />
                         <span>{periodLabel}</span>
@@ -635,7 +706,11 @@ function CoreReconciliationPage() {
                           <button type="button" onMouseEnter={() => prefetchBill360?.('rd', String(row.id))} onFocus={() => prefetchBill360?.('rd', String(row.id))} onClick={() => openBill360('rd', String(row.id), row)}>
                             360°
                           </button>
-                          {archived ? (
+                          {isCancelled ? (
+                            <button type="button" disabled={voidingId === String(row.id)} onClick={() => void handleRestoreCancelled(row)}>
+                              {voidingId === String(row.id) ? '处理中…' : '恢复账单'}
+                            </button>
+                          ) : archived ? (
                             <button type="button" disabled={archiveWorkingId === String(row.id)} onClick={() => void handleUnarchive(row)}>
                               {archiveWorkingId === String(row.id) ? '处理中…' : '取消归档'}
                             </button>
@@ -652,11 +727,11 @@ function CoreReconciliationPage() {
                               <button
                                 type="button"
                                 className="danger"
-                                disabled={isCancelled || voidingId === String(row.id)}
-                                title={isCancelled ? '账单已作废' : '作废会保留账单、关联关系和操作日志'}
+                                disabled={Boolean(voidingId)}
+                                title="作废后账单会移入垃圾桶，历史、关联关系和操作日志仍保留"
                                 onClick={() => void voidBill(row)}
                               >
-                                {isCancelled ? '已作废' : voidingId === String(row.id) ? '作废中…' : '作废'}
+                                {voidingId === String(row.id) ? '作废中…' : '作废'}
                               </button>
                             </>
                           )}
