@@ -1,3 +1,5 @@
+@import './ChannelReceiptBankLink.css';
+
 .channel-receipt-account-card {
   margin-top: 10px;
   padding: 12px 14px;
@@ -42,4 +44,8 @@
   font-size: 12px;
   color: var(--text-secondary, #64748b);
   line-height: 1.5;
+}
+
+.channel-receipt-bank-section {
+  margin-top: 12px;
 }
