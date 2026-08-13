@@ -8,10 +8,11 @@ import {
   VIEWS
 } from './routes.js'
 
-describe('V4 工作流导航', () => {
-  it('收口为六个核心业务域', () => {
+describe('V4.1 工作流导航', () => {
+  it('收口为七个清晰业务域', () => {
     expect(SIDEBAR_GROUPS.map((group) => group.label)).toEqual([
       '工作台',
+      '经营分析',
       '对账中心',
       '合同与客户',
       '发票',
@@ -20,12 +21,12 @@ describe('V4 工作流导航', () => {
     ])
   })
 
-  it('财务待办、经营、利润、异常和服务器成本统一归入工作台', () => {
+  it('日常执行留在工作台，经营类页面独立成经营分析', () => {
     expect(getGroupForView(VIEWS.FINANCE_WORKBENCH)?.id).toBe('workbench')
-    expect(getGroupForView(VIEWS.BUSINESS_DASHBOARD)?.id).toBe('workbench')
-    expect(getGroupForView(VIEWS.PROFIT_ANALYSIS)?.id).toBe('workbench')
     expect(getGroupForView(VIEWS.ANOMALIES)?.id).toBe('workbench')
-    expect(getGroupForView(VIEWS.SERVER_COSTS)?.id).toBe('workbench')
+    expect(getGroupForView(VIEWS.BUSINESS_DASHBOARD)?.id).toBe('analysis')
+    expect(getGroupForView(VIEWS.PROFIT_ANALYSIS)?.id).toBe('analysis')
+    expect(getGroupForView(VIEWS.SERVER_COSTS)?.id).toBe('analysis')
   })
 
   it('客户库与合同台账共享合同与客户域', () => {
