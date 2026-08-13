@@ -132,13 +132,52 @@ export type BankMultiAllocationDashboard = {
 }
 
 const PATH = '/api/bank-auto-reconciliation'
+const DASHBOARD_TTL_MS = 2_000
+const dashboardCache = new Map<string, { value: unknown; expiresAt: number }>()
+const dashboardInflight = new Map<string, Promise<unknown>>()
+
+function loadDashboard<T>(key: string, loader: () => Promise<T>): Promise<T> {
+  const cached = dashboardCache.get(key)
+  if (cached && cached.expiresAt > Date.now()) return Promise.resolve(cached.value as T)
+  if (cached) dashboardCache.delete(key)
+  const running = dashboardInflight.get(key)
+  if (running) return running as Promise<T>
+  const request = loader()
+    .then((value) => {
+      dashboardCache.set(key, { value, expiresAt: Date.now() + DASHBOARD_TTL_MS })
+      return value
+    })
+    .finally(() => {
+      if (dashboardInflight.get(key) === request) dashboardInflight.delete(key)
+    })
+  dashboardInflight.set(key, request)
+  return request
+}
+
+export function clearBankDashboardCache() {
+  dashboardCache.clear()
+  dashboardInflight.clear()
+}
+
+function afterBankMutation<T>(request: Promise<T>): Promise<T> {
+  return request.then((result) => {
+    clearBankDashboardCache()
+    return result
+  })
+}
 
 export function getBankAutoReconciliationDashboard(limit = 200) {
-  return apiGet<BankAutoReconciliationDashboard>(`${PATH}?limit=${limit}`)
+  return loadDashboard(
+    `dashboard:${limit}`,
+    () => apiGet<BankAutoReconciliationDashboard>(`${PATH}?limit=${limit}`)
+  )
 }
 
 export function getBankMultiAllocationDashboard(limit = 500) {
-  return apiGet<BankMultiAllocationDashboard>(`${PATH}/p2-dashboard?limit=${limit}`)
+  return loadDashboard(
+    `p2:${limit}`,
+    () => apiGet<BankMultiAllocationDashboard>(`${PATH}/p2-dashboard?limit=${limit}`)
+  )
 }
 
 export function confirmBankAutoReconciliation(
@@ -146,21 +185,21 @@ export function confirmBankAutoReconciliation(
   billType: 'rd' | 'channel',
   billId: string
 ) {
-  return apiPost<{ match: BankMatchHistoryRow; message: string }>(
+  return afterBankMutation(apiPost<{ match: BankMatchHistoryRow; message: string }>(
     `${PATH}/${encodeURIComponent(transactionId)}/confirm`,
     { bill_type: billType, bill_id: billId }
-  )
+  ))
 }
 
 export function allocateBankTransaction(
   transactionId: string,
   allocations: Array<{ bill_type: 'rd' | 'channel'; bill_id: string; amount: number }>
 ) {
-  return apiPost<{
+  return afterBankMutation(apiPost<{
     matches: BankMatchHistoryRow[]
     transaction: BankTransactionAllocationSummary
     message: string
-  }>(`${PATH}/${encodeURIComponent(transactionId)}/p2-allocate`, { allocations })
+  }>(`${PATH}/${encodeURIComponent(transactionId)}/p2-allocate`, { allocations }))
 }
 
 export function getBankTransactionAllocationSummaries(transactionIds: string[]) {
@@ -176,8 +215,8 @@ export function getBankBillAllocationSummary(billType: 'rd' | 'channel', billId:
 }
 
 export function reverseBankAutoReconciliation(matchId: string, reason: string) {
-  return apiPost<{ match: BankMatchHistoryRow; message: string }>(
+  return afterBankMutation(apiPost<{ match: BankMatchHistoryRow; message: string }>(
     `${PATH}/matches/${encodeURIComponent(matchId)}/reverse`,
     { reason }
-  )
+  ))
 }
