@@ -43,3 +43,7 @@
   color: var(--text-secondary, #64748b);
   line-height: 1.5;
 }
+
+.channel-receipt-bank-section {
+  margin-top: 12px;
+}
