@@ -20,19 +20,23 @@ from app.services.workbench_todos_cumulative import build_workbench_todos
 router = APIRouter()
 
 _PENDING_STATUSES = ("draft", "pending", "")
+_CANCELLED_STATUSES = ("cancelled", "canceled", "void", "deleted")
 
 
 def _count_total_pending(db: Session, model) -> tuple[int, float, int, str | None]:
+    normalized_status = func.lower(func.coalesce(model.status, "pending"))
+    active_bill = ~normalized_status.in_(_CANCELLED_STATUSES)
     total_count, amount_total, latest_month = db.execute(
         select(
             func.count(model.id),
             func.coalesce(func.sum(model.settlement_amount), 0),
             func.max(model.settlement_month),
-        )
+        ).where(active_bill)
     ).one()
     pending_count = db.execute(
         select(func.count(model.id)).where(
-            func.lower(func.coalesce(model.status, "pending")).in_(_PENDING_STATUSES)
+            active_bill,
+            normalized_status.in_(_PENDING_STATUSES),
         )
     ).scalar_one()
     return (
