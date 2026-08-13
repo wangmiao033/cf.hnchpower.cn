@@ -8,6 +8,7 @@ import { ThemeProvider } from './contexts/ThemeContext.jsx'
 import { AuthProvider } from '@/features/auth/AuthContext.jsx'
 import './index.css'
 import './styles/V4SystemPolish.css'
+import './styles/SystemDetailPolishV42.css'
 
 const PRELOAD_RECOVERY_KEY = 'cf-preload-recovery'
 
@@ -23,7 +24,6 @@ window.setTimeout(() => {
   window.sessionStorage.removeItem(PRELOAD_RECOVERY_KEY)
 }, 5000)
 
-// 设置 dayjs 中文语言
 dayjs.locale('zh-cn')
 
 ReactDOM.createRoot(document.getElementById('root')).render(
@@ -37,4 +37,3 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     </ErrorBoundary>
   </React.StrictMode>,
 )
-
