@@ -33,12 +33,11 @@ export const VIEWS = {
 }
 
 /**
- * V4.0 P0 information architecture.
+ * V4.1 information architecture.
  *
- * Keep all existing views/routes for backwards compatibility, but group them by
- * the operator's real workflow rather than by the implementation history of each
- * module.  This keeps deep links stable while removing the feeling of many
- * independent mini-systems.
+ * Keep all existing views/routes for backwards compatibility, while separating
+ * daily execution from management analysis.  This keeps the left navigation
+ * compact and prevents the workbench group from becoming a catch-all area.
  */
 export const SIDEBAR_GROUPS = [
   {
@@ -47,9 +46,15 @@ export const SIDEBAR_GROUPS = [
     items: [
       { view: VIEWS.DASHBOARD, label: '总览' },
       { view: VIEWS.FINANCE_WORKBENCH, label: '财务待办' },
+      { view: VIEWS.ANOMALIES, label: '待办与异常' }
+    ]
+  },
+  {
+    id: 'analysis',
+    label: '经营分析',
+    items: [
       { view: VIEWS.BUSINESS_DASHBOARD, label: '经营驾驶舱' },
       { view: VIEWS.PROFIT_ANALYSIS, label: '利润分析' },
-      { view: VIEWS.ANOMALIES, label: '待办与异常' },
       { view: VIEWS.SERVER_COSTS, label: '服务器成本' }
     ]
   },
