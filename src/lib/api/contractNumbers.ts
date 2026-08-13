@@ -12,7 +12,7 @@ export type InternalContractNumbersResponse = {
   total: number
 }
 
-const TTL_MS = 10_000
+const TTL_MS = 2_000
 let cached: { value: InternalContractNumbersResponse; expiresAt: number } | null = null
 let inflight: Promise<InternalContractNumbersResponse> | null = null
 
