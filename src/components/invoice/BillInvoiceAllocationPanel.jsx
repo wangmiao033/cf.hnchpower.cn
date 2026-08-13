@@ -7,6 +7,7 @@ import {
   reverseBillInvoiceAllocation
 } from '@/lib/api/billInvoiceAllocations.ts'
 import './BillInvoiceAllocationPanel.css'
+import './BillInvoiceSmartMatch.css'
 
 function money(value) {
   return `¥ ${Number(value || 0).toLocaleString('zh-CN', {
