@@ -3,6 +3,7 @@ import Header from '@/components/layout/Header.jsx'
 import Sidebar from '@/components/layout/Sidebar.jsx'
 import TopSubnav from '@/components/layout/TopSubnav.jsx'
 import ContractSmartIntakeLauncher, { CONTRACT_SMART_SAVED_EVENT } from '@/components/contract/ContractSmartIntakeLauncher.jsx'
+import ChannelQuickReconcileLauncher from '@/components/channel/ChannelQuickReconcileLauncher.jsx'
 import { VIEWS } from '@/app/routes.js'
 import './AppShell.css'
 
@@ -72,6 +73,7 @@ function AppShell({
               {children}
             </React.Fragment>
           </main>
+          {activeView === VIEWS.RECON_CHANNEL ? <ChannelQuickReconcileLauncher /> : null}
           {activeView === VIEWS.CONTRACTS ? <ContractSmartIntakeLauncher /> : null}
         </div>
       </div>
