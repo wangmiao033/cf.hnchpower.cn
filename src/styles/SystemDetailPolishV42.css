@@ -1,0 +1,65 @@
+/* V4.2 system-wide interaction details. Presentation only. */
+:root {
+  --sys-focus: color-mix(in srgb, var(--admin-primary, #3977b7) 68%, #fff);
+  --sys-row-hover: color-mix(in srgb, var(--admin-primary, #3977b7) 3.5%, #fff);
+  --sys-sticky-bg: color-mix(in srgb, var(--admin-card-bg, #fff) 96%, #f5f7fa);
+}
+[data-theme='dark'] {
+  --sys-row-hover: color-mix(in srgb, var(--admin-primary, #3977b7) 9%, transparent);
+  --sys-sticky-bg: var(--admin-card-bg, #182231);
+}
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, [role='tab']:focus-visible, [role='option']:focus-visible {
+  outline: 2px solid var(--sys-focus);
+  outline-offset: 2px;
+}
+button:disabled, input:disabled, select:disabled, textarea:disabled { cursor: not-allowed; }
+.app-workspace, .page-container-body, .rec-drawer__body, .admin-drawer-surface {
+  scrollbar-gutter: stable;
+  overscroll-behavior: contain;
+}
+.core-recon-table-wrap, .admin-table-wrap, .invoice-table-wrap, .bank-table-wrap {
+  position: relative;
+  overscroll-behavior: contain;
+}
+.core-recon-table thead th, .admin-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: var(--sys-sticky-bg);
+  box-shadow: 0 1px 0 var(--admin-border, #dde5ee);
+}
+.core-recon-table tbody tr, .admin-table tbody tr { transition: background-color .12s ease; }
+.core-recon-table tbody tr:hover, .admin-table tbody tr:hover { background: var(--sys-row-hover); }
+.core-recon-table tbody tr.is-selected, .admin-table tbody tr.is-selected {
+  box-shadow: inset 3px 0 0 var(--admin-primary, #3977b7);
+}
+.core-recon-row-actions, .core-recon-selection-actions, .rec-drawer__footer-actions { align-items: center; }
+.core-recon-row-actions button, .core-recon-selection-actions button { min-height: 28px; white-space: nowrap; }
+.core-recon-row-actions button.danger:not(:disabled), .core-recon-selection-actions button.danger:not(:disabled) { font-weight: 600; }
+.core-recon-filter-control input, .core-recon-filter-control select, .rec-field input, .rec-field select, .rec-field textarea {
+  transition: border-color .12s ease, box-shadow .12s ease, background-color .12s ease;
+}
+.core-recon-filter-control input:hover:not(:disabled), .core-recon-filter-control select:hover:not(:disabled), .rec-field input:hover:not(:disabled), .rec-field select:hover:not(:disabled), .rec-field textarea:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--admin-primary, #3977b7) 36%, var(--admin-border, #dde5ee));
+}
+.rec-drawer-backdrop, .admin-drawer-backdrop { overscroll-behavior: none; }
+.rec-drawer, .admin-drawer-surface { max-width: 100vw; }
+@media (max-width: 1280px) {
+  .app-workspace { padding-left: 14px; padding-right: 14px; }
+  .core-recon-table { min-width: 1080px; }
+  .app-admin-header__title-block span { max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}
+@media (max-width: 760px) {
+  .app-workspace { padding: 10px; }
+  .core-recon-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .rec-drawer, .admin-drawer-surface { width: 100vw !important; }
+}
+@media (max-width: 480px) { .core-recon-stats { grid-template-columns: 1fr; } }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    transition-duration: .01ms !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
