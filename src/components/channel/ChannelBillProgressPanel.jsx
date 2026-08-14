@@ -6,7 +6,6 @@ const T = {
   completed: '已核对',
   pendingReconcile: '待核对',
   start: '开始核对',
-  view: '查看账单',
   empty: '当前账期没有渠道账单'
 }
 
@@ -60,8 +59,7 @@ function invoiceTaskLabel(task, coverage) {
 export default function ChannelBillProgressPanel({
   snapshot,
   onEditBill,
-  onViewAttachments,
-  onViewInvoices,
+  onOpen360,
   onSubmitInvoiceRequest,
   invoiceSummaries = {},
   invoiceTaskStatuses = {},
@@ -144,22 +142,27 @@ export default function ChannelBillProgressPanel({
                       </td>
                       <td>
                         <div className="channel-progress-row-actions">
-                          <button type="button" onClick={() => onEditBill?.(row.id)}>{row.reconciled ? T.view : T.start}</button>
                           {row.id ? (
-                            <>
-                              {row.reconciled && canSubmitInvoiceRequest ? (
-                                <button
-                                  type="button"
-                                  disabled={!submitEnabled || invoiceTaskBusyId === String(row.id)}
-                                  title={task?.status === 'rejected' ? `驳回原因：${task.reject_reason || '未填写'}` : invoiceAction.label}
-                                  onClick={() => submitEnabled && onSubmitInvoiceRequest?.(row, task)}
-                                >
-                                  {invoiceTaskBusyId === String(row.id) ? '提交中…' : invoiceAction.label}
-                                </button>
-                              ) : null}
-                              <button type="button" onClick={() => onViewAttachments?.(row)}>附件</button>
-                              <button type="button" onClick={() => onViewInvoices?.(row)}>发票 {coverage.toFixed(0)}%</button>
-                            </>
+                            <button
+                              type="button"
+                              onClick={() => onOpen360?.(row)}
+                              title="发票、资金、合同、附件和操作日志统一在账单360°查看"
+                            >
+                              360° · 发票 {coverage.toFixed(0)}%
+                            </button>
+                          ) : null}
+                          {!row.reconciled ? (
+                            <button type="button" onClick={() => onEditBill?.(row.id)}>{T.start}</button>
+                          ) : null}
+                          {row.reconciled && canSubmitInvoiceRequest ? (
+                            <button
+                              type="button"
+                              disabled={!submitEnabled || invoiceTaskBusyId === String(row.id)}
+                              title={task?.status === 'rejected' ? `驳回原因：${task.reject_reason || '未填写'}` : invoiceAction.label}
+                              onClick={() => submitEnabled && onSubmitInvoiceRequest?.(row, task)}
+                            >
+                              {invoiceTaskBusyId === String(row.id) ? '提交中…' : invoiceAction.label}
+                            </button>
                           ) : null}
                         </div>
                       </td>
