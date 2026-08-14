@@ -30,7 +30,7 @@ export default function Bill360ActionPanel({ billType, billId, billNumber = '' }
 
   const handleInvoiceChanged = async () => {
     if (billType === 'channel') await recon?.refetchChannelFromApi?.()
-    else await recon?.refetchFromApi?.()
+    else await recon?.refetchReconciliationFromApi?.()
   }
 
   return (
