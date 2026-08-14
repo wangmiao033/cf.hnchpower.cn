@@ -38,8 +38,7 @@ function RdReconciliationProgressPanel({
   expanded = true,
   onToggle,
   onEdit,
-  onViewAttachments,
-  onViewInvoices,
+  onOpen360,
   invoiceSummaries = {}
 }) {
   const totals = snapshot.totals
@@ -144,47 +143,46 @@ function RdReconciliationProgressPanel({
                       <td colSpan={7} className="channel-progress-empty">当前范围内没有研发账单</td>
                     </tr>
                   ) : (
-                    rows.map((row) => (
-                      <tr key={row.id}>
-                        <td>{monthLabel(row.month)}</td>
-                        <td>{row.billNumber}</td>
-                        <td title={row.partner}><strong>{row.partner}</strong></td>
-                        <td title={row.product}>{row.product}</td>
-                        <td className="is-number">{money(row.settlementAmount)}</td>
-                        <td>
-                          <span className={row.reconciled ? 'channel-progress-complete' : 'channel-progress-pending'}>
-                            {row.reconciled ? '已核对' : row.reason}
-                          </span>
-                        </td>
-                        <td>
-                          <button
-                            type="button"
-                            className="rd-progress-edit"
-                            onClick={() => onEdit?.(row.id)}
-                          >
-                            编辑
-                          </button>
-                          {row.billId && (
-                            <>
-                              <button
-                                type="button"
-                                className="rd-progress-edit rd-progress-attachment"
-                                onClick={() => onViewAttachments?.(row)}
-                              >
-                                附件
-                              </button>
-                              <button
-                                type="button"
-                                className="rd-progress-edit rd-progress-attachment"
-                                onClick={() => onViewInvoices?.(row)}
-                              >
-                                发票 {Number(invoiceSummaries[`rd:${row.billId}`]?.coverage_percent || 0).toFixed(0)}%
-                              </button>
-                            </>
-                          )}
-                        </td>
-                      </tr>
-                    ))
+                    rows.map((row) => {
+                      const coverage = Number(invoiceSummaries[`rd:${row.billId}`]?.coverage_percent || 0)
+                      return (
+                        <tr key={row.id}>
+                          <td>{monthLabel(row.month)}</td>
+                          <td>{row.billNumber}</td>
+                          <td title={row.partner}><strong>{row.partner}</strong></td>
+                          <td title={row.product}>{row.product}</td>
+                          <td className="is-number">{money(row.settlementAmount)}</td>
+                          <td>
+                            <span className={row.reconciled ? 'channel-progress-complete' : 'channel-progress-pending'}>
+                              {row.reconciled ? '已核对' : row.reason}
+                            </span>
+                          </td>
+                          <td>
+                            <div className="channel-progress-row-actions">
+                              {row.billId ? (
+                                <button
+                                  type="button"
+                                  className="rd-progress-edit"
+                                  onClick={() => onOpen360?.(row)}
+                                  title="发票、资金、合同、附件和操作日志统一在账单360°查看"
+                                >
+                                  360° · 发票 {coverage.toFixed(0)}%
+                                </button>
+                              ) : null}
+                              {!row.reconciled ? (
+                                <button
+                                  type="button"
+                                  className="rd-progress-edit rd-progress-attachment"
+                                  onClick={() => onEdit?.(row.id)}
+                                >
+                                  开始核对
+                                </button>
+                              ) : null}
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })
                   )}
                 </tbody>
               </table>
