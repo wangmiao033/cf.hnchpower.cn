@@ -1,9 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useAppState } from '@/app/AppStateContext.jsx'
 import { VIEWS } from '@/app/routes.js'
-import AdminDrawerLayout from '@/components/admin/AdminDrawerLayout.jsx'
-import BillScanAttachments from '@/components/billing/BillScanAttachments.jsx'
-import BillInvoiceAllocationPanel from '@/components/invoice/BillInvoiceAllocationPanel.jsx'
 import ChannelBillProgressPanel from '@/components/channel/ChannelBillProgressPanel.jsx'
 import PageContainer from '@/components/layout/PageContainer.jsx'
 import RdReconciliationProgressPanel from '@/components/reconciliation/RdReconciliationProgressPanel.jsx'
@@ -56,31 +53,16 @@ export default function RdReconciliationProgressPage() {
     recon,
     showToast,
     openReconciliationEdit,
-    openChannelReconciliationEdit
+    openChannelReconciliationEdit,
+    openBill360
   } = useAppState()
   const [mode, setMode] = useState('game')
   const [selectedMonth, setSelectedMonth] = useState(null)
   const [query, setQuery] = useState('')
-  const [selectedBill, setSelectedBill] = useState(null)
   const [invoiceSummaries, setInvoiceSummaries] = useState({})
-  const [invoiceRevision, setInvoiceRevision] = useState(0)
   const [invoiceTaskStatuses, setInvoiceTaskStatuses] = useState({})
   const [invoiceTaskRevision, setInvoiceTaskRevision] = useState(0)
   const [invoiceTaskBusyId, setInvoiceTaskBusyId] = useState('')
-
-  useEffect(() => {
-    if (!selectedBill) return undefined
-    const previousOverflow = document.body.style.overflow
-    const handleKeyDown = (event) => {
-      if (event.key === 'Escape') setSelectedBill(null)
-    }
-    document.body.style.overflow = 'hidden'
-    window.addEventListener('keydown', handleKeyDown)
-    return () => {
-      document.body.style.overflow = previousOverflow
-      window.removeEventListener('keydown', handleKeyDown)
-    }
-  }, [selectedBill])
 
   const gameRecords = recon.records || []
   const channelRecords = recon.channelRecords || []
@@ -180,7 +162,7 @@ export default function RdReconciliationProgressPage() {
       if (!cancelled) setInvoiceSummaries(Object.fromEntries(entries.filter(([, value]) => value)))
     })()
     return () => { cancelled = true }
-  }, [invoiceRevision, visibleInvoiceBills])
+  }, [visibleInvoiceBills])
 
   const visibleChannelBillIds = useMemo(
     () => (channelSnapshot.rows || []).map((row) => String(row.id || '')).filter(Boolean),
@@ -264,52 +246,20 @@ export default function RdReconciliationProgressPage() {
         <RdReconciliationProgressPanel
           snapshot={gameSnapshot}
           onEdit={(id) => openReconciliationEdit(String(id), VIEWS.RECON_PROGRESS)}
-          onViewAttachments={(row) => setSelectedBill({ panel: 'attachments', billType: 'rd', billId: row.billId, billNumber: row.billNumber })}
-          onViewInvoices={(row) => setSelectedBill({ panel: 'invoices', billType: 'rd', billId: row.billId, billNumber: row.billNumber })}
+          onOpen360={(row) => openBill360('rd', String(row.billId || row.id), row)}
           invoiceSummaries={invoiceSummaries}
         />
       ) : (
         <ChannelBillProgressPanel
           snapshot={channelSnapshot}
           onEditBill={(id) => openChannelReconciliationEdit(String(id), VIEWS.RECON_PROGRESS)}
-          onViewAttachments={(row) => setSelectedBill({ panel: 'attachments', billType: 'channel', billId: row.id, billNumber: row.billNumber })}
-          onViewInvoices={(row) => setSelectedBill({ panel: 'invoices', billType: 'channel', billId: row.id, billNumber: row.billNumber })}
+          onOpen360={(row) => openBill360('channel', String(row.id), row)}
           onSubmitInvoiceRequest={(row, task) => void handleSubmitInvoiceRequest(row, task)}
           invoiceSummaries={invoiceSummaries}
           invoiceTaskStatuses={invoiceTaskStatuses}
           canSubmitInvoiceRequest={can('invoice_requests.submit')}
           invoiceTaskBusyId={invoiceTaskBusyId}
         />
-      )}
-
-      {selectedBill && (
-        <>
-          <button type="button" className="rec-drawer-backdrop" aria-label="关闭账单管理" onClick={() => setSelectedBill(null)} />
-          <AdminDrawerLayout className="rec-drawer rec-drawer--wide rec-drawer--light" role="dialog" aria-modal="true" aria-labelledby="bill-detail-drawer-title">
-            <div className="rec-drawer__head">
-              <h2 id="bill-detail-drawer-title" className="rec-drawer__title">
-                {selectedBill.panel === 'invoices' ? '账单发票' : '账单附件'}
-                <span className="rec-drawer__title-sub"> · {selectedBill.billNumber || selectedBill.billId}</span>
-              </h2>
-              <button type="button" className="rec-drawer__close" onClick={() => setSelectedBill(null)} aria-label="关闭">×</button>
-            </div>
-            <div className="rec-drawer__body">
-              {selectedBill.panel === 'invoices' ? (
-                <BillInvoiceAllocationPanel
-                  billType={selectedBill.billType}
-                  billId={selectedBill.billId}
-                  showToast={showToast}
-                  onChanged={() => {
-                    setInvoiceRevision((value) => value + 1)
-                    setInvoiceTaskRevision((value) => value + 1)
-                  }}
-                />
-              ) : (
-                <BillScanAttachments billType={selectedBill.billType} billId={selectedBill.billId} />
-              )}
-            </div>
-          </AdminDrawerLayout>
-        </>
       )}
     </PageContainer>
   )

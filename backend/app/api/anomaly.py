@@ -16,6 +16,7 @@ from app.models.reconciliation import ReconciliationRecord
 from app.schemas.anomaly import BillInvoiceOverview
 from app.schemas.anomaly_ai import AnomalyAiAnalysisRequest, AnomalyAiAnalysisResponse
 from app.services.anomaly_ai import analyze_with_database
+from app.services.data_consistency import build_data_consistency_audit
 
 router = APIRouter()
 ACTIVE_STATUSES = ("suggested", "confirmed")
@@ -170,6 +171,15 @@ def list_bill_invoice_overviews(
             )
         )
     return items
+
+
+@router.get("/consistency-audit")
+def get_consistency_audit(
+    limit: int = Query(default=500, ge=1, le=1000),
+    db: Session = Depends(get_db),
+) -> dict:
+    """只读巡检账单、发票、银行核销和归档之间的数据一致性。"""
+    return build_data_consistency_audit(db, limit=limit)
 
 
 @router.post("/ai-analysis", response_model=AnomalyAiAnalysisResponse)
