@@ -14,6 +14,40 @@ export type BillInvoiceOverview = AnomalyBillRef & {
   allocation_count: number
 }
 
+export type SystemConsistencyIssue = {
+  id: string
+  severity: 'critical' | 'warning' | 'info' | string
+  category: 'lifecycle' | 'invoice' | 'funding' | 'archive' | 'reference' | string
+  title: string
+  detail: string
+  bill_type?: 'rd' | 'channel' | null
+  bill_id?: string | null
+  bill_number?: string | null
+  partner_name?: string | null
+  settlement_month?: string | null
+  amount?: number | null
+  target_view?: string | null
+  source_id?: string | null
+}
+
+export type SystemConsistencyAudit = {
+  generated_at: string
+  summary: {
+    total: number
+    critical: number
+    warning: number
+    info: number
+    healthy: boolean
+    bills_scanned: number
+    invoice_allocations_scanned: number
+    bank_matches_scanned: number
+    archived_bills_scanned: number
+    category_counts: Record<string, number>
+  }
+  items: SystemConsistencyIssue[]
+  truncated: boolean
+}
+
 const PATH = '/api/anomaly-data'
 
 function uniqueRefs(refs: AnomalyBillRef[]) {
@@ -46,4 +80,9 @@ export async function listBillInvoiceOverviews(
     })
   )
   return pages.flat()
+}
+
+export function getSystemConsistencyAudit(limit = 500): Promise<SystemConsistencyAudit> {
+  const query = new URLSearchParams({ limit: String(limit) })
+  return apiGet<SystemConsistencyAudit>(`${PATH}/consistency-audit?${query.toString()}`)
 }
