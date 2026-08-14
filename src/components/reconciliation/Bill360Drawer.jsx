@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAppState } from '@/app/AppStateContext.jsx'
 import { VIEWS } from '@/app/routes.js'
 import Bill360DrawerBase from './Bill360DrawerBase.jsx'
+import Bill360ActionPanel from './Bill360ActionPanel.jsx'
 import BillContractCheckPanelV2 from './BillContractCheckPanelV2.jsx'
 import Bill360FundingPanel from './Bill360FundingPanel.jsx'
 import BillCarryForwardInbox from './BillCarryForwardInbox.jsx'
@@ -205,9 +206,12 @@ function Bill360Drawer({ target, onClose }) {
     if (result) primeBill360Resource(`contract-check:${billType}:${billId}`, result, 60_000)
   }, [billId, billType])
 
+  const billNumber = target?.initialRecord?.settlementNumber || target?.initialRecord?.billNumber || target?.initialRecord?.statementNo || target?.initialRecord?.statement_no || ''
+
   return (
     <>
       <Bill360DrawerBase target={target} onClose={onClose} />
+      <Bill360ActionPanel billType={billType} billId={billId} billNumber={billNumber} />
 
       <button
         type="button"
