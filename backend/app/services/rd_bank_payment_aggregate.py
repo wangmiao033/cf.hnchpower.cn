@@ -12,6 +12,8 @@ from sqlalchemy.orm import Session
 
 from app.models.bank_reconciliation_match import BankReconciliationMatch
 from app.models.bank_transaction import BankTransaction
+from app.models.reconciliation import ReconciliationRecord
+from app.services.rd_prepayment import deductions_for_bill_ids, financial_payable
 
 EPS = Decimal("0.005")
 RD_TYPE = "rd"
@@ -24,6 +26,9 @@ class RdPaymentAggregate:
     payment_status: str
     payment_count: int
     latest_payment_date: str | None
+    prepayment_deduction: Decimal = Decimal("0")
+    cash_payable_amount: Decimal = Decimal("0")
+    gross_payable_amount: Decimal = Decimal("0")
 
 
 def _payable_decimal(settlement_amount: Any) -> Decimal:
@@ -34,6 +39,8 @@ def _payable_decimal(settlement_amount: Any) -> Decimal:
 
 
 def _compute_status(payable: Decimal, paid: Decimal) -> str:
+    if payable <= EPS:
+        return "已付款"
     if paid <= EPS:
         return "未付款"
     if paid + EPS < payable:
@@ -55,11 +62,15 @@ def _date_string(value: Any) -> str | None:
 def aggregate_rd_payments_for_ids(
     db: Session, reconciliation_ids: list[str]
 ) -> dict[str, RdPaymentAggregate]:
-    """按研发账单聚合真实付款。
+    """按研发账单聚合真实现金付款，并带出预付款抵扣金额。
 
     - 银行核销：以 bank_reconciliation_matches.confirmed.linked_amount 为事实源。
     - 旧手工付款登记：仍从 bank_transactions(payment_register) 聚合，但排除已有
       confirmed match 的流水，避免同一笔银行钱重复计算。
+    - 研发预付款抵扣：作为非现金结算层单独带出，不计入 paid_amount；但会减少
+      后续仍需由银行实际支付的 cash_payable_amount / unpaid_amount。
+    - 同时保留账单原始应结金额，使旧调用方即使已先传入净应付金额，也不会发生
+      二次扣减预付款。
     """
     ids = list(dict.fromkeys(str(value) for value in reconciliation_ids if value))
     if not ids:
@@ -68,6 +79,15 @@ def aggregate_rd_payments_for_ids(
     totals: dict[str, Decimal] = {item: Decimal("0") for item in ids}
     counts: dict[str, int] = {item: 0 for item in ids}
     latest: dict[str, str | None] = {item: None for item in ids}
+    prepayment_map = deductions_for_bill_ids(db, ids)
+    gross_map = {
+        str(rec_id): _payable_decimal(amount)
+        for rec_id, amount in db.execute(
+            select(ReconciliationRecord.id, ReconciliationRecord.settlement_amount).where(
+                ReconciliationRecord.id.in_(ids)
+            )
+        ).all()
+    }
 
     match_rows = db.execute(
         select(
@@ -122,29 +142,50 @@ def aggregate_rd_payments_for_ids(
         if candidate and (latest.get(sid) is None or candidate > str(latest[sid])):
             latest[sid] = candidate
 
-    return {
-        sid: RdPaymentAggregate(
-            paid_amount=totals.get(sid, Decimal("0")),
-            unpaid_amount=Decimal("0"),
-            payment_status="未付款",
+    result: dict[str, RdPaymentAggregate] = {}
+    for sid in ids:
+        prepayment = max(Decimal("0"), prepayment_map.get(sid, Decimal("0")))
+        gross = gross_map.get(sid, Decimal("0"))
+        capped_prepayment, cash_payable = financial_payable(gross, prepayment)
+        paid = totals.get(sid, Decimal("0"))
+        if paid <= EPS and counts.get(sid, 0) <= 0 and prepayment <= EPS:
+            continue
+        result[sid] = RdPaymentAggregate(
+            paid_amount=paid,
+            unpaid_amount=max(Decimal("0"), cash_payable - paid),
+            payment_status=_compute_status(cash_payable, paid),
             payment_count=counts.get(sid, 0),
             latest_payment_date=latest.get(sid),
+            prepayment_deduction=capped_prepayment,
+            cash_payable_amount=cash_payable,
+            gross_payable_amount=gross,
         )
-        for sid in ids
-        if totals.get(sid, Decimal("0")) > EPS or counts.get(sid, 0) > 0
-    }
+    return result
 
 
 def fill_payable_for_row(
     agg: RdPaymentAggregate | None, settlement_amount: Any
 ) -> RdPaymentAggregate:
-    payable = abs(_payable_decimal(settlement_amount))
+    # Some legacy callers already pass the post-prepayment net payable, while newer
+    # bank matching callers pass the original gross settlement.  When the aggregate
+    # came from a persisted bill, gross_payable_amount is the source of truth so both
+    # call paths converge to exactly one deduction.
+    source_payable = (
+        agg.gross_payable_amount
+        if agg is not None and abs(agg.gross_payable_amount) > EPS
+        else _payable_decimal(settlement_amount)
+    )
     paid = agg.paid_amount if agg is not None else Decimal("0")
-    unpaid = max(Decimal("0"), payable - paid)
+    requested_prepayment = agg.prepayment_deduction if agg is not None else Decimal("0")
+    prepayment, cash_payable = financial_payable(source_payable, requested_prepayment)
+    unpaid = max(Decimal("0"), cash_payable - paid)
     return RdPaymentAggregate(
         paid_amount=paid,
         unpaid_amount=unpaid,
-        payment_status=_compute_status(payable, paid),
+        payment_status=_compute_status(cash_payable, paid),
         payment_count=agg.payment_count if agg is not None else 0,
         latest_payment_date=agg.latest_payment_date if agg is not None else None,
+        prepayment_deduction=prepayment,
+        cash_payable_amount=cash_payable,
+        gross_payable_amount=source_payable,
     )
