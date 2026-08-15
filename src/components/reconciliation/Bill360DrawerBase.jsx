@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAppState } from '@/app/AppStateContext.jsx'
 import { VIEWS } from '@/app/routes.js'
+import { useAuth } from '@/features/auth/AuthContext.jsx'
 import {
   apiRowToFrontend,
   getReconciliationBankPayment,
@@ -13,10 +14,14 @@ import {
   getChannelRecord,
   listChannelReceipts
 } from '@/lib/api/channel.ts'
-import { getBillInvoiceSummary } from '@/lib/api/billInvoiceAllocations.ts'
+import {
+  clearBillInvoiceSummaryCache,
+  getBillInvoiceSummary
+} from '@/lib/api/billInvoiceAllocations.ts'
 import { listContracts } from '@/lib/api/contract.ts'
 import { getCachedEditRecord, loadEditRecord } from '@/lib/api/editRecordCache.js'
 import {
+  clearBill360ResourceCache,
   getBill360QuickSdkSummary,
   loadBill360Resource,
   peekBill360Resource,
@@ -34,6 +39,8 @@ import {
   filterBill360Contracts,
   summarizeBill360
 } from '@/domain/reconciliation/bill360.js'
+import BillInvoiceAllocationPanel from '@/components/invoice/BillInvoiceAllocationPanel.jsx'
+import BillScanAttachments from '@/components/billing/BillScanAttachments.jsx'
 import BillOperationTimeline from './BillOperationTimeline.jsx'
 import BillClosureRail from './BillClosureRail.jsx'
 import { buildBillClosureStatus } from '@/domain/reconciliation/closureStatus.js'
@@ -99,16 +106,25 @@ function ProgressBar({ value, tone = '' }) {
 
 function Bill360Drawer({ target, onClose }) {
   const {
+    recon,
+    showToast,
     setActiveView,
     openReconciliationEdit,
     openChannelReconciliationEdit
   } = useAppState()
+  const { can } = useAuth()
   const billType = target?.billType === 'channel' ? 'channel' : 'rd'
   const billId = String(target?.billId || '')
   const initialSeed = target?.initialRecord || getCachedEditRecord(billType, billId) || null
+  const canViewInvoice = can('invoices.view')
+  const canManageInvoice = can('invoices.manage')
+  const canManageAttachment = can('reconciliation.manage')
+  const canViewFunds = can('funds.view')
+  const canViewContracts = can('contracts.view')
+  const canEditBill = can('reconciliation.manage')
   const [activeTab, setActiveTab] = useState('overview')
   const [record, setRecord] = useState(initialSeed)
-  const [invoiceSummary, setInvoiceSummary] = useState(() => peekBill360Resource(`invoice:${billType}:${billId}`))
+  const [invoiceSummary, setInvoiceSummary] = useState(() => canViewInvoice ? peekBill360Resource(`invoice:${billType}:${billId}`) : null)
   const [quickSdkRows, setQuickSdkRows] = useState([])
   const [contracts, setContracts] = useState([])
   const [attachments, setAttachments] = useState([])
@@ -116,7 +132,7 @@ function Bill360Drawer({ target, onClose }) {
   const [bankInstruction, setBankInstruction] = useState(null)
   const [bankAttachments, setBankAttachments] = useState([])
   const [loading, setLoading] = useState(!initialSeed)
-  const [invoiceLoading, setInvoiceLoading] = useState(!invoiceSummary)
+  const [invoiceLoading, setInvoiceLoading] = useState(canViewInvoice && !invoiceSummary)
   const [contractsLoading, setContractsLoading] = useState(false)
   const [quickSdkLoading, setQuickSdkLoading] = useState(false)
   const [quickSdkLoaded, setQuickSdkLoaded] = useState(false)
@@ -131,219 +147,248 @@ function Bill360Drawer({ target, onClose }) {
   }, [billType, billId])
 
   useEffect(() => {
-        if (!billId) return undefined
-        let cancelled = false
-        const seeded = target?.initialRecord || getCachedEditRecord(billType, billId) || null
-        setRecord(seeded)
-        setLoading(!seeded)
-        setError('')
-        setQuickSdkRows([])
-        setQuickSdkLoaded(false)
-        setPayments([])
-        setBankInstruction(null)
-        setPaymentsLoaded(false)
-        setAttachments([])
-        setBankAttachments([])
-        setAttachmentsLoaded(false)
+    if (!billId) return undefined
+    let cancelled = false
+    const seeded = target?.initialRecord || getCachedEditRecord(billType, billId) || null
+    setRecord(seeded)
+    setLoading(!seeded)
+    setError('')
+    setQuickSdkRows([])
+    setQuickSdkLoaded(false)
+    setPayments([])
+    setBankInstruction(null)
+    setPaymentsLoaded(false)
+    setAttachments([])
+    setBankAttachments([])
+    setAttachmentsLoaded(false)
 
-        void loadEditRecord(
-          billType,
-          billId,
-          async () => billType === 'rd'
-            ? apiRowToFrontend(await getReconciliationRecord(billId))
-            : apiChannelRowToFrontend(await getChannelRecord(billId))
-        )
-          .then((apiRecord) => {
-            if (!cancelled) setRecord(apiRecord)
-          })
-          .catch((loadError) => {
-            if (!cancelled && !seeded) setError(loadErrorLabel(loadError))
-          })
-          .finally(() => {
-            if (!cancelled) setLoading(false)
-          })
+    void loadEditRecord(
+      billType,
+      billId,
+      async () => billType === 'rd'
+        ? apiRowToFrontend(await getReconciliationRecord(billId))
+        : apiChannelRowToFrontend(await getChannelRecord(billId))
+    )
+      .then((apiRecord) => {
+        if (!cancelled) setRecord(apiRecord)
+      })
+      .catch((loadError) => {
+        if (!cancelled && !seeded) setError(loadErrorLabel(loadError))
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
 
-        return () => {
-          cancelled = true
-        }
-      }, [billId, billType, target?.initialRecord])
+    return () => {
+      cancelled = true
+    }
+  }, [billId, billType, target?.initialRecord])
 
-      useEffect(() => {
-        if (!billId) return undefined
-        let cancelled = false
-        const key = `invoice:${billType}:${billId}`
-        const cached = peekBill360Resource(key)
-        setInvoiceSummary(cached)
-        setInvoiceLoading(!cached)
-        void loadBill360Resource(key, () => getBillInvoiceSummary(billType, billId), { ttlMs: 60_000 })
-          .then((result) => {
-            if (!cancelled) setInvoiceSummary(result)
-          })
-          .catch(() => {
-            if (!cancelled) setInvoiceSummary(null)
-          })
-          .finally(() => {
-            if (!cancelled) setInvoiceLoading(false)
-          })
-        return () => {
-          cancelled = true
-        }
-      }, [billId, billType])
+  const refreshInvoiceSummary = useCallback(async (force = false) => {
+    if (!billId || !canViewInvoice) {
+      setInvoiceSummary(null)
+      setInvoiceLoading(false)
+      return null
+    }
+    const key = `invoice:${billType}:${billId}`
+    if (force) {
+      clearBillInvoiceSummaryCache(billType, billId)
+      clearBill360ResourceCache(key)
+    }
+    setInvoiceLoading(true)
+    try {
+      const result = await loadBill360Resource(
+        key,
+        () => getBillInvoiceSummary(billType, billId),
+        { ttlMs: 60_000, force }
+      )
+      setInvoiceSummary(result)
+      return result
+    } catch {
+      setInvoiceSummary(null)
+      return null
+    } finally {
+      setInvoiceLoading(false)
+    }
+  }, [billId, billType, canViewInvoice])
 
-      useEffect(() => {
-        if (!billId || !record) return undefined
-        let cancelled = false
-        const name = bill360PartnerName(billType, record)
-        const partnerId = String(record?.partnerId || '')
-        if (!name && !partnerId) {
-          setContracts([])
-          setContractsLoading(false)
-          return undefined
-        }
-        const cacheKey = `contracts:${partnerId || name.toLowerCase()}`
-        const cached = peekBill360Resource(cacheKey)
-        if (cached) setContracts(cached)
+  useEffect(() => {
+    let cancelled = false
+    if (!canViewInvoice) {
+      setInvoiceSummary(null)
+      setInvoiceLoading(false)
+      return undefined
+    }
+    const key = `invoice:${billType}:${billId}`
+    const cached = peekBill360Resource(key)
+    if (!cancelled) {
+      setInvoiceSummary(cached)
+      setInvoiceLoading(!cached)
+    }
+    void refreshInvoiceSummary(false)
+    return () => {
+      cancelled = true
+    }
+  }, [billId, billType, canViewInvoice, refreshInvoiceSummary])
 
-        const run = () => {
-          if (!cached) setContractsLoading(true)
-          void loadBill360Resource(
-            cacheKey,
-            () => listContracts({ q: name, limit: 100, offset: 0 })
-              .then((response) => filterBill360Contracts(response.items || [], name, partnerId)),
-            { ttlMs: 90_000 }
-          )
-            .then((result) => {
-              if (!cancelled) setContracts(result || [])
-            })
-            .catch(() => {
-              if (!cancelled && !cached) setContracts([])
-            })
-            .finally(() => {
-              if (!cancelled) setContractsLoading(false)
-            })
-        }
+  useEffect(() => {
+    if (!billId || !record || !canViewContracts) {
+      if (!canViewContracts) setContracts([])
+      setContractsLoading(false)
+      return undefined
+    }
+    let cancelled = false
+    const name = bill360PartnerName(billType, record)
+    const partnerId = String(record?.partnerId || '')
+    if (!name && !partnerId) {
+      setContracts([])
+      setContractsLoading(false)
+      return undefined
+    }
+    const cacheKey = `contracts:${partnerId || name.toLowerCase()}`
+    const cached = peekBill360Resource(cacheKey)
+    if (cached) setContracts(cached)
 
-        if (activeTab === 'contract') {
-          run()
-          return () => { cancelled = true }
-        }
-        const cancelIdle = scheduleBill360Idle(run, 650)
-        return () => {
-          cancelled = true
-          cancelIdle()
-        }
-      }, [activeTab, billId, billType, record])
+    const run = () => {
+      if (!cached) setContractsLoading(true)
+      void loadBill360Resource(
+        cacheKey,
+        () => listContracts({ q: name, limit: 100, offset: 0 })
+          .then((response) => filterBill360Contracts(response.items || [], name, partnerId)),
+        { ttlMs: 90_000 }
+      )
+        .then((result) => {
+          if (!cancelled) setContracts(result || [])
+        })
+        .catch(() => {
+          if (!cancelled && !cached) setContracts([])
+        })
+        .finally(() => {
+          if (!cancelled) setContractsLoading(false)
+        })
+    }
 
-      useEffect(() => {
-        if (!billId || billType !== 'rd' || !record || quickSdkLoaded) return undefined
-        const quickKeys = bill360QuickSdkKeys(billType, record).slice(0, 40)
-        if (!quickKeys.length) {
+    if (activeTab === 'contract') {
+      run()
+      return () => { cancelled = true }
+    }
+    const cancelIdle = scheduleBill360Idle(run, 650)
+    return () => {
+      cancelled = true
+      cancelIdle()
+    }
+  }, [activeTab, billId, billType, canViewContracts, record])
+
+  useEffect(() => {
+    if (!billId || billType !== 'rd' || !record || quickSdkLoaded) return undefined
+    const quickKeys = bill360QuickSdkKeys(billType, record).slice(0, 40)
+    if (!quickKeys.length) {
+      setQuickSdkLoaded(true)
+      return undefined
+    }
+    let cancelled = false
+    const run = () => {
+      setQuickSdkLoading(true)
+      void getBill360QuickSdkSummary(
+        quickKeys.map((item) => ({
+          key: item.key,
+          settlement_month: item.month,
+          game_name: item.game
+        }))
+      )
+        .then((rows) => {
+          if (cancelled) return
+          setQuickSdkRows((rows || []).map((row) => ({
+            ...row,
+            lookupKey: row.key,
+            lookupGame: row.game_name,
+            lookupMonth: row.settlement_month
+          })))
           setQuickSdkLoaded(true)
-          return undefined
-        }
-        let cancelled = false
-        const run = () => {
-          setQuickSdkLoading(true)
-          void getBill360QuickSdkSummary(
-            quickKeys.map((item) => ({
-              key: item.key,
-              settlement_month: item.month,
-              game_name: item.game
-            }))
-          )
-            .then((rows) => {
-              if (cancelled) return
-              setQuickSdkRows((rows || []).map((row) => ({
-                ...row,
-                lookupKey: row.key,
-                lookupGame: row.game_name,
-                lookupMonth: row.settlement_month
-              })))
-              setQuickSdkLoaded(true)
-            })
-            .catch(() => {
-              if (!cancelled) {
-                setQuickSdkRows([])
-                setQuickSdkLoaded(true)
-              }
-            })
-            .finally(() => {
-              if (!cancelled) setQuickSdkLoading(false)
-            })
-        }
-
-        if (activeTab === 'lines') {
-          run()
-          return () => { cancelled = true }
-        }
-        const cancelIdle = scheduleBill360Idle(run, 1_100)
-        return () => {
-          cancelled = true
-          cancelIdle()
-        }
-      }, [activeTab, billId, billType, quickSdkLoaded, record])
-
-      useEffect(() => {
-        if (activeTab !== 'payment' || !billId || paymentsLoaded) return undefined
-        let cancelled = false
-        setPaymentsLoading(true)
-        const key = `payments:${billType}:${billId}`
-        const loader = async () => {
-          if (billType === 'rd') {
-            const [linked, instruction] = await Promise.all([
-              listReconciliationLinkedBankPayments(billId).catch(() => ({ items: [] })),
-              getReconciliationBankPayment(billId).catch(() => null)
-            ])
-            return { items: linked?.items || [], instruction }
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setQuickSdkRows([])
+            setQuickSdkLoaded(true)
           }
-          const result = await listChannelReceipts(billId).catch(() => ({ items: [] }))
-          return { items: result?.items || [], instruction: null }
-        }
-        void loadBill360Resource(key, loader, { ttlMs: 45_000 })
-          .then((result) => {
-            if (cancelled) return
-            setPayments(result?.items || [])
-            setBankInstruction(result?.instruction || null)
-            setPaymentsLoaded(true)
-          })
-          .catch(() => {
-            if (!cancelled) setPaymentsLoaded(true)
-          })
-          .finally(() => {
-            if (!cancelled) setPaymentsLoading(false)
-          })
-        return () => { cancelled = true }
-      }, [activeTab, billId, billType, paymentsLoaded])
+        })
+        .finally(() => {
+          if (!cancelled) setQuickSdkLoading(false)
+        })
+    }
 
-      useEffect(() => {
-        if (activeTab !== 'attachment' || !billId || attachmentsLoaded) return undefined
-        let cancelled = false
-        setAttachmentsLoading(true)
-        const key = `attachments:${billType}:${billId}`
-        const loader = async () => {
-          const [billFiles, bankFiles] = await Promise.all([
-            listBillAttachments(billType, billId).catch(() => []),
-            billType === 'rd'
-              ? listBankPaymentAttachments(billId).then((result) => result?.items || []).catch(() => [])
-              : Promise.resolve([])
-          ])
-          return { billFiles, bankFiles }
-        }
-        void loadBill360Resource(key, loader, { ttlMs: 90_000 })
-          .then((result) => {
-            if (cancelled) return
-            setAttachments(result?.billFiles || [])
-            setBankAttachments(result?.bankFiles || [])
-            setAttachmentsLoaded(true)
-          })
-          .catch(() => {
-            if (!cancelled) setAttachmentsLoaded(true)
-          })
-          .finally(() => {
-            if (!cancelled) setAttachmentsLoading(false)
-          })
-        return () => { cancelled = true }
-      }, [activeTab, attachmentsLoaded, billId, billType])
+    if (activeTab === 'lines') {
+      run()
+      return () => { cancelled = true }
+    }
+    const cancelIdle = scheduleBill360Idle(run, 1_100)
+    return () => {
+      cancelled = true
+      cancelIdle()
+    }
+  }, [activeTab, billId, billType, quickSdkLoaded, record])
+
+  useEffect(() => {
+    if (activeTab !== 'payment' || !billId || paymentsLoaded) return undefined
+    let cancelled = false
+    setPaymentsLoading(true)
+    const key = `payments:${billType}:${billId}`
+    const loader = async () => {
+      if (billType === 'rd') {
+        const [linked, instruction] = await Promise.all([
+          listReconciliationLinkedBankPayments(billId).catch(() => ({ items: [] })),
+          getReconciliationBankPayment(billId).catch(() => null)
+        ])
+        return { items: linked?.items || [], instruction }
+      }
+      const result = await listChannelReceipts(billId).catch(() => ({ items: [] }))
+      return { items: result?.items || [], instruction: null }
+    }
+    void loadBill360Resource(key, loader, { ttlMs: 45_000 })
+      .then((result) => {
+        if (cancelled) return
+        setPayments(result?.items || [])
+        setBankInstruction(result?.instruction || null)
+        setPaymentsLoaded(true)
+      })
+      .catch(() => {
+        if (!cancelled) setPaymentsLoaded(true)
+      })
+      .finally(() => {
+        if (!cancelled) setPaymentsLoading(false)
+      })
+    return () => { cancelled = true }
+  }, [activeTab, billId, billType, paymentsLoaded])
+
+  useEffect(() => {
+    if (activeTab !== 'attachment' || !billId || attachmentsLoaded) return undefined
+    let cancelled = false
+    setAttachmentsLoading(true)
+    const key = `attachments:${billType}:${billId}`
+    const loader = async () => {
+      const [billFiles, bankFiles] = await Promise.all([
+        listBillAttachments(billType, billId).catch(() => []),
+        billType === 'rd'
+          ? listBankPaymentAttachments(billId).then((result) => result?.items || []).catch(() => [])
+          : Promise.resolve([])
+      ])
+      return { billFiles, bankFiles }
+    }
+    void loadBill360Resource(key, loader, { ttlMs: 90_000 })
+      .then((result) => {
+        if (cancelled) return
+        setAttachments(result?.billFiles || [])
+        setBankAttachments(result?.bankFiles || [])
+        setAttachmentsLoaded(true)
+      })
+      .catch(() => {
+        if (!cancelled) setAttachmentsLoaded(true)
+      })
+      .finally(() => {
+        if (!cancelled) setAttachmentsLoading(false)
+      })
+    return () => { cancelled = true }
+  }, [activeTab, attachmentsLoaded, billId, billType])
 
   useEffect(() => {
     const handleKeyDown = (event) => {
@@ -352,6 +397,17 @@ function Bill360Drawer({ target, onClose }) {
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [onClose])
+
+  const handleInvoiceChanged = useCallback(async () => {
+    await refreshInvoiceSummary(true)
+    if (billType === 'channel') await recon?.refetchChannelFromApi?.()
+    else await recon?.refetchReconciliationFromApi?.()
+  }, [billType, recon, refreshInvoiceSummary])
+
+  const handleAttachmentChanged = useCallback(() => {
+    clearBill360ResourceCache(`attachments:${billType}:${billId}`)
+    setAttachmentsLoaded(false)
+  }, [billId, billType])
 
   const lines = useMemo(() => bill360Lines(billType, record || {}), [billType, record])
   const summary = useMemo(
@@ -364,6 +420,7 @@ function Bill360Drawer({ target, onClose }) {
   const months = [...new Set(lines.map((line) => line.month).filter(Boolean))]
 
   const editBill = () => {
+    if (!canEditBill) return
     onClose?.()
     if (billType === 'rd') {
       openReconciliationEdit(billId)
@@ -426,7 +483,7 @@ function Bill360Drawer({ target, onClose }) {
             </span>
             {summary.isZeroSettlement ? <span className="bill360-status is-completed">零结算</span> : null}
             {summary.isReverseSettlement ? <span className="bill360-status is-cancelled">反向结算</span> : null}
-            <button type="button" onClick={editBill}>编辑账单</button>
+            {canEditBill ? <button type="button" onClick={editBill}>编辑账单</button> : null}
             <button type="button" className="bill360-close" onClick={onClose} aria-label="关闭">×</button>
           </div>
         </header>
@@ -461,16 +518,20 @@ function Bill360Drawer({ target, onClose }) {
                 <strong>
                   {summary.isZeroSettlement
                     ? '无需开票'
-                    : invoiceSummary
-                      ? percent(summary.invoicePercent)
-                      : invoiceLoading ? '读取中…' : '-'}
+                    : !canViewInvoice
+                      ? '无权限'
+                      : invoiceSummary
+                        ? percent(summary.invoicePercent)
+                        : invoiceLoading ? '读取中…' : '-'}
                 </strong>
                 <small>
                   {summary.isZeroSettlement
                     ? '零结算不形成发票缺口'
-                    : `已关联 ${money(summary.invoiceAllocated)} · 缺口 ${money(summary.invoiceRemaining)}`}
+                    : !canViewInvoice
+                      ? '当前账号没有查看发票的权限'
+                      : `已关联 ${money(summary.invoiceAllocated)} · 缺口 ${money(summary.invoiceRemaining)}`}
                 </small>
-                <ProgressBar value={summary.invoicePercent} tone={invoiceTone} />
+                {canViewInvoice ? <ProgressBar value={summary.invoicePercent} tone={invoiceTone} /> : null}
               </article>
               <article>
                 <span>{billType === 'rd' ? '数据库核对' : '合同状态'}</span>
@@ -481,6 +542,8 @@ function Bill360Drawer({ target, onClose }) {
                     </strong>
                     <small>{quickSdkLoaded ? `QuickSDK ${money(summary.databaseFlow)}` : '不阻塞首屏 · 后台批量汇总'}</small>
                   </>
+                ) : !canViewContracts ? (
+                  <><strong>无权限</strong><small>当前账号没有查看合同的权限</small></>
                 ) : (
                   <>
                     <strong>{contractsLoading && !contracts.length ? '读取中…' : contracts.some((item) => item.timeline_status === '生效中') ? '合同有效' : contracts.length ? '需核对' : '未匹配'}</strong>
@@ -538,17 +601,19 @@ function Bill360Drawer({ target, onClose }) {
                       </div>
                       <div className={summary.isZeroSettlement ? 'is-good' : invoiceTone === 'good' ? 'is-good' : invoiceTone === 'danger' ? 'is-danger' : 'is-warning'}>
                         <span>发票覆盖</span>
-                        <strong>{summary.isZeroSettlement ? '无需开票' : invoiceSummary ? percent(summary.invoicePercent) : '-'}</strong>
+                        <strong>{summary.isZeroSettlement ? '无需开票' : !canViewInvoice ? '无权限' : invoiceSummary ? percent(summary.invoicePercent) : '-'}</strong>
                         <small>
                           {summary.isZeroSettlement
                             ? '零结算自动跳过发票环节'
-                            : invoiceSummary ? `剩余缺口 ${money(summary.invoiceRemaining)}` : '未读取到发票关联'}
+                            : !canViewInvoice
+                              ? '当前账号无发票查看权限'
+                              : invoiceSummary ? `剩余缺口 ${money(summary.invoiceRemaining)}` : '未读取到发票关联'}
                         </small>
                       </div>
                       <div className={contracts.some((item) => item.timeline_status === '生效中') ? 'is-good' : contracts.length ? 'is-warning' : 'is-neutral'}>
                         <span>合同</span>
-                        <strong>{contractsLoading && !contracts.length ? '读取中…' : `${contracts.length} 份`}</strong>
-                        <small>{contractsLoading && !contracts.length ? '后台读取，不阻塞账单打开' : contracts.some((item) => item.timeline_status === '生效中') ? '存在生效中合同' : contracts.length ? '当前合同需核对有效期' : '未匹配合同'}</small>
+                        <strong>{!canViewContracts ? '无权限' : contractsLoading && !contracts.length ? '读取中…' : `${contracts.length} 份`}</strong>
+                        <small>{!canViewContracts ? '当前账号无合同查看权限' : contractsLoading && !contracts.length ? '后台读取，不阻塞账单打开' : contracts.some((item) => item.timeline_status === '生效中') ? '存在生效中合同' : contracts.length ? '当前合同需核对有效期' : '未匹配合同'}</small>
                       </div>
                     </div>
                     {summary.isReverseSettlement ? (
@@ -575,10 +640,10 @@ function Bill360Drawer({ target, onClose }) {
                   <section className="bill360-card">
                     <div className="bill360-card-head"><div><span>快捷处理</span><h3>关联模块</h3></div></div>
                     <div className="bill360-jump-list">
-                      <button type="button" onClick={() => navigate(billType === 'rd' ? VIEWS.INVOICE_INPUT : VIEWS.INVOICE_MANAGE)}><span>票</span><div><strong>发票中心</strong><small>{summary.isZeroSettlement ? '零结算无需开票' : '查看与调整发票覆盖'}</small></div></button>
-                      <button type="button" onClick={() => navigate(VIEWS.CONTRACTS)}><span>合</span><div><strong>合同中心</strong><small>查看合作方合同与有效期</small></div></button>
+                      {canViewInvoice ? <button type="button" onClick={() => setActiveTab('invoice')}><span>票</span><div><strong>发票</strong><small>{canManageInvoice ? '在360°直接智能匹配与关联' : '查看当前发票覆盖'}</small></div></button> : null}
+                      {canViewContracts ? <button type="button" onClick={() => setActiveTab('contract')}><span>合</span><div><strong>合同</strong><small>查看合作方合同与有效期</small></div></button> : null}
                       {billType === 'rd' ? <button type="button" onClick={() => navigate(VIEWS.QUICKSDK_LIBRARY)}><span>流</span><div><strong>数据库</strong><small>核对 QuickSDK 原始流水</small></div></button> : null}
-                      <button type="button" onClick={editBill}><span>编</span><div><strong>编辑账单</strong><small>进入完整账单编辑表单</small></div></button>
+                      {canEditBill ? <button type="button" onClick={editBill}><span>编</span><div><strong>编辑账单</strong><small>进入完整账单编辑表单</small></div></button> : null}
                     </div>
                   </section>
                 </div>
@@ -606,25 +671,42 @@ function Bill360Drawer({ target, onClose }) {
               {activeTab === 'invoice' && (
                 <section className="bill360-card bill360-card--table">
                   <div className="bill360-card-head">
-                    <div><span>发票闭环</span><h3>{summary.isZeroSettlement ? '零结算无需开票' : invoiceSummary ? `${percent(summary.invoicePercent)} 已覆盖` : '暂无关联摘要'}</h3></div>
-                    <button type="button" onClick={() => navigate(billType === 'rd' ? VIEWS.INVOICE_INPUT : VIEWS.INVOICE_MANAGE)}>进入发票中心</button>
+                    <div><span>发票闭环</span><h3>{summary.isZeroSettlement ? '零结算无需开票' : !canViewInvoice ? '无查看权限' : invoiceSummary ? `${percent(summary.invoicePercent)} 已覆盖` : '暂无关联摘要'}</h3></div>
+                    {canViewInvoice ? <button type="button" onClick={() => navigate(billType === 'rd' ? VIEWS.INVOICE_INPUT : VIEWS.INVOICE_MANAGE)}>进入发票中心</button> : null}
                   </div>
-                  <div className="bill360-invoice-summary"><div><span>账单金额</span><strong>{money(summary.settlementAmount)}</strong></div><div><span>已分配</span><strong>{money(summary.invoiceAllocated)}</strong></div><div><span>剩余</span><strong>{money(summary.invoiceRemaining)}</strong></div></div>
-                  {summary.isZeroSettlement ? (
+                  {!canViewInvoice ? (
+                    <div className="bill360-empty-block">当前账号没有查看发票的权限。</div>
+                  ) : summary.isZeroSettlement ? (
                     <div className="bill360-empty-block">本期结算金额为 ¥0.00，发票环节已自动视为无需处理，不形成发票缺口。</div>
+                  ) : canManageInvoice ? (
+                    <BillInvoiceAllocationPanel
+                      billType={billType}
+                      billId={billId}
+                      showToast={showToast}
+                      onChanged={() => void handleInvoiceChanged()}
+                    />
                   ) : (
-                    <div className="bill360-table-wrap">
-                      <table><thead><tr><th>发票号码</th><th>往来单位</th><th>开票日期</th><th className="is-right">发票金额</th><th className="is-right">本账单分配</th><th>匹配方式</th></tr></thead><tbody>
-                        {(invoiceSummary?.allocations || []).length === 0 ? <tr><td colSpan={6} className="bill360-empty-cell">暂无已关联发票</td></tr> : (invoiceSummary.allocations || []).map((allocation) => <tr key={allocation.id}><td>{allocation.invoice?.number || '-'}</td><td>{allocation.invoice?.counterparty_name || '-'}</td><td>{allocation.invoice?.issue_date || '-'}</td><td className="is-right">{money(allocation.invoice?.gross_amount)}</td><td className="is-right is-strong">{money(allocation.allocated_gross_amount)}</td><td>{allocation.match_type || 'manual'}</td></tr>)}
-                      </tbody></table>
-                    </div>
+                    <>
+                      <div className="bill360-invoice-summary"><div><span>账单金额</span><strong>{money(summary.settlementAmount)}</strong></div><div><span>已分配</span><strong>{money(summary.invoiceAllocated)}</strong></div><div><span>剩余</span><strong>{money(summary.invoiceRemaining)}</strong></div></div>
+                      <div className="bill360-table-wrap">
+                        <table><thead><tr><th>发票号码</th><th>往来单位</th><th>开票日期</th><th className="is-right">发票金额</th><th className="is-right">本账单分配</th><th>匹配方式</th></tr></thead><tbody>
+                          {(invoiceSummary?.allocations || []).length === 0 ? <tr><td colSpan={6} className="bill360-empty-cell">暂无已关联发票</td></tr> : (invoiceSummary.allocations || []).map((allocation) => <tr key={allocation.id}><td>{allocation.invoice?.number || '-'}</td><td>{allocation.invoice?.counterparty_name || '-'}</td><td>{allocation.invoice?.issue_date || '-'}</td><td className="is-right">{money(allocation.invoice?.gross_amount)}</td><td className="is-right is-strong">{money(allocation.allocated_gross_amount)}</td><td>{allocation.match_type || 'manual'}</td></tr>)}
+                        </tbody></table>
+                      </div>
+                    </>
                   )}
                 </section>
               )}
 
               {activeTab === 'payment' && (
                 <section className="bill360-card bill360-card--table">
-                  <div className="bill360-card-head"><div><span>资金闭环</span><h3>{summary.isZeroSettlement ? '无需收付款' : `${summary.paidLabel}记录`}</h3></div><span className="bill360-card-meta">{paymentsLoading ? '读取中…' : `${payments.length} 笔`}</span></div>
+                  <div className="bill360-card-head">
+                    <div><span>资金闭环</span><h3>{summary.isZeroSettlement ? '无需收付款' : `${summary.paidLabel}记录`}</h3></div>
+                    <div className="bill360-card-actions">
+                      <span className="bill360-card-meta">{paymentsLoading ? '读取中…' : `${payments.length} 笔`}</span>
+                      {canViewFunds && !summary.isZeroSettlement ? <button type="button" onClick={() => navigate(VIEWS.BANK_RECONCILIATION)}>去银行中心处理</button> : null}
+                    </div>
+                  </div>
                   {summary.isZeroSettlement ? (
                     <div className="bill360-empty-block">本期为零结算，系统不会要求补录 0 元收款或付款记录。</div>
                   ) : (
@@ -644,10 +726,12 @@ function Bill360Drawer({ target, onClose }) {
 
               {activeTab === 'contract' && (
                 <section className="bill360-card bill360-card--table">
-                  <div className="bill360-card-head"><div><span>业务依据</span><h3>合作方合同</h3></div><button type="button" onClick={() => navigate(VIEWS.CONTRACTS)}>进入合同中心</button></div>
-                  <div className="bill360-contracts">
-                    {contracts.length === 0 ? <div className="bill360-empty-block">没有匹配到该合作方合同。</div> : contracts.map((contract) => <article key={contract.id}><div><span className={`bill360-contract-status is-${contract.timeline_status}`}>{contract.timeline_status || '未判断'}</span><h4>{contract.contract_name || contract.contract_no || '未命名合同'}</h4><p>{contract.contract_no || '无合同编号'} · {contract.contract_type || '未分类'}</p></div><dl><div><dt>合作方</dt><dd>{contract.partner_short_name || contract.partner_name || contract.counterparty || '-'}</dd></div><div><dt>有效期</dt><dd>{contract.effective_date || '-'} ～ {contract.end_date || '-'}</dd></div><div><dt>金额</dt><dd>{contract.amount ? money(contract.amount) : '-'}</dd></div></dl></article>)}
-                  </div>
+                  <div className="bill360-card-head"><div><span>业务依据</span><h3>合作方合同</h3></div>{canViewContracts ? <button type="button" onClick={() => navigate(VIEWS.CONTRACTS)}>进入合同中心</button> : null}</div>
+                  {!canViewContracts ? <div className="bill360-empty-block">当前账号没有查看合同的权限。</div> : (
+                    <div className="bill360-contracts">
+                      {contracts.length === 0 ? <div className="bill360-empty-block">没有匹配到该合作方合同。</div> : contracts.map((contract) => <article key={contract.id}><div><span className={`bill360-contract-status is-${contract.timeline_status}`}>{contract.timeline_status || '未判断'}</span><h4>{contract.contract_name || contract.contract_no || '未命名合同'}</h4><p>{contract.contract_no || '无合同编号'} · {contract.contract_type || '未分类'}</p></div><dl><div><dt>合作方</dt><dd>{contract.partner_short_name || contract.partner_name || contract.counterparty || '-'}</dd></div><div><dt>有效期</dt><dd>{contract.effective_date || '-'} ～ {contract.end_date || '-'}</dd></div><div><dt>金额</dt><dd>{contract.amount ? money(contract.amount) : '-'}</dd></div></dl></article>)}
+                    </div>
+                  )}
                 </section>
               )}
 
@@ -658,11 +742,19 @@ function Bill360Drawer({ target, onClose }) {
               {activeTab === 'attachment' && (
                 <section className="bill360-card">
                   <div className="bill360-card-head"><div><span>资料归档</span><h3>账单与付款附件</h3></div><span className="bill360-card-meta">共 {attachments.length + bankAttachments.length} 个</span></div>
-                  <div className="bill360-attachments">
-                    {attachments.map((attachment) => <a key={attachment.id} href={billAttachmentFileUrl(billType, billId, attachment.id, true)} target="_blank" rel="noreferrer"><span>账</span><div><strong>{attachment.file_name}</strong><small>{attachment.file_type || '文件'} · {attachment.file_size ? `${Math.ceil(attachment.file_size / 1024)} KB` : '-'}</small></div><em>预览</em></a>)}
-                    {bankAttachments.map((attachment) => <a key={attachment.id} href={attachment.file_url} target="_blank" rel="noreferrer"><span>付</span><div><strong>{attachment.file_name}</strong><small>{attachment.file_type || '付款附件'}</small></div><em>打开</em></a>)}
-                    {attachmentsLoading ? <div className="bill360-empty-block">正在读取附件…</div> : attachments.length + bankAttachments.length === 0 ? <div className="bill360-empty-block">当前账单没有附件。</div> : null}
-                  </div>
+                  {canManageAttachment ? (
+                    <BillScanAttachments billType={billType} billId={billId} onChanged={handleAttachmentChanged} />
+                  ) : (
+                    <div className="bill360-attachments">
+                      {attachments.map((attachment) => <a key={attachment.id} href={billAttachmentFileUrl(billType, billId, attachment.id, true)} target="_blank" rel="noreferrer"><span>账</span><div><strong>{attachment.file_name}</strong><small>{attachment.file_type || '文件'} · {attachment.file_size ? `${Math.ceil(attachment.file_size / 1024)} KB` : '-'}</small></div><em>预览</em></a>)}
+                      {attachmentsLoading ? <div className="bill360-empty-block">正在读取附件…</div> : attachments.length === 0 ? <div className="bill360-empty-block">当前账单没有附件。</div> : null}
+                    </div>
+                  )}
+                  {bankAttachments.length > 0 ? (
+                    <div className="bill360-attachments bill360-bank-attachments">
+                      {bankAttachments.map((attachment) => <a key={attachment.id} href={attachment.file_url} target="_blank" rel="noreferrer"><span>付</span><div><strong>{attachment.file_name}</strong><small>{attachment.file_type || '付款附件'}</small></div><em>打开</em></a>)}
+                    </div>
+                  ) : null}
                 </section>
               )}
             </main>
