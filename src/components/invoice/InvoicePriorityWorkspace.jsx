@@ -1,6 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { AppStateProvider, useAppState } from '@/app/AppStateContext.jsx'
-import { autoMatchInvoices } from '@/lib/api/billInvoiceAllocations.ts'
+import {
+  autoMatchInvoices,
+  INVOICE_ARCHIVE_SYNC_EVENT
+} from '@/lib/api/billInvoiceAllocations.ts'
 import { getInvoiceRecordId } from '@/lib/api/invoice.ts'
 import {
   archiveInvoiceRecord,
@@ -89,6 +92,15 @@ export default function InvoicePriorityWorkspace({ variant = 'manage', direction
       return
     }
     void refreshArchiveSnapshot({ sync: true, silent: true })
+  }, [invoiceApiEnabled, refreshArchiveSnapshot])
+
+  useEffect(() => {
+    if (!invoiceApiEnabled) return undefined
+    const handleArchiveSync = () => {
+      void refreshArchiveSnapshot({ sync: true, silent: true })
+    }
+    window.addEventListener(INVOICE_ARCHIVE_SYNC_EVENT, handleArchiveSync)
+    return () => window.removeEventListener(INVOICE_ARCHIVE_SYNC_EVENT, handleArchiveSync)
   }, [invoiceApiEnabled, refreshArchiveSnapshot])
 
   useEffect(() => {
