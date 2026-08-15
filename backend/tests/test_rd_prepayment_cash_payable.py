@@ -3,7 +3,7 @@ from decimal import Decimal
 from app.services.rd_bank_payment_aggregate import RdPaymentAggregate, fill_payable_for_row
 
 
-def _aggregate(*, paid=0, deduction=0):
+def _aggregate(*, paid=0, deduction=0, gross=0):
     return RdPaymentAggregate(
         paid_amount=Decimal(str(paid)),
         unpaid_amount=Decimal("0"),
@@ -12,6 +12,7 @@ def _aggregate(*, paid=0, deduction=0):
         latest_payment_date=None,
         prepayment_deduction=Decimal(str(deduction)),
         cash_payable_amount=Decimal("0"),
+        gross_payable_amount=Decimal(str(gross)),
     )
 
 
@@ -45,3 +46,11 @@ def test_negative_settlement_never_consumes_prepayment_balance():
     assert result.prepayment_deduction == Decimal("0")
     assert result.cash_payable_amount == Decimal("20000")
     assert result.unpaid_amount == Decimal("20000")
+
+
+def test_legacy_net_payable_caller_does_not_apply_prepayment_twice():
+    aggregate = _aggregate(deduction=6000, gross=20000)
+    result = fill_payable_for_row(aggregate, 14000)
+    assert result.prepayment_deduction == Decimal("6000")
+    assert result.cash_payable_amount == Decimal("14000")
+    assert result.unpaid_amount == Decimal("14000")
