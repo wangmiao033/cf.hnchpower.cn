@@ -164,6 +164,21 @@ def _auto_reopen_state(db: Session, invoice: InvoiceRecord, *, reason: str) -> N
     _write_archive_log(db, invoice, action="unarchive", source="auto", reason=reason, user=None)
 
 
+def release_manual_archive_hold(db: Session, invoice_id: str) -> None:
+    """Allow the next sync to re-evaluate an invoice after the user actually changes it."""
+    db.execute(
+        text(
+            """
+            DELETE FROM invoice_archive_states
+            WHERE invoice_id = :invoice_id
+              AND is_archived = FALSE
+              AND manual_hold = TRUE
+            """
+        ),
+        {"invoice_id": invoice_id},
+    )
+
+
 def _archive_inputs(db: Session, invoices: list[InvoiceRecord]):
     ids = [str(invoice.id) for invoice in invoices]
     if not ids:
@@ -241,6 +256,9 @@ def sync_invoice_archive_states(
         if eligible:
             if state and bool(state["is_archived"]):
                 continue
+            if state and bool(state["manual_hold"]):
+                held += 1
+                continue
             _archive_state(db, invoice, source="auto", reason=reason, user=user)
             auto_archived += 1
             continue
@@ -248,7 +266,7 @@ def sync_invoice_archive_states(
         if state and bool(state["is_archived"]):
             _auto_reopen_state(db, invoice, reason=reason)
             auto_reopened += 1
-        elif state:
+        elif state and bool(state["manual_hold"]):
             db.execute(
                 text("DELETE FROM invoice_archive_states WHERE invoice_id = :invoice_id"),
                 {"invoice_id": invoice_id},
@@ -297,15 +315,38 @@ def unarchive_invoice(db: Session, invoice_id: str, *, user: AuthUser | None) ->
     if not state or not bool(state["is_archived"]):
         return {"invoice_id": invoice_id, "archived": False, "already_unarchived": True}
     db.execute(
-        text("DELETE FROM invoice_archive_states WHERE invoice_id = :invoice_id"),
-        {"invoice_id": invoice_id},
+        text(
+            """
+            INSERT INTO invoice_archive_states (
+              invoice_id, is_archived, manual_hold, archive_source,
+              archived_at, unarchived_at, archived_by_user_id, archived_by_email, updated_at
+            ) VALUES (
+              :invoice_id, FALSE, TRUE, 'manual_hold',
+              NULL, NOW(), :user_id, :email, NOW()
+            )
+            ON CONFLICT (invoice_id) DO UPDATE SET
+              is_archived = FALSE,
+              manual_hold = TRUE,
+              archive_source = 'manual_hold',
+              archived_at = NULL,
+              unarchived_at = NOW(),
+              archived_by_user_id = EXCLUDED.archived_by_user_id,
+              archived_by_email = EXCLUDED.archived_by_email,
+              updated_at = NOW()
+            """
+        ),
+        {
+            "invoice_id": invoice_id,
+            "user_id": str(getattr(user, "id", None) or "") or None,
+            "email": str(getattr(user, "email", None) or "") or None,
+        },
     )
     _write_archive_log(
         db,
         invoice,
         action="unarchive",
         source="manual",
-        reason="人工取消归档，允许进入待处理区调整",
+        reason="人工取消归档，等待修改或重新归档",
         user=user,
     )
     db.commit()
@@ -338,6 +379,7 @@ def invoice_archive_snapshot(
         )
     ).mappings().all()
     archived_ids = [str(row["invoice_id"]) for row in rows if bool(row["is_archived"])]
+    held_ids = [str(row["invoice_id"]) for row in rows if bool(row["manual_hold"])]
     items = [
         {
             "invoice_id": str(row["invoice_id"]),
@@ -350,9 +392,9 @@ def invoice_archive_snapshot(
     ]
     return {
         "archived_ids": archived_ids,
-        "held_ids": [],
+        "held_ids": held_ids,
         "archived_count": len(archived_ids),
-        "held_count": 0,
+        "held_count": len(held_ids),
         "items": items,
         **sync_result,
     }
