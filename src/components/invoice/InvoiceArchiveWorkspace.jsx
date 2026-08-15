@@ -26,6 +26,7 @@ export default function InvoiceArchiveWorkspace({
   direction = 'output',
   archiveItems = [],
   archiveBusyId = '',
+  readOnly = false,
   onUnarchive
 }) {
   const [keyword, setKeyword] = useState('')
@@ -96,7 +97,7 @@ export default function InvoiceArchiveWorkspace({
             placeholder="搜索往来单位 / 发票号 / 税号"
             aria-label="搜索已归档发票"
           />
-          <span>已归档发票为只读历史记录，需要调整时请先取消归档。</span>
+          <span>{readOnly ? '已归档发票为只读历史记录。' : '已归档发票为只读历史记录，需要调整时请先取消归档。'}</span>
         </div>
       </AdminFilterBar>
 
@@ -143,14 +144,16 @@ export default function InvoiceArchiveWorkspace({
                   <span>{archive?.archived_at ? String(archive.archived_at).replace('T', ' ').slice(0, 16) : '—'}</span>
                   <span className="invoice-archive-actions">
                     <button type="button" className="rec-btn rec-btn--ghost" onClick={() => setExpandedId(isExpanded ? '' : id)}>{isExpanded ? '收起' : '详情'}</button>
-                    <button
-                      type="button"
-                      className="rec-btn rec-btn--secondary"
-                      disabled={archiveBusyId === id}
-                      onClick={() => onUnarchive?.(id)}
-                    >
-                      {archiveBusyId === id ? '处理中…' : '取消归档'}
-                    </button>
+                    {!readOnly ? (
+                      <button
+                        type="button"
+                        className="rec-btn rec-btn--secondary"
+                        disabled={archiveBusyId === id}
+                        onClick={() => onUnarchive?.(id)}
+                      >
+                        {archiveBusyId === id ? '处理中…' : '取消归档'}
+                      </button>
+                    ) : null}
                   </span>
                 </div>
                 {isExpanded ? (
