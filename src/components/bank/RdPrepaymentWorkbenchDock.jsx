@@ -165,7 +165,7 @@ export default function RdPrepaymentWorkbenchDock({ onChanged }) {
                             <div className="rd-prepay-pool-recommendations">
                               <span>历史流水推荐</span>
                               {(pool.bank_recommendations || []).map((candidate) => (
-                                <button key={candidate.id} type="button" disabled={!canManage} onClick={() => setFundingTarget(candidate)}>
+                                <button key={candidate.id} type="button" disabled={!canManage} onClick={() => setFundingTarget({ ...candidate, preferred_access_item_id: id })}>
                                   <strong>{candidate.trade_date || '-'} · {candidate.payee_name || '未识别收款方'} · {money(candidate.available_amount)}</strong>
                                   <small>{candidate.transaction_no || candidate.summary || '无流水号/摘要'} · 匹配 {candidate.match_score}</small>
                                   <em>{canManage ? `补录 ${money(candidate.suggested_funding_amount)}` : '仅查看'}</em>
@@ -185,7 +185,7 @@ export default function RdPrepaymentWorkbenchDock({ onChanged }) {
                                         <div><strong>{funding.trade_date || funding.funding_date || '-'} · {funding.counterparty_name || '-'}</strong><small>{funding.transaction_no || funding.bank_summary || '无流水号/摘要'}</small></div>
                                         <div><span>银行入账</span><strong>{money(funding.funded_amount)}</strong></div>
                                         <div><span>发票覆盖</span><strong>{money(funding.invoice_allocated_amount)}</strong><small>{Number(funding.invoice_gap || 0) > 0.01 ? `缺 ${money(funding.invoice_gap)}` : '已覆盖'}</small></div>
-                                        <button type="button" disabled={!canManage} onClick={() => setFundingTarget({ id: funding.bank_transaction_id })}>{Number(funding.invoice_gap || 0) > 0.01 ? '补发票 / 查看' : '查看凭证'}</button>
+                                        <button type="button" disabled={!canManage} onClick={() => setFundingTarget({ id: funding.bank_transaction_id, preferred_access_item_id: id })}>{Number(funding.invoice_gap || 0) > 0.01 ? '补发票 / 查看' : '查看凭证'}</button>
                                       </div>
                                     ))}
                                   </section>
