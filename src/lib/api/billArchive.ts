@@ -19,7 +19,7 @@ export type BillArchiveSnapshot = {
 
 const TTL_MS = 3_000
 // 自动归档执行会完整遍历账单并再次计算归档资格；React store 在一次业务操作后
-// 可能连续刷新多次。5 秒仅抑制这种“紧邻重复扫描”，普通归档状态仍实时读取。
+// 可能连续刷新多次。5 秒仅抑制 auto 缓存过期后的紧邻重复扫描，普通归档状态仍实时读取。
 const AUTO_SCAN_DEBOUNCE_MS = 5_000
 const cache = new Map<string, { value: BillArchiveSnapshot; expiresAt: number }>()
 const inflight = new Map<string, Promise<BillArchiveSnapshot>>()
@@ -27,6 +27,13 @@ const lastAutoScanAt = new Map<'rd' | 'channel', number>()
 
 function cacheKey(billType: 'rd' | 'channel', auto: boolean) {
   return `${billType}:${auto ? 'auto' : 'read'}`
+}
+
+function readFreshCache(key: string, now: number) {
+  const cached = cache.get(key)
+  if (cached && cached.expiresAt > now) return cached.value
+  if (cached) cache.delete(key)
+  return null
 }
 
 export function clearBillArchiveSnapshotCache(billType?: 'rd' | 'channel') {
@@ -44,12 +51,22 @@ export function clearBillArchiveSnapshotCache(billType?: 'rd' | 'channel') {
 
 export function getBillArchiveSnapshot(billType: 'rd' | 'channel', auto = true) {
   const now = Date.now()
+  const autoKey = cacheKey(billType, true)
+
+  // 原有语义优先：同一轮 auto 请求必须先复用正在进行的请求或 3 秒结果缓存。
+  // 这样多个组件/刷新同时读取时仍只发一次请求。
+  if (auto) {
+    const cachedAuto = readFreshCache(autoKey, now)
+    if (cachedAuto) return Promise.resolve(cachedAuto)
+    const runningAuto = inflight.get(autoKey)
+    if (runningAuto) return runningAuto
+  }
+
   const previousAutoScan = lastAutoScanAt.get(billType) || 0
   const effectiveAuto = Boolean(auto && now - previousAutoScan >= AUTO_SCAN_DEBOUNCE_MS)
   const key = cacheKey(billType, effectiveAuto)
-  const cached = cache.get(key)
-  if (cached && cached.expiresAt > now) return Promise.resolve(cached.value)
-  if (cached) cache.delete(key)
+  const cached = readFreshCache(key, now)
+  if (cached) return Promise.resolve(cached)
   const running = inflight.get(key)
   if (running) return running
 
