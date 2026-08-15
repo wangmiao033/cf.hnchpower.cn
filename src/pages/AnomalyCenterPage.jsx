@@ -163,7 +163,7 @@ export default function AnomalyCenterPage() {
 
     setSnapshot({
       invoiceOverviews: invoiceResult.status === 'fulfilled' ? invoiceResult.value : null,
-      contracts: contractResult.status === 'fulfilled' ? invoiceResult.value && contractResult.value.items || [] : null,
+      contracts: contractResult.status === 'fulfilled' ? contractResult.value.items || [] : null,
       quickSdkMonthly: quickSdkResult.status === 'fulfilled' ? quickSdkResult.value.monthly || [] : null
     })
     if (statusResult.status === 'fulfilled') {
