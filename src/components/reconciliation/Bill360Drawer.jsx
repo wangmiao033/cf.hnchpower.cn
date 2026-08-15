@@ -95,10 +95,14 @@ function cumulativeFundingText(condition) {
 
 function nextStepForBill({ record, invoiceOverview, remainingAmount, cumulativeDeferred }) {
   const status = String(record?.status || 'pending').trim().toLowerCase()
-  const amount = Math.abs(Number(record?.settlementAmount || 0))
+  const signedAmount = Number(record?.settlementAmount || 0)
+  const amount = Math.abs(signedAmount)
   const coverage = String(invoiceOverview?.coverage_status || '').toLowerCase()
   if (['cancelled', 'canceled', 'void', 'deleted'].includes(status)) {
     return { key: null, tone: 'blocked', title: '账单已作废', detail: '无需继续发票或资金处理；如需恢复，请回垃圾桶操作。' }
+  }
+  if (signedAmount < -0.01) {
+    return { key: 'edit', tone: 'blocked', title: '反向结算需人工核对', detail: '当前结算金额为负数，不按普通应收/应付流程自动引导；请先确认退款、冲抵或反向结算业务。' }
   }
   if (['draft', 'pending'].includes(status)) {
     return { key: 'edit', tone: 'warning', title: '先完成账单核对', detail: '核对业务数据和合同依据后，再进入发票与资金闭环。' }
