@@ -8,6 +8,7 @@ import Bill360FundingPanel from './Bill360FundingPanel.jsx'
 import BillCarryForwardInbox from './BillCarryForwardInbox.jsx'
 import ContractDifferenceActionPanel from './ContractDifferenceActionPanel.jsx'
 import ChannelCumulativeSettlementCard from '@/components/channel/ChannelCumulativeSettlementCard.jsx'
+import { useAuth } from '@/features/auth/AuthContext.jsx'
 import { getContractBillReconciliation } from '@/lib/api/contractTerms.ts'
 import { getChannelCumulativeBillCondition } from '@/lib/api/channelCumulativeSettlement.ts'
 import { loadBill360Resource, peekBill360Resource, primeBill360Resource } from '@/lib/api/bill360Performance.ts'
@@ -16,6 +17,7 @@ import './Bill360ContractAware.css'
 import './Bill360FundingPanel.css'
 import './Bill360AnomalyPriority.css'
 import './Bill360ContractAmount.css'
+import './Bill360CommandDock.css'
 
 function money(value) {
   const number = Number(value)
@@ -96,8 +98,12 @@ function Bill360Drawer({ target, onClose }) {
     openReconciliationEdit,
     openChannelReconciliationEdit
   } = useAppState()
+  const { can } = useAuth()
   const [checkOpen, setCheckOpen] = useState(false)
   const [fundingOpen, setFundingOpen] = useState(false)
+  const [actionOpen, setActionOpen] = useState(false)
+  const [actionTab, setActionTab] = useState('invoice')
+  const [detailRevision, setDetailRevision] = useState(0)
   const [checkData, setCheckData] = useState(null)
   const [checkSummary, setCheckSummary] = useState(null)
   const [checkLoading, setCheckLoading] = useState(false)
@@ -106,6 +112,12 @@ function Bill360Drawer({ target, onClose }) {
   const [cumulativeCondition, setCumulativeCondition] = useState(null)
   const billType = target?.billType === 'channel' ? 'channel' : 'rd'
   const billId = String(target?.billId || '')
+
+  const canManageInvoice = can('invoices.manage')
+  const canManageAttachment = can('reconciliation.manage')
+  const canViewFunds = can('funds.view')
+  const canViewContracts = can('contracts.view')
+  const canEditBill = can('reconciliation.manage')
 
   const loadContractCheck = useCallback(async (force = false) => {
     if (!billId) return null
@@ -159,6 +171,9 @@ function Bill360Drawer({ target, onClose }) {
   useEffect(() => {
     setCheckOpen(false)
     setFundingOpen(false)
+    setActionOpen(false)
+    setActionTab('invoice')
+    setDetailRevision(0)
   }, [billId, billType])
 
   const openBillEdit = useCallback(() => {
@@ -200,6 +215,15 @@ function Bill360Drawer({ target, onClose }) {
     if (!checkData && !checkLoading) void loadContractCheck(false)
   }
 
+  const openAction = (nextTab) => {
+    setActionTab(nextTab)
+    setActionOpen(true)
+  }
+
+  const handleBillMutation = () => {
+    setDetailRevision((value) => value + 1)
+  }
+
   const handleContractDataChange = useCallback((result) => {
     setCheckData(result || null)
     setCheckSummary(result?.summary || null)
@@ -207,50 +231,55 @@ function Bill360Drawer({ target, onClose }) {
   }, [billId, billType])
 
   const billNumber = target?.initialRecord?.settlementNumber || target?.initialRecord?.billNumber || target?.initialRecord?.statementNo || target?.initialRecord?.statement_no || ''
+  const contractText = launcherText(checkSummary, checkLoading, checkUnavailable)
 
   return (
     <>
-      <Bill360DrawerBase target={target} onClose={onClose} />
-      <Bill360ActionPanel billType={billType} billId={billId} billNumber={billNumber} />
+      <Bill360DrawerBase key={`${billType}:${billId}:${detailRevision}`} target={target} onClose={onClose} />
+      <Bill360ActionPanel
+        billType={billType}
+        billId={billId}
+        billNumber={billNumber}
+        open={actionOpen}
+        onOpenChange={setActionOpen}
+        initialTab={actionTab}
+        hideLauncher
+        onChanged={handleBillMutation}
+      />
 
-      <button
-        type="button"
-        className={`bill360-funding-launcher ${cumulativeFunding ? 'is-cumulative' : ''}`.trim()}
-        onClick={() => setFundingOpen(true)}
-        title={cumulativeDeferred ? '查看累计结算进度；未达到门槛前不进入银行收款核销' : '查看银行流水、核销分配、累计已收/已付与剩余未结'}
-      >
-        <span aria-hidden>{cumulativeFunding?.icon || '银'}</span>
-        <span>
-          <strong>{cumulativeFunding?.title || '银行资金闭环'}</strong>
-          <small>{cumulativeFunding?.detail || '多笔流水 · 部分核销 · 剩余未结'}</small>
-        </span>
-        <em aria-hidden>›</em>
-      </button>
-
-      <button
-        type="button"
-        className={`bill360-contract-launcher is-${tone}`}
-        onClick={openContractCheck}
-        title="按合作方、游戏、账期和授权期匹配合同合作清单，并重算合同标准结算金额"
-      >
-        <span aria-hidden>合</span>
-        <span>
-          <strong>{launcherText(checkSummary, checkLoading, checkUnavailable)}</strong>
-          <small>
-            {amountSummary?.expected_amount != null
-              ? `合同应结 ${money(amountSummary.expected_amount)} · 实际 ${money(amountSummary.actual_amount)} · ${amountVarianceText(amountSummary)}`
-              : '固定合同依据 · 分成 · 税率 · 渠道费 · 标准结算重算'}
-          </small>
-          {dueInfo ? (
-            <small className={`bill360-due-note ${dueTone}`.trim()}>
-              到期 {dueInfo.dueDate} · {dueText} · {dueInfo.paymentTerms}
-            </small>
-          ) : cumulativeDeferred ? (
-            <small className="bill360-due-note">累计结算中 · 未达门槛不计算催收逾期</small>
-          ) : null}
-        </span>
-        <em aria-hidden>›</em>
-      </button>
+      <div className="bill360-command-dock" role="toolbar" aria-label="账单360处理工具栏">
+        {canManageInvoice ? (
+          <button type="button" className="is-primary" onClick={() => openAction('invoice')} title="直接处理当前账单的发票智能匹配与批量关联">
+            <span>票</span><strong>发票处理</strong><small>智能匹配</small>
+          </button>
+        ) : null}
+        {canManageAttachment ? (
+          <button type="button" onClick={() => openAction('attachment')} title="上传、预览或删除当前账单附件">
+            <span>附</span><strong>附件</strong>
+          </button>
+        ) : null}
+        {(canManageInvoice || canManageAttachment) && (canViewFunds || canViewContracts || canEditBill) ? <i className="bill360-command-dock__divider" aria-hidden="true" /> : null}
+        {canViewFunds ? (
+          <button
+            type="button"
+            className="is-funding"
+            onClick={() => setFundingOpen(true)}
+            title={cumulativeDeferred ? '查看累计结算进度；未达到门槛前不进入银行收款核销' : '查看银行流水、核销分配、累计已收/已付与剩余未结'}
+          >
+            <span>{cumulativeFunding?.icon || '银'}</span><strong>{cumulativeFunding ? '累计结算' : '资金闭环'}</strong>
+          </button>
+        ) : null}
+        {canViewContracts ? (
+          <button type="button" className={`is-contract is-${tone}`} onClick={openContractCheck} title={contractText}>
+            <span>合</span><strong>合同核验</strong>
+          </button>
+        ) : null}
+        {canEditBill ? (
+          <button type="button" className="is-edit" onClick={openBillEdit} title="进入完整账单编辑表单">
+            <span>编</span><strong>编辑</strong>
+          </button>
+        ) : null}
+      </div>
 
       {fundingOpen ? (
         <div className="bill360-funding-overlay" role="presentation" onMouseDown={(event) => {

@@ -53,7 +53,7 @@ const fileExtension = (name = '') => {
 const fileKind = (name = '') => FILE_KIND_LABELS[fileExtension(name)] || 'FILE'
 const canPreview = (name = '') => PREVIEWABLE_EXTENSIONS.has(fileExtension(name))
 
-export default function BillScanAttachments({ billType, billId }) {
+export default function BillScanAttachments({ billType, billId, onChanged }) {
   const inputRef = useRef(null)
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(false)
@@ -114,6 +114,7 @@ export default function BillScanAttachments({ billType, billId }) {
       }
       setMessage(`已上传 ${files.length} 个附件`)
       await refresh()
+      onChanged?.({ action: 'upload', count: files.length })
     } catch (err) {
       setMessage('')
       setError(err?.message || '上传附件失败')
@@ -123,8 +124,6 @@ export default function BillScanAttachments({ billType, billId }) {
   }
 
   const handleFiles = async (event) => {
-    // FileList is live. Snapshot it before clearing the input so the selected
-    // files are not discarded before uploadFiles reads them.
     const files = Array.from(event.target.files || [])
     event.target.value = ''
     await uploadFiles(files)
@@ -157,6 +156,7 @@ export default function BillScanAttachments({ billType, billId }) {
       await deleteBillAttachment(billType, billId, item.id)
       setItems((current) => current.filter((entry) => entry.id !== item.id))
       setMessage('附件已删除')
+      onChanged?.({ action: 'delete', attachmentId: item.id })
     } catch (err) {
       setError(err?.message || '删除附件失败')
     }
