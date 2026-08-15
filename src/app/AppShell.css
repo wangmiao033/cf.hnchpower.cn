@@ -74,6 +74,55 @@
   transform: translateY(-1px);
 }
 
+.app-data-connection-warning {
+  flex: 0 0 auto;
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px 20px;
+  border-top: 1px solid #ead8a7;
+  border-bottom: 1px solid #ead8a7;
+  background: #fff9e9;
+  color: #6f5a25;
+}
+
+.app-data-connection-warning > div {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.app-data-connection-warning strong {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: #7f5d11;
+}
+
+.app-data-connection-warning span {
+  min-width: 0;
+  font-size: 9.5px;
+  color: #8d7440;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-data-connection-warning button {
+  flex: 0 0 auto;
+  height: 28px;
+  padding: 0 11px;
+  border: 1px solid #d9bf78;
+  border-radius: 7px;
+  background: #fff;
+  color: #7e5f1e;
+  font-size: 9px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
 .app-workspace {
   flex: 1;
   min-height: 0;
@@ -97,6 +146,21 @@
   .app-dashboard {
     flex-direction: column;
     min-height: auto;
+  }
+
+  .app-data-connection-warning {
+    align-items: flex-start;
+    padding: 8px 12px;
+  }
+
+  .app-data-connection-warning > div {
+    display: grid;
+    gap: 2px;
+  }
+
+  .app-data-connection-warning span {
+    white-space: normal;
+    line-height: 1.45;
   }
 
   .app-workspace {
