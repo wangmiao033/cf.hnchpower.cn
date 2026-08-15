@@ -42,10 +42,21 @@ function recordSettlementAmount(row) {
   return Number.isFinite(stored) ? stored : totalReconciliationSettlementAmount(row)
 }
 
+function recordPrepaymentDeduction(row) {
+  const stored = Number(row?.prepaymentDeduction ?? row?.prepayment_deduction ?? 0)
+  return Number.isFinite(stored) ? Math.max(0, stored) : 0
+}
+
+function recordActualPayable(row) {
+  const stored = Number(row?.actualPayable ?? row?.actual_payable)
+  if (Number.isFinite(stored)) return Math.max(0, stored)
+  return Math.max(0, recordSettlementAmount(row) - recordPrepaymentDeduction(row))
+}
+
 function paymentAmounts(row) {
   const paid = Math.max(0, Number(row?.paidAmount || 0))
   const storedUnpaid = Number(row?.unpaidAmount)
-  const fallbackUnpaid = recordSettlementAmount(row) - paid
+  const fallbackUnpaid = recordActualPayable(row) - paid
   return {
     paid,
     unpaid: Math.max(0, Number.isFinite(storedUnpaid) ? storedUnpaid : fallbackUnpaid)
@@ -250,6 +261,8 @@ function CoreReconciliationPage() {
 
   const stats = useMemo(() => {
     const total = rows.reduce((sum, row) => sum + recordSettlementAmount(row), 0)
+    const prepayment = rows.reduce((sum, row) => sum + recordPrepaymentDeduction(row), 0)
+    const actualPayable = rows.reduce((sum, row) => sum + recordActualPayable(row), 0)
     const paid = rows.reduce((sum, row) => sum + paymentAmounts(row).paid, 0)
     const unpaid = rows.reduce((sum, row) => sum + paymentAmounts(row).unpaid, 0)
     const partners = new Set(
@@ -261,7 +274,7 @@ function CoreReconciliationPage() {
     return [
       { label: '账单数量', value: rows.length },
       { label: '合作方', value: partners.size, note: `${games.size} 个游戏项目` },
-      { label: '研发应付', value: money(total) },
+      { label: '研发应结', value: money(total), note: prepayment > 0.01 ? `预付款抵扣 ${money(prepayment)} · 实际应付 ${money(actualPayable)}` : undefined },
       { label: '未付', value: money(unpaid), note: `已付 ${money(paid)}` }
     ]
   }, [rows])
@@ -604,6 +617,8 @@ function CoreReconciliationPage() {
               <col className="core-rd-col-flow" />
               <col className="core-rd-col-share" />
               <col className="core-rd-col-settlement" />
+              <col className="core-rd-col-prepayment" />
+              <col className="core-rd-col-payable" />
               <col className="core-rd-col-received" />
               <col className="core-rd-col-status" />
               <col className="core-rd-col-actions" />
@@ -616,7 +631,9 @@ function CoreReconciliationPage() {
                 <th>产品</th>
                 <th className="core-recon-align-right">流水</th>
                 <th className="core-recon-align-right">分成比例</th>
-                <th className="core-recon-align-right">结算金额</th>
+                <th className="core-recon-align-right">研发应结</th>
+                <th className="core-recon-align-right">预付款抵扣</th>
+                <th className="core-recon-align-right">实际应付</th>
                 <th className="core-recon-align-right">已付 / 未付</th>
                 <th>闭环状态</th>
                 <th>操作</th>
@@ -625,7 +642,7 @@ function CoreReconciliationPage() {
             <tbody>
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="core-recon-empty">
+                  <td colSpan={12} className="core-recon-empty">
                     {quickFilter === 'data-diff' && dataDiffLoading
                       ? '正在批量核对 QuickSDK 数据差异…'
                       : quickFilter === 'trash'
@@ -644,7 +661,7 @@ function CoreReconciliationPage() {
                   const archived = archivedIds.has(String(row.id))
                   const canArchive = eligibleIds.has(String(row.id))
                   const closure = listFundingClosureStatus({
-                    amount: recordSettlementAmount(row),
+                    amount: recordActualPayable(row),
                     paid,
                     lifecycleStatus: row.status,
                     archived
@@ -687,6 +704,12 @@ function CoreReconciliationPage() {
                       </td>
                       <td className="core-recon-money core-recon-money--settlement">
                         {money(recordSettlementAmount(row))}
+                      </td>
+                      <td className="core-recon-money">
+                        {recordPrepaymentDeduction(row) > 0.01 ? `-${money(recordPrepaymentDeduction(row))}` : '—'}
+                      </td>
+                      <td className="core-recon-money core-recon-money--settlement">
+                        {money(recordActualPayable(row))}
                       </td>
                       <td
                         className="core-recon-money core-recon-money--received"

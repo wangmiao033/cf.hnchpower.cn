@@ -20,6 +20,7 @@ from app.services.rd_bank_payment_aggregate import (
     aggregate_rd_payments_for_ids,
     fill_payable_for_row,
 )
+from app.services.rd_prepayment import deductions_for_bill_ids, financial_payable
 
 ACTIVE_ALLOCATION_STATUSES = ("suggested", "confirmed")
 EDITABLE_STATUSES = {"draft", "pending"}
@@ -250,16 +251,28 @@ def bill_financial_state(db: Session, bill_type: str, bill) -> BillFinancialStat
     coverage_percent = round(min(999.9, allocated / bill_amount * 100), 1) if bill_amount > 0 else 0
 
     if bill_type == "rd":
-        aggregate = aggregate_rd_payments_for_ids(db, [str(bill.id)]).get(str(bill.id))
-        payment = fill_payable_for_row(aggregate, bill_amount)
+        bill_id = str(bill.id)
+        deduction_map = deductions_for_bill_ids(db, [bill_id])
+        prepayment_deduction, actual_payable = financial_payable(
+            bill_amount,
+            deduction_map.get(bill_id, 0),
+        )
+        aggregate = aggregate_rd_payments_for_ids(db, [bill_id]).get(bill_id)
+        payment = fill_payable_for_row(aggregate, actual_payable)
         paid = round(float(payment.paid_amount), 2)
-        if paid <= 0.01:
+        cash_payable = round(float(actual_payable), 2)
+        if cash_payable <= 0.01:
+            phase = "paid"
+            label = "预付款已抵扣" if prepayment_deduction > 0 else "无需付款"
+        elif paid <= 0.01:
             phase = "unpaid"
-        elif paid + 0.01 < bill_amount:
+            label = "未付款"
+        elif paid + 0.01 < cash_payable:
             phase = "partial"
+            label = "部分付款"
         else:
             phase = "paid"
-        label = {"unpaid": "未付款", "partial": "部分付款", "paid": "已付款"}[phase]
+            label = "已付款"
     else:
         paid = round(abs(float(getattr(bill, "received_amount", 0) or 0)), 2)
         condition = bill_condition(db, bill)

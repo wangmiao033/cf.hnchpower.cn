@@ -18,6 +18,7 @@ try:
     from .v2_main import _ensure_v2_tables
     from .matcher import score_candidate
     from .rd_rule_recommender import recommend_rd_rules
+    from .rd_prepayment import enrich_prepayment_candidates, replace_bill_prepayment_deductions
 except ImportError:
     from v8_main import app as _v8_app, reconcile_bill_contract_v3_compat as _v8_reconcile
     from v4_main import _database_url, _require_permission
@@ -25,6 +26,7 @@ except ImportError:
     from v2_main import _ensure_v2_tables
     from matcher import score_candidate
     from rd_rule_recommender import recommend_rd_rules
+    from rd_prepayment import enrich_prepayment_candidates, replace_bill_prepayment_deductions
 
 
 app = FastAPI(
@@ -228,6 +230,13 @@ def _finalize_pending_entry(
             ],
         )
 
+    finalized_metadata = replace_bill_prepayment_deductions(
+        conn,
+        str(bill["id"]),
+        finalized_metadata,
+        actor,
+    )
+
     snapshot_id = uuid4().hex
     conn.execute(
         """
@@ -271,9 +280,15 @@ def recommend_rd_rule(request: Request, payload: dict) -> dict:
         raise HTTPException(status_code=422, detail="请先选择合作方，再自动匹配研发合同规则")
     if not lines:
         raise HTTPException(status_code=422, detail="请至少填写一条游戏明细")
+    bill_id = _text(payload.get("bill_id"), 128)
     with psycopg.connect(_database_url(), connect_timeout=15, row_factory=dict_row) as conn:
-        candidates = _candidate_rows(conn)
+        candidates = enrich_prepayment_candidates(
+            conn,
+            _candidate_rows(conn),
+            exclude_bill_id=bill_id or None,
+        )
         result = recommend_rd_rules(partner_name, lines, candidates)
+        conn.commit()
     return {**result, "partner_name": partner_name, "generated_at": datetime.now(timezone.utc).isoformat()}
 
 

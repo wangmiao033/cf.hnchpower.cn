@@ -109,6 +109,8 @@ class ReconciliationRead(BaseModel):
     discount_value: float
     refund_amount: float
     settlement_amount: float
+    prepayment_deduction: float = 0
+    actual_payable: float = 0
     status: str | None
     remark: str | None
     created_at: datetime

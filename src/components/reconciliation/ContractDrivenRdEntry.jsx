@@ -248,7 +248,11 @@ export default function ContractDrivenRdEntry(props) {
     const timer = window.setTimeout(async () => {
       const seq = ++requestSeqRef.current
       try {
-        const result = await recommendRdContractRules({ partner_name: partner, lines: requestLines })
+        const result = await recommendRdContractRules({
+          partner_name: partner,
+          bill_id: mode === 'edit' && editRecord?.id ? String(editRecord.id) : undefined,
+          lines: requestLines
+        })
         if (seq !== requestSeqRef.current) return
         lastRequestSignatureRef.current = signature
         setRecommendation(result)
@@ -261,7 +265,7 @@ export default function ContractDrivenRdEntry(props) {
       }
     }, 320)
     return () => window.clearTimeout(timer)
-  }, [formState])
+  }, [formState, mode, editRecord?.id])
 
   const forceApplyRecommendation = useCallback(() => {
     if (!formState || !recommendation || !recommendationMatchesRecord(formState, recommendation)) return
@@ -311,6 +315,30 @@ export default function ContractDrivenRdEntry(props) {
     return out
   }, [formState, recommendation])
 
+  const prepaymentByLine = useMemo(() => {
+    if (!recommendationCurrent) return {}
+    return Object.fromEntries(
+      (recommendation?.lines || []).map((item) => {
+        const rec = item?.recommended || {}
+        return [item.line_index, {
+          enabled: Boolean(rec.prepayment_enabled),
+          agreedAmount: num(rec.prepayment_agreed_amount),
+          usedAmount: num(rec.prepayment_used_amount),
+          availableBefore: num(rec.prepayment_available_before),
+          deduction: num(rec.prepayment_deduction),
+          availableAfter: num(rec.prepayment_available_after),
+          actualPayable: num(rec.actual_payable)
+        }]
+      })
+    )
+  }, [recommendation, recommendationCurrent])
+  const hasPrepayment = Object.values(prepaymentByLine).some((item) => item?.enabled)
+  const prepaymentDeductionTotal = Object.values(prepaymentByLine).reduce(
+    (sum, item) => sum + num(item?.deduction),
+    0
+  )
+  const actualPayableTotal = Math.max(0, currentFinal - prepaymentDeductionTotal)
+
   const buildAuditMetadata = useCallback((record) => {
     const rows = Array.isArray(record?.items) ? record.items : []
     return rows.map((line, index) => {
@@ -352,6 +380,13 @@ export default function ContractDrivenRdEntry(props) {
         },
         contract_expected_amount: result?.contract_amount?.expected_amount ?? null,
         contract_amount_deterministic: Boolean(result?.contract_amount?.deterministic),
+        prepayment_enabled: Boolean(recommended?.prepayment_enabled),
+        prepayment_agreed_amount: recommended?.prepayment_agreed_amount ?? 0,
+        prepayment_used_amount: recommended?.prepayment_used_amount ?? 0,
+        prepayment_available_before: recommended?.prepayment_available_before ?? 0,
+        prepayment_deduction: recommended?.prepayment_deduction ?? 0,
+        prepayment_available_after: recommended?.prepayment_available_after ?? 0,
+        actual_payable: recommended?.actual_payable ?? result?.contract_amount?.expected_amount ?? 0,
         deviations,
         override_reason: String(overrideReasons[index] || '').trim(),
         recommendation_generated_at: recommendation?.generated_at || null
@@ -490,6 +525,8 @@ export default function ContractDrivenRdEntry(props) {
                         <div><span>合同通道费</span><strong>{rec?.channel_fee_rate == null ? '保留当前值' : `${rec.channel_fee_rate}%`}</strong></div>
                         <div><span>合同测试费</span><strong>{rec?.test_fee == null ? '保留当前值' : money(rec.test_fee)}</strong></div>
                         <div><span>合同应结</span><strong>{money(item.contract_amount?.expected_amount)}</strong></div>
+                        {rec?.prepayment_enabled ? <div><span>预付款抵扣</span><strong>-{money(rec.prepayment_deduction)}</strong></div> : null}
+                        {rec?.prepayment_enabled ? <div><span>本期实际应付</span><strong>{money(rec.actual_payable)}</strong></div> : null}
                       </div>
                       <div className="rd-contract-entry-discount-note">
                         <span>产品折扣系数：<b>{productRef ?? '-'}</b></span>
@@ -522,6 +559,8 @@ export default function ContractDrivenRdEntry(props) {
           <div className="rd-contract-entry-summary">
             <div><span>合同应结</span><strong>{money(contractExpected)}</strong></div>
             <div><span>当前账单</span><strong>{money(currentFinal)}</strong></div>
+            {hasPrepayment ? <div><span>预付款抵扣</span><strong>-{money(prepaymentDeductionTotal)}</strong></div> : null}
+            {hasPrepayment ? <div><span>实际应付</span><strong>{money(actualPayableTotal)}</strong></div> : null}
             <div className={adjustment != null && Math.abs(adjustment) > 0.01 ? 'is-diff' : ''}>
               <span>人工调整</span><strong>{adjustment == null ? '-' : `${adjustment >= 0 ? '+' : ''}${money(adjustment)}`}</strong>
             </div>
@@ -538,6 +577,7 @@ export default function ContractDrivenRdEntry(props) {
         editRecord={editRecord}
         draftRecord={effectiveDraftRecord}
         quickFillData={effectiveQuickFill}
+        prepaymentByLine={prepaymentByLine}
         onFormStateChange={handleFormStateChange}
         onAddRecord={handleAddRecord}
         onUpdateRecord={handleUpdateRecord}

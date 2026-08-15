@@ -115,6 +115,7 @@ function ReconciliationLineItemsForm({
   onUpdateRecord,
   settlementMonth,
   settlementCycles = [],
+  prepaymentByLine = {},
   onError,
   quickFillData,
   partners = [],
@@ -255,6 +256,26 @@ function ReconciliationLineItemsForm({
       sumSettlement: Math.round(sumSettlement * 100) / 100
     }
   }, [lines, header.channelFeeRate])
+
+  const showPrepaymentColumns = useMemo(
+    () => Object.values(prepaymentByLine || {}).some((item) => Boolean(item?.enabled)),
+    [prepaymentByLine]
+  )
+  const prepaymentTotals = useMemo(() => {
+    let deduction = 0
+    let actualPayable = 0
+    for (let index = 0; index < lines.length; index += 1) {
+      const settlement = Math.max(0, calculateRdSettlementRow(lines[index], header.channelFeeRate).settlementAmount)
+      const requested = Math.max(0, Number(prepaymentByLine?.[index]?.deduction || 0))
+      const applied = Math.min(settlement, requested)
+      deduction += applied
+      actualPayable += Math.max(0, settlement - applied)
+    }
+    return {
+      deduction: Math.round(deduction * 100) / 100,
+      actualPayable: Math.round(actualPayable * 100) / 100
+    }
+  }, [lines, header.channelFeeRate, prepaymentByLine])
 
   useEffect(() => {
     if (!onPreviewChange) return
@@ -647,7 +668,7 @@ function ReconciliationLineItemsForm({
             showAddButton={false}
             hint="点击月份字段直接选择年月；新增一行会自动继承上一行月份，仍可单独修改。"
           >
-            <div className="rd-line-items-grid">
+            <div className={`rd-line-items-grid${showPrepaymentColumns ? ' rd-line-items-grid--prepayment' : ''}`}>
               <div className="rd-line-items-grid-head" aria-hidden="true">
                 <div className="channel-cell">结算周期</div>
                 <div className="channel-cell">游戏名称</div>
@@ -661,7 +682,9 @@ function ReconciliationLineItemsForm({
                 <div className="channel-cell channel-cell--num">税率%</div>
                 <div className="channel-cell channel-cell--num">分成%</div>
                 <div className="channel-cell channel-cell--num">参与分成金额</div>
-                <div className="channel-cell channel-cell--num">结算金额</div>
+                <div className="channel-cell channel-cell--num">研发应结</div>
+                {showPrepaymentColumns ? <div className="channel-cell channel-cell--num">预付款抵扣</div> : null}
+                {showPrepaymentColumns ? <div className="channel-cell channel-cell--num">实际应付</div> : null}
                 <div className="channel-cell channel-cell--actions">操作</div>
               </div>
               {lines.map((line, index) => {
@@ -669,6 +692,12 @@ function ReconciliationLineItemsForm({
                 const net = calc.totalFlow
                 const gross = calc.shareAmount
                 const settlement = calc.settlementAmount
+                const prepayment = prepaymentByLine?.[index] || {}
+                const prepaymentDeduction = Math.min(
+                  Math.max(0, settlement),
+                  Math.max(0, Number(prepayment.deduction || 0))
+                )
+                const actualPayable = Math.max(0, settlement - prepaymentDeduction)
                 const flowStatus = flowStatuses[line.id]
                 const gameListId = `${formId || 'rd'}-game-list-${index}`
                 return (
@@ -764,7 +793,9 @@ function ReconciliationLineItemsForm({
                     <div className="channel-cell channel-cell--num"><input type="number" step="0.01" aria-label={`第 ${index + 1} 行税率`} className="admin-input channel-input-num" value={line.taxRate} onChange={(e) => updateLine(index, 'taxRate', e.target.value)} /></div>
                     <div className="channel-cell channel-cell--num"><input type="number" step="0.01" aria-label={`第 ${index + 1} 行分成比例`} className="admin-input channel-input-num" value={line.shareRatio} onChange={(e) => updateLine(index, 'shareRatio', e.target.value)} /></div>
                     <div className="channel-cell channel-cell--num"><input type="text" readOnly disabled aria-label={`第 ${index + 1} 行参与分成金额`} className="admin-input readonly-input channel-input-num" value={gross.toFixed(2)} /></div>
-                    <div className="channel-cell channel-cell--num"><input type="text" readOnly disabled aria-label={`第 ${index + 1} 行结算金额`} className="admin-input readonly-input channel-input-num" value={settlement.toFixed(2)} /></div>
+                    <div className="channel-cell channel-cell--num"><input type="text" readOnly disabled aria-label={`第 ${index + 1} 行研发应结`} className="admin-input readonly-input channel-input-num" value={settlement.toFixed(2)} /></div>
+                    {showPrepaymentColumns ? <div className="channel-cell channel-cell--num"><input type="text" readOnly disabled aria-label={`第 ${index + 1} 行预付款抵扣`} className="admin-input readonly-input channel-input-num" value={prepayment.enabled ? `-${prepaymentDeduction.toFixed(2)}` : '—'} /></div> : null}
+                    {showPrepaymentColumns ? <div className="channel-cell channel-cell--num"><input type="text" readOnly disabled aria-label={`第 ${index + 1} 行实际应付`} className="admin-input readonly-input channel-input-num" value={actualPayable.toFixed(2)} /></div> : null}
                     <div className="channel-cell channel-cell--actions">
                       <button type="button" className="rec-btn rec-btn--ghost" onClick={addRow} title="新增一行并继承当前月份">+</button>
                       <button type="button" className="rec-btn rec-btn--danger-outline" disabled={lines.length <= 1} onClick={() => removeRow(index)} title="删除当前行">-</button>
@@ -788,7 +819,9 @@ function ReconciliationLineItemsForm({
             <div className="summary-item summary-item--accent"><div className="label">折后总流水</div><div className="value">¥{totals.sumNet.toFixed(2)}</div></div>
             <div className="summary-item"><div className="label">总代金券</div><div className="value">¥{totals.sumCoupon.toFixed(2)}</div></div>
             <div className="summary-item"><div className="label">总参与分成金额</div><div className="value">¥{totals.sumShareAmount.toFixed(2)}</div></div>
-            <div className="summary-item summary-item--hero"><div className="label">总结算金额</div><div className="value">¥{totals.sumSettlement.toFixed(2)}</div></div>
+            <div className="summary-item summary-item--hero"><div className="label">研发应结</div><div className="value">¥{totals.sumSettlement.toFixed(2)}</div></div>
+            {showPrepaymentColumns ? <div className="summary-item"><div className="label">预付款抵扣</div><div className="value">-¥{prepaymentTotals.deduction.toFixed(2)}</div></div> : null}
+            {showPrepaymentColumns ? <div className="summary-item summary-item--hero"><div className="label">本期实际应付</div><div className="value">¥{prepaymentTotals.actualPayable.toFixed(2)}</div></div> : null}
           </div>
         </div>
 
@@ -809,8 +842,8 @@ function ReconciliationLineItemsForm({
         {!isDrawer && !isCreatePage && (
           <div className="channel-form-section" style={{ padding: '12px 16px' }}>
             <div className="form-row" style={{ alignItems: 'center' }}>
-              <span style={{ color: 'var(--admin-text-sub)', fontSize: 14 }}>预计结算金额</span>
-              <span style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--admin-success)' }}>{`\u00a5${totals.sumSettlement.toFixed(2)}`}</span>
+              <span style={{ color: 'var(--admin-text-sub)', fontSize: 14 }}>{showPrepaymentColumns ? '预计实际应付' : '预计研发应结'}</span>
+              <span style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--admin-success)' }}>{`\u00a5${(showPrepaymentColumns ? prepaymentTotals.actualPayable : totals.sumSettlement).toFixed(2)}`}</span>
             </div>
           </div>
         )}

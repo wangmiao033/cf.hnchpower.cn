@@ -29,6 +29,9 @@ export type RdContractRuleMatch = {
   channel_fee_rate?: number | null
   invoice_tax_rate?: number | null
   testing_fee?: number | null
+  prepayment_amount?: number | null
+  prepayment_used_amount?: number | null
+  prepayment_available_amount?: number | null
   settlement_mode?: string | null
   settlement_basis?: string | null
   payment_terms?: string | null
@@ -49,6 +52,13 @@ export type RdContractRuleRecommended = {
   channel_fee_rate: number | null
   tax_rate: number | null
   test_fee: number | null
+  prepayment_enabled: boolean
+  prepayment_agreed_amount: number
+  prepayment_used_amount: number
+  prepayment_available_before: number
+  prepayment_deduction: number
+  prepayment_available_after: number
+  actual_payable: number | null
   warnings: string[]
 }
 
@@ -118,6 +128,7 @@ export type RdContractEntrySnapshot = {
 
 export function recommendRdContractRules(payload: {
   partner_name: string
+  bill_id?: string
   lines: RdContractEntryLineInput[]
 }): Promise<RdContractRuleRecommendation> {
   return apiPost('/api/contract-terms/rd-rule-recommendation', payload)

@@ -47,6 +47,9 @@ def _candidate_snapshot(candidate: dict, scored: dict) -> dict:
         "channel_fee_rate": candidate.get("channel_fee_rate"),
         "invoice_tax_rate": candidate.get("invoice_tax_rate"),
         "testing_fee": candidate.get("testing_fee"),
+        "prepayment_amount": candidate.get("prepayment_amount"),
+        "prepayment_used_amount": candidate.get("prepayment_used_amount"),
+        "prepayment_available_amount": candidate.get("prepayment_available_amount"),
         "settlement_mode": candidate.get("settlement_mode"),
         "settlement_basis": candidate.get("settlement_basis"),
         "payment_terms": candidate.get("payment_terms"),
@@ -75,6 +78,15 @@ def _recommended(candidate: dict, raw: dict) -> dict:
     fee = _number(candidate.get("channel_fee_rate"))
     tax = _number(candidate.get("invoice_tax_rate"))
     testing = _number(candidate.get("testing_fee"))
+    prepayment_agreed = max(0.0, _safe_number(candidate.get("prepayment_amount")))
+    prepayment_used = max(0.0, _safe_number(candidate.get("prepayment_used_amount")))
+    prepayment_available = max(
+        0.0,
+        _safe_number(
+            candidate.get("prepayment_available_amount"),
+            max(0.0, prepayment_agreed - prepayment_used),
+        ),
+    )
     if share is None:
         warnings.append("合同未维护分成比例")
     if fee is None:
@@ -97,6 +109,13 @@ def _recommended(candidate: dict, raw: dict) -> dict:
         "channel_fee_rate": None if fee is None else round(fee, 4),
         "tax_rate": None if tax is None else round(tax, 4),
         "test_fee": None if testing is None else round(testing, 2),
+        "prepayment_enabled": prepayment_agreed > EPS,
+        "prepayment_agreed_amount": round(prepayment_agreed, 2),
+        "prepayment_used_amount": round(prepayment_used, 2),
+        "prepayment_available_before": round(prepayment_available, 2),
+        "prepayment_deduction": 0.0,
+        "prepayment_available_after": round(prepayment_available, 2),
+        "actual_payable": None,
         "warnings": warnings,
     }
 
@@ -107,6 +126,7 @@ def recommend_rd_rules(
     candidates: list[dict],
 ) -> dict:
     results: list[dict] = []
+    remaining_prepayment: dict[str, float] = {}
     for index, raw in enumerate(lines or []):
         source_index = raw.get("line_index", index)
         try:
@@ -191,6 +211,29 @@ def recommend_rd_rules(
             contract_amount["deterministic"] = False
             contract_amount["message"] = "已找到合同参考金额，但合同身份尚未达到自动带入阈值，需人工确认。"
 
+        expected_amount = _number(contract_amount.get("expected_amount"))
+        current_amount = max(0.0, _safe_number(raw.get("settlement_amount")))
+        due_amount = max(
+            0.0,
+            expected_amount
+            if contract_amount.get("deterministic") and expected_amount is not None
+            else current_amount,
+        )
+        access_key = _text(candidate.get("access_item_id")) or f"line:{source_index}"
+        available_before = max(0.0, _safe_number(recommended.get("prepayment_available_before")))
+        if recommended.get("prepayment_enabled"):
+            available_before = remaining_prepayment.get(access_key, available_before)
+            deduction = min(due_amount, max(0.0, available_before))
+            available_after = max(0.0, available_before - deduction)
+            remaining_prepayment[access_key] = available_after
+        else:
+            deduction = 0.0
+            available_after = available_before
+        recommended["prepayment_available_before"] = round(available_before, 2)
+        recommended["prepayment_deduction"] = round(deduction, 2)
+        recommended["prepayment_available_after"] = round(available_after, 2)
+        recommended["actual_payable"] = round(max(0.0, due_amount - deduction), 2)
+
         results.append({
             "line_index": source_index,
             "game_name": game_name,
@@ -233,7 +276,7 @@ def recommend_rd_rules(
                 }
 
     return {
-        "version": "contract-rd-entry-v1",
+        "version": "contract-rd-entry-v2",
         "auto_apply": bool(results) and len(auto_lines) == len(results),
         "matched_lines": len([item for item in results if item.get("match")]),
         "auto_apply_lines": len(auto_lines),
