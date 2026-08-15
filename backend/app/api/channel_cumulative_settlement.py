@@ -105,6 +105,29 @@ def get_pool(
     return result
 
 
+@router.get("/snapshot")
+def get_snapshot(
+    partner_name: str = Query(..., min_length=1, max_length=500),
+    batch_limit: int = Query(8, ge=1, le=100),
+    db: Session = Depends(get_db),
+    _: AuthUser = Depends(require_permission("reconciliation.view")),
+) -> dict:
+    """Return policy, pool and recent batches in one read request.
+
+    The underlying policy/pool/batch services remain the single source of truth;
+    this endpoint only coalesces HTTP round trips.
+    """
+    policy = policy_to_dict(policy_for_partner(db, partner_name), partner_name)
+    pool = pool_state(db, partner_name)
+    batches = list_batches(db, partner_name, batch_limit)
+    db.commit()
+    return {
+        "policy": policy,
+        "pool": pool,
+        "batches": {"items": batches, "total": len(batches)},
+    }
+
+
 @router.get("/bill/{bill_id}")
 def get_bill_condition(
     bill_id: str,

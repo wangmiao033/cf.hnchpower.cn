@@ -84,6 +84,12 @@ export type ChannelCumulativeBillCondition = {
   batch: ChannelCumulativeBatch | null
 }
 
+export type ChannelCumulativeSnapshot = {
+  policy: ChannelCumulativePolicy
+  pool: ChannelCumulativePool
+  batches: { items: ChannelCumulativeBatch[]; total: number }
+}
+
 const PATH = '/api/channel-cumulative-settlement'
 
 export function getChannelCumulativePolicy(partnerName: string) {
@@ -98,6 +104,11 @@ export function saveChannelCumulativePolicy(payload: Partial<ChannelCumulativePo
 export function getChannelCumulativePool(partnerName: string) {
   const query = new URLSearchParams({ partner_name: partnerName })
   return apiGet<ChannelCumulativePool>(`${PATH}/pool?${query.toString()}`)
+}
+
+export function getChannelCumulativeSnapshot(partnerName: string, batchLimit = 8) {
+  const query = new URLSearchParams({ partner_name: partnerName, batch_limit: String(batchLimit) })
+  return apiGet<ChannelCumulativeSnapshot>(`${PATH}/snapshot?${query.toString()}`)
 }
 
 export function getChannelCumulativeBillCondition(billId: string) {
