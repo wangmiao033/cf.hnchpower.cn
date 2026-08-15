@@ -2,10 +2,11 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useAppState } from '@/app/AppStateContext.jsx'
 import { VIEWS } from '@/app/routes.js'
 import ContractDetailsDrawer from '@/components/contract/ContractDetailsDrawer.jsx'
+import BankSearchResultDrawer from './BankSearchResultDrawer.jsx'
 import { useAuth } from '@/features/auth/AuthContext.jsx'
 import { globalSearch } from '@/lib/api/globalSearch.ts'
 import { stashPartnerFocus } from '@/lib/search/globalSearchFocus.ts'
-import { getGlobalSearchContract } from '@/lib/search/globalSearchDetails.ts'
+import { getGlobalSearchBankTransaction, getGlobalSearchContract } from '@/lib/search/globalSearchDetails.ts'
 import '@/pages/contract-management.css'
 import './GlobalSearch.css'
 
@@ -37,6 +38,7 @@ function GlobalSearch() {
   const [error, setError] = useState('')
   const [activeIndex, setActiveIndex] = useState(0)
   const [selectedContract, setSelectedContract] = useState(null)
+  const [selectedBankTransaction, setSelectedBankTransaction] = useState(null)
   const inputRef = useRef(null)
   const requestVersionRef = useRef(0)
 
@@ -144,7 +146,13 @@ function GlobalSearch() {
       return
     }
     if (target.action === 'bank_detail') {
-      setActiveView?.(VIEWS.BANK_TRANSACTIONS_LEDGER)
+      try {
+        const transaction = await getGlobalSearchBankTransaction(target.entity_id)
+        setSelectedBankTransaction(transaction)
+      } catch (detailError) {
+        console.error(detailError)
+        showToast?.(detailError?.message || '银行流水详情读取失败，请稍后重试', 'error')
+      }
       return
     }
     showToast?.('这个搜索结果暂时没有可打开的目标', 'info')
@@ -311,6 +319,15 @@ function GlobalSearch() {
           }))
         }
         onToast={showToast}
+      />
+
+      <BankSearchResultDrawer
+        transaction={selectedBankTransaction}
+        onClose={() => setSelectedBankTransaction(null)}
+        onOpenLedger={() => {
+          setSelectedBankTransaction(null)
+          setActiveView?.(VIEWS.BANK_TRANSACTIONS_LEDGER)
+        }}
       />
     </>
   )
