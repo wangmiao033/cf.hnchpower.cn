@@ -96,6 +96,39 @@ def _funding_count_map(db: Session) -> dict[str, int]:
     }
 
 
+def _lifecycle_caps(db: Session) -> dict[str, dict]:
+    settings_ready = db.execute(text("SELECT to_regclass('public.cf_rd_prepayment_lifecycle_settings')")).scalar_one_or_none()
+    installments_ready = db.execute(text("SELECT to_regclass('public.cf_rd_prepayment_installments')")).scalar_one_or_none()
+    if not settings_ready or not installments_ready:
+        return {}
+    rows = db.execute(text("""
+        SELECT
+          settings.access_item_id,
+          settings.strict_mode,
+          settings.frozen_at,
+          COALESCE(SUM(
+            CASE
+              WHEN installment.triggered_at IS NOT NULL
+               AND (installment.requires_invoice IS FALSE OR installment.invoice_ready_at IS NOT NULL)
+              THEN installment.planned_amount
+              ELSE 0
+            END
+          ), 0) AS eligible_amount
+        FROM cf_rd_prepayment_lifecycle_settings AS settings
+        LEFT JOIN cf_rd_prepayment_installments AS installment
+          ON installment.access_item_id = settings.access_item_id
+        GROUP BY settings.access_item_id, settings.strict_mode, settings.frozen_at
+    """)).mappings().all()
+    return {
+        str(row["access_item_id"]): {
+            "strict_mode": bool(row.get("strict_mode")),
+            "frozen": row.get("frozen_at") is not None,
+            "eligible_amount": max(ZERO, _money(row.get("eligible_amount"))),
+        }
+        for row in rows
+    }
+
+
 def _pool_candidates(db: Session, bank_payee: str = "") -> list[dict]:
     contract_table = db.execute(text("SELECT to_regclass('public.cf_contract_access_terms')")).scalar_one_or_none()
     if not contract_table:
@@ -139,6 +172,13 @@ def _pool_candidates(db: Session, bank_payee: str = "") -> list[dict]:
         GROUP BY funding.access_item_id
     """, "access_item_id")
     funding_counts = _funding_count_map(db)
+    lifecycle_caps = _lifecycle_caps(db)
+    refund_table = db.execute(text("SELECT to_regclass('public.cf_rd_prepayment_refunds')")).scalar_one_or_none()
+    refunded = _aggregate_map(db, """
+        SELECT access_item_id, COALESCE(SUM(refund_amount), 0) AS amount
+        FROM cf_rd_prepayment_refunds
+        GROUP BY access_item_id
+    """, "access_item_id") if refund_table else {}
 
     out = []
     for row in rows:
@@ -146,10 +186,17 @@ def _pool_candidates(db: Session, bank_payee: str = "") -> list[dict]:
         agreed = max(ZERO, _money(row.get("prepayment_agreed_amount")))
         actual_funded = funded.get(access_id, ZERO)
         used_amount = used.get(access_id, ZERO)
+        refunded_amount = refunded.get(access_id, ZERO)
         has_actual_funding = funding_counts.get(access_id, 0) > 0
-        effective_cap = min(agreed, actual_funded) if has_actual_funding else agreed
-        available = max(ZERO, effective_cap - used_amount)
-        shortfall = max(ZERO, used_amount - actual_funded) if has_actual_funding else ZERO
+        lifecycle = lifecycle_caps.get(access_id, {})
+        strict_mode = bool(lifecycle.get("strict_mode"))
+        frozen = bool(lifecycle.get("frozen"))
+        eligible_amount = _money(lifecycle.get("eligible_amount")) if strict_mode else agreed
+        effective_cap = min(agreed, actual_funded) if (has_actual_funding or strict_mode) else agreed
+        available = max(ZERO, effective_cap - used_amount - refunded_amount)
+        shortfall = max(ZERO, used_amount + refunded_amount - actual_funded) if (has_actual_funding or strict_mode) else ZERO
+        fundable_cap = ZERO if frozen else min(agreed, eligible_amount)
+        max_fundable = max(ZERO, fundable_cap - actual_funded) if strict_mode else (ZERO if frozen else max(ZERO, agreed - actual_funded))
         score = max(
             _match_score(bank_payee, row.get("counterparty")),
             _match_score(bank_payee, row.get("partner_name")),
@@ -160,13 +207,17 @@ def _pool_candidates(db: Session, bank_payee: str = "") -> list[dict]:
             "prepayment_agreed_amount": float(agreed),
             "actual_funded_amount": float(actual_funded),
             "deducted_amount": float(used_amount),
+            "refunded_amount": float(refunded_amount),
             "available_balance": float(available),
             "funding_shortfall": float(shortfall),
             "invoice_allocated_amount": float(invoiced.get(access_id, ZERO)),
             "has_actual_funding": has_actual_funding,
-            "max_fundable_amount": float(max(ZERO, agreed - actual_funded)),
+            "strict_mode": strict_mode,
+            "frozen": frozen,
+            "eligible_payment_amount": float(eligible_amount),
+            "max_fundable_amount": float(max_fundable),
             "bank_match_score": score,
-            "recommended": score >= 80,
+            "recommended": score >= 80 and max_fundable > EPS,
         })
     out.sort(key=lambda item: (item["bank_match_score"], item["max_fundable_amount"]), reverse=True)
     return out
@@ -376,12 +427,18 @@ def create_funding(
     if candidate is None:
         raise HTTPException(status_code=422, detail="该合同产品没有配置可用的研发预付款")
     pool_remaining = _money(candidate["max_fundable_amount"])
-    requested = _money(payload.get("funded_amount") or bank_remaining)
+    requested = _money(payload.get("funded_amount") or min(bank_remaining, pool_remaining))
     if requested <= ZERO:
+        if candidate.get("frozen"):
+            raise HTTPException(status_code=409, detail="该研发预付款已冻结，不能继续登记付款")
+        if candidate.get("strict_mode"):
+            raise HTTPException(status_code=409, detail="当前没有已触发且满足付款前置条件的预付款金额")
         raise HTTPException(status_code=422, detail="预付款登记金额必须大于 0")
     if requested > bank_remaining + EPS:
         raise HTTPException(status_code=409, detail="登记金额超过该银行流水尚未分配的支出金额")
     if requested > pool_remaining + EPS:
+        if candidate.get("strict_mode"):
+            raise HTTPException(status_code=409, detail="登记金额超过已触发且满足付款前置条件的可付款金额")
         raise HTTPException(status_code=409, detail="登记金额超过合同约定预付款尚未入账的金额")
 
     funding_id = uuid4().hex
@@ -406,7 +463,12 @@ def create_funding(
         })
     except Exception as exc:
         db.rollback()
-        if "unique" in str(exc).lower() or "duplicate" in str(exc).lower():
+        message = str(exc)
+        if "PREPAYMENT_FROZEN" in message:
+            raise HTTPException(status_code=409, detail="该研发预付款已冻结，不能继续登记付款") from exc
+        if "PREPAYMENT_NOT_DUE" in message:
+            raise HTTPException(status_code=409, detail="登记金额超过已触发且满足付款前置条件的可付款金额") from exc
+        if "unique" in message.lower() or "duplicate" in message.lower():
             raise HTTPException(status_code=409, detail="该银行流水已经登记到这个预付款产品") from exc
         raise
     _audit(
@@ -430,9 +492,11 @@ def delete_funding(
     access_id = str(funding["access_item_id"])
     total_funded = _money(db.execute(text("SELECT COALESCE(SUM(funded_amount), 0) FROM cf_rd_prepayment_fundings WHERE access_item_id = :id"), {"id": access_id}).scalar_one())
     used = _money(db.execute(text("SELECT COALESCE(SUM(deduction_amount), 0) FROM cf_rd_prepayment_deductions WHERE access_item_id = :id"), {"id": access_id}).scalar_one())
+    refund_table = db.execute(text("SELECT to_regclass('public.cf_rd_prepayment_refunds')")).scalar_one_or_none()
+    refunded = _money(db.execute(text("SELECT COALESCE(SUM(refund_amount), 0) FROM cf_rd_prepayment_refunds WHERE access_item_id = :id"), {"id": access_id}).scalar_one()) if refund_table else ZERO
     after = max(ZERO, total_funded - _money(funding["funded_amount"]))
-    if after + EPS < used:
-        raise HTTPException(status_code=409, detail=f"该预付款已经实际抵扣 ¥{used:.2f}，解除后银行已付仅 ¥{after:.2f}；请先补足或调整抵扣记录")
+    if after + EPS < used + refunded:
+        raise HTTPException(status_code=409, detail=f"该预付款已抵扣/退款 ¥{used + refunded:.2f}，解除后银行已付仅 ¥{after:.2f}；不能删除这笔资金事实")
     tx = db.get(BankTransaction, str(funding["bank_transaction_id"]))
     db.execute(text("DELETE FROM cf_rd_prepayment_fundings WHERE id = :id"), {"id": funding_id})
     _audit(
