@@ -1,6 +1,7 @@
 import { apiGet } from '@/lib/api/client.ts'
 import type { ApiContractRow } from '@/lib/api/contract.ts'
 import { listInternalContractNumbers } from '@/lib/api/contractNumbers.ts'
+import { getBankTransactionDetail } from '@/lib/api/bankTransaction.ts'
 
 export async function getGlobalSearchContract(id: string): Promise<ApiContractRow> {
   const contract = await apiGet<ApiContractRow>(`/api/contracts/${encodeURIComponent(id)}`)
@@ -15,4 +16,8 @@ export async function getGlobalSearchContract(id: string): Promise<ApiContractRo
     console.warn('Contract internal number lookup unavailable in global search.', error)
     return contract
   }
+}
+
+export function getGlobalSearchBankTransaction(id: string) {
+  return getBankTransactionDetail(String(id))
 }
