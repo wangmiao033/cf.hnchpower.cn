@@ -110,6 +110,12 @@ export type ElectronicInvoiceParseResponse = {
 }
 
 const PATH = '/api/invoices'
+const INVOICE_ARCHIVE_SYNC_EVENT = 'invoice-archive-sync-requested'
+
+function notifyInvoiceArchiveSync() {
+  if (typeof window === 'undefined') return
+  window.dispatchEvent(new CustomEvent(INVOICE_ARCHIVE_SYNC_EVENT))
+}
 
 export function listInvoiceRecords(params?: { search?: string; status?: string; limit?: number; offset?: number }): Promise<InvoiceListResponse> {
   const q = new URLSearchParams()
@@ -126,19 +132,31 @@ export function getInvoiceRecord(id: string): Promise<ApiInvoiceRow> {
 }
 
 export function createInvoiceRecord(payload: InvoiceRecordPayload): Promise<ApiInvoiceRow> {
-  return apiPost<ApiInvoiceRow>(PATH, payload)
+  return apiPost<ApiInvoiceRow>(PATH, payload).then((result) => {
+    notifyInvoiceArchiveSync()
+    return result
+  })
 }
 
 export function importInvoiceRecords(items: InvoiceRecordPayload[], sourceFile?: string): Promise<InvoiceImportResponse> {
-  return apiPost<InvoiceImportResponse>(`${PATH}/import`, { items, source_file: sourceFile || null })
+  return apiPost<InvoiceImportResponse>(`${PATH}/import`, { items, source_file: sourceFile || null }).then((result) => {
+    notifyInvoiceArchiveSync()
+    return result
+  })
 }
 
 export function updateInvoiceRecord(id: string, payload: InvoiceRecordUpdatePayload): Promise<ApiInvoiceRow> {
-  return apiPut<ApiInvoiceRow>(`${PATH}/${encodeURIComponent(id)}`, payload)
+  return apiPut<ApiInvoiceRow>(`${PATH}/${encodeURIComponent(id)}`, payload).then((result) => {
+    notifyInvoiceArchiveSync()
+    return result
+  })
 }
 
 export function deleteInvoiceRecord(id: string): Promise<void> {
-  return apiDelete(`${PATH}/${encodeURIComponent(id)}`)
+  return apiDelete<void>(`${PATH}/${encodeURIComponent(id)}`).then((result) => {
+    notifyInvoiceArchiveSync()
+    return result
+  })
 }
 
 export function parseElectronicInvoiceFile(
