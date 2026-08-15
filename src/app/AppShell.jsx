@@ -16,6 +16,9 @@ function AppShell({
   openTabs,
   onCloseTab,
   onSettingsChange,
+  dataConnectionWarning,
+  dataConnectionDetail,
+  onRetryDataConnection,
   children
 }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(
@@ -67,6 +70,15 @@ function AppShell({
             openTabs={openTabs}
             onCloseTab={onCloseTab}
           />
+          {dataConnectionWarning ? (
+            <div className="app-data-connection-warning" role="status">
+              <div>
+                <strong>当前显示浏览器缓存数据</strong>
+                <span>{dataConnectionDetail || '账单服务器数据暂时不可用'}。这些内容可能不是服务器最新状态，请恢复连接后再执行关键财务操作。</span>
+              </div>
+              <button type="button" onClick={onRetryDataConnection}>重新连接</button>
+            </div>
+          ) : null}
           <main className="app-workspace">
             <React.Fragment key={activeView === VIEWS.CONTRACTS ? `contracts-${contractRefreshKey}` : activeView}>
               {children}
