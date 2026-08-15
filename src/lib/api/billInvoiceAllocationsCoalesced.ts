@@ -18,12 +18,18 @@ type PendingRead = { billType: 'rd' | 'channel'; billId: string; waiters: Waiter
 
 const PATH = '/api/bill-invoice-allocations'
 const SUMMARY_TTL_MS = 15_000
+export const INVOICE_ARCHIVE_SYNC_EVENT = 'invoice-archive-sync-requested'
 const summaryCache = new Map<string, { value: BillInvoiceSummary; expiresAt: number }>()
 const summaryInflight = new Map<string, Promise<BillInvoiceSummary>>()
 const pendingReads = new Map<string, PendingRead>()
 let flushTimer: ReturnType<typeof setTimeout> | null = null
 
 function keyFor(billType: 'rd' | 'channel', billId: string) { return `${billType}:${String(billId || '').trim()}` }
+
+function notifyInvoiceArchiveSync() {
+  if (typeof window === 'undefined') return
+  window.dispatchEvent(new CustomEvent(INVOICE_ARCHIVE_SYNC_EVENT))
+}
 
 function loadFullSummary(billType: 'rd' | 'channel', billId: string): Promise<BillInvoiceSummary> {
   const key = keyFor(billType, billId)
@@ -102,11 +108,25 @@ export function listInvoiceAllocationOverviews(invoiceIds: string[]): Promise<In
 }
 export function getInvoiceBillSummary(invoiceId: string): Promise<InvoiceBillSummary> { return apiGet(`${PATH}/invoice/${encodeURIComponent(invoiceId)}`) }
 export function createBillInvoiceAllocation(payload: { bill_type: 'rd' | 'channel'; bill_id: string; invoice_id: string; allocated_gross_amount: number; match_type?: string; match_score?: number; match_reasons?: string[] }): Promise<BillInvoiceAllocation> {
-  return apiPost<BillInvoiceAllocation>(PATH, payload).then((result) => { clearBillInvoiceSummaryCache(payload.bill_type, payload.bill_id); return result })
+  return apiPost<BillInvoiceAllocation>(PATH, payload).then((result) => {
+    clearBillInvoiceSummaryCache(payload.bill_type, payload.bill_id)
+    notifyInvoiceArchiveSync()
+    return result
+  })
 }
 export function reverseBillInvoiceAllocation(id: string): Promise<void> {
-  return apiDelete<void>(`${PATH}/${encodeURIComponent(id)}`).then((result) => { clearBillInvoiceSummaryCache(); return result })
+  return apiDelete<void>(`${PATH}/${encodeURIComponent(id)}`).then((result) => {
+    clearBillInvoiceSummaryCache()
+    notifyInvoiceArchiveSync()
+    return result
+  })
 }
 export function autoMatchInvoices(payload: { invoice_direction?: 'input' | 'output'; invoice_ids?: string[]; threshold?: number; unique_margin?: number; dry_run: boolean }): Promise<InvoiceAutoMatchResponse> {
-  return apiPost<InvoiceAutoMatchResponse>(`${PATH}/auto-match`, payload).then((result) => { if (!payload.dry_run) clearBillInvoiceSummaryCache(); return result })
+  return apiPost<InvoiceAutoMatchResponse>(`${PATH}/auto-match`, payload).then((result) => {
+    if (!payload.dry_run) {
+      clearBillInvoiceSummaryCache()
+      notifyInvoiceArchiveSync()
+    }
+    return result
+  })
 }
