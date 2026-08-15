@@ -11,6 +11,7 @@ import ChannelCumulativeSettlementCard from '@/components/channel/ChannelCumulat
 import { useAuth } from '@/features/auth/AuthContext.jsx'
 import { getContractBillReconciliation } from '@/lib/api/contractTerms.ts'
 import { getChannelCumulativeBillCondition } from '@/lib/api/channelCumulativeSettlement.ts'
+import { getBillInvoiceSummary } from '@/lib/api/billInvoiceAllocations.ts'
 import { loadBill360Resource, peekBill360Resource, primeBill360Resource } from '@/lib/api/bill360Performance.ts'
 import { billDueInfo, dueStatusText } from '@/domain/reconciliation/billDueDate.js'
 import './Bill360ContractAware.css'
@@ -62,11 +63,11 @@ function remainingFromInitial(billType, record) {
     if (Number.isFinite(stored)) return Math.max(0, stored)
     const amount = Number(record.settlementAmount)
     const paid = Number(record.paidAmount || 0)
-    return Number.isFinite(amount) ? Math.max(0, amount - paid) : null
+    return Number.isFinite(amount) ? Math.max(0, Math.abs(amount) - paid) : null
   }
   const amount = Number(record.settlementAmount)
   const received = Number(record.receivedAmount || 0)
-  return Number.isFinite(amount) ? Math.max(0, amount - received) : null
+  return Number.isFinite(amount) ? Math.max(0, Math.abs(amount) - received) : null
 }
 
 function cumulativeFundingText(condition) {
@@ -92,9 +93,41 @@ function cumulativeFundingText(condition) {
   return null
 }
 
+function nextStepForBill({ record, invoiceOverview, remainingAmount, cumulativeDeferred }) {
+  const status = String(record?.status || 'pending').trim().toLowerCase()
+  const amount = Math.abs(Number(record?.settlementAmount || 0))
+  const coverage = String(invoiceOverview?.coverage_status || '').toLowerCase()
+  if (['cancelled', 'canceled', 'void', 'deleted'].includes(status)) {
+    return { key: null, tone: 'blocked', title: '账单已作废', detail: '无需继续发票或资金处理；如需恢复，请回垃圾桶操作。' }
+  }
+  if (['draft', 'pending'].includes(status)) {
+    return { key: 'edit', tone: 'warning', title: '先完成账单核对', detail: '核对业务数据和合同依据后，再进入发票与资金闭环。' }
+  }
+  if (amount > 0.01 && !invoiceOverview) {
+    return { key: null, tone: 'neutral', title: '正在汇总闭环状态', detail: '正在读取当前账单的发票覆盖情况。' }
+  }
+  if (coverage === 'over') {
+    return { key: 'invoice', tone: 'blocked', title: '先修正发票超额', detail: '当前发票分配超过账单金额，处理后才能继续闭环。' }
+  }
+  if (amount > 0.01 && coverage !== 'complete') {
+    return { key: 'invoice', tone: 'warning', title: '补齐发票覆盖', detail: `当前发票覆盖 ${Number(invoiceOverview?.coverage_percent || 0).toFixed(0)}%，优先完成发票关联。` }
+  }
+  if (cumulativeDeferred) {
+    return { key: 'funding', tone: 'info', title: '继续累计结算', detail: '本期已核对，等待累计口径达到门槛后再统一开票和收款。' }
+  }
+  if (remainingAmount != null && remainingAmount > 0.01) {
+    return { key: 'funding', tone: 'warning', title: '完成资金结算', detail: `仍有 ${money(remainingAmount)} 未结，下一步匹配或确认银行流水。` }
+  }
+  if (['completed', 'settled', 'reconciled', 'verified'].includes(status)) {
+    return { key: null, tone: 'pass', title: '账单已完成闭环', detail: '发票与资金均已完成，可按归档规则进入历史账单。' }
+  }
+  return { key: 'edit', tone: 'pass', title: '闭环条件已具备', detail: '发票与资金已完成，可确认账单状态并进入归档流程。' }
+}
+
 function Bill360Drawer({ target, onClose }) {
   const {
     activeView,
+    setActiveView,
     openReconciliationEdit,
     openChannelReconciliationEdit
   } = useAppState()
@@ -104,6 +137,7 @@ function Bill360Drawer({ target, onClose }) {
   const [actionOpen, setActionOpen] = useState(false)
   const [actionTab, setActionTab] = useState('invoice')
   const [detailRevision, setDetailRevision] = useState(0)
+  const [invoiceOverview, setInvoiceOverview] = useState(null)
   const [checkData, setCheckData] = useState(null)
   const [checkSummary, setCheckSummary] = useState(null)
   const [checkLoading, setCheckLoading] = useState(false)
@@ -113,6 +147,7 @@ function Bill360Drawer({ target, onClose }) {
   const billType = target?.billType === 'channel' ? 'channel' : 'rd'
   const billId = String(target?.billId || '')
 
+  const canViewInvoice = can('invoices.view')
   const canManageInvoice = can('invoices.manage')
   const canManageAttachment = can('reconciliation.manage')
   const canViewFunds = can('funds.view')
@@ -152,6 +187,21 @@ function Bill360Drawer({ target, onClose }) {
   }, [billId, billType])
 
   useEffect(() => {
+    if (!billId || !canViewInvoice) {
+      setInvoiceOverview(null)
+      return undefined
+    }
+    let active = true
+    const key = `invoice:${billType}:${billId}`
+    const cached = peekBill360Resource(key)
+    if (cached) setInvoiceOverview(cached)
+    void loadBill360Resource(key, () => getBillInvoiceSummary(billType, billId), { ttlMs: 60_000 })
+      .then((result) => { if (active) setInvoiceOverview(result) })
+      .catch(() => { if (active) setInvoiceOverview(null) })
+    return () => { active = false }
+  }, [billId, billType, canViewInvoice, detailRevision])
+
+  useEffect(() => {
     setCumulativeCondition(null)
   }, [billId, billType])
 
@@ -185,6 +235,12 @@ function Bill360Drawer({ target, onClose }) {
       openReconciliationEdit(billId, activeView || VIEWS.RECON_RD)
     }
   }, [activeView, billId, billType, onClose, openChannelReconciliationEdit, openReconciliationEdit])
+
+  const goBankCenter = useCallback(() => {
+    setFundingOpen(false)
+    onClose?.()
+    setActiveView(VIEWS.BANK_RECONCILIATION)
+  }, [onClose, setActiveView])
 
   const cumulativeDeferred = Boolean(cumulativeCondition?.deferred)
   const cumulativeFunding = cumulativeFundingText(cumulativeCondition)
@@ -232,6 +288,24 @@ function Bill360Drawer({ target, onClose }) {
 
   const billNumber = target?.initialRecord?.settlementNumber || target?.initialRecord?.billNumber || target?.initialRecord?.statementNo || target?.initialRecord?.statement_no || ''
   const contractText = launcherText(checkSummary, checkLoading, checkUnavailable)
+  const nextStep = nextStepForBill({
+    record: target?.initialRecord,
+    invoiceOverview: canViewInvoice ? invoiceOverview : { coverage_status: 'complete', coverage_percent: 100 },
+    remainingAmount,
+    cumulativeDeferred
+  })
+
+  const runNextStep = () => {
+    if (nextStep.key === 'invoice' && canManageInvoice) openAction('invoice')
+    else if (nextStep.key === 'funding' && canViewFunds) setFundingOpen(true)
+    else if (nextStep.key === 'edit' && canEditBill) openBillEdit()
+  }
+
+  const nextStepActionable = (
+    (nextStep.key === 'invoice' && canManageInvoice) ||
+    (nextStep.key === 'funding' && canViewFunds) ||
+    (nextStep.key === 'edit' && canEditBill)
+  )
 
   return (
     <>
@@ -248,8 +322,18 @@ function Bill360Drawer({ target, onClose }) {
       />
 
       <div className="bill360-command-dock" role="toolbar" aria-label="账单360处理工具栏">
+        {nextStepActionable ? (
+          <button type="button" className={`bill360-command-dock__next is-${nextStep.tone}`} onClick={runNextStep} title={nextStep.detail}>
+            <span>下一步</span><strong>{nextStep.title}</strong>
+          </button>
+        ) : (
+          <div className={`bill360-command-dock__next is-${nextStep.tone}`} title={nextStep.detail}>
+            <span>下一步</span><strong>{nextStep.title}</strong>
+          </div>
+        )}
+        <i className="bill360-command-dock__divider" aria-hidden="true" />
         {canManageInvoice ? (
-          <button type="button" className="is-primary" onClick={() => openAction('invoice')} title="直接处理当前账单的发票智能匹配与批量关联">
+          <button type="button" className={nextStep.key === 'invoice' ? 'is-primary' : ''} onClick={() => openAction('invoice')} title="直接处理当前账单的发票智能匹配与批量关联">
             <span>票</span><strong>发票处理</strong><small>智能匹配</small>
           </button>
         ) : null}
@@ -262,7 +346,7 @@ function Bill360Drawer({ target, onClose }) {
         {canViewFunds ? (
           <button
             type="button"
-            className="is-funding"
+            className={`is-funding ${nextStep.key === 'funding' ? 'is-primary' : ''}`.trim()}
             onClick={() => setFundingOpen(true)}
             title={cumulativeDeferred ? '查看累计结算进度；未达到门槛前不进入银行收款核销' : '查看银行流水、核销分配、累计已收/已付与剩余未结'}
           >
@@ -275,7 +359,7 @@ function Bill360Drawer({ target, onClose }) {
           </button>
         ) : null}
         {canEditBill ? (
-          <button type="button" className="is-edit" onClick={openBillEdit} title="进入完整账单编辑表单">
+          <button type="button" className={`is-edit ${nextStep.key === 'edit' ? 'is-primary' : ''}`.trim()} onClick={openBillEdit} title="进入完整账单编辑表单">
             <span>编</span><strong>编辑</strong>
           </button>
         ) : null}
@@ -309,7 +393,7 @@ function Bill360Drawer({ target, onClose }) {
                   当前无需登记收款或做银行核销。达到累计结算门槛并生成批次后，资金闭环会自动恢复。
                 </div>
               ) : (
-                <Bill360FundingPanel billType={billType} billId={billId} />
+                <Bill360FundingPanel billType={billType} billId={billId} onGoBank={goBankCenter} />
               )}
             </main>
           </aside>
