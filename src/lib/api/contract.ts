@@ -152,25 +152,10 @@ export type ContractAttachmentUploadResult = {
 }
 
 const PATH = '/api/contracts'
+const contractListInflight = new Map<string, Promise<ContractListResponse>>()
 
-export async function listContracts(params?: {
-  q?: string
-  contractType?: string
-  paymentType?: string
-  timelineStatus?: string
-  limit?: number
-  offset?: number
-}) {
-  const query = new URLSearchParams()
-  if (params?.q) query.set('q', params.q)
-  if (params?.contractType) query.set('contract_type', params.contractType)
-  if (params?.paymentType) query.set('payment_type', params.paymentType)
-  if (params?.timelineStatus) query.set('timeline_status', params.timelineStatus)
-  if (params?.limit != null) query.set('limit', String(params.limit))
-  if (params?.offset != null) query.set('offset', String(params.offset))
-  const qs = query.toString()
-  const response = await apiGet<ContractListResponse>(`${PATH}${qs ? `?${qs}` : ''}`)
-
+async function loadContractList(url: string): Promise<ContractListResponse> {
+  const response = await apiGet<ContractListResponse>(url)
   try {
     const numbering = await listInternalContractNumbers()
     const numberMap = new Map(
@@ -190,6 +175,33 @@ export async function listContracts(params?: {
       items: (response.items || []).map((item) => ({ ...item, internal_contract_no: '' }))
     }
   }
+}
+
+export function listContracts(params?: {
+  q?: string
+  contractType?: string
+  paymentType?: string
+  timelineStatus?: string
+  limit?: number
+  offset?: number
+}): Promise<ContractListResponse> {
+  const query = new URLSearchParams()
+  if (params?.q) query.set('q', params.q)
+  if (params?.contractType) query.set('contract_type', params.contractType)
+  if (params?.paymentType) query.set('payment_type', params.paymentType)
+  if (params?.timelineStatus) query.set('timeline_status', params.timelineStatus)
+  if (params?.limit != null) query.set('limit', String(params.limit))
+  if (params?.offset != null) query.set('offset', String(params.offset))
+  const qs = query.toString()
+  const url = `${PATH}${qs ? `?${qs}` : ''}`
+  const running = contractListInflight.get(url)
+  if (running) return running
+
+  const request = loadContractList(url).finally(() => {
+    if (contractListInflight.get(url) === request) contractListInflight.delete(url)
+  })
+  contractListInflight.set(url, request)
+  return request
 }
 
 export function importContracts(items: ContractPayload[]) {
