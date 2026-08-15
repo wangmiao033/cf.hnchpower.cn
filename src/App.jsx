@@ -416,13 +416,33 @@ function App() {
     }
   }
 
+  const cacheSources = []
+  if (!recon.reconciliationApiEnabled) cacheSources.push('研发账单')
+  if (!recon.channelApiEnabled) cacheSources.push('渠道账单')
+  const dataConnectionWarning = Boolean(
+    hasReconciliationAccess &&
+    reconDataActivated &&
+    recon.lastSaveTime &&
+    cacheSources.length > 0
+  )
+  const dataConnectionDetail = cacheSources.length ? `${cacheSources.join('、')}暂未连接服务器` : ''
+
   if (loading) return <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center' }}>正在加载登录状态...</div>
   if (!isAuthenticated) return <LoginPage />
 
   return (
     <ErrorBoundary>
       <AppStateProvider value={appCtx}>
-        <AppShell activeView={activeView} onNavigate={navigate} openTabs={openTabs} onCloseTab={closeTab} onSettingsChange={handleHeaderSettingsChange}>
+        <AppShell
+          activeView={activeView}
+          onNavigate={navigate}
+          openTabs={openTabs}
+          onCloseTab={closeTab}
+          onSettingsChange={handleHeaderSettingsChange}
+          dataConnectionWarning={dataConnectionWarning}
+          dataConnectionDetail={dataConnectionDetail}
+          onRetryDataConnection={() => window.location.reload()}
+        >
           <Suspense fallback={<WorkspaceLoadingFallback />}>{renderView()}</Suspense>
         </AppShell>
         {bill360Target ? (
