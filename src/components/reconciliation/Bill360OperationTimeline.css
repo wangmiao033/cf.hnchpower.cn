@@ -8,7 +8,7 @@
 }
 
 .bill360-operation-note {
-  margin: 0 18px 16px;
+  margin: 0 18px 12px;
   padding: 10px 12px;
   border-radius: 9px;
   background: #f7f9fc;
@@ -17,14 +17,67 @@
   line-height: 1.6;
 }
 
-.bill360-transition-reason {
+.bill360-audit-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 18px 14px;
+}
+
+.bill360-audit-filters button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid #dfe5ed;
+  border-radius: 8px;
+  background: #fff;
+  color: #657286;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.bill360-audit-filters button:hover,
+.bill360-audit-filters button.is-active {
+  border-color: #bbc9dc;
+  background: #eef4fb;
+  color: #355b87;
+}
+
+.bill360-audit-filters em {
+  min-width: 18px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: #edf1f6;
+  color: #7d8999;
+  font-size: 9px;
+  font-style: normal;
+  text-align: center;
+}
+
+.bill360-audit-filters button.is-active em {
+  background: #dce9f7;
+  color: #355b87;
+}
+
+.bill360-transition-reason,
+.bill360-audit-evidence {
   margin-top: 9px;
   padding: 7px 9px;
   border-radius: 7px;
-  background: #fff8e9;
-  color: #805f26;
   font-size: 10px;
   line-height: 1.5;
+}
+
+.bill360-transition-reason {
+  background: #fff8e9;
+  color: #805f26;
+}
+
+.bill360-audit-evidence {
+  background: #eef6fb;
+  color: #42647f;
 }
 
 .bill360-timeline {
@@ -140,6 +193,8 @@
 }
 
 @media (max-width: 640px) {
+  .bill360-audit-filters { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 2px; }
+  .bill360-audit-filters button { flex: 0 0 auto; }
   .bill360-timeline { padding-left: 14px; }
   .bill360-timeline::before { left: 28px; }
   .bill360-timeline-item { grid-template-columns: 30px minmax(0, 1fr); gap: 10px; }
