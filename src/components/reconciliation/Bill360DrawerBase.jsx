@@ -56,7 +56,7 @@ const STATUS_TEXT = {
   completed: '已完成',
   settled: '已结算',
   reconciled: '已核销',
-  cancelled: '已取消'
+  cancelled: '已作废'
 }
 
 function money(value) {
