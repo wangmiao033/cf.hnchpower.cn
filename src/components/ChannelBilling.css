@@ -1521,6 +1521,10 @@
   min-width: 1320px;
 }
 
+.rd-line-items-grid--prepayment {
+  min-width: 1520px;
+}
+
 .rd-line-items-grid-head,
 .rd-line-items-grid-row {
   display: grid;
@@ -1530,6 +1534,12 @@
   padding: 10px 12px;
   align-items: center;
   border-bottom: 1px solid var(--admin-border-soft, #e5e7eb);
+}
+
+.rd-line-items-grid--prepayment .rd-line-items-grid-head,
+.rd-line-items-grid--prepayment .rd-line-items-grid-row {
+  grid-template-columns:
+    118px minmax(160px, 1.45fr) 108px 80px 88px 84px 84px 84px 72px 72px 72px 96px 88px 100px 100px 76px;
 }
 
 .rd-line-items-grid-head {

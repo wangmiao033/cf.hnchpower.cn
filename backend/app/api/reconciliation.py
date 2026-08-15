@@ -21,6 +21,7 @@ from app.services.rd_bank_payment_aggregate import (
     aggregate_rd_payments_for_ids,
     fill_payable_for_row,
 )
+from app.services.rd_prepayment import deductions_for_bill_ids, financial_payable
 from app.services.rd_reconciliation_line import compute_rd_line_amounts
 from app.services.reconciliation_partner_links import (
     delete_partner_link,
@@ -179,18 +180,25 @@ def _enrich_reconciliation_read(db: Session, row: ReconciliationRecord) -> Recon
         ).scalars().first()
     except (OperationalError, ProgrammingError):
         bp = None
-    st = compute_bank_payment_list_status(float(row.settlement_amount or 0), bp)
+    prepayment_map = deductions_for_bill_ids(db, [row.id])
+    prepayment_deduction, actual_payable = financial_payable(
+        row.settlement_amount,
+        prepayment_map.get(row.id, 0),
+    )
+    st = compute_bank_payment_list_status(float(actual_payable), bp)
     try:
         agg_map = aggregate_rd_payments_for_ids(db, [row.id])
     except (OperationalError, ProgrammingError):
         agg_map = {}
-    pay = fill_payable_for_row(agg_map.get(row.id), row.settlement_amount)
+    pay = fill_payable_for_row(agg_map.get(row.id), actual_payable)
     links = load_partner_links(db, [row.id])
     link = links.get(row.id)
     return base_read.model_copy(
         update={
             "items": line_reads,
             "bank_payment_list_status": st,
+            "prepayment_deduction": float(prepayment_deduction),
+            "actual_payable": float(actual_payable),
             "paid_amount": float(pay.paid_amount),
             "unpaid_amount": float(pay.unpaid_amount),
             "payment_status": pay.payment_status,
@@ -281,12 +289,17 @@ def list_reconciliation(
         agg_map = aggregate_rd_payments_for_ids(db, [r.id for r in rows])
     except (OperationalError, ProgrammingError):
         agg_map = {}
+    prepayment_map = deductions_for_bill_ids(db, [r.id for r in rows])
     links = load_partner_links(db, [r.id for r in rows])
     items = []
     for r in rows:
         base_read = ReconciliationRead.model_validate(r)
-        st = compute_bank_payment_list_status(float(r.settlement_amount or 0), bp_map.get(r.id))
-        pay = fill_payable_for_row(agg_map.get(r.id), r.settlement_amount)
+        prepayment_deduction, actual_payable = financial_payable(
+            r.settlement_amount,
+            prepayment_map.get(r.id, 0),
+        )
+        st = compute_bank_payment_list_status(float(actual_payable), bp_map.get(r.id))
+        pay = fill_payable_for_row(agg_map.get(r.id), actual_payable)
         link = links.get(r.id)
         display_settlement_month = _resolve_row_display_settlement_month(r)
         items.append(
@@ -295,6 +308,8 @@ def list_reconciliation(
                     "settlement_month": display_settlement_month,
                     "items": [],
                     "bank_payment_list_status": st,
+                    "prepayment_deduction": float(prepayment_deduction),
+                    "actual_payable": float(actual_payable),
                     "paid_amount": float(pay.paid_amount),
                     "unpaid_amount": float(pay.unpaid_amount),
                     "payment_status": pay.payment_status,

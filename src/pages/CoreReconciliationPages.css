@@ -1442,7 +1442,7 @@
 }
 
 .core-rd-recon-table {
-  min-width: 1120px;
+  min-width: 1340px;
   table-layout: fixed;
 }
 
@@ -1525,7 +1525,12 @@
 }
 
 .core-rd-recon-table .core-rd-col-settlement {
-  width: 120px;
+  width: 112px;
+}
+
+.core-rd-recon-table .core-rd-col-prepayment,
+.core-rd-recon-table .core-rd-col-payable {
+  width: 112px;
 }
 
 .core-rd-recon-table .core-rd-col-received {

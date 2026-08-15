@@ -52,6 +52,8 @@ export type ApiReconciliationRow = {
   discount_value: number
   refund_amount: number
   settlement_amount: number
+  prepayment_deduction?: number
+  actual_payable?: number
   status: string | null
   remark: string | null
   created_at: string
@@ -396,6 +398,12 @@ export function apiRowToFrontend(row: ApiReconciliationRow): Record<string, unkn
     refund: row.refund_amount != null ? String(row.refund_amount) : '0',
     settlementAmount:
       row.settlement_amount != null ? Number(row.settlement_amount).toFixed(2) : '0.00',
+    prepaymentDeduction:
+      row.prepayment_deduction != null ? Number(row.prepayment_deduction).toFixed(2) : '0.00',
+    actualPayable:
+      row.actual_payable != null
+        ? Number(row.actual_payable).toFixed(2)
+        : Math.max(0, Number(row.settlement_amount || 0) - Number(row.prepayment_deduction || 0)).toFixed(2),
     status: row.status || 'pending',
     memo: row.remark != null ? String(row.remark) : '',
     items,

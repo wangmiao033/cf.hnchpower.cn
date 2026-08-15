@@ -640,7 +640,7 @@ function ContractAccessEditor({ contract, item, onClose, onSaved, onToast }) {
                   <SelectField label="发票类型" value={form.invoice_type} onChange={(value) => setValue('invoice_type', value)} options={['', '增值税专用发票', '增值税普通发票', '不开票', '其他']} />
                   <Field label="测试费" inputMode="decimal" value={form.testing_fee} error={errors.testing_fee} onChange={(value) => setValue('testing_fee', value)} />
                   <SelectField label="服务器成本承担" value={form.server_cost_bearer} onChange={(value) => setValue('server_cost_bearer', value)} options={['', '我方承担', '对方承担', '双方分摊', '按项目约定', '其他']} />
-                  <Field label="预付款" inputMode="decimal" value={form.prepayment_amount} error={errors.prepayment_amount} onChange={(value) => setValue('prepayment_amount', value)} />
+                  <Field label="预付款（抵扣研发结算）" inputMode="decimal" min="0" value={form.prepayment_amount} error={errors.prepayment_amount} onChange={(value) => setValue('prepayment_amount', value)} placeholder="不适用则留空" />
                   <Field label="保底 / 最低保证" inputMode="decimal" value={form.minimum_guarantee_amount} error={errors.minimum_guarantee_amount} onChange={(value) => setValue('minimum_guarantee_amount', value)} />
                   <TextareaField label="退款 / 退费规则" wide value={form.refund_rule} onChange={(value) => setValue('refund_rule', value)} />
                   <TextareaField label="其他扣除规则" wide value={form.deduction_rule} onChange={(value) => setValue('deduction_rule', value)} />
