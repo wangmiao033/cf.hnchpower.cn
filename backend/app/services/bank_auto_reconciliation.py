@@ -16,6 +16,7 @@ from app.models.channel import ChannelReceipt, ChannelRecord
 from app.models.reconciliation import ReconciliationRecord
 from app.models.user import AuthUser
 from app.services.monthly_business_dashboard import month_key
+from app.services.rd_prepayment import bank_funding_transaction_ids
 from app.services.rd_bank_payment_aggregate import (
     aggregate_rd_payments_for_ids,
     fill_payable_for_row,
@@ -317,15 +318,17 @@ def _history_row(match: BankReconciliationMatch, tx: BankTransaction | None) -> 
 
 
 def build_dashboard(db: Session, limit: int = 200) -> dict:
+    funded_ids = bank_funding_transaction_ids(db)
+    predicate = BankTransaction.type == "statement_import"
+    if funded_ids:
+        predicate = predicate & ~BankTransaction.id.in_(funded_ids)
     pending_total = int(
-        db.execute(
-            select(func.count(BankTransaction.id)).where(BankTransaction.type == "statement_import")
-        ).scalar_one()
+        db.execute(select(func.count(BankTransaction.id)).where(predicate)).scalar_one()
     )
     pending = (
         db.execute(
             select(BankTransaction)
-            .where(BankTransaction.type == "statement_import")
+            .where(predicate)
             .order_by(BankTransaction.trade_date.desc(), BankTransaction.created_at.desc())
             .limit(limit)
         )
@@ -432,6 +435,8 @@ def confirm_match(db: Session, transaction_id: str, bill_type: str, bill_id: str
     ).scalar_one_or_none()
     if tx is None:
         raise HTTPException(status_code=404, detail="银行流水不存在")
+    if str(tx.id) in bank_funding_transaction_ids(db):
+        raise HTTPException(status_code=409, detail="该流水已经登记为研发预付款，不能再核销普通账单")
     if tx.type != "statement_import":
         raise HTTPException(status_code=409, detail="该流水已登记或已核销，不能重复匹配")
     active_match = db.execute(

@@ -73,6 +73,23 @@ def enrich_prepayment_candidates(
         )
     )
     used_map: dict[str, Decimal] = {}
+    funded_map: dict[str, Decimal] = {}
+    funding_count_map: dict[str, int] = {}
+    funding_table = conn.execute("SELECT to_regclass('public.cf_rd_prepayment_fundings')").fetchone()
+    if access_ids and funding_table and funding_table[0]:
+        placeholders = ",".join(["%s"] * len(access_ids))
+        for row in conn.execute(
+            f"""
+            SELECT access_item_id, COALESCE(SUM(funded_amount), 0) AS funded_amount, COUNT(*) AS funding_count
+            FROM cf_rd_prepayment_fundings
+            WHERE access_item_id IN ({placeholders})
+            GROUP BY access_item_id
+            """,
+            list(access_ids),
+        ).fetchall():
+            access_id = str(row["access_item_id"])
+            funded_map[access_id] = _money(row.get("funded_amount"))
+            funding_count_map[access_id] = int(row.get("funding_count") or 0)
     if access_ids:
         placeholders = ",".join(["%s"] * len(access_ids))
         sql = f"""
@@ -94,8 +111,14 @@ def enrich_prepayment_candidates(
         access_id = str(item.get("access_item_id") or "").strip()
         agreed = max(ZERO, _money(item.get("prepayment_amount")))
         used = max(ZERO, used_map.get(access_id, ZERO))
-        available = max(ZERO, agreed - used)
+        actual_funded = max(ZERO, funded_map.get(access_id, ZERO))
+        has_actual_funding = funding_count_map.get(access_id, 0) > 0
+        effective_cap = min(agreed, actual_funded) if has_actual_funding else agreed
+        available = max(ZERO, effective_cap - used)
         item["prepayment_used_amount"] = float(used)
+        item["prepayment_actual_funded_amount"] = float(actual_funded)
+        item["prepayment_funding_verified"] = has_actual_funding
+        item["prepayment_funding_shortfall"] = float(max(ZERO, used - actual_funded) if has_actual_funding else ZERO)
         item["prepayment_available_amount"] = float(available)
         out.append(item)
     return out
@@ -142,6 +165,9 @@ def replace_bill_prepayment_deductions(
                 "prepayment_enabled": False,
                 "prepayment_agreed_amount": 0.0,
                 "prepayment_used_amount": 0.0,
+                "prepayment_actual_funded_amount": 0.0,
+                "prepayment_funding_verified": False,
+                "prepayment_funding_shortfall": 0.0,
                 "prepayment_available_before": 0.0,
                 "prepayment_deduction": 0.0,
                 "prepayment_available_after": 0.0,
@@ -176,7 +202,22 @@ def replace_bill_prepayment_deductions(
             [access_item_id],
         ).fetchone()
         used = max(ZERO, _money(used_row.get("used_amount") if used_row else 0))
-        available = max(ZERO, agreed - used)
+        funding_table = conn.execute("SELECT to_regclass('public.cf_rd_prepayment_fundings')").fetchone()
+        funded = ZERO
+        funding_count = 0
+        if funding_table and funding_table[0]:
+            funding_row = conn.execute(
+                """
+                SELECT COALESCE(SUM(funded_amount), 0) AS funded_amount, COUNT(*) AS funding_count
+                FROM cf_rd_prepayment_fundings
+                WHERE access_item_id = %s
+                """,
+                [access_item_id],
+            ).fetchone()
+            funded = max(ZERO, _money(funding_row.get("funded_amount") if funding_row else 0))
+            funding_count = int(funding_row.get("funding_count") or 0) if funding_row else 0
+        effective_cap = min(agreed, funded) if funding_count > 0 else agreed
+        available = max(ZERO, effective_cap - used)
         deduction = min(settlement, available)
         after = max(ZERO, available - deduction)
         actual = max(ZERO, settlement - deduction)
@@ -207,6 +248,9 @@ def replace_bill_prepayment_deductions(
                 "prepayment_enabled": True,
                 "prepayment_agreed_amount": float(agreed),
                 "prepayment_used_amount": float(used),
+                "prepayment_actual_funded_amount": float(funded),
+                "prepayment_funding_verified": funding_count > 0,
+                "prepayment_funding_shortfall": float(max(ZERO, used - funded) if funding_count > 0 else ZERO),
                 "prepayment_available_before": float(available),
                 "prepayment_deduction": float(deduction),
                 "prepayment_available_after": float(after),
