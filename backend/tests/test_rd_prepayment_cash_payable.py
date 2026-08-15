@@ -38,3 +38,10 @@ def test_cash_payment_is_applied_after_prepayment_offset():
     assert result.paid_amount == Decimal("5000")
     assert result.unpaid_amount == Decimal("9000")
     assert result.payment_status == "部分付款"
+
+
+def test_negative_settlement_never_consumes_prepayment_balance():
+    result = fill_payable_for_row(_aggregate(deduction=6000), -20000)
+    assert result.prepayment_deduction == Decimal("0")
+    assert result.cash_payable_amount == Decimal("20000")
+    assert result.unpaid_amount == Decimal("20000")
