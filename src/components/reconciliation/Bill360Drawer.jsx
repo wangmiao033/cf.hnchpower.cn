@@ -131,6 +131,7 @@ function nextStepForBill({ record, invoiceOverview, remainingAmount, cumulativeD
 function Bill360Drawer({ target, onClose }) {
   const {
     activeView,
+    recon,
     setActiveView,
     openReconciliationEdit,
     openChannelReconciliationEdit
@@ -203,7 +204,7 @@ function Bill360Drawer({ target, onClose }) {
       .then((result) => { if (active) setInvoiceOverview(result) })
       .catch(() => { if (active) setInvoiceOverview(null) })
     return () => { active = false }
-  }, [billId, billType, canViewInvoice, detailRevision])
+  }, [billId, billType, canViewInvoice, detailRevision, recon?.records, recon?.channelRecords])
 
   useEffect(() => {
     setCumulativeCondition(null)
