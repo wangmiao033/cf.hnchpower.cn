@@ -27,6 +27,7 @@ from app.schemas.invoice import (
 from app.services.invoice_archive import (
     archive_invoice,
     invoice_archive_snapshot,
+    release_manual_archive_hold,
     sync_invoice_archive_states,
     unarchive_invoice,
 )
@@ -175,6 +176,7 @@ def import_invoice_records(
             created += 1
             continue
 
+        release_manual_archive_hold(db, str(row.id))
         for key, value in data.items():
             if key in preserved_fields:
                 continue
@@ -265,6 +267,7 @@ def update_invoice_record(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"error": "not_found", "id": record_id},
         )
+    release_manual_archive_hold(db, record_id)
     patch = payload.model_dump(exclude_unset=True)
     _normalize_tax_status(patch)
     merged_for_identity = {
