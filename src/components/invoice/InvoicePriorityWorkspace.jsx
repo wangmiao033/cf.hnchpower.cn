@@ -81,6 +81,15 @@ export default function InvoicePriorityWorkspace({ variant = 'manage', direction
       return snapshot
     } catch (error) {
       console.error(error)
+      if (sync) {
+        try {
+          const snapshot = await getInvoiceArchiveSnapshot()
+          setArchiveSnapshot(snapshot)
+          return snapshot
+        } catch (snapshotError) {
+          console.error(snapshotError)
+        }
+      }
       if (!silent) showToast?.('发票归档状态同步失败，请稍后重试', 'error')
       return null
     }
@@ -165,7 +174,7 @@ export default function InvoicePriorityWorkspace({ variant = 'manage', direction
   )
 
   const runArchiveAction = useCallback(async (invoiceId, action) => {
-    if (!invoiceApiEnabled || !invoiceId || archiveBusyId) return
+    if (variant !== 'manage' || !invoiceApiEnabled || !invoiceId || archiveBusyId) return
     setArchiveBusyId(String(invoiceId))
     try {
       if (action === 'unarchive') {
@@ -184,7 +193,7 @@ export default function InvoicePriorityWorkspace({ variant = 'manage', direction
     } finally {
       setArchiveBusyId('')
     }
-  }, [archiveBusyId, invoiceApiEnabled, refreshArchiveSnapshot, showToast])
+  }, [archiveBusyId, invoiceApiEnabled, refreshArchiveSnapshot, showToast, variant])
 
   const nestedState = useMemo(
     () => ({
@@ -227,6 +236,7 @@ export default function InvoicePriorityWorkspace({ variant = 'manage', direction
           direction={direction}
           archiveItems={archiveSnapshot.items || []}
           archiveBusyId={archiveBusyId}
+          readOnly={variant !== 'manage'}
           onUnarchive={(invoiceId) => runArchiveAction(invoiceId, 'unarchive')}
         />
       )}
