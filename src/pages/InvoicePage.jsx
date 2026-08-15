@@ -5,6 +5,7 @@ import PaymentRegisterWorkspace from '@/components/payment/PaymentRegisterWorksp
 import { VIEWS } from '@/app/routes.js'
 import '@/components/invoice/invoice-admin.css'
 import '@/components/invoice/invoice-workspace-toolbar.css'
+import '@/components/invoice/invoice-compact-ui.css'
 
 function InvoicePage({ section }) {
   if (section === VIEWS.INVOICE_PAYMENT) {
