@@ -6,7 +6,10 @@ import {
   apiPut,
   parseResponse
 } from '@/lib/api/client.ts'
-import { listInternalContractNumbers } from '@/lib/api/contractNumbers.ts'
+import {
+  clearInternalContractNumbersCache,
+  listInternalContractNumbers
+} from '@/lib/api/contractNumbers.ts'
 
 export type ApiContractAttachment = {
   id: string
@@ -155,25 +158,33 @@ const PATH = '/api/contracts'
 const contractListInflight = new Map<string, Promise<ContractListResponse>>()
 
 async function loadContractList(url: string): Promise<ContractListResponse> {
-  const response = await apiGet<ContractListResponse>(url)
-  try {
-    const numbering = await listInternalContractNumbers()
-    const numberMap = new Map(
-      (numbering.items || []).map((item) => [String(item.contract_id), item.internal_contract_no])
-    )
+  // 两个只读资源彼此独立，首次加载并行请求，避免原来先等合同再等编号的串行延迟。
+  const contractRequest = apiGet<ContractListResponse>(url)
+  const numberingRequest = listInternalContractNumbers().catch((error) => {
+    console.warn('Internal contract numbering unavailable; contract list remains usable.', error)
+    return null
+  })
+  const [response, numbering] = await Promise.all([contractRequest, numberingRequest])
+
+  if (!numbering) {
     return {
       ...response,
       items: (response.items || []).map((item) => ({
         ...item,
-        internal_contract_no: numberMap.get(String(item.id)) || ''
+        internal_contract_no: item.internal_contract_no || ''
       }))
     }
-  } catch (error) {
-    console.warn('Internal contract numbering unavailable; contract list remains usable.', error)
-    return {
-      ...response,
-      items: (response.items || []).map((item) => ({ ...item, internal_contract_no: '' }))
-    }
+  }
+
+  const numberMap = new Map(
+    (numbering.items || []).map((item) => [String(item.contract_id), item.internal_contract_no])
+  )
+  return {
+    ...response,
+    items: (response.items || []).map((item) => ({
+      ...item,
+      internal_contract_no: item.internal_contract_no || numberMap.get(String(item.id)) || ''
+    }))
   }
 }
 
@@ -204,8 +215,15 @@ export function listContracts(params?: {
   return request
 }
 
+function invalidateContractMetadata<T>(request: Promise<T>): Promise<T> {
+  return request.then((result) => {
+    clearInternalContractNumbersCache()
+    return result
+  })
+}
+
 export function importContracts(items: ContractPayload[]) {
-  return apiPost<ContractImportResult>(`${PATH}/import`, { items })
+  return invalidateContractMetadata(apiPost<ContractImportResult>(`${PATH}/import`, { items }))
 }
 
 export function relinkContracts() {
@@ -213,7 +231,7 @@ export function relinkContracts() {
 }
 
 export function createContract(payload: ContractPayload) {
-  return apiPost<ApiContractRow>(PATH, payload)
+  return invalidateContractMetadata(apiPost<ApiContractRow>(PATH, payload))
 }
 
 export function updateContract(id: string, payload: ContractPayload) {
@@ -221,7 +239,7 @@ export function updateContract(id: string, payload: ContractPayload) {
 }
 
 export function deleteContract(id: string) {
-  return apiDelete(`${PATH}/${encodeURIComponent(id)}`)
+  return invalidateContractMetadata(apiDelete(`${PATH}/${encodeURIComponent(id)}`))
 }
 
 export function createContractAccessItem(
