@@ -3,6 +3,7 @@ import { useAppState } from '@/app/AppStateContext.jsx'
 import BillInvoiceAllocationPanel from '@/components/invoice/BillInvoiceAllocationPanel.jsx'
 import BillScanAttachments from '@/components/billing/BillScanAttachments.jsx'
 import { useAuth } from '@/features/auth/AuthContext.jsx'
+import { clearBill360ResourceCache } from '@/lib/api/bill360Performance.ts'
 import './Bill360ActionPanel.css'
 
 export default function Bill360ActionPanel({
@@ -59,12 +60,14 @@ export default function Bill360ActionPanel({
   }, [open])
 
   const handleInvoiceChanged = async () => {
+    clearBill360ResourceCache(`invoice:${billType}:${billId}`)
     if (billType === 'channel') await recon?.refetchChannelFromApi?.()
     else await recon?.refetchReconciliationFromApi?.()
     onChanged?.('invoice')
   }
 
   const handleAttachmentChanged = () => {
+    clearBill360ResourceCache(`attachments:${billType}:${billId}`)
     onChanged?.('attachment')
   }
 
