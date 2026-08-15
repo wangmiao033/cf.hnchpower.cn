@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 MIGRATION_DIR = Path(__file__).resolve().parents[2] / "sql"
 MIGRATION_FILES = (
-    *tuple(f"{number:03d}" for number in range(1, 46)),
+    *tuple(f"{number:03d}" for number in range(1, 47)),
     "neon_repair_missing_columns.sql",
 )
 

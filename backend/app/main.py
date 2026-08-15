@@ -38,6 +38,7 @@ from app.api.bank_auto_reconciliation import router as bank_auto_reconciliation_
 from app.api.reconciliation import router as reconciliation_router
 from app.api.rd_prepayment import router as rd_prepayment_router
 from app.api.rd_prepayment_workbench import router as rd_prepayment_workbench_router
+from app.api.rd_prepayment_lifecycle import router as rd_prepayment_lifecycle_router
 from app.api.reconciliation_period import router as reconciliation_period_router
 from app.api.contract import router as contract_router
 from app.api.quicksdk import router as quicksdk_router
@@ -250,6 +251,7 @@ app.include_router(bank_transaction_router, prefix="/api/bank-transactions", tag
 app.include_router(bank_auto_reconciliation_router, prefix="/api/bank-auto-reconciliation", tags=["bank-auto-reconciliation"], dependencies=[funds_access])
 app.include_router(rd_prepayment_router, prefix="/api/rd-prepayments", tags=["rd-prepayments"], dependencies=[funds_access])
 app.include_router(rd_prepayment_workbench_router, prefix="/api/rd-prepayments", tags=["rd-prepayment-workbench"], dependencies=[funds_access])
+app.include_router(rd_prepayment_lifecycle_router, prefix="/api/rd-prepayment-lifecycle", tags=["rd-prepayment-lifecycle"], dependencies=[funds_access])
 app.include_router(contract_router, prefix="/api/contracts", tags=["contracts"], dependencies=[contract_access])
 app.include_router(quicksdk_router, prefix="/api/quicksdk", tags=["quicksdk"], dependencies=[data_access])
 app.include_router(bill_attachment_router, prefix="/api/bill-attachments", tags=["bill-attachments"], dependencies=[reconciliation_access])

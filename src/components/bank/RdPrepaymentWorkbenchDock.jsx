@@ -4,7 +4,9 @@ import {
   getRdPrepaymentPoolDetail,
   getRdPrepaymentWorkbench
 } from '@/lib/api/rdPrepayment.ts'
+import { getRdPrepaymentLifecycleWorkbench } from '@/lib/api/rdPrepaymentLifecycle.ts'
 import RdPrepaymentFundingModal from './RdPrepaymentFundingModal.jsx'
+import RdPrepaymentLifecyclePanel from './RdPrepaymentLifecyclePanel.jsx'
 import './RdPrepaymentWorkbenchDock.css'
 
 function money(value) {
@@ -20,18 +22,37 @@ function dateTime(value) {
 
 const FILTERS = [
   { key: 'all', label: '全部' },
-  { key: 'funding', label: '待补银行' },
-  { key: 'invoice', label: '待补发票' },
+  { key: 'trigger', label: '待触发' },
+  { key: 'funding', label: '待付款' },
+  { key: 'invoice', label: '待发票' },
+  { key: 'refund', label: '待退款' },
   { key: 'using', label: '正在抵扣' },
-  { key: 'done', label: '已用完' }
+  { key: 'done', label: '已结清' }
 ]
 
 function matchFilter(pool, filter) {
-  if (filter === 'funding') return ['funding_pending', 'funding_shortfall'].includes(pool.status)
-  if (filter === 'invoice') return pool.status === 'invoice_pending'
-  if (filter === 'using') return pool.status === 'deducting'
-  if (filter === 'done') return pool.status === 'exhausted'
+  if (filter === 'trigger') return ['plan_pending', 'pending_trigger'].includes(pool.status)
+  if (filter === 'funding') return ['payment_pending', 'payment_overdue', 'funding_pending', 'funding_shortfall'].includes(pool.status)
+  if (filter === 'invoice') return ['invoice_precondition', 'invoice_pending'].includes(pool.status)
+  if (filter === 'refund') return ['refund_pending', 'refund_partial'].includes(pool.status)
+  if (filter === 'using') return ['deducting', 'ready'].includes(pool.status)
+  if (filter === 'done') return ['exhausted', 'refunded'].includes(pool.status)
   return true
+}
+
+function mergeWorkbench(baseData, lifecycleData) {
+  if (!lifecycleData?.schema_ready) return baseData
+  const baseById = new Map((baseData?.items || []).map((item) => [String(item.access_item_id), item]))
+  const items = (lifecycleData.items || []).map((life) => ({
+    ...(baseById.get(String(life.access_item_id)) || {}),
+    ...life,
+    bank_recommendations: baseById.get(String(life.access_item_id))?.bank_recommendations || []
+  }))
+  return {
+    schema_ready: true,
+    stats: lifecycleData.stats || {},
+    items
+  }
 }
 
 export default function RdPrepaymentWorkbenchDock({ onChanged }) {
@@ -52,8 +73,11 @@ export default function RdPrepaymentWorkbenchDock({ onChanged }) {
     if (!silent) setLoading(true)
     setError('')
     try {
-      const result = await getRdPrepaymentWorkbench(5)
-      setData(result)
+      const [base, lifecycle] = await Promise.all([
+        getRdPrepaymentWorkbench(5),
+        getRdPrepaymentLifecycleWorkbench().catch(() => null)
+      ])
+      setData(mergeWorkbench(base, lifecycle))
     } catch (err) {
       setError(err instanceof Error ? err.message : '研发预付款台账读取失败')
     } finally {
@@ -88,7 +112,11 @@ export default function RdPrepaymentWorkbenchDock({ onChanged }) {
       const result = await getRdPrepaymentPoolDetail(id)
       setDetails((current) => ({ ...current, [id]: result }))
     } catch (err) {
-      setError(err instanceof Error ? err.message : '预付款明细读取失败')
+      if (pool.frozen || String(pool.access_status || '') === '已终止') {
+        setDetails((current) => ({ ...current, [id]: { fundings: [], deductions: [] } }))
+      } else {
+        setError(err instanceof Error ? err.message : '预付款明细读取失败')
+      }
     } finally {
       setDetailLoading('')
     }
@@ -102,12 +130,13 @@ export default function RdPrepaymentWorkbenchDock({ onChanged }) {
 
   const stats = data?.stats || {}
   const attention = Number(stats.attention_count || 0)
+  const v32 = Object.prototype.hasOwnProperty.call(stats, 'triggered_amount')
 
   return (
     <>
       <button type="button" className="rd-prepay-workbench-launcher" onClick={() => setOpen(true)}>
         <span>预</span>
-        <div><strong>研发预付款</strong><small>{attention ? `${attention} 项待处理` : '资金池 / 抵扣 / 发票'}</small></div>
+        <div><strong>研发预付款</strong><small>{attention ? `${attention} 项待处理` : '履约 / 资金池 / 抵扣 / 退款'}</small></div>
         {attention ? <em>{attention}</em> : <b>›</b>}
       </button>
 
@@ -115,23 +144,25 @@ export default function RdPrepaymentWorkbenchDock({ onChanged }) {
         <div className="rd-prepay-workbench-mask" onMouseDown={(event) => { if (event.target === event.currentTarget) setOpen(false) }}>
           <aside className="rd-prepay-workbench-drawer">
             <header className="rd-prepay-workbench-head">
-              <div><span>R&D PREPAYMENT WORKBENCH</span><h2>研发预付款台账</h2><p>合同约定 → 银行实际付款 → 发票凭证 → 月度抵扣，一处完成核对与补录。</p></div>
+              <div><span>R&D PREPAYMENT WORKBENCH · V3.2</span><h2>研发预付款履约台账</h2><p>合同分期 → 条件触发 → 发票前置 → 银行付款 → 月度抵扣 → 冻结退款，一处闭环。</p></div>
               <button type="button" onClick={() => setOpen(false)}>×</button>
             </header>
 
             <main>
               {error ? <div className="rd-prepay-workbench-error">{error}<button type="button" onClick={() => void load()}>重试</button></div> : null}
-              {loading && !data ? <div className="rd-prepay-workbench-loading">正在汇总合同、银行、发票和研发账单抵扣…</div> : null}
+              {loading && !data ? <div className="rd-prepay-workbench-loading">正在汇总合同履约、银行、发票、抵扣和退款…</div> : null}
 
               {data ? (
                 <>
                   <section className="rd-prepay-workbench-stats">
-                    <article><span>合同预付款</span><strong>{money(stats.agreed_amount)}</strong><small>{stats.pool_count || 0} 个产品资金池</small></article>
+                    <article><span>合同总预付</span><strong>{money(stats.agreed_amount)}</strong><small>{stats.pool_count || 0} 个产品资金池</small></article>
+                    {v32 ? <article><span>已触发</span><strong>{money(stats.triggered_amount)}</strong><small>当前已进入付款义务</small></article> : null}
+                    {v32 ? <article><span>未触发</span><strong>{money(stats.untriggered_amount)}</strong><small>不计入待付款</small></article> : null}
                     <article><span>银行已付</span><strong>{money(stats.funded_amount)}</strong><small>真实资金来源</small></article>
                     <article><span>累计抵扣</span><strong>{money(stats.deducted_amount)}</strong><small>已进入研发月结</small></article>
-                    <article className="is-good"><span>当前可用</span><strong>{money(stats.available_amount)}</strong><small>按银行已付口径</small></article>
-                    <article className={Number(stats.funding_gap || 0) > 0.01 ? 'is-warning' : ''}><span>待补银行</span><strong>{money(stats.funding_gap)}</strong><small>合同约定尚未入账</small></article>
-                    <article className={Number(stats.invoice_gap || 0) > 0.01 ? 'is-warning' : ''}><span>待补发票</span><strong>{money(stats.invoice_gap)}</strong><small>银行已付尚无进项凭证</small></article>
+                    <article className="is-good"><span>当前可用</span><strong>{money(stats.available_amount)}</strong><small>严格模式按银行实付</small></article>
+                    <article className={Number(stats.funding_gap || 0) > 0.01 ? 'is-warning' : ''}><span>{v32 ? '已触发待付款' : '待补银行'}</span><strong>{money(stats.funding_gap)}</strong><small>{v32 ? '未触发期次不计入' : '合同约定尚未入账'}</small></article>
+                    {v32 && Number(stats.refund_due || 0) > 0.01 ? <article className="is-warning"><span>待退款</span><strong>{money(stats.refund_due)}</strong><small>冻结余额待银行收回</small></article> : null}
                   </section>
 
                   <section className="rd-prepay-workbench-toolbar">
@@ -150,41 +181,44 @@ export default function RdPrepaymentWorkbenchDock({ onChanged }) {
                       const progressBase = Math.max(Number(pool.prepayment_agreed_amount || 0), 0.01)
                       const usedPct = Math.min(100, Math.max(0, Number(pool.deducted_amount || 0) / progressBase * 100))
                       const fundedPct = Math.min(100, Math.max(0, Number(pool.actual_funded_amount || 0) / progressBase * 100))
+                      const bankSuggestions = Number(pool.funding_gap || 0) > 0.01 ? (pool.bank_recommendations || []) : []
                       return (
                         <article key={id} className={`rd-prepay-pool-card is-${pool.status_tone || 'neutral'}`}>
                           <div className="rd-prepay-pool-main">
-                            <div className="rd-prepay-pool-title"><strong>{pool.product_name || '未命名研发产品'}</strong><small>{pool.contract_name || '未命名合同'}{pool.contract_no ? ` · ${pool.contract_no}` : ''}</small><small>{pool.counterparty || pool.partner_name || '未填写合作方'}</small></div>
-                            <div className="rd-prepay-pool-money"><span>合同预付<strong>{money(pool.prepayment_agreed_amount)}</strong></span><span>银行已付<strong>{money(pool.actual_funded_amount)}</strong></span><span>已抵扣<strong>{money(pool.deducted_amount)}</strong></span><span>可用余额<strong>{money(pool.available_balance)}</strong></span></div>
-                            <div className="rd-prepay-pool-state"><em className={`is-${pool.status_tone || 'neutral'}`}>{pool.status_label}</em><small>{Number(pool.invoice_gap || 0) > 0.01 ? `发票缺口 ${money(pool.invoice_gap)}` : '发票凭证已覆盖'}</small></div>
-                            <button type="button" className="rd-prepay-pool-expand" onClick={() => void openDetail(pool)}>{expanded ? '收起' : '查看明细'}</button>
+                            <div className="rd-prepay-pool-title"><strong>{pool.product_name || '未命名研发产品'}</strong><small>{pool.contract_name || '未命名合同'}{pool.contract_no ? ` · ${pool.contract_no}` : ''}</small><small>{pool.counterparty || pool.partner_name || '未填写合作方'}{pool.strict_mode ? ' · 严格履约' : ' · 历史兼容'}</small></div>
+                            <div className="rd-prepay-pool-money"><span>合同预付<strong>{money(pool.prepayment_agreed_amount)}</strong></span>{v32 ? <span>已触发<strong>{money(pool.triggered_amount)}</strong></span> : null}<span>银行已付<strong>{money(pool.actual_funded_amount)}</strong></span><span>已抵扣<strong>{money(pool.deducted_amount)}</strong></span><span>可用余额<strong>{money(pool.available_balance)}</strong></span>{Number(pool.refund_due || 0) > 0.01 ? <span>待退款<strong>{money(pool.refund_due)}</strong></span> : null}</div>
+                            <div className="rd-prepay-pool-state"><em className={`is-${pool.status_tone || 'neutral'}`}>{pool.status_label}</em><small>{Number(pool.invoice_gap || 0) > 0.01 ? `付款发票缺口 ${money(pool.invoice_gap)}` : pool.strict_mode && Number(pool.untriggered_amount || 0) > 0.01 ? `未触发 ${money(pool.untriggered_amount)}` : '当前凭证链正常'}</small></div>
+                            <button type="button" className="rd-prepay-pool-expand" onClick={() => void openDetail(pool)}>{expanded ? '收起' : '履约 / 明细'}</button>
                           </div>
                           <div className="rd-prepay-pool-progress"><i style={{ width: `${fundedPct}%` }} /><b style={{ width: `${usedPct}%` }} /></div>
 
-                          {Number(pool.funding_shortfall || 0) > 0.01 ? <div className="rd-prepay-pool-alert is-danger">历史抵扣比已关联银行付款多 {money(pool.funding_shortfall)}，请优先补齐真实预付款流水。</div> : null}
-                          {Number(pool.funding_gap || 0) > 0.01 && (pool.bank_recommendations || []).length ? (
+                          {Number(pool.funding_shortfall || 0) > 0.01 ? <div className="rd-prepay-pool-alert is-danger">历史抵扣/退款比已关联银行付款多 {money(pool.funding_shortfall)}，请优先补齐真实预付款流水。</div> : null}
+                          {bankSuggestions.length ? (
                             <div className="rd-prepay-pool-recommendations">
-                              <span>历史流水推荐</span>
-                              {(pool.bank_recommendations || []).map((candidate) => (
-                                <button key={candidate.id} type="button" disabled={!canManage} onClick={() => setFundingTarget({ ...candidate, preferred_access_item_id: id })}>
+                              <span>{pool.strict_mode ? '已触发付款流水推荐' : '历史流水推荐'}</span>
+                              {bankSuggestions.map((candidate) => {
+                                const suggested = Math.min(Number(candidate.suggested_funding_amount || 0), Number(pool.funding_gap || candidate.suggested_funding_amount || 0))
+                                return <button key={candidate.id} type="button" disabled={!canManage || suggested <= 0} onClick={() => setFundingTarget({ ...candidate, suggested_funding_amount: suggested, preferred_access_item_id: id })}>
                                   <strong>{candidate.trade_date || '-'} · {candidate.payee_name || '未识别收款方'} · {money(candidate.available_amount)}</strong>
                                   <small>{candidate.transaction_no || candidate.summary || '无流水号/摘要'} · 匹配 {candidate.match_score}</small>
-                                  <em>{canManage ? `补录 ${money(candidate.suggested_funding_amount)}` : '仅查看'}</em>
+                                  <em>{canManage ? `补录 ${money(suggested)}` : '仅查看'}</em>
                                 </button>
-                              ))}
+                              })}
                             </div>
                           ) : null}
 
                           {expanded ? (
                             <div className="rd-prepay-pool-detail">
+                              <RdPrepaymentLifecyclePanel accessItemId={id} canManage={canManage} onChanged={() => void refreshAfterFunding()} />
                               {detailLoading === id && !detail ? <div className="rd-prepay-detail-loading">正在读取银行、发票与抵扣明细…</div> : null}
                               {detail ? (
                                 <>
                                   <section><header><strong>银行实际付款 / 发票凭证</strong><small>{detail.fundings?.length || 0} 笔银行入账</small></header>
-                                    {(detail.fundings || []).length === 0 ? <p className="rd-prepay-detail-empty">尚未关联真实银行付款。上方有推荐流水时可直接补录。</p> : (detail.fundings || []).map((funding) => (
+                                    {(detail.fundings || []).length === 0 ? <p className="rd-prepay-detail-empty">尚未关联可展示的银行付款；已终止合同请以上方履约退款链为准。</p> : (detail.fundings || []).map((funding) => (
                                       <div key={funding.id} className="rd-prepay-detail-row">
                                         <div><strong>{funding.trade_date || funding.funding_date || '-'} · {funding.counterparty_name || '-'}</strong><small>{funding.transaction_no || funding.bank_summary || '无流水号/摘要'}</small></div>
                                         <div><span>银行入账</span><strong>{money(funding.funded_amount)}</strong></div>
-                                        <div><span>发票覆盖</span><strong>{money(funding.invoice_allocated_amount)}</strong><small>{Number(funding.invoice_gap || 0) > 0.01 ? `缺 ${money(funding.invoice_gap)}` : '已覆盖'}</small></div>
+                                        <div><span>预付池发票留存</span><strong>{money(funding.invoice_allocated_amount)}</strong><small>{Number(funding.invoice_gap || 0) > 0.01 ? `当前池内缺 ${money(funding.invoice_gap)}` : '当前池内已覆盖'}</small></div>
                                         <button type="button" disabled={!canManage} onClick={() => setFundingTarget({ id: funding.bank_transaction_id, preferred_access_item_id: id })}>{Number(funding.invoice_gap || 0) > 0.01 ? '补发票 / 查看' : '查看凭证'}</button>
                                       </div>
                                     ))}
@@ -208,7 +242,7 @@ export default function RdPrepaymentWorkbenchDock({ onChanged }) {
                     })}
                   </section>
 
-                  <footer className="rd-prepay-workbench-note">管理口径：研发成本按合同应结金额确认；预付款抵扣只是资金余额消耗，不会把当期研发成本变成 0。银行付款和月度抵扣分别留痕。</footer>
+                  <footer className="rd-prepay-workbench-note">V3.2 口径：未触发期次不进入待付款；严格模式只允许已触发且满足付款前置条件的金额进入银行预付；冻结后禁止继续抵扣，退款按银行收入逐笔核销。研发成本仍按合同应结金额确认。</footer>
                 </>
               ) : null}
             </main>

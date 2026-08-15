@@ -41,15 +41,23 @@ def deductions_for_bill_ids(db: Session, bill_ids: list[str]) -> dict[str, Decim
 
 
 def bank_funding_transaction_ids(db: Session) -> set[str]:
-    """Return bank transactions reserved as actual R&D prepayment funding."""
-    exists = db.execute(text("SELECT to_regclass('public.cf_rd_prepayment_fundings')")).scalar_one_or_none()
-    if not exists:
-        return set()
-    return {
-        str(row[0])
-        for row in db.execute(text("SELECT DISTINCT bank_transaction_id FROM cf_rd_prepayment_fundings")).all()
-        if row[0]
-    }
+    """Return bank transactions reserved by R&D prepayment funding or refund flows."""
+    ids: set[str] = set()
+    funding_exists = db.execute(text("SELECT to_regclass('public.cf_rd_prepayment_fundings')")).scalar_one_or_none()
+    if funding_exists:
+        ids.update(
+            str(row[0])
+            for row in db.execute(text("SELECT DISTINCT bank_transaction_id FROM cf_rd_prepayment_fundings")).all()
+            if row[0]
+        )
+    refund_exists = db.execute(text("SELECT to_regclass('public.cf_rd_prepayment_refunds')")).scalar_one_or_none()
+    if refund_exists:
+        ids.update(
+            str(row[0])
+            for row in db.execute(text("SELECT DISTINCT bank_transaction_id FROM cf_rd_prepayment_refunds")).all()
+            if row[0]
+        )
+    return ids
 
 
 def financial_payable(settlement_amount: Any, prepayment_deduction: Any) -> tuple[Decimal, Decimal]:
