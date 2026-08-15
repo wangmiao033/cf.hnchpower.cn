@@ -157,27 +157,12 @@ export type ContractAttachmentUploadResult = {
 const PATH = '/api/contracts'
 const contractListInflight = new Map<string, Promise<ContractListResponse>>()
 
-async function loadContractList(url: string): Promise<ContractListResponse> {
-  // 两个只读资源彼此独立，首次加载并行请求，避免原来先等合同再等编号的串行延迟。
-  const contractRequest = apiGet<ContractListResponse>(url)
-  const numberingRequest = listInternalContractNumbers().catch((error) => {
-    console.warn('Internal contract numbering unavailable; contract list remains usable.', error)
-    return null
-  })
-  const [response, numbering] = await Promise.all([contractRequest, numberingRequest])
-
-  if (!numbering) {
-    return {
-      ...response,
-      items: (response.items || []).map((item) => ({
-        ...item,
-        internal_contract_no: item.internal_contract_no || ''
-      }))
-    }
-  }
-
+function enrichInternalNumbers(
+  response: ContractListResponse,
+  numbering: { items?: Array<{ contract_id: string; internal_contract_no: string }> } | null
+): ContractListResponse {
   const numberMap = new Map(
-    (numbering.items || []).map((item) => [String(item.contract_id), item.internal_contract_no])
+    (numbering?.items || []).map((item) => [String(item.contract_id), item.internal_contract_no])
   )
   return {
     ...response,
@@ -186,6 +171,37 @@ async function loadContractList(url: string): Promise<ContractListResponse> {
       internal_contract_no: item.internal_contract_no || numberMap.get(String(item.id)) || ''
     }))
   }
+}
+
+async function loadContractList(url: string): Promise<ContractListResponse> {
+  // 两个只读资源彼此独立，首次加载并行请求，避免原来先等合同再等编号的串行延迟。
+  const contractRequest = apiGet<ContractListResponse>(url)
+  const numberingRequest = listInternalContractNumbers().catch((error) => {
+    console.warn('Internal contract numbering unavailable; contract list remains usable.', error)
+    return null
+  })
+  const [response, numbering] = await Promise.all([contractRequest, numberingRequest])
+  let enriched = enrichInternalNumbers(response, numbering)
+
+  // 其他账号刚新增合同、而本机仍持有 30 秒编号缓存时，不等待 TTL：
+  // 发现列表里出现“编号表没有的新合同”就立即失效并补拉一次编号服务。
+  const missingInternalNumber = Boolean(
+    numbering &&
+    (response.items || []).some((item) => !String(item.internal_contract_no || '').trim() && !String(
+      (numbering.items || []).find((entry) => String(entry.contract_id) === String(item.id))?.internal_contract_no || ''
+    ).trim())
+  )
+  if (missingInternalNumber) {
+    clearInternalContractNumbersCache()
+    try {
+      const freshNumbering = await listInternalContractNumbers()
+      enriched = enrichInternalNumbers(response, freshNumbering)
+    } catch (error) {
+      console.warn('Fresh internal contract numbering unavailable; using current contract list.', error)
+    }
+  }
+
+  return enriched
 }
 
 export function listContracts(params?: {
