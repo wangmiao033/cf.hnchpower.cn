@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { useAppState } from '@/app/AppStateContext.jsx'
 import { listOperationLogs } from '@/lib/api/operationLog.ts'
 import {
+  operationActionCategory,
   operationActionMeta,
   operationActorLabel,
   operationChangeLines,
@@ -9,6 +10,15 @@ import {
 } from '@/domain/reconciliation/operationLogPresentation.js'
 import BillLifecyclePanel from './BillLifecyclePanel.jsx'
 import './Bill360OperationTimeline.css'
+
+const FILTERS = [
+  ['all', '全部'],
+  ['status', '状态'],
+  ['invoice', '发票'],
+  ['funding', '资金'],
+  ['attachment', '附件'],
+  ['bill', '账单修改']
+]
 
 function dateTime(value) {
   const raw = String(value || '').trim()
@@ -26,12 +36,30 @@ function dateTime(value) {
   })
 }
 
+function evidenceText(log) {
+  const metadata = log?.metadata || {}
+  if (String(log?.action || '').startsWith('bank_match_')) {
+    const amount = Number(metadata.linked_amount || 0)
+    const amountText = Number.isFinite(amount)
+      ? `¥${amount.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+      : ''
+    return [metadata.bank_transaction_id ? `银行流水 ${metadata.bank_transaction_id}` : '', amountText ? `本账单分配 ${amountText}` : '']
+      .filter(Boolean)
+      .join(' · ')
+  }
+  if (String(log?.action || '').startsWith('attachment_')) {
+    return [metadata.file_name || '', metadata.attachment_id ? `附件ID ${metadata.attachment_id}` : ''].filter(Boolean).join(' · ')
+  }
+  return ''
+}
+
 export default function BillOperationTimeline({ billType, billId }) {
   const { recon, showToast } = useAppState()
   const [logs, setLogs] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [revision, setRevision] = useState(0)
+  const [filter, setFilter] = useState('all')
 
   useEffect(() => {
     if (!billId) return undefined
@@ -41,7 +69,8 @@ export default function BillOperationTimeline({ billType, billId }) {
     listOperationLogs({
       entity_type: billType,
       entity_id: billId,
-      limit: 200,
+      include_related: true,
+      limit: 300,
       offset: 0
     })
       .then((response) => {
@@ -61,9 +90,25 @@ export default function BillOperationTimeline({ billType, billId }) {
     }
   }, [billId, billType, revision])
 
+  useEffect(() => setFilter('all'), [billId, billType])
+
   const ordered = useMemo(
     () => [...logs].sort((left, right) => String(right.created_at).localeCompare(String(left.created_at))),
     [logs]
+  )
+
+  const counts = useMemo(() => {
+    const next = { all: ordered.length, status: 0, invoice: 0, funding: 0, attachment: 0, bill: 0 }
+    ordered.forEach((log) => {
+      const category = operationActionCategory(log.action)
+      next[category] = (next[category] || 0) + 1
+    })
+    return next
+  }, [ordered])
+
+  const visibleLogs = useMemo(
+    () => filter === 'all' ? ordered : ordered.filter((log) => operationActionCategory(log.action) === filter),
+    [filter, ordered]
   )
 
   const handleTransitioned = async () => {
@@ -86,26 +131,45 @@ export default function BillOperationTimeline({ billType, billId }) {
 
       <section className="bill360-card bill360-card--table">
         <div className="bill360-card-head">
-          <div><span>审计轨迹</span><h3>核对与修改记录</h3></div>
+          <div><span>审计轨迹</span><h3>账单完整操作证据链</h3></div>
           <span className="bill360-card-meta">{loading ? '读取中…' : `${ordered.length} 条`}</span>
         </div>
         <div className="bill360-operation-note">
-          日常只需要“确认核对”和“退回修改”。确认核对后账单自动锁定；退回原因、再次保存和重新核对都会自动记录在这里。
+          状态、发票、银行核销和附件操作按数据库审计日志统一汇总。银行核销虽然来自独立核销表，也会按账单关系归入当前时间线。
         </div>
+
+        {!loading && !error && ordered.length > 0 ? (
+          <div className="bill360-audit-filters" role="tablist" aria-label="操作日志分类">
+            {FILTERS.map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                className={filter === key ? 'is-active' : ''}
+                onClick={() => setFilter(key)}
+              >
+                {label}<em>{counts[key] || 0}</em>
+              </button>
+            ))}
+          </div>
+        ) : null}
 
         {error ? <div className="bill360-history-empty">{error}</div> : null}
         {!error && loading ? <div className="bill360-history-empty">正在读取操作日志…</div> : null}
         {!error && !loading && ordered.length === 0 ? (
           <div className="bill360-history-empty">当前账单暂无操作日志。历史数据不会反向伪造日志，新操作会自动开始记录。</div>
         ) : null}
+        {!error && !loading && ordered.length > 0 && visibleLogs.length === 0 ? (
+          <div className="bill360-history-empty">当前分类暂无操作记录。</div>
+        ) : null}
 
-        {!error && ordered.length > 0 ? (
+        {!error && visibleLogs.length > 0 ? (
           <div className="bill360-timeline">
-            {ordered.map((log) => {
+            {visibleLogs.map((log) => {
               const action = operationActionMeta(log.action)
               const changes = operationChangeLines(log.changes, 8)
               const hidden = operationHiddenChangeCount(log.changes, changes.length)
               const reason = log.metadata?.reason ? String(log.metadata.reason) : ''
+              const evidence = evidenceText(log)
               return (
                 <article className="bill360-timeline-item" key={log.id}>
                   <span className={`bill360-timeline-mark is-${action.tone}`}>{action.mark}</span>
@@ -117,6 +181,7 @@ export default function BillOperationTimeline({ billType, billId }) {
                       </div>
                       <time>{dateTime(log.created_at)}</time>
                     </div>
+                    {evidence ? <div className="bill360-audit-evidence">证据：{evidence}</div> : null}
                     {reason ? <div className="bill360-transition-reason">原因：{reason}</div> : null}
                     {changes.length > 0 ? (
                       <div className="bill360-change-list">
