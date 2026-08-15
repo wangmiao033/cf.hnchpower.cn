@@ -6,7 +6,10 @@ import {
   apiPut,
   parseResponse
 } from '@/lib/api/client.ts'
-import { listInternalContractNumbers } from '@/lib/api/contractNumbers.ts'
+import {
+  clearInternalContractNumbersCache,
+  listInternalContractNumbers
+} from '@/lib/api/contractNumbers.ts'
 
 export type ApiContractAttachment = {
   id: string
@@ -154,27 +157,51 @@ export type ContractAttachmentUploadResult = {
 const PATH = '/api/contracts'
 const contractListInflight = new Map<string, Promise<ContractListResponse>>()
 
+function enrichInternalNumbers(
+  response: ContractListResponse,
+  numbering: { items?: Array<{ contract_id: string; internal_contract_no: string }> } | null
+): ContractListResponse {
+  const numberMap = new Map(
+    (numbering?.items || []).map((item) => [String(item.contract_id), item.internal_contract_no])
+  )
+  return {
+    ...response,
+    items: (response.items || []).map((item) => ({
+      ...item,
+      internal_contract_no: item.internal_contract_no || numberMap.get(String(item.id)) || ''
+    }))
+  }
+}
+
 async function loadContractList(url: string): Promise<ContractListResponse> {
-  const response = await apiGet<ContractListResponse>(url)
-  try {
-    const numbering = await listInternalContractNumbers()
-    const numberMap = new Map(
-      (numbering.items || []).map((item) => [String(item.contract_id), item.internal_contract_no])
-    )
-    return {
-      ...response,
-      items: (response.items || []).map((item) => ({
-        ...item,
-        internal_contract_no: numberMap.get(String(item.id)) || ''
-      }))
-    }
-  } catch (error) {
+  // 两个只读资源彼此独立，首次加载并行请求，避免原来先等合同再等编号的串行延迟。
+  const contractRequest = apiGet<ContractListResponse>(url)
+  const numberingRequest = listInternalContractNumbers().catch((error) => {
     console.warn('Internal contract numbering unavailable; contract list remains usable.', error)
-    return {
-      ...response,
-      items: (response.items || []).map((item) => ({ ...item, internal_contract_no: '' }))
+    return null
+  })
+  const [response, numbering] = await Promise.all([contractRequest, numberingRequest])
+  let enriched = enrichInternalNumbers(response, numbering)
+
+  // 其他账号刚新增合同、而本机仍持有 30 秒编号缓存时，不等待 TTL：
+  // 发现列表里出现“编号表没有的新合同”就立即失效并补拉一次编号服务。
+  const missingInternalNumber = Boolean(
+    numbering &&
+    (response.items || []).some((item) => !String(item.internal_contract_no || '').trim() && !String(
+      (numbering.items || []).find((entry) => String(entry.contract_id) === String(item.id))?.internal_contract_no || ''
+    ).trim())
+  )
+  if (missingInternalNumber) {
+    clearInternalContractNumbersCache()
+    try {
+      const freshNumbering = await listInternalContractNumbers()
+      enriched = enrichInternalNumbers(response, freshNumbering)
+    } catch (error) {
+      console.warn('Fresh internal contract numbering unavailable; using current contract list.', error)
     }
   }
+
+  return enriched
 }
 
 export function listContracts(params?: {
@@ -204,8 +231,15 @@ export function listContracts(params?: {
   return request
 }
 
+function invalidateContractMetadata<T>(request: Promise<T>): Promise<T> {
+  return request.then((result) => {
+    clearInternalContractNumbersCache()
+    return result
+  })
+}
+
 export function importContracts(items: ContractPayload[]) {
-  return apiPost<ContractImportResult>(`${PATH}/import`, { items })
+  return invalidateContractMetadata(apiPost<ContractImportResult>(`${PATH}/import`, { items }))
 }
 
 export function relinkContracts() {
@@ -213,7 +247,7 @@ export function relinkContracts() {
 }
 
 export function createContract(payload: ContractPayload) {
-  return apiPost<ApiContractRow>(PATH, payload)
+  return invalidateContractMetadata(apiPost<ApiContractRow>(PATH, payload))
 }
 
 export function updateContract(id: string, payload: ContractPayload) {
@@ -221,7 +255,7 @@ export function updateContract(id: string, payload: ContractPayload) {
 }
 
 export function deleteContract(id: string) {
-  return apiDelete(`${PATH}/${encodeURIComponent(id)}`)
+  return invalidateContractMetadata(apiDelete(`${PATH}/${encodeURIComponent(id)}`))
 }
 
 export function createContractAccessItem(

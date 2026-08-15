@@ -12,7 +12,9 @@ export type InternalContractNumbersResponse = {
   total: number
 }
 
-const TTL_MS = 2_000
+// 内部合同编号属于低频变化元数据。合同新增/导入/删除时由 contract.ts 精确失效，
+// 日常列表读取可安全复用，避免合同页、360° 与异常巡检反复请求同一份编号表。
+const TTL_MS = 30_000
 let cached: { value: InternalContractNumbersResponse; expiresAt: number } | null = null
 let inflight: Promise<InternalContractNumbersResponse> | null = null
 
