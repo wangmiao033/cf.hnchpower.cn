@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.models.bank_reconciliation_match import BankReconciliationMatch
 from app.models.bank_transaction import BankTransaction
-from app.services.rd_prepayment import deductions_for_bill_ids
+from app.services.rd_prepayment import deductions_for_bill_ids, financial_payable
 
 EPS = Decimal("0.005")
 RD_TYPE = "rd"
@@ -152,11 +152,10 @@ def aggregate_rd_payments_for_ids(
 def fill_payable_for_row(
     agg: RdPaymentAggregate | None, settlement_amount: Any
 ) -> RdPaymentAggregate:
-    payable = abs(_payable_decimal(settlement_amount))
+    signed_payable = _payable_decimal(settlement_amount)
     paid = agg.paid_amount if agg is not None else Decimal("0")
     requested_prepayment = agg.prepayment_deduction if agg is not None else Decimal("0")
-    prepayment = min(payable, max(Decimal("0"), requested_prepayment))
-    cash_payable = max(Decimal("0"), payable - prepayment)
+    prepayment, cash_payable = financial_payable(signed_payable, requested_prepayment)
     unpaid = max(Decimal("0"), cash_payable - paid)
     return RdPaymentAggregate(
         paid_amount=paid,
