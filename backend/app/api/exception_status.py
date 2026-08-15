@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, Query
@@ -9,7 +10,9 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_db
+from app.core.security import require_current_user
 from app.models.exception_status import ExceptionStatus
+from app.models.user import AuthUser
 from app.schemas.exception_status import (
     ExceptionStatusListResponse,
     ExceptionStatusRead,
@@ -48,9 +51,11 @@ def list_exception_statuses(
 def upsert_exception_status(
     payload: ExceptionStatusUpsert,
     db: Session = Depends(get_db),
+    user: AuthUser = Depends(require_current_user),
 ) -> ExceptionStatusRead:
     st = payload.status
     eid = payload.exception_id.strip()
+    now = datetime.now(timezone.utc)
     row = db.execute(
         select(ExceptionStatus).where(ExceptionStatus.exception_id == eid)
     ).scalar_one_or_none()
@@ -59,6 +64,23 @@ def upsert_exception_status(
         db.add(row)
     else:
         row.status = st
+
+    if payload.assignee is not None:
+        row.assignee = payload.assignee.strip() or None
+    elif st == "processing" and not row.assignee:
+        row.assignee = str(user.email or "").strip() or None
+
+    if payload.note is not None:
+        row.note = payload.note.strip() or None
+
+    row.updated_by_email = str(user.email or "").strip() or None
+    if st == "processing" and row.started_at is None:
+        row.started_at = now
+    if st in {"resolved", "ignored"}:
+        row.closed_at = now
+    else:
+        row.closed_at = None
+
     db.commit()
     db.refresh(row)
     return ExceptionStatusRead.model_validate(row)
