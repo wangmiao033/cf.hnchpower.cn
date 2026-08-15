@@ -1,6 +1,6 @@
 import React from 'react'
 import PageContainer from '@/components/layout/PageContainer.jsx'
-import InvoiceManageWorkspace from '@/components/invoice/InvoiceManageWorkspace.jsx'
+import InvoicePriorityWorkspace from '@/components/invoice/InvoicePriorityWorkspace.jsx'
 import PaymentRegisterWorkspace from '@/components/payment/PaymentRegisterWorkspace.jsx'
 import { VIEWS } from '@/app/routes.js'
 import '@/components/invoice/invoice-admin.css'
@@ -18,7 +18,7 @@ function InvoicePage({ section }) {
 
   return (
     <PageContainer hideHeader className="page-container--recon-rd">
-      <InvoiceManageWorkspace
+      <InvoicePriorityWorkspace
         variant={section === VIEWS.INVOICE_VERIFY ? 'verify' : 'manage'}
         direction={section === VIEWS.INVOICE_INPUT ? 'input' : 'output'}
       />
