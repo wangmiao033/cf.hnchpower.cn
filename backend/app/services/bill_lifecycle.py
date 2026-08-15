@@ -44,8 +44,8 @@ STATUS_LABELS = {
     "settled": "已结算",
     "reconciled": "已核销",
     "verified": "已核销",
-    "cancelled": "已取消",
-    "canceled": "已取消",
+    "cancelled": "已作废",
+    "canceled": "已作废",
 }
 
 BASE_TRANSITIONS: dict[str, tuple[str, ...]] = {
@@ -168,7 +168,7 @@ def assert_delete_allowed(current_status: str | None) -> None:
             status_code=status.HTTP_409_CONFLICT,
             detail={
                 "error": "bill_locked",
-                "message": "已核对、已结算或已取消的账单不能直接删除，请通过状态流转处理。",
+                "message": "已核对、已结算或已作废的账单不能直接删除，请通过状态流转处理。",
                 "status": normalized,
             },
         )
@@ -449,7 +449,7 @@ def transition_label(bill_type: str, current: str, target: str) -> str:
     if target == "reconciled":
         return "核销归档"
     if target == "cancelled":
-        return "取消账单"
+        return "作废账单"
     return status_label(target)
 
 

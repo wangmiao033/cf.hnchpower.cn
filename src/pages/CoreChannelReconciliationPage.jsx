@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import * as XLSX from 'xlsx'
 import { useAppState } from '@/app/AppStateContext.jsx'
 import PageContainer from '@/components/layout/PageContainer.jsx'
 import BillQuickFilters from '@/components/reconciliation/BillQuickFilters.jsx'
@@ -27,7 +26,7 @@ const STATUS_LABELS = {
   pending: '待处理',
   confirmed: '已确认',
   completed: '已完成',
-  cancelled: '已取消'
+  cancelled: '已作废'
 }
 
 function money(value) {
@@ -277,6 +276,8 @@ function CoreChannelReconciliationPage() {
 
   const handleQuickFilter = (key) => {
     setQuickFilter(key)
+    if (key === 'trash') setStatus('cancelled')
+    else if (status === 'cancelled') setStatus('')
     setSelectedIds([])
   }
 
@@ -385,7 +386,7 @@ function CoreChannelReconciliationPage() {
     }
   }
 
-  const exportRows = () => {
+  const exportRows = async () => {
     const target = selectedRows.length > 0 ? selectedRows : rows
     if (!target.length) {
       showToast('没有可导出的渠道账单', 'error')
@@ -416,10 +417,16 @@ function CoreChannelReconciliationPage() {
         备注: row.remark || ''
       }
     })
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), '渠道账单')
-    XLSX.writeFile(wb, `渠道账单_${new Date().toISOString().slice(0, 10)}.xlsx`)
-    showToast(`已导出 ${target.length} 条渠道账单`, 'success')
+    try {
+      const XLSX = await import('xlsx')
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), '渠道账单')
+      XLSX.writeFile(wb, `渠道账单_${new Date().toISOString().slice(0, 10)}.xlsx`)
+      showToast(`已导出 ${target.length} 条渠道账单`, 'success')
+    } catch (err) {
+      console.error(err)
+      showToast('Excel 模块加载或导出失败，请重试', 'error')
+    }
   }
 
   const handleImportFile = async (event) => {
@@ -427,6 +434,7 @@ function CoreChannelReconciliationPage() {
     event.target.value = ''
     if (!file) return
     try {
+      const XLSX = await import('xlsx')
       const data = await file.arrayBuffer()
       const workbook = XLSX.read(data, { type: 'array' })
       const structured = parseChannelStatementWorkbook(workbook, file.name)
@@ -460,7 +468,7 @@ function CoreChannelReconciliationPage() {
           </div>
           <div className="core-recon-actions">
             <button type="button" onClick={() => fileRef.current?.click()}>导入 Excel</button>
-            <button type="button" onClick={exportRows}>导出</button>
+            <button type="button" onClick={() => void exportRows()}>导出</button>
             <button type="button" className="primary" onClick={() => setActiveView(VIEWS.CHANNEL_RECON_CREATE)}>新增账单</button>
             <input ref={fileRef} type="file" accept=".xlsx,.xls" onChange={handleImportFile} hidden />
           </div>
@@ -497,6 +505,8 @@ function CoreChannelReconciliationPage() {
                 const next = event.target.value
                 setStatus(next)
                 if (next === 'cancelled') setQuickFilter('trash')
+                else if (quickFilter === 'trash') setQuickFilter('all')
+                setSelectedIds([])
               }}
             >
               <option value="">全部状态</option>
