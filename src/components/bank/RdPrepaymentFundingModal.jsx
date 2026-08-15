@@ -15,6 +15,7 @@ function money(value) {
 
 export default function RdPrepaymentFundingModal({ open, transaction, onClose, onSaved }) {
   const transactionId = String(transaction?.id || '')
+  const preferredAccessItemId = String(transaction?.preferred_access_item_id || '')
   const [context, setContext] = useState(null)
   const [loading, setLoading] = useState(false)
   const [busy, setBusy] = useState('')
@@ -33,10 +34,13 @@ export default function RdPrepaymentFundingModal({ open, transaction, onClose, o
       const result = await getRdPrepaymentBankContext(transactionId)
       setContext(result)
       const candidates = result.candidates || []
+      const preferred = preferredAccessItemId
+        ? candidates.find((item) => String(item.access_item_id) === preferredAccessItemId)
+        : null
       const currentExists = candidates.some((item) => String(item.access_item_id) === String(accessItemId))
-      const next = currentExists
+      const next = preferred || (currentExists
         ? candidates.find((item) => String(item.access_item_id) === String(accessItemId))
-        : candidates.find((item) => item.recommended && Number(item.max_fundable_amount || 0) > 0) || candidates.find((item) => Number(item.max_fundable_amount || 0) > 0) || candidates[0]
+        : candidates.find((item) => item.recommended && Number(item.max_fundable_amount || 0) > 0) || candidates.find((item) => Number(item.max_fundable_amount || 0) > 0) || candidates[0])
       if (next) setAccessItemId(String(next.access_item_id))
     } catch (err) {
       setError(err instanceof Error ? err.message : '预付款信息读取失败')
@@ -54,7 +58,7 @@ export default function RdPrepaymentFundingModal({ open, transaction, onClose, o
     setInvoiceChoice({})
     setInvoiceAmount({})
     void load()
-  }, [open, transactionId])
+  }, [open, transactionId, preferredAccessItemId])
 
   const candidates = context?.candidates || []
   const selected = useMemo(
