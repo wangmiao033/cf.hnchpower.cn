@@ -11,9 +11,11 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_db
+from app.core.security import require_current_user
 from app.models.bill_invoice_allocation import BillInvoiceAllocation
 from app.models.invoice import InvoiceRecord
 from app.models.invoice_payment_link import InvoicePaymentLink
+from app.models.user import AuthUser
 from app.schemas.invoice import (
     InvoiceRecordCreate,
     InvoiceRecordImportRequest,
@@ -21,6 +23,12 @@ from app.schemas.invoice import (
     InvoiceRecordListResponse,
     InvoiceRecordRead,
     InvoiceRecordUpdate,
+)
+from app.services.invoice_archive import (
+    archive_invoice,
+    invoice_archive_snapshot,
+    sync_invoice_archive_states,
+    unarchive_invoice,
 )
 
 router = APIRouter()
@@ -183,6 +191,41 @@ def import_invoice_records(
         skipped=skipped,
         total=created + updated,
     )
+
+
+@router.get("/archive/snapshot")
+def get_invoice_archive_snapshot(
+    db: Session = Depends(get_db),
+) -> dict:
+    return invoice_archive_snapshot(db, run_auto=False)
+
+
+@router.post("/archive/sync")
+def sync_invoice_archives(
+    db: Session = Depends(get_db),
+    user: AuthUser = Depends(require_current_user),
+) -> dict:
+    result = sync_invoice_archive_states(db, user=user)
+    db.commit()
+    return invoice_archive_snapshot(db, run_auto=False) | result
+
+
+@router.post("/{record_id}/archive")
+def archive_invoice_record(
+    record_id: str,
+    db: Session = Depends(get_db),
+    user: AuthUser = Depends(require_current_user),
+) -> dict:
+    return archive_invoice(db, record_id, user=user)
+
+
+@router.post("/{record_id}/unarchive")
+def unarchive_invoice_record(
+    record_id: str,
+    db: Session = Depends(get_db),
+    user: AuthUser = Depends(require_current_user),
+) -> dict:
+    return unarchive_invoice(db, record_id, user=user)
 
 
 @router.get("/{record_id}", response_model=InvoiceRecordRead)
