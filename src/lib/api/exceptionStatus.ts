@@ -4,10 +4,17 @@
 
 import { apiGet, apiPost } from '@/lib/api/client.ts'
 
+export type ExceptionStatusCode = 'pending' | 'processing' | 'ignored' | 'resolved'
+
 export type ExceptionStatusRow = {
   id: string
   exception_id: string
-  status: string
+  status: ExceptionStatusCode
+  assignee?: string | null
+  note?: string | null
+  updated_by_email?: string | null
+  started_at?: string | null
+  closed_at?: string | null
   updated_at: string
 }
 
@@ -18,7 +25,9 @@ export type ExceptionStatusListResponse = {
 
 export type ExceptionStatusUpsertPayload = {
   exception_id: string
-  status: 'pending' | 'ignored' | 'resolved'
+  status: ExceptionStatusCode
+  assignee?: string | null
+  note?: string | null
 }
 
 export function listExceptionStatuses(params?: {
@@ -37,8 +46,5 @@ export function listExceptionStatuses(params?: {
 export function upsertExceptionStatus(
   payload: ExceptionStatusUpsertPayload
 ): Promise<ExceptionStatusRow> {
-  return apiPost<ExceptionStatusRow>('/api/exception-statuses', {
-    exception_id: payload.exception_id,
-    status: payload.status
-  })
+  return apiPost<ExceptionStatusRow>('/api/exception-statuses', payload)
 }
