@@ -39,7 +39,9 @@ const FIELD_LABELS = {
   payment_date: '付款日期',
   transaction_serial: '付款流水号',
   remitter_company: '付款方',
-  payee_company: '收款方'
+  payee_company: '收款方',
+  file_name: '附件名称',
+  file_size: '附件大小'
 }
 
 const MONEY_FIELDS = new Set([
@@ -81,9 +83,39 @@ const ACTION_META = {
   payment_instruction_create: { label: '创建付款指令', tone: 'money', mark: '付' },
   payment_instruction_update: { label: '更新付款指令', tone: 'money', mark: '付' },
   payment_instruction_delete: { label: '删除付款指令', tone: 'delete', mark: '删' },
+  bank_match_confirm: { label: '确认银行核销', tone: 'money', mark: '银' },
+  bank_match_reverse: { label: '撤销银行核销', tone: 'delete', mark: '银' },
+  bank_match_update: { label: '更新银行核销', tone: 'money', mark: '银' },
   invoice_link: { label: '关联发票', tone: 'invoice', mark: '票' },
   invoice_unlink: { label: '撤销发票', tone: 'delete', mark: '票' },
-  invoice_link_update: { label: '更新发票关联', tone: 'invoice', mark: '票' }
+  invoice_link_update: { label: '更新发票关联', tone: 'invoice', mark: '票' },
+  attachment_add: { label: '上传附件', tone: 'create', mark: '附' },
+  attachment_update: { label: '更新附件', tone: 'update', mark: '附' },
+  attachment_delete: { label: '删除附件', tone: 'delete', mark: '附' }
+}
+
+const ACTION_CATEGORY = {
+  status_change: 'status',
+  archive: 'status',
+  unarchive: 'status',
+  receipt_add: 'funding',
+  receipt_delete: 'funding',
+  receipt_update: 'funding',
+  payment_add: 'funding',
+  payment_delete: 'funding',
+  payment_update: 'funding',
+  payment_instruction_create: 'funding',
+  payment_instruction_update: 'funding',
+  payment_instruction_delete: 'funding',
+  bank_match_confirm: 'funding',
+  bank_match_reverse: 'funding',
+  bank_match_update: 'funding',
+  invoice_link: 'invoice',
+  invoice_unlink: 'invoice',
+  invoice_link_update: 'invoice',
+  attachment_add: 'attachment',
+  attachment_update: 'attachment',
+  attachment_delete: 'attachment'
 }
 
 function unwrapJsonValue(value) {
@@ -103,6 +135,10 @@ export function operationActionMeta(action) {
   return ACTION_META[action] || { label: action || '操作', tone: 'default', mark: '记' }
 }
 
+export function operationActionCategory(action) {
+  return ACTION_CATEGORY[action] || 'bill'
+}
+
 export function operationFieldLabel(field) {
   return FIELD_LABELS[field] || field
 }
@@ -110,6 +146,13 @@ export function operationFieldLabel(field) {
 export function formatOperationValue(field, raw) {
   const value = unwrapJsonValue(raw)
   if (value === null || value === undefined || value === '') return '-'
+  if (field === 'file_size') {
+    const numeric = Number(value)
+    if (Number.isFinite(numeric)) {
+      if (numeric < 1024 * 1024) return `${Math.ceil(numeric / 1024)} KB`
+      return `${(numeric / 1024 / 1024).toFixed(1)} MB`
+    }
+  }
   if (MONEY_FIELDS.has(field)) {
     const numeric = Number(value)
     if (Number.isFinite(numeric)) {
