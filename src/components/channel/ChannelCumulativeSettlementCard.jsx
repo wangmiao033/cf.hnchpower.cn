@@ -3,9 +3,7 @@ import { useAuth } from '@/features/auth/AuthContext.jsx'
 import {
   cancelChannelCumulativeBatch,
   createChannelCumulativeBatch,
-  getChannelCumulativePolicy,
-  getChannelCumulativePool,
-  listChannelCumulativeBatches,
+  getChannelCumulativeSnapshot,
   saveChannelCumulativePolicy,
   submitChannelCumulativeBatchInvoice
 } from '@/lib/api/channelCumulativeSettlement.ts'
@@ -62,14 +60,11 @@ export default function ChannelCumulativeSettlementCard({
     setLoading(true)
     setMessage('')
     try {
-      const [policyResult, poolResult, batchResult] = await Promise.all([
-        getChannelCumulativePolicy(name),
-        getChannelCumulativePool(name),
-        listChannelCumulativeBatches(name, 8)
-      ])
+      const snapshot = await getChannelCumulativeSnapshot(name, 8)
+      const policyResult = snapshot.policy
       setPolicy(policyResult)
-      setPool(poolResult)
-      setBatches(batchResult.items || [])
+      setPool(snapshot.pool)
+      setBatches(snapshot.batches?.items || [])
       setForm({
         settlement_mode: policyResult.settlement_mode || 'periodic',
         threshold_basis: policyResult.threshold_basis || 'billing_flow',
