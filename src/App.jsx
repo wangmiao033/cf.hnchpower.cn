@@ -22,6 +22,7 @@ import { canOpenView } from './app/viewPermissions.js'
 import { useAuth } from '@/features/auth/AuthContext.jsx'
 import { apiRowToFrontend, getReconciliationRecord } from '@/lib/api/reconciliation.ts'
 import { apiChannelRowToFrontend, getChannelRecord } from '@/lib/api/channel.ts'
+import { getBillInvoiceSummary } from '@/lib/api/billInvoiceAllocations.ts'
 import { prefetchEditRecord } from '@/lib/api/editRecordCache.js'
 import CoreDashboardPage from './pages/CoreDashboardPage.jsx'
 import LoginPage from './pages/LoginPage.jsx'
@@ -349,7 +350,13 @@ function App() {
     void PAGE_LOADERS.bill360().catch(() => {})
     const billId = String(id || '')
     if (!billId) return
-    if (billType === 'channel') {
+    const normalizedBillType = billType === 'channel' ? 'channel' : 'rd'
+    // 只有用户明确 hover / focus 某张 360° 时才预热发票摘要；
+    // getBillInvoiceSummary 自带 15 秒缓存与并发去重，点击后直接复用，不扫全列表。
+    if (can('invoices.view')) {
+      void getBillInvoiceSummary(normalizedBillType, billId).catch(() => {})
+    }
+    if (normalizedBillType === 'channel') {
       void prefetchEditRecord('channel', billId, async () => apiChannelRowToFrontend(await getChannelRecord(billId)))
     } else {
       void prefetchEditRecord('rd', billId, async () => apiRowToFrontend(await getReconciliationRecord(billId)))
