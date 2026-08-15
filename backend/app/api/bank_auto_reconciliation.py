@@ -39,6 +39,7 @@ from app.services.bank_partner_match import (
     save_customer_link,
 )
 from app.services.bank_reconciliation_engine import allocate, confirm_single, reverse
+from app.services.bank_suggestion_priority import prioritize_bank_suggestions
 from app.services.permissions import require_permission
 
 router = APIRouter()
@@ -56,6 +57,9 @@ def get_bank_auto_reconciliation_dashboard(
     p2_result = filter_cumulative_bank_suggestions(db, build_p2_dashboard(db, limit=limit))
     result = enrich_auto_dashboard_with_p2(result, p2_result)
     result = enrich_reconciliation_dashboard(db, result)
+    # 银行中心默认把最值得先处理的流水放在前面：高置信 -> 高分 -> 高区分度 -> 新日期。
+    # 前端仍可按日期、方向和匹配状态继续筛选，不改变任何核销写入规则。
+    result = prioritize_bank_suggestions(result)
     confirmed_count, confirmed_amount = db.execute(
         select(
             func.count(BankReconciliationMatch.id),
