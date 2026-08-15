@@ -3,6 +3,7 @@ import { useAppState } from '@/app/AppStateContext.jsx'
 import { VIEWS } from '@/app/routes.js'
 import PageContainer from '@/components/layout/PageContainer.jsx'
 import BankCenterImportModal from '@/components/bank/BankCenterImportModal.jsx'
+import RdPrepaymentFundingModal from '@/components/bank/RdPrepaymentFundingModal.jsx'
 import { useAuth } from '@/features/auth/AuthContext.jsx'
 import {
   confirmBankAutoReconciliation,
@@ -14,6 +15,7 @@ import {
   getBankImportBatches,
   getBankTransactions
 } from '@/lib/api/bankTransaction.ts'
+import { getRdPrepaymentFundingMap } from '@/lib/api/rdPrepayment.ts'
 import './BankAutoReconciliationPage.css'
 import './BankCenterPage.css'
 
@@ -116,6 +118,8 @@ export default function BankCenterPage() {
   const [expandedId, setExpandedId] = useState('')
   const [historyMode, setHistoryMode] = useState('confirmed')
   const [importOpen, setImportOpen] = useState(false)
+  const [prepaymentTarget, setPrepaymentTarget] = useState(null)
+  const [prepaymentMap, setPrepaymentMap] = useState({})
 
   const [ledgerRows, setLedgerRows] = useState([])
   const [ledgerTotal, setLedgerTotal] = useState(0)
@@ -214,6 +218,28 @@ export default function BankCenterPage() {
   }, [activeTab, ledgerRevision, dataRevision, ledgerSearch, serverDateRange.from, serverDateRange.to, amountMin, amountMax, accountFilter, sourceFileFilter])
 
   useEffect(() => {
+    if (activeTab !== 'ledger' || ledgerRows.length === 0) {
+      setPrepaymentMap({})
+      return undefined
+    }
+    let cancelled = false
+    getRdPrepaymentFundingMap(ledgerRows.map((row) => String(row.id)))
+      .then((result) => {
+        if (cancelled) return
+        const next = {}
+        for (const item of result.items || []) {
+          const key = String(item.bank_transaction_id || '')
+          if (!key) continue
+          if (!next[key]) next[key] = []
+          next[key].push(item)
+        }
+        setPrepaymentMap(next)
+      })
+      .catch(() => { if (!cancelled) setPrepaymentMap({}) })
+    return () => { cancelled = true }
+  }, [activeTab, ledgerRows])
+
+  useEffect(() => {
     if (activeTab !== 'ledger') return undefined
     let cancelled = false
     setAccountsLoading(true)
@@ -284,11 +310,11 @@ export default function BankCenterPage() {
   const visibleLedger = useMemo(() => ledgerRows.filter((row) => {
     const direction = directionOf(row)
     if (ledgerDirection !== 'all' && direction !== ledgerDirection) return false
-    const linked = linkedOf(row)
+    const linked = linkedOf(row) || Boolean(prepaymentMap[String(row.id)]?.length)
     if (ledgerLinked === 'linked' && !linked) return false
     if (ledgerLinked === 'unlinked' && linked) return false
     return true
-  }), [ledgerRows, ledgerDirection, ledgerLinked])
+  }), [ledgerRows, ledgerDirection, ledgerLinked, prepaymentMap])
 
   const confirmOne = async (item, candidate) => {
     if (!canManage || !candidate) return
@@ -463,6 +489,7 @@ export default function BankCenterPage() {
                           <td>
                             <div className="bank-center-row-actions">
                               <button type="button" onClick={() => setExpandedId(expanded ? '' : item.transaction_id)}>{expanded ? '收起' : '详情'}</button>
+                              {canManage && item.direction === 'payment' ? <button type="button" disabled={busyId === item.transaction_id} onClick={() => setPrepaymentTarget({ id: item.transaction_id })}>预付款</button> : null}
                               {canManage ? <button type="button" className={item.auto_ready ? 'is-primary' : ''} disabled={!candidate || busyId === item.transaction_id} onClick={() => confirmSelected(item)}>{busyId === item.transaction_id ? '处理中…' : item.auto_ready ? '确认核销' : '人工确认'}</button> : null}
                             </div>
                           </td>
@@ -574,6 +601,9 @@ export default function BankCenterPage() {
                   {visibleLedger.map((row) => {
                     const direction = directionOf(row)
                     const linked = linkedOf(row)
+                    const prepaymentLinks = prepaymentMap[String(row.id)] || []
+                    const prepaymentLinked = prepaymentLinks.length > 0
+                    const financialLinked = linked || prepaymentLinked
                     return (
                       <tr key={row.id}>
                         <td>{row.trade_date || '-'}</td>
@@ -587,8 +617,8 @@ export default function BankCenterPage() {
                         <td className="is-right is-income">{Number(row.income_amount || 0) > 0 ? money(row.income_amount) : '-'}</td>
                         <td className="is-right is-expense">{Number(row.expense_amount || 0) > 0 ? money(row.expense_amount) : '-'}</td>
                         <td className="is-right">{row.balance != null ? money(row.balance, '-') : '-'}</td>
-                        <td><span className={`bank-center-ledger-status ${linked ? 'is-linked' : 'is-unlinked'}`}>{linked ? '已核销' : '待核销'}</span></td>
-                        <td>{linked ? <span className="bank-center-linked-no">{linkedNo(row)}</span> : <span className="bank-center-muted">-</span>}</td>
+                        <td><span className={`bank-center-ledger-status ${financialLinked ? 'is-linked' : 'is-unlinked'}`}>{linked ? '已核销' : prepaymentLinked ? '研发预付款' : '待核销'}</span></td>
+                        <td>{linked ? <span className="bank-center-linked-no">{linkedNo(row)}</span> : prepaymentLinked ? <button type="button" className="bank-center-more-action" onClick={() => setPrepaymentTarget(row)}>预付款 · {prepaymentLinks[0]?.product_name || '研发产品'}{prepaymentLinks.length > 1 ? ` (+${prepaymentLinks.length - 1})` : ''}</button> : direction === 'expense' && canManage ? <button type="button" className="bank-center-more-action" onClick={() => setPrepaymentTarget(row)}>登记预付款</button> : <span className="bank-center-muted">-</span>}</td>
                       </tr>
                     )
                   })}
@@ -677,6 +707,16 @@ export default function BankCenterPage() {
           </section>
         </div>
       ) : null}
+
+      <RdPrepaymentFundingModal
+        open={Boolean(prepaymentTarget)}
+        transaction={prepaymentTarget}
+        onClose={() => setPrepaymentTarget(null)}
+        onSaved={() => {
+          refreshDashboard()
+          refreshLedger()
+        }}
+      />
 
       <BankCenterImportModal
         open={importOpen}

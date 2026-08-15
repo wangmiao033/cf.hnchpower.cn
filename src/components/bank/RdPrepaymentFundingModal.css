@@ -1,0 +1,48 @@
+.rd-prepay-modal-backdrop { position: fixed; inset: 0; z-index: 1800; display: grid; place-items: center; padding: 20px; background: rgb(15 23 42 / 48%); }
+.rd-prepay-modal { width: min(980px, calc(100vw - 40px)); max-height: calc(100vh - 40px); overflow: auto; border: 1px solid #dbe3ef; border-radius: 10px; background: #fff; box-shadow: 0 24px 70px rgb(15 23 42 / 24%); color: var(--admin-text-main); }
+.rd-prepay-modal__head { position: sticky; top: 0; z-index: 3; display: flex; justify-content: space-between; gap: 20px; padding: 18px 20px 16px; border-bottom: 1px solid var(--admin-border-soft); background: #fff; }
+.rd-prepay-modal__head span { color: var(--admin-primary); font-size: 12px; font-weight: 800; }
+.rd-prepay-modal__head h2 { margin: 4px 0; font-size: 20px; }
+.rd-prepay-modal__head p { margin: 0; color: var(--admin-text-sub); font-size: 12px; }
+.rd-prepay-modal__head > button { width: 32px; height: 32px; border: 0; border-radius: 7px; background: #f1f5f9; color: #475569; font-size: 20px; cursor: pointer; }
+.rd-prepay-modal__loading, .rd-prepay-modal__error, .rd-prepay-modal__blocked { margin: 14px 20px; padding: 11px 13px; border-radius: 7px; font-size: 13px; }
+.rd-prepay-modal__loading { background: #eff6ff; color: #1d4ed8; }
+.rd-prepay-modal__error, .rd-prepay-modal__blocked { background: #fff1f2; color: #be123c; }
+.rd-prepay-modal__bank-summary, .rd-prepay-modal__pool, .rd-prepay-funding-card__metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.rd-prepay-modal__bank-summary { border-bottom: 1px solid var(--admin-border-soft); background: #f8fafc; }
+.rd-prepay-modal__bank-summary > div, .rd-prepay-modal__pool > div, .rd-prepay-funding-card__metrics > div { padding: 12px 15px; border-right: 1px solid var(--admin-border-soft); }
+.rd-prepay-modal__bank-summary > div:last-child, .rd-prepay-modal__pool > div:last-child, .rd-prepay-funding-card__metrics > div:last-child { border-right: 0; }
+.rd-prepay-modal__bank-summary span, .rd-prepay-modal__pool span, .rd-prepay-funding-card__metrics span { display: block; color: var(--admin-text-tertiary); font-size: 11px; }
+.rd-prepay-modal__bank-summary strong, .rd-prepay-modal__pool strong, .rd-prepay-funding-card__metrics strong { display: block; margin-top: 4px; font-size: 15px; font-variant-numeric: tabular-nums; }
+.rd-prepay-modal__bank-summary .is-warning strong { color: #be123c; }
+.rd-prepay-modal__section { padding: 18px 20px; border-bottom: 1px solid var(--admin-border-soft); }
+.rd-prepay-modal__section-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 12px; }
+.rd-prepay-modal__section-head h3 { margin: 0; font-size: 15px; }
+.rd-prepay-modal__section-head p { margin: 4px 0 0; color: var(--admin-text-sub); font-size: 12px; }
+.rd-prepay-modal__section-head em { padding: 3px 8px; border-radius: 999px; background: #eef2ff; color: #4338ca; font-size: 11px; font-style: normal; font-weight: 700; }
+.rd-prepay-modal__fundings { display: grid; gap: 10px; }
+.rd-prepay-funding-card { overflow: hidden; border: 1px solid #dbe5f1; border-radius: 8px; background: #fff; }
+.rd-prepay-funding-card__title { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 13px; background: #f8fafc; }
+.rd-prepay-funding-card__title strong, .rd-prepay-funding-card__title span { display: block; }
+.rd-prepay-funding-card__title span { margin-top: 3px; color: var(--admin-text-sub); font-size: 11px; }
+.rd-prepay-funding-card__title b { color: #166534; font-size: 17px; }
+.rd-prepay-funding-card__metrics { border-top: 1px solid var(--admin-border-soft); border-bottom: 1px solid var(--admin-border-soft); }
+.rd-prepay-funding-card__warning { padding: 9px 12px; background: #fff7ed; color: #b45309; font-size: 12px; }
+.rd-prepay-funding-card__invoice-list { display: flex; flex-wrap: wrap; gap: 7px; padding: 10px 12px; }
+.rd-prepay-funding-card__invoice-list span { display: inline-flex; align-items: center; gap: 6px; padding: 4px 7px; border-radius: 6px; background: #ecfdf5; color: #047857; font-size: 11px; }
+.rd-prepay-funding-card__invoice-list span button { border: 0; background: transparent; color: #047857; cursor: pointer; }
+.rd-prepay-funding-card__invoice-list small { color: var(--admin-text-tertiary); }
+.rd-prepay-funding-card__invoice-link { display: grid; grid-template-columns: minmax(0, 1fr) 140px auto; gap: 8px; padding: 0 12px 10px; }
+.rd-prepay-funding-card__invoice-link select, .rd-prepay-funding-card__invoice-link input, .rd-prepay-modal__form select, .rd-prepay-modal__form input { height: 36px; min-width: 0; border: 1px solid var(--admin-border); border-radius: 7px; padding: 0 10px; background: #fff; }
+.rd-prepay-funding-card__invoice-link button, .rd-prepay-funding-card__foot button { height: 36px; padding: 0 11px; border: 1px solid var(--admin-border); border-radius: 7px; background: #fff; color: var(--admin-primary); font-weight: 700; cursor: pointer; }
+.rd-prepay-funding-card__foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 12px; border-top: 1px solid var(--admin-border-soft); color: var(--admin-text-sub); font-size: 11px; }
+.rd-prepay-funding-card__foot button.is-danger { color: #be123c; border-color: #fecdd3; }
+.rd-prepay-modal__form { display: grid; grid-template-columns: minmax(240px, 1.4fr) minmax(180px, .7fr) minmax(220px, 1fr) auto; gap: 10px; align-items: end; }
+.rd-prepay-modal__form label { display: flex; min-width: 0; flex-direction: column; gap: 5px; color: var(--admin-text-sub); font-size: 11px; font-weight: 700; }
+.rd-prepay-modal__form label:first-child { grid-column: span 2; }
+.rd-prepay-modal__form label small { color: var(--admin-text-tertiary); font-weight: 500; }
+.rd-prepay-modal__pool { grid-column: 1 / -1; overflow: hidden; border: 1px solid var(--admin-border-soft); border-radius: 7px; background: #f8fafc; }
+.rd-prepay-modal__primary { height: 36px; padding: 0 14px; border: 1px solid var(--admin-primary); border-radius: 7px; background: var(--admin-primary); color: #fff; font-weight: 800; cursor: pointer; }
+.rd-prepay-modal button:disabled, .rd-prepay-modal input:disabled, .rd-prepay-modal select:disabled { cursor: not-allowed; opacity: .55; }
+.rd-prepay-modal__hint { padding: 12px 20px 16px; color: var(--admin-text-tertiary); font-size: 11px; line-height: 1.6; }
+@media (max-width: 760px) { .rd-prepay-modal { width: calc(100vw - 20px); max-height: calc(100vh - 20px); } .rd-prepay-modal-backdrop { padding: 10px; } .rd-prepay-modal__bank-summary, .rd-prepay-modal__pool, .rd-prepay-funding-card__metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } .rd-prepay-modal__form { grid-template-columns: 1fr; } .rd-prepay-modal__form label:first-child, .rd-prepay-modal__pool { grid-column: auto; } .rd-prepay-funding-card__invoice-link { grid-template-columns: 1fr; } }

@@ -31,6 +31,7 @@ from app.services.bank_auto_reconciliation import (
     transaction_direction,
 )
 from app.services.rd_bank_payment_aggregate import aggregate_rd_payments_for_ids, fill_payable_for_row
+from app.services.rd_prepayment import bank_funding_transaction_ids
 
 
 def _num(value) -> float:
@@ -115,6 +116,9 @@ def build_p2_dashboard(db: Session, limit: int = 500) -> dict:
         .where(predicate)
         .order_by(BankTransaction.trade_date.desc(), BankTransaction.created_at.desc())
     ).scalars().all()
+    funded_ids = bank_funding_transaction_ids(db)
+    if funded_ids:
+        rows = [row for row in rows if str(row.id) not in funded_ids]
 
     pool = _candidate_pool(db)
     suggestions: list[dict] = []
@@ -250,6 +254,8 @@ def allocate_transaction(db: Session, transaction_id: str, allocations: list[dic
     ).scalar_one_or_none()
     if tx is None:
         raise HTTPException(status_code=404, detail="银行流水不存在")
+    if str(tx.id) in bank_funding_transaction_ids(db):
+        raise HTTPException(status_code=409, detail="该流水已经登记为研发预付款，不能再分配到普通账单")
     direction, total, blocked = transaction_direction(tx)
     if blocked or direction == "unknown" or total <= EPS:
         raise HTTPException(status_code=422, detail=blocked or "流水金额无效")
