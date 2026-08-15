@@ -13,7 +13,7 @@ function dateTime(value) {
   return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString('zh-CN', { hour12: false })
 }
 
-export default function Bill360FundingPanel({ billType, billId }) {
+export default function Bill360FundingPanel({ billType, billId, onGoBank }) {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -44,6 +44,12 @@ export default function Bill360FundingPanel({ billType, billId }) {
         <article className={data.remaining_amount <= 0.01 ? 'is-good' : 'is-warning'}><span>剩余未结</span><strong>{money(data.remaining_amount)}</strong><small>{percent.toFixed(1)}% 已完成</small></article>
       </section>
       <div className="bill360-funding-progress"><span style={{ width: `${percent}%` }} /></div>
+      {data.remaining_amount > 0.01 && typeof onGoBank === 'function' ? (
+        <div className="bill360-funding-next-action">
+          <div><span>NEXT ACTION</span><strong>资金尚未结清</strong><small>去银行中心匹配或确认流水，完成后回到 360° 会自动重新汇总。</small></div>
+          <button type="button" onClick={onGoBank}>去银行中心处理 →</button>
+        </div>
+      ) : null}
       <section className="bill360-funding-card">
         <header><div><span>BANK ALLOCATIONS</span><h3>银行流水分配明细</h3></div><small>同一账单可由多笔流水共同结清</small></header>
         <div className="bill360-funding-table-wrap">
