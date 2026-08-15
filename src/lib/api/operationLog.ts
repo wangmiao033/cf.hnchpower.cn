@@ -28,6 +28,7 @@ export function listOperationLogs(params: {
   entity_type?: string
   entity_id?: string
   action?: string
+  include_related?: boolean
   limit?: number
   offset?: number
 } = {}): Promise<OperationLogListResponse> {
@@ -35,6 +36,7 @@ export function listOperationLogs(params: {
   if (params.entity_type) query.set('entity_type', params.entity_type)
   if (params.entity_id) query.set('entity_id', params.entity_id)
   if (params.action) query.set('action', params.action)
+  if (params.include_related) query.set('include_related', 'true')
   if (params.limit != null) query.set('limit', String(params.limit))
   if (params.offset != null) query.set('offset', String(params.offset))
   const qs = query.toString()
