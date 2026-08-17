@@ -16,7 +16,7 @@
     },
     "backend": {
       "root": "proxy/",
-      "entrypoint": "secured_main:app",
+      "entrypoint": "stable_secured_main:app",
       "framework": "fastapi"
     },
     "core": {
