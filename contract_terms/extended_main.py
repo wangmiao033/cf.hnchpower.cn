@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from datetime import datetime, timezone
 from typing import Any
 
@@ -10,11 +11,11 @@ from fastapi import FastAPI, HTTPException, Query, Request
 from psycopg.rows import dict_row
 
 try:
-    from .main import app as _base_app, _database_url, _ensure_table, _require_permission
+    from .main import app as _base_app, _database_url, _require_permission, _require_table
     from .matcher import evaluate_line, summarize_results
     from .channel_rule_recommender import recommend_channel_rules
 except ImportError:  # Vercel loads service modules from the service root.
-    from main import app as _base_app, _database_url, _ensure_table, _require_permission
+    from main import app as _base_app, _database_url, _require_permission, _require_table
     from matcher import evaluate_line, summarize_results
     from channel_rule_recommender import recommend_channel_rules
 
@@ -201,50 +202,67 @@ def _channel_bill(conn: psycopg.Connection, bill_id: str) -> tuple[dict, list[di
     ]
 
 
+_CANDIDATE_SQL = """
+    SELECT
+      access.id AS access_item_id,
+      access.contract_id,
+      access.channel_name,
+      access.product_name,
+      access.authorization_start,
+      access.authorization_end,
+      access.share_rate,
+      access.channel_fee_rate,
+      access.status AS access_status,
+      contract.contract_name,
+      contract.contract_no,
+      contract.counterparty,
+      contract.effective_date,
+      contract.end_date,
+      contract.performance_status,
+      partner.name AS partner_name,
+      partner.short_name AS partner_short_name,
+      terms.settlement_mode,
+      terms.settlement_basis,
+      terms.unit_price,
+      terms.currency,
+      terms.settlement_cycle,
+      terms.payment_terms,
+      terms.invoice_tax_rate,
+      terms.invoice_type,
+      terms.refund_rule,
+      terms.testing_fee,
+      terms.server_cost_bearer,
+      terms.prepayment_amount,
+      terms.minimum_guarantee_amount,
+      terms.deduction_rule
+    FROM cf_contract_access_items AS access
+    JOIN cf_contract_records AS contract ON contract.id = access.contract_id
+    LEFT JOIN cf_partner_records AS partner ON partner.id = contract.partner_id
+    LEFT JOIN cf_contract_access_terms AS terms ON terms.access_item_id = access.id
+    ORDER BY contract.updated_at DESC, access.updated_at DESC
+"""
+
+
 def _candidate_rows(conn: psycopg.Connection) -> list[dict]:
-    _ensure_table(conn)
-    rows = conn.execute(
-        """
-        SELECT
-          access.id AS access_item_id,
-          access.contract_id,
-          access.channel_name,
-          access.product_name,
-          access.authorization_start,
-          access.authorization_end,
-          access.share_rate,
-          access.channel_fee_rate,
-          access.status AS access_status,
-          contract.contract_name,
-          contract.contract_no,
-          contract.counterparty,
-          contract.effective_date,
-          contract.end_date,
-          contract.performance_status,
-          partner.name AS partner_name,
-          partner.short_name AS partner_short_name,
-          terms.settlement_mode,
-          terms.settlement_basis,
-          terms.unit_price,
-          terms.currency,
-          terms.settlement_cycle,
-          terms.payment_terms,
-          terms.invoice_tax_rate,
-          terms.invoice_type,
-          terms.refund_rule,
-          terms.testing_fee,
-          terms.server_cost_bearer,
-          terms.prepayment_amount,
-          terms.minimum_guarantee_amount,
-          terms.deduction_rule
-        FROM cf_contract_access_items AS access
-        JOIN cf_contract_records AS contract ON contract.id = access.contract_id
-        LEFT JOIN cf_partner_records AS partner ON partner.id = contract.partner_id
-        LEFT JOIN cf_contract_access_terms AS terms ON terms.access_item_id = access.id
-        ORDER BY contract.updated_at DESC, access.updated_at DESC
-        """
-    ).fetchall()
-    return [dict(row) for row in rows]
+    """Read contract candidates without runtime DDL and retry transient deadlocks."""
+    for attempt in range(3):
+        try:
+            _require_table(conn)
+            rows = conn.execute(_CANDIDATE_SQL).fetchall()
+            return [dict(row) for row in rows]
+        except psycopg.errors.DeadlockDetected as exc:
+            conn.rollback()
+            if attempt >= 2:
+                raise HTTPException(
+                    status_code=503,
+                    detail={
+                        "error": "contract_service_busy",
+                        "message": "合同服务正在处理并发数据库操作，请稍后重试。",
+                        "retryable": True,
+                    },
+                ) from exc
+            time.sleep(0.08 * (attempt + 1))
+    return []
 
 
 def _bill_level_checks(bill: dict, line_results: list[dict]) -> list[dict]:
@@ -286,7 +304,6 @@ def recommend_channel_rule(request: Request, payload: dict) -> dict:
     with psycopg.connect(_database_url(), connect_timeout=15, row_factory=dict_row) as conn:
         candidates = _candidate_rows(conn)
         result = recommend_channel_rules(partner_name, channel_name, lines, candidates)
-        conn.commit()
     return {**result, "generated_at": datetime.now(timezone.utc).isoformat()}
 
 
@@ -308,7 +325,6 @@ def reconcile_bill_contract(
             summary["issue_count"] += len(bill_checks)
             summary["overall_status"] = "warning" if summary["overall_status"] == "pass" else summary["overall_status"]
             summary["can_auto_confirm"] = False
-        conn.commit()
 
     return {
         "version": "contract-match-v1",
