@@ -356,26 +356,5 @@ export function recommendChannelContractRules(payload: {
   channel_name?: string
   lines: Array<{ game_name: string; settlement_cycle: string }>
 }) {
-  return apiPost<ChannelContractRuleRecommendation>(
-    `${PATH}/channel-rule-recommendation`,
-    payload
-  ).then((result) => {
-    // A partner-level rule is already the resolved common rule for this partner.
-    // When every bill line has a contract match, keeping partner_auto_apply=false
-    // leaves row share rates at their default 0 even though the UI correctly shows
-    // the recognized contract rate. Treat this fully matched case as safe to apply
-    // to the current bill; line-specific auto recommendations still take priority.
-    const fullyMatched =
-      Number(result.total_lines || 0) > 0 &&
-      Number(result.matched_lines || 0) === Number(result.total_lines || 0)
-
-    if (result.partner_recommendation && fullyMatched && !result.partner_auto_apply) {
-      return {
-        ...result,
-        partner_auto_apply: true
-      }
-    }
-
-    return result
-  })
+  return apiPost<ChannelContractRuleRecommendation>(`${PATH}/channel-rule-recommendation`, payload)
 }
