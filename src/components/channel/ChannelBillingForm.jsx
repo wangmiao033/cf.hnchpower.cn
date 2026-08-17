@@ -187,12 +187,16 @@ function ChannelBillingForm({
     const result = contractRuleState.recommendation
     if (!result) return false
     if (result.partner_rule_status === 'none') return false
+    const partnerBaseline = result.partner_recommendation && (result.partner_auto_apply || mode === 'add')
+      ? result.partner_recommendation
+      : null
     for (let index = 0; index < lines.length; index += 1) {
       const row = lines[index]
       if (!String(row.gameName || '').trim() || !normalizeChannelSettlementCycle(row.settlementCycle)) continue
       const item = (result.lines || []).find((candidate) => candidate.line_index === index)
-      if (!item?.match || !item.auto_apply || !item.recommended) return true
-      const rec = item.recommended
+      if (!item?.match) return true
+      const rec = item.auto_apply && item.recommended ? item.recommended : partnerBaseline
+      if (!rec) return true
       const rowRule = resolveChannelLineRuleHeader(row, effectiveRuleHeader)
       if (rec.share_rate != null && !sameNumber(row.shareRate, rec.share_rate)) return true
       if (rec.tax_rate != null && !sameNumber(row.taxRate, rec.tax_rate)) return true
@@ -201,7 +205,7 @@ function ChannelBillingForm({
       if (rec.tax_mode && rowRule.taxMode !== rec.tax_mode) return true
     }
     return false
-  }, [contractAwareMode, contractRuleState.recommendation, effectiveRuleHeader, lines, targetedRuleLocked])
+  }, [contractAwareMode, contractRuleState.recommendation, effectiveRuleHeader, lines, mode, targetedRuleLocked])
 
   useEffect(() => { onPreviewChange?.(previewSettlement) }, [previewSettlement, onPreviewChange])
 
@@ -267,7 +271,9 @@ function ChannelBillingForm({
 
           const targeted = detectChannelRulePreset(header.partnerName || header.channelName) === XIAN_WEIZHEN_9917_RULE
           const preciseHeader = result.auto_apply && result.header_recommendation ? result.header_recommendation : null
-          const baseline = result.partner_auto_apply && result.partner_recommendation ? result.partner_recommendation : null
+          const baseline = result.partner_recommendation && (result.partner_auto_apply || mode === 'add')
+            ? result.partner_recommendation
+            : null
           const chosenHeader = preciseHeader || baseline
           const lineRecommendations = new Map(
             (result.lines || [])
@@ -411,7 +417,10 @@ function ChannelBillingForm({
   const addLine = () => {
     const last = lines[lines.length - 1] || {}
     const lastCycle = normalizeChannelSettlementCycle(last.settlementCycle)
-    const baseline = contractRuleState.recommendation?.partner_recommendation
+    const recommendation = contractRuleState.recommendation
+    const baseline = recommendation?.partner_recommendation && (recommendation.partner_auto_apply || mode === 'add')
+      ? recommendation.partner_recommendation
+      : null
     let next = { ...initialLineItem(), settlementCycle: lastCycle }
     if (!targetedRuleLocked) {
       if (baseline) next = applyContractRecommendationToLine(next, baseline)
