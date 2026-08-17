@@ -80,7 +80,6 @@ jobs:
           missing = sorted(required - found)
           if missing:
               print('::error::Missing Vercel Production variables: ' + ', '.join(missing))
-              print('Create a Workers AI REST API token in Cloudflare, then add both variables before merging.')
               raise SystemExit(1)
           print('Cloudflare Workers AI Production variables are configured.')
           PY
@@ -198,30 +197,6 @@ jobs:
         with:
           node-version: '24'
 
-      - uses: actions/setup-python@v5
-        if: steps.latest.outputs.deploy == 'true'
-        with:
-          python-version: '3.12'
-          cache: pip
-          cache-dependency-path: backend/requirements.txt
-
-      - name: Install migration dependencies
-        if: steps.latest.outputs.deploy == 'true'
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -r backend/requirements.txt
-          python -m pip check
-
-      - name: Run serialized production database migrations
-        if: steps.latest.outputs.deploy == 'true'
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          export PYTHONPATH=backend:.
-          python backend/scripts/run_vercel_production_migrations.py
-
       - name: Deploy latest main to Vercel Production
         id: vercel
         if: steps.latest.outputs.deploy == 'true'
@@ -271,7 +246,7 @@ jobs:
             echo '- Git SHA: `${{ github.sha }}`'
             echo '- Production URL: `${{ steps.vercel.outputs.url }}`'
             echo '- Domain: `https://cf.hnchpower.cn`'
-            echo '- Database migrations: serialized before Vercel deployment.'
+            echo '- Database migrations: executed inside the Vercel Production build using sensitive env.'
             echo '- Contract AI provider: `Cloudflare Workers AI`.'
             echo '- Git auto-deployments: disabled; this workflow is the only release path.'
           } >> "$GITHUB_STEP_SUMMARY"
