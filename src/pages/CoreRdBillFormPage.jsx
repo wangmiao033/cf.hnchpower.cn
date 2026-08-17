@@ -3,6 +3,7 @@ import { useAppState } from '@/app/AppStateContext.jsx'
 import PageContainer from '@/components/layout/PageContainer.jsx'
 import BillScanAttachments from '@/components/billing/BillScanAttachments.jsx'
 import ContractDrivenRdEntry from '@/components/reconciliation/ContractDrivenRdEntry.jsx'
+import ContractDifferenceActionPanel from '@/components/reconciliation/ContractDifferenceActionPanel.jsx'
 import { CoreBillLoadingState } from '@/pages/CoreBillLoadingState.jsx'
 import { VIEWS } from '@/app/routes.js'
 import {
@@ -62,6 +63,7 @@ function CoreRdBillFormPage({ mode }) {
   const [loadError, setLoadError] = useState('')
   const [loadAttempt, setLoadAttempt] = useState(0)
   const [reviewing, setReviewing] = useState(false)
+  const [differenceRefreshVersion, setDifferenceRefreshVersion] = useState(0)
 
   useEffect(() => {
     if (!isEdit) return
@@ -171,6 +173,7 @@ function CoreRdBillFormPage({ mode }) {
         showToast('核对完成，账单已锁定', 'success')
         goList()
       } catch (error) {
+        setDifferenceRefreshVersion((value) => value + 1)
         showToast(error instanceof Error ? error.message : '账单已保存，但确认核对失败，请稍后重试。', 'error')
       } finally {
         setReviewing(false)
@@ -300,6 +303,17 @@ function CoreRdBillFormPage({ mode }) {
         billType="rd"
         billId={isEdit ? String(stableEditRecord?.id || reconEditRecordId || '') : ''}
       />
+
+      {isEdit && (stableEditRecord?.id || reconEditRecordId) ? (
+        <ContractDifferenceActionPanel
+          key={`${stableEditRecord?.id || reconEditRecordId}-${differenceRefreshVersion}`}
+          billType="rd"
+          billId={String(stableEditRecord?.id || reconEditRecordId)}
+          onEditBill={() => {
+            document.getElementById(FORM_ID)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+          }}
+        />
+      ) : null}
 
       <section className="core-bill-footer">
         <div className="core-bill-footer-summary">
