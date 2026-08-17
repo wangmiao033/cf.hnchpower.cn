@@ -5,6 +5,7 @@ export type ContractAccessTerms = {
   contract_id: string
   settlement_mode: string
   settlement_basis: string
+  commercial_variant: string
   unit_price: string | null
   currency: string
   settlement_cycle: string
@@ -25,6 +26,7 @@ export type ContractAccessTermsPayload = {
   contract_id?: string
   settlement_mode?: string
   settlement_basis?: string
+  commercial_variant?: string
   unit_price?: string | number | null
   currency?: string
   settlement_cycle?: string
@@ -72,6 +74,7 @@ export type ContractBillMatch = {
   access_item_id: string
   product_name: string
   channel_name: string
+  commercial_variant?: string | null
   authorization_start: string | null
   authorization_end: string | null
   share_rate: string | number | null
@@ -94,6 +97,7 @@ export type ContractBillCandidate = {
   access_item_id: string
   product_name: string
   channel_name: string
+  commercial_variant?: string | null
   partner_name?: string
   authorization_start: string | null
   authorization_end: string | null
@@ -249,6 +253,7 @@ export type ChannelContractRuleRecommendation = {
       access_item_id: string
       product_name: string
       channel_name: string
+      commercial_variant?: string | null
       authorization_start: string | null
       authorization_end: string | null
       share_rate: string | number | null
