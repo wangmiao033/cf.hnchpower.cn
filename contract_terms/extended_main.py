@@ -19,9 +19,6 @@ except ImportError:  # Vercel loads service modules from the service root.
     from matcher import evaluate_line, summarize_results
     from channel_rule_recommender import recommend_channel_rules
 
-# Vercel's Python builder discovers handlers statically. Keep an explicit
-# top-level FastAPI assignment in this entrypoint, then reuse all existing
-# contract-terms routes from the stable base service.
 app = FastAPI(
     title="contract-terms-reconciliation",
     docs_url=None,
@@ -223,6 +220,7 @@ _CANDIDATE_SQL = """
       partner.short_name AS partner_short_name,
       terms.settlement_mode,
       terms.settlement_basis,
+      terms.commercial_variant,
       terms.unit_price,
       terms.currency,
       terms.settlement_cycle,
@@ -291,7 +289,6 @@ def _bill_level_checks(bill: dict, line_results: list[dict]) -> list[dict]:
 
 @app.post("/api/contract-terms/channel-rule-recommendation")
 def recommend_channel_rule(request: Request, payload: dict) -> dict:
-    """Match a draft channel bill to contract access items before the bill exists."""
     _require_permission(request, "contracts.view")
     partner_name = str(payload.get("partner_name") or "").strip()
     channel_name = str(payload.get("channel_name") or "").strip()
