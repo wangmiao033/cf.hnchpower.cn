@@ -1,4 +1,4 @@
-"""Run versioned PostgreSQL schema migrations safely at application startup."""
+"""Run versioned PostgreSQL schema migrations from an explicit migration context."""
 
 from __future__ import annotations
 
@@ -16,9 +16,11 @@ logger = logging.getLogger(__name__)
 
 MIGRATION_DIR = Path(__file__).resolve().parents[2] / "sql"
 MIGRATION_FILES = (
-    *tuple(f"{number:03d}" for number in range(1, 49)),
+    *tuple(f"{number:03d}" for number in range(1, 52)),
     "neon_repair_missing_columns.sql",
 )
+
+_TRUE_VALUES = {"1", "true", "yes", "on"}
 
 
 def _migration_paths() -> list[Path]:
@@ -37,10 +39,14 @@ def _migration_paths() -> list[Path]:
 
 
 def should_run_migrations() -> bool:
+    """Never execute DDL in a Vercel request/cold-start process."""
+    context = os.environ.get("MIGRATION_EXECUTION_CONTEXT", "").strip().lower()
+    if context in {"deploy", "manual", "cli"}:
+        return True
+    if os.environ.get("VERCEL", "").strip().lower() in _TRUE_VALUES:
+        return False
     configured = os.environ.get("AUTO_MIGRATE_DB", "").strip().lower()
-    if configured:
-        return configured in {"1", "true", "yes", "on"}
-    return os.environ.get("APP_ENV", "").strip().lower() == "production"
+    return configured in _TRUE_VALUES
 
 
 def run_schema_migrations() -> None:
