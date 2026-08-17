@@ -20,8 +20,6 @@ MIGRATION_FILES = (
     "neon_repair_missing_columns.sql",
 )
 
-_TRUE_VALUES = {"1", "true", "yes", "on"}
-
 
 def _migration_paths() -> list[Path]:
     paths: list[Path] = []
@@ -39,14 +37,9 @@ def _migration_paths() -> list[Path]:
 
 
 def should_run_migrations() -> bool:
-    """Never execute DDL in a Vercel request/cold-start process."""
+    """Only explicit deploy/manual/CLI jobs may execute schema DDL."""
     context = os.environ.get("MIGRATION_EXECUTION_CONTEXT", "").strip().lower()
-    if context in {"deploy", "manual", "cli"}:
-        return True
-    if os.environ.get("VERCEL", "").strip().lower() in _TRUE_VALUES:
-        return False
-    configured = os.environ.get("AUTO_MIGRATE_DB", "").strip().lower()
-    return configured in _TRUE_VALUES
+    return context in {"deploy", "manual", "cli"}
 
 
 def run_schema_migrations() -> None:
