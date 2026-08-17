@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 from decimal import Decimal, InvalidOperation
 
 import jwt
@@ -42,6 +43,8 @@ DECIMAL_FIELDS = {
     "prepayment_amount": Decimal("0.01"),
     "minimum_guarantee_amount": Decimal("0.01"),
 }
+
+_VARIANT_RE = re.compile(r"(?<!\d)(\d+(?:[.]\d+)?)\s*折", re.IGNORECASE)
 
 
 def _database_url() -> str:
@@ -154,6 +157,25 @@ def _decimal(value: object, quantize: Decimal, *, percent: bool = False) -> Deci
     return parsed.quantize(quantize)
 
 
+def _infer_commercial_variant(product_name: object) -> str:
+    raw = str(product_name or "").replace("．", ".").strip()
+    match = _VARIANT_RE.search(raw)
+    if match:
+        try:
+            number = f"{float(match.group(1)):g}"
+        except ValueError:
+            number = match.group(1)
+        return f"{number}折"
+    lowered = raw.lower().replace(" ", "")
+    if "折扣版" in lowered:
+        return "折扣版"
+    if "折服" in lowered:
+        return "折服"
+    if "折版" in lowered:
+        return "折版"
+    return ""
+
+
 def _payload(raw: dict) -> dict:
     clean = {key: _text(raw.get(key), limit) for key, limit in TEXT_FIELDS.items()}
     clean["currency"] = (clean.get("currency") or "CNY").upper()
@@ -226,7 +248,7 @@ def upsert_terms(access_item_id: str, request: Request, payload: dict) -> dict:
     with psycopg.connect(_database_url(), connect_timeout=15, row_factory=dict_row) as conn:
         _require_table(conn)
         access_item = conn.execute(
-            "SELECT id, contract_id FROM cf_contract_access_items WHERE id = %s",
+            "SELECT id, contract_id, product_name FROM cf_contract_access_items WHERE id = %s",
             [access_item_id],
         ).fetchone()
         if access_item is None:
@@ -235,6 +257,12 @@ def upsert_terms(access_item_id: str, request: Request, payload: dict) -> dict:
         actual_contract_id = str(access_item["contract_id"])
         if requested_contract_id and requested_contract_id != actual_contract_id:
             raise HTTPException(status_code=409, detail="合作清单与合同归属不一致")
+
+        # Commercial version is deliberately zero-input for normal users. If the client
+        # does not provide an explicit structured value, derive it from the product name
+        # once on save. Explicit API clients may still override it intentionally.
+        if not clean["commercial_variant"]:
+            clean["commercial_variant"] = _infer_commercial_variant(access_item.get("product_name"))
 
         row = conn.execute(
             """
