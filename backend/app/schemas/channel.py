@@ -26,6 +26,13 @@ class ChannelReceiptRead(BaseModel):
     remark: str | None
     attachment_url: str | None
     created_at: datetime
+    source_type: str = "manual"
+    source_label: str = "手工登记"
+    bank_match_id: str | None = None
+    bank_transaction_id: str | None = None
+    bank_transaction_no: str | None = None
+    bank_match_status: str | None = None
+    can_delete_directly: bool = True
 
 
 class ChannelReceiptListResponse(BaseModel):
