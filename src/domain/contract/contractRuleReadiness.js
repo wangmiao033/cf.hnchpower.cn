@@ -16,10 +16,15 @@ function settlementBasis(entry) {
   return text(entry?.settlement_basis || entry?.settlementBasis).toLowerCase()
 }
 
+function isUnitBased(entry) {
+  const combined = `${settlementMode(entry)} ${settlementBasis(entry)}`
+  return /cpa|cpi|单价|固定|fixed|unit|注册|激活/.test(combined)
+}
+
 function isShareBased(entry) {
   const combined = `${settlementMode(entry)} ${settlementBasis(entry)}`
-  if (/cpa|cps|单价|固定|fixed|unit/.test(combined)) return false
-  if (/分成|流水|share|revenue|充值/.test(combined)) return true
+  if (isUnitBased(entry)) return false
+  if (/分成|流水|share|revenue|充值|cps/.test(combined)) return true
   return hasNumber(entry?.share_rate ?? entry?.shareRate)
 }
 
@@ -38,10 +43,20 @@ export function getContractRuleReadiness(entry, options = {}) {
 
   const mode = text(entry?.settlement_mode || entry?.settlementMode)
   const basis = text(entry?.settlement_basis || entry?.settlementBasis)
-  if (!mode && !basis) warnings.push('未明确结算模式/基数')
+  const shareRate = entry?.share_rate ?? entry?.shareRate
+  const unitPrice = entry?.unit_price ?? entry?.unitPrice
 
-  if (isShareBased(entry) && !hasNumber(entry?.share_rate ?? entry?.shareRate)) {
+  if (!mode && !basis && !hasNumber(shareRate) && !hasNumber(unitPrice)) {
+    issues.push('缺结算规则')
+  } else if (!mode && !basis) {
+    warnings.push('未明确结算模式/基数')
+  }
+
+  if (isShareBased(entry) && !hasNumber(shareRate)) {
     issues.push('缺分成比例')
+  }
+  if (isUnitBased(entry) && !hasNumber(unitPrice)) {
+    issues.push('缺结算单价')
   }
 
   const cycle = text(entry?.settlement_cycle || entry?.settlementCycle)
