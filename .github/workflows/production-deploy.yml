@@ -221,6 +221,8 @@ jobs:
           set -euo pipefail
           ENV_FILE="$(mktemp)"
           trap 'rm -f "$ENV_FILE"' EXIT
+          rm -rf .vercel
+          npx --yes vercel@latest pull --yes --environment=production --token "$VERCEL_TOKEN"
           npx --yes vercel@latest env pull "$ENV_FILE" --environment=production --yes --token "$VERCEL_TOKEN"
           set -a
           # Vercel env pull writes a shell-compatible dotenv file. Do not print it.
