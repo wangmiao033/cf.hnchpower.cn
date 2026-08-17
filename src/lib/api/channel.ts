@@ -44,7 +44,10 @@ export function deleteChannelRecord(id: string): Promise<void> { return apiDelet
 export type ChannelReceiptPayload = { amount: number; receipt_date?: string | null; bank_account?: string | null; remark?: string | null; attachment_url?: string | null }
 export function uploadChannelReceiptAttachment(file: File): Promise<{ url: string }> { const fd = new FormData(); fd.append('file', file); return apiPostMultipart<{ url: string }>(`${PATH}/receipt-attachment`, fd) }
 export function createChannelReceipt(recordId: string, body: ChannelReceiptPayload): Promise<ApiChannelRow> { return apiPost<ApiChannelRow>(`${PATH}/${encodeURIComponent(recordId)}/receipts`, body) }
-export type ApiChannelReceipt = { id: string; channel_record_id: string; amount: number; receipt_date: string | null; bank_account: string | null; remark: string | null; attachment_url: string | null; created_at: string }
+export type ApiChannelReceipt = {
+  id: string; channel_record_id: string; amount: number; receipt_date: string | null; bank_account: string | null; remark: string | null; attachment_url: string | null; created_at: string;
+  source_type: 'manual' | 'bank_allocation' | string; source_label: string; bank_match_id: string | null; bank_transaction_id: string | null; bank_transaction_no: string | null; bank_match_status: string | null; can_delete_directly: boolean
+}
 export function listChannelReceipts(recordId: string): Promise<{ items: ApiChannelReceipt[] }> { return apiGet(`${PATH}/${encodeURIComponent(recordId)}/receipts`) }
 export function deleteChannelReceipt(recordId: string, receiptId: string): Promise<void> { return apiDelete(`${PATH}/${encodeURIComponent(recordId)}/receipts/${encodeURIComponent(receiptId)}`) }
 
