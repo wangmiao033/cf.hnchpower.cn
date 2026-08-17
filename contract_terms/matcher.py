@@ -51,6 +51,27 @@ def normalize_game(value: Any) -> str:
     return text
 
 
+def commercial_game_variant(value: Any) -> str:
+    """Return a settlement-relevant discount variant such as 0.05折 or 0.1折.
+
+    Parenthetical marketing text is intentionally removed by ``normalize_game``
+    so a bill like ``云上征途（0.05折）`` can still match a legacy contract row
+    named only ``云上征途``.  Discount versions are different commercial SKUs,
+    however, and may carry different share/channel-fee rules.  Preserve that
+    one settlement-driving token separately so 0.05折 never competes as an exact
+    candidate for 0.1折.
+    """
+    text = unicodedata.normalize("NFKC", str(value or "")).strip().lower()
+    match = re.search(r"(?<!\d)(\d+(?:\.\d+)?)\s*折", text)
+    if not match:
+        return ""
+    try:
+        number = float(match.group(1))
+    except (TypeError, ValueError):
+        return ""
+    return f"{number:g}折"
+
+
 def normalize_channel(value: Any) -> str:
     text = unicodedata.normalize("NFKC", str(value or "")).strip().lower()
     return re.sub(r"[\s·,，.。\-_/\\:：]", "", text)
@@ -121,6 +142,9 @@ def score_candidate(bill: dict, line: dict, candidate: dict) -> dict:
         normalize_game(candidate.get("product_name")),
         containment_floor=4,
     )
+    line_variant = commercial_game_variant(line.get("game_name"))
+    candidate_variant = commercial_game_variant(candidate.get("product_name"))
+    variant_conflict = bool(line_variant and candidate_variant and line_variant != candidate_variant)
     channel_similarity = _similarity(
         normalize_channel(bill.get("channel_name")),
         normalize_channel(candidate.get("channel_name")),
@@ -134,8 +158,10 @@ def score_candidate(bill: dict, line: dict, candidate: dict) -> dict:
 
     # Product identity is the minimum requirement for a specific access-item
     # match.  Partner identity is expected too, but a missing bill partner must
-    # not make otherwise exact legacy data impossible to inspect.
-    eligible = game_similarity > 0 and (partner_similarity > 0 or not bill_partner)
+    # not make otherwise exact legacy data impossible to inspect.  Explicit
+    # discount variants are settlement-driving product identities: 0.05折 and
+    # 0.1折 must never compete as equivalent contracts.
+    eligible = game_similarity > 0 and not variant_conflict and (partner_similarity > 0 or not bill_partner)
     score = 0.0
     reasons: list[str] = []
     if eligible:
@@ -145,6 +171,16 @@ def score_candidate(bill: dict, line: dict, candidate: dict) -> dict:
             reasons.append("游戏名称一致")
         else:
             reasons.append("游戏名称高度相似")
+
+        if line_variant:
+            if candidate_variant == line_variant:
+                reasons.append(f"商业版本一致（{line_variant}）")
+            elif not candidate_variant:
+                # Keep legacy base-name contracts usable, but an explicitly
+                # versioned access item must outrank the generic fallback.
+                score -= 12
+                reasons.append(f"合同未标注{line_variant}版本，按基础游戏名兜底")
+
         if partner_similarity == 1:
             reasons.append("合作方一致")
         elif partner_similarity > 0:
