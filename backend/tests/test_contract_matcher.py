@@ -108,7 +108,7 @@ class ContractMatcherTest(unittest.TestCase):
         self.assertEqual(result["lines"][0]["recommended"]["share_rate"], 83)
         self.assertEqual(result["lines"][0]["recommended"]["tax_rate"], 6)
 
-    def test_channel_rule_recommendation_does_not_auto_apply_ambiguous_contract(self):
+    def test_channel_rule_recommendation_auto_applies_identical_ambiguous_contract_rules(self):
         second = {**self.candidate, "contract_id": "c2", "access_item_id": "a2", "contract_name": "另一份同条件合同"}
         result = recommend_channel_rules(
             "西安烦烈网络科技有限公司",
@@ -116,9 +116,13 @@ class ContractMatcherTest(unittest.TestCase):
             [{"game_name": "云上征途", "settlement_cycle": "2026-06"}],
             [self.candidate, second],
         )
-        self.assertFalse(result["auto_apply"])
-        self.assertFalse(result["lines"][0]["auto_apply"])
+        self.assertTrue(result["auto_apply"])
+        self.assertTrue(result["lines"][0]["auto_apply"])
         self.assertEqual(result["lines"][0]["ambiguity_margin"], 0)
+        self.assertFalse(result["lines"][0]["contract_identity_unambiguous"])
+        self.assertTrue(result["lines"][0]["rule_consensus"])
+        self.assertEqual(result["lines"][0]["recommended"]["share_rate"], 83)
+        self.assertIn("合同归属仍待确认", result["lines"][0]["message"])
 
 
 if __name__ == "__main__":
