@@ -337,10 +337,20 @@ def recommend_channel_rules(
         second_score = float(pool[1][1].get("score") or 0) if len(pool) > 1 else 0.0
         top_score = float(scored.get("score") or 0)
         margin = round(top_score - second_score, 1)
-        # The margin represents contract-identity certainty, not merely whether
-        # two contracts happen to carry equal money fields. Preserve the safety
-        # boundary that equal-score duplicate contracts require human review.
-        financially_unambiguous = margin >= 10
+
+        # Contract identity certainty and settlement-rule certainty are separate.
+        # Duplicate contract rows can be equally likely while still carrying the
+        # exact same share/channel-fee rule. In that case it is safe to fill the
+        # money fields now and keep only the contract attribution itself pending.
+        contract_identity_unambiguous = margin >= 10
+        complete_rule_signatures = {
+            _rule_signature(rule)
+            for _, _, rule in pool
+            if rule.get("fields_complete")
+        }
+        rule_consensus = bool(complete_rule_signatures) and len(complete_rule_signatures) == 1
+        financially_unambiguous = contract_identity_unambiguous or rule_consensus
+
         authorization_status = scored.get("authorization_status")
         exact_identity = _partner_matches(partner_name, candidate) and _exact_game_matches(game_name, candidate)
         identity_confident = scored.get("confidence") == "high" or exact_identity
@@ -354,7 +364,15 @@ def recommend_channel_rules(
         tax_rate_warning = bool(recommended.get("tax_rate_missing"))
         public_recommended = _public_rule(recommended)
 
-        if auto_apply and authorization_status == "unknown" and tax_rate_warning:
+        if auto_apply and not contract_identity_unambiguous:
+            warning_bits: list[str] = []
+            if authorization_status == "unknown":
+                warning_bits.append("授权期未结构化")
+            if tax_rate_warning:
+                warning_bits.append("发票税率未结构化（按0记录，不参与结算）")
+            warning_text = f"；{'、'.join(warning_bits)}" if warning_bits else ""
+            line_message = f"存在多个合同候选，但结算规则完全一致，已自动带入分成/通道费；合同归属仍待确认{warning_text}"
+        elif auto_apply and authorization_status == "unknown" and tax_rate_warning:
             line_message = "合同合作项匹配明确，分成/通道费已带入；授权期与发票税率未结构化，按0记录且不参与结算"
         elif auto_apply and authorization_status == "unknown":
             line_message = "合同合作项匹配明确，授权期未结构化；已带入合同结算数字，授权期单独待确认"
@@ -367,7 +385,7 @@ def recommend_channel_rules(
         elif not recommended.get("fields_complete"):
             line_message = "已找到具体合同，但该合作项的分成或通道费结构化字段不完整"
         elif not financially_unambiguous:
-            line_message = "当前游戏/账期仍有多个有效合同候选，需要先确认合同归属"
+            line_message = "当前游戏/账期存在多个有效合同候选，且结算规则不一致，需要先确认合同归属"
         else:
             line_message = "已找到合同，但候选身份仍需人工确认"
 
@@ -384,6 +402,8 @@ def recommend_channel_rules(
                 "authorization_warning": authorization_status == "unknown",
                 "tax_rate_warning": tax_rate_warning,
                 "rule_fields_complete": bool(recommended.get("fields_complete")),
+                "contract_identity_unambiguous": contract_identity_unambiguous,
+                "rule_consensus": rule_consensus,
                 "financially_unambiguous": financially_unambiguous,
                 "candidate_count": len(ranked),
                 "usable_candidate_count": len(pool),
@@ -447,12 +467,14 @@ def recommend_channel_rules(
 
     if overall_auto and header:
         warning_bits: list[str] = []
+        if any(not item.get("contract_identity_unambiguous", True) for item in auto_lines):
+            warning_bits.append("部分明细存在多个合同候选，但结算规则一致")
         if any(item.get("authorization_warning") for item in auto_lines):
             warning_bits.append("授权期未结构化")
         if any(item.get("tax_rate_warning") for item in auto_lines):
             warning_bits.append("发票税率未结构化（按0记录，不参与结算）")
         if warning_bits:
-            message = f"当前游戏与合同匹配已明确；{'、'.join(warning_bits)}，不影响已知结算数字带入"
+            message = f"当前游戏的结算数字可自动带入；{'、'.join(warning_bits)}"
         else:
             message = "当前游戏与账期的合同匹配已明确，可自动带入"
     elif safe_partner_auto_apply:
@@ -463,7 +485,7 @@ def recommend_channel_rules(
         message = partner_summary["message"]
 
     return {
-        "version": "contract-channel-rule-v2.7",
+        "version": "contract-channel-rule-v2.8",
         "auto_apply": bool(overall_auto and header),
         "matched_lines": len(matched),
         "total_lines": len(results),
