@@ -3,7 +3,7 @@
 This script is intended for GitHub Actions. It never prints environment values.
 It supports both project-scoped and team Shared Environment Variables linked to the
 project, because Vercel multi-service projects may receive runtime variables through
-a shared team configuration even when /v10/projects/{id}/env does not expose them.
+a shared team configuration even when /v10/projects/{id}/env does not expose values.
 """
 
 from __future__ import annotations
@@ -57,13 +57,39 @@ def _walk_dicts(value: Any):
             yield from _walk_dicts(child)
 
 
-def _project_env_values(payload: Any) -> dict[str, str]:
+def _project_env_values(
+    payload: Any,
+    token: str,
+    team_id: str,
+    project_id: str,
+) -> dict[str, str]:
+    """Resolve project envs, fetching sensitive values individually when needed."""
     found: dict[str, str] = {}
+    seen_ids: set[str] = set()
     for item in _walk_dicts(payload):
         key = str(item.get("key") or "")
+        if key not in WANTED_KEYS or not _is_production(item.get("target")):
+            continue
         value = item.get("value")
-        if key in WANTED_KEYS and _is_production(item.get("target")) and isinstance(value, str) and value:
+        if isinstance(value, str) and value:
             found[key] = value
+            continue
+        env_id = str(item.get("id") or "")
+        if not env_id or env_id in seen_ids:
+            continue
+        seen_ids.add(env_id)
+        detail = _api_json(
+            f"/v1/projects/{urllib.parse.quote(project_id, safe='')}/env/"
+            f"{urllib.parse.quote(env_id, safe='')}?teamId={urllib.parse.quote(team_id, safe='')}",
+            token,
+        )
+        for row in _walk_dicts(detail):
+            if str(row.get("key") or "") != key:
+                continue
+            decrypted_value = row.get("value")
+            if isinstance(decrypted_value, str) and decrypted_value:
+                found[key] = decrypted_value
+                break
     return found
 
 
@@ -117,7 +143,7 @@ def resolve_database_env() -> tuple[dict[str, str], str]:
         f"?teamId={urllib.parse.quote(team_id, safe='')}&decrypt=true"
     )
     project_payload = _api_json(project_path, token)
-    values = _project_env_values(project_payload)
+    values = _project_env_values(project_payload, token, team_id, project_id)
     if values:
         return values, "project"
 
