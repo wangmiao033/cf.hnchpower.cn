@@ -118,37 +118,18 @@ def _require_permission(request: Request, permission: str) -> str:
     return user_id
 
 
-def _ensure_table(conn: psycopg.Connection) -> None:
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS cf_contract_access_terms (
-          access_item_id TEXT PRIMARY KEY REFERENCES cf_contract_access_items(id) ON DELETE CASCADE,
-          contract_id TEXT NOT NULL REFERENCES cf_contract_records(id) ON DELETE CASCADE,
-          settlement_mode TEXT NOT NULL DEFAULT '',
-          settlement_basis TEXT NOT NULL DEFAULT '',
-          unit_price NUMERIC(18, 4) NULL,
-          currency TEXT NOT NULL DEFAULT 'CNY',
-          settlement_cycle TEXT NOT NULL DEFAULT '',
-          payment_terms TEXT NOT NULL DEFAULT '',
-          invoice_tax_rate NUMERIC(7, 2) NULL,
-          invoice_type TEXT NOT NULL DEFAULT '',
-          refund_rule TEXT NOT NULL DEFAULT '',
-          testing_fee NUMERIC(18, 2) NULL,
-          server_cost_bearer TEXT NOT NULL DEFAULT '',
-          prepayment_amount NUMERIC(18, 2) NULL,
-          minimum_guarantee_amount NUMERIC(18, 2) NULL,
-          deduction_rule TEXT NOT NULL DEFAULT '',
-          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+def _require_table(conn: psycopg.Connection) -> None:
+    relation = conn.execute(
+        "SELECT to_regclass('public.cf_contract_access_terms') AS name"
+    ).fetchone()
+    if not relation or not relation.get("name"):
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": "contract_terms_schema_not_ready",
+                "message": "合同结构化条款数据库尚未初始化，请先完成生产迁移。",
+            },
         )
-        """
-    )
-    conn.execute(
-        """
-        CREATE INDEX IF NOT EXISTS idx_cf_contract_access_terms_contract
-        ON cf_contract_access_terms (contract_id)
-        """
-    )
 
 
 def _text(value: object, limit: int) -> str:
@@ -206,10 +187,9 @@ def _row(row: dict) -> dict:
 @app.get("/api/contract-terms/health")
 def health() -> dict:
     with psycopg.connect(_database_url(), connect_timeout=15, row_factory=dict_row) as conn:
-        _ensure_table(conn)
+        _require_table(conn)
         count = int(conn.execute("SELECT COUNT(*) AS count FROM cf_contract_access_terms").fetchone()["count"] or 0)
-        conn.commit()
-    return {"status": "ok", "count": count}
+    return {"status": "ok", "schema_ready": True, "count": count}
 
 
 @app.get("/api/contract-terms")
@@ -229,12 +209,11 @@ def list_terms(
         params.append(access_item_id)
     where = f"WHERE {' AND '.join(filters)}" if filters else ""
     with psycopg.connect(_database_url(), connect_timeout=15, row_factory=dict_row) as conn:
-        _ensure_table(conn)
+        _require_table(conn)
         rows = conn.execute(
             f"SELECT * FROM cf_contract_access_terms {where} ORDER BY updated_at DESC",
             params,
         ).fetchall()
-        conn.commit()
     return {"items": [_row(item) for item in rows], "total": len(rows)}
 
 
@@ -243,7 +222,7 @@ def upsert_terms(access_item_id: str, request: Request, payload: dict) -> dict:
     _require_permission(request, "contracts.manage")
     clean = _payload(payload)
     with psycopg.connect(_database_url(), connect_timeout=15, row_factory=dict_row) as conn:
-        _ensure_table(conn)
+        _require_table(conn)
         access_item = conn.execute(
             "SELECT id, contract_id FROM cf_contract_access_items WHERE id = %s",
             [access_item_id],
@@ -317,7 +296,7 @@ def upsert_terms(access_item_id: str, request: Request, payload: dict) -> dict:
 def delete_terms(access_item_id: str, request: Request) -> Response:
     _require_permission(request, "contracts.manage")
     with psycopg.connect(_database_url(), connect_timeout=15, row_factory=dict_row) as conn:
-        _ensure_table(conn)
+        _require_table(conn)
         conn.execute("DELETE FROM cf_contract_access_terms WHERE access_item_id = %s", [access_item_id])
         conn.commit()
     return Response(status_code=204)
