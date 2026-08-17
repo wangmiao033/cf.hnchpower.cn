@@ -156,7 +156,7 @@ class ChannelContractAuthorityTests(unittest.TestCase):
         self.assertEqual(row["recommended"]["share_rate"], 25)
         self.assertEqual(row["recommended"]["channel_fee_rate"], 0)
 
-    def test_duplicate_valid_contracts_remain_identity_ambiguous_even_when_financial_rules_match(self):
+    def test_duplicate_valid_contracts_auto_apply_when_financial_rules_match(self):
         candidates = [
             self.candidate(access_id="A1", game="龙吟大陆", contract_id="C1", contract_name="合同一"),
             self.candidate(access_id="A2", game="龙吟大陆", contract_id="C2", contract_name="合同二"),
@@ -169,9 +169,13 @@ class ChannelContractAuthorityTests(unittest.TestCase):
         )
         row = result["lines"][0]
         self.assertEqual(row["ambiguity_margin"], 0)
-        self.assertFalse(row["financially_unambiguous"])
-        self.assertFalse(row["auto_apply"])
-        self.assertIn("多个有效合同候选", row["message"])
+        self.assertFalse(row["contract_identity_unambiguous"])
+        self.assertTrue(row["rule_consensus"])
+        self.assertTrue(row["financially_unambiguous"])
+        self.assertTrue(row["auto_apply"])
+        self.assertEqual(row["recommended"]["share_rate"], 25)
+        self.assertIn("结算规则完全一致", row["message"])
+        self.assertIn("合同归属仍待确认", row["message"])
 
     def test_duplicate_contract_candidates_with_different_rules_stay_unresolved(self):
         candidates = [
@@ -185,9 +189,10 @@ class ChannelContractAuthorityTests(unittest.TestCase):
             candidates,
         )
         row = result["lines"][0]
+        self.assertFalse(row["rule_consensus"])
         self.assertFalse(row["financially_unambiguous"])
         self.assertFalse(row["auto_apply"])
-        self.assertIn("多个有效合同候选", row["message"])
+        self.assertIn("结算规则不一致", row["message"])
 
     def test_exact_identity_can_apply_when_authorization_dates_are_unstructured(self):
         candidates = [
