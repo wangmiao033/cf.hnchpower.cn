@@ -141,6 +141,7 @@ def resolve_database_env() -> tuple[dict[str, str], str]:
     project_path = (
         f"/v10/projects/{urllib.parse.quote(project_id, safe='')}/env"
         f"?teamId={urllib.parse.quote(team_id, safe='')}&decrypt=true"
+        f"&source={urllib.parse.quote('vercel-cli:pull', safe='')}"
     )
     project_payload = _api_json(project_path, token)
     values = _project_env_values(project_payload, token, team_id, project_id)
@@ -178,8 +179,6 @@ def main() -> int:
         os.environ[key] = value
     os.environ["MIGRATION_EXECUTION_CONTEXT"] = "deploy"
 
-    # Import only after setting DATABASE_URL so SQLAlchemy never initializes against
-    # an incomplete CI environment.
     from app.core.migrations import run_schema_migrations
 
     run_schema_migrations()
