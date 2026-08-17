@@ -299,6 +299,44 @@
   gap: 1px;
 }
 
+/* Keep the linked-customer status beside the short name so compact rows never clip it. */
+.invoice-rd-workspace .invoice-ledger-cell:has(.invoice-partner-link) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  grid-template-rows: auto auto;
+  column-gap: 4px;
+  row-gap: 1px;
+  align-items: center;
+  min-width: 0;
+  overflow: visible;
+}
+
+.invoice-rd-workspace .invoice-ledger-cell:has(.invoice-partner-link) > strong {
+  grid-column: 1;
+  grid-row: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.invoice-rd-workspace .invoice-ledger-cell:has(.invoice-partner-link) > .invoice-partner-link {
+  grid-column: 2;
+  grid-row: 1;
+  align-self: center;
+  margin: 0;
+  white-space: nowrap;
+}
+
+.invoice-rd-workspace .invoice-ledger-cell:has(.invoice-partner-link) > small {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .invoice-rd-workspace .invoice-ledger-cell strong {
   color: #203650;
   font-size: 12px;
