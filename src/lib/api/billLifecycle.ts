@@ -3,6 +3,7 @@ import {
   createContractReconciliationSnapshot,
   getContractBillReconciliation
 } from '@/lib/api/contractTerms.ts'
+import { listContractDifferenceCases } from '@/lib/api/contractDifferences.ts'
 import type { ChannelCumulativeBillCondition } from '@/lib/api/channelCumulativeSettlement.ts'
 
 export type BillTransitionOption = {
@@ -40,6 +41,26 @@ export function getBillLifecycle(
   return apiGet(`/api/bill-lifecycle/${encodeURIComponent(billType)}/${encodeURIComponent(billId)}`)
 }
 
+async function hasApprovedContractDifferenceOverride(
+  billType: 'rd' | 'channel',
+  billId: string,
+  failCount: number
+): Promise<boolean> {
+  if (failCount <= 0) return true
+  try {
+    const result = await listContractDifferenceCases({ billType, billId, limit: 200 })
+    const items = result.items || []
+    const unresolved = items.filter((item) => item.status !== 'resolved')
+    const accepted = items.filter(
+      (item) => item.status === 'resolved' && item.handling_type === 'accept_difference'
+    )
+    return unresolved.length === 0 && accepted.length >= failCount
+  } catch (error) {
+    console.warn('Contract difference approval lookup unavailable', error)
+    return false
+  }
+}
+
 export async function transitionBillLifecycle(
   billType: 'rd' | 'channel',
   billId: string,
@@ -59,9 +80,16 @@ export async function transitionBillLifecycle(
 
     const failCount = Number(preflight?.summary?.fail_count || 0)
     if (failCount > 0) {
-      throw new Error(
-        `合同核验发现 ${failCount} 条明确差异，暂不能确认核对。请先打开“账单360 → 合同核验”，核对分成、税率、授权期或费用条款；如自动匹配不正确，可人工锁定正确的合同合作清单。`
+      const approvedOverride = await hasApprovedContractDifferenceOverride(
+        billType,
+        billId,
+        failCount
       )
+      if (!approvedOverride) {
+        throw new Error(
+          `合同核验发现 ${failCount} 条明确差异，暂不能确认核对。可在当前页面“合同差异处理”中选择“特殊结算确认”并留痕，或前往“账单360 → 合同核验”修正合同匹配/账单数据。`
+        )
+      }
     }
   }
 
