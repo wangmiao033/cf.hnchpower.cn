@@ -2,7 +2,11 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { useAppState } from '@/app/AppStateContext.jsx'
 import { VIEWS } from '@/app/routes.js'
 import { useAuth } from '@/features/auth/AuthContext.jsx'
-import { getChannelRecordId, uploadChannelReceiptAttachment } from '@/lib/api/channel.ts'
+import {
+  getChannelRecordId,
+  listChannelReceipts,
+  uploadChannelReceiptAttachment
+} from '@/lib/api/channel.ts'
 import {
   allocateBankTransaction,
   getBankBillAllocationSummary,
@@ -81,6 +85,7 @@ function ChannelReceiptDrawer({
   const [bankError, setBankError] = useState('')
   const [bankMatches, setBankMatches] = useState([])
   const [bankBillSummary, setBankBillSummary] = useState(null)
+  const [receiptFacts, setReceiptFacts] = useState([])
   const [bankReloadKey, setBankReloadKey] = useState(0)
   const [allocatingTxId, setAllocatingTxId] = useState('')
 
@@ -108,6 +113,7 @@ function ChannelReceiptDrawer({
     setBankError('')
     setBankMatches([])
     setBankBillSummary(null)
+    setReceiptFacts([])
     setAllocatingTxId('')
   }, [open, recordId])
 
@@ -119,9 +125,10 @@ function ChannelReceiptDrawer({
 
     Promise.all([
       getBankMultiAllocationDashboard(500),
-      getBankBillAllocationSummary('channel', recordId)
+      getBankBillAllocationSummary('channel', recordId),
+      listChannelReceipts(recordId)
     ])
-      .then(([dashboard, billSummary]) => {
+      .then(([dashboard, billSummary, receiptResponse]) => {
         if (cancelled) return
         const matches = (dashboard?.suggestions || [])
           .filter((item) => item?.direction === 'collection' && numberValue(item?.remaining_amount) > 0.01)
@@ -141,11 +148,13 @@ function ChannelReceiptDrawer({
 
         setBankMatches(matches)
         setBankBillSummary(billSummary || null)
+        setReceiptFacts(Array.isArray(receiptResponse?.items) ? receiptResponse.items : [])
       })
       .catch((error) => {
         if (cancelled) return
         setBankMatches([])
         setBankBillSummary(null)
+        setReceiptFacts([])
         setBankError(error instanceof Error ? error.message : '银行流水匹配读取失败')
       })
       .finally(() => {
@@ -174,6 +183,10 @@ function ChannelReceiptDrawer({
   const unpaid = getChannelUnpaidAmount(record)
   const settled = isChannelReceiptSettled(record)
   const linkedAllocations = bankBillSummary?.allocations || []
+  const bankReceiptFacts = receiptFacts.filter((item) => item.source_type === 'bank_allocation' && item.bank_match_status !== 'reversed')
+  const manualReceiptFacts = receiptFacts.filter((item) => item.source_type !== 'bank_allocation')
+  const bankReceiptAmount = bankReceiptFacts.reduce((sum, item) => sum + numberValue(item.amount), 0)
+  const manualReceiptAmount = manualReceiptFacts.reduce((sum, item) => sum + numberValue(item.amount), 0)
 
   const resolveBankAccount = () => {
     if (bankSelect === '__custom__') {
@@ -336,6 +349,47 @@ function ChannelReceiptDrawer({
               <dd className="channel-receipt-unpaid">{formatMoney(unpaid)}</dd>
             </dl>
           </div>
+
+          <section className="channel-receipt-section channel-receipt-ledger-section">
+            <div className="channel-receipt-section-title-row">
+              <div>
+                <div className="channel-receipt-section__title">收款事实台账</div>
+                <p>把银行核销和手工收款分开留痕，已收金额必须能逐笔追溯。</p>
+              </div>
+              <span className="channel-receipt-ledger-count">{receiptFacts.length} 笔</span>
+            </div>
+            <div className="channel-receipt-ledger-stats">
+              <span><small>银行流水核销</small><strong>{formatMoney(bankReceiptAmount)}</strong></span>
+              <span><small>手工登记</small><strong>{formatMoney(manualReceiptAmount)}</strong></span>
+              <span className={Math.abs(bankReceiptAmount + manualReceiptAmount - received) <= 0.01 ? 'is-ok' : 'is-warning'}>
+                <small>台账与已收</small>
+                <strong>{Math.abs(bankReceiptAmount + manualReceiptAmount - received) <= 0.01 ? '一致' : `差 ${formatMoney(Math.abs(bankReceiptAmount + manualReceiptAmount - received))}`}</strong>
+              </span>
+            </div>
+            {receiptFacts.length ? (
+              <div className="channel-receipt-ledger-list">
+                {receiptFacts.slice(0, 6).map((item) => {
+                  const bankSource = item.source_type === 'bank_allocation'
+                  return (
+                    <div className={`channel-receipt-ledger-row ${bankSource ? 'is-bank' : 'is-manual'}`} key={item.id}>
+                      <span className="channel-receipt-ledger-source">{item.source_label || (bankSource ? '银行流水核销' : '手工登记')}</span>
+                      <div>
+                        <strong>{displayDate(item.receipt_date || item.created_at)}</strong>
+                        <small>{bankSource ? (item.bank_transaction_no || item.bank_transaction_id || '银行流水') : (item.remark || item.bank_account || '手工收款')}</small>
+                      </div>
+                      <b>{formatMoney(item.amount)}</b>
+                    </div>
+                  )
+                })}
+                {receiptFacts.length > 6 ? <small className="channel-receipt-ledger-more">另有 {receiptFacts.length - 6} 笔收款记录。</small> : null}
+              </div>
+            ) : (
+              <div className="channel-receipt-ledger-empty">当前还没有收款事实记录。</div>
+            )}
+            {bankReceiptFacts.length ? (
+              <div className="channel-receipt-ledger-note">银行核销生成的收款不能在账单里直接删除；如需撤回，请去银行中心撤销对应核销分配，系统会同步回滚收款。</div>
+            ) : null}
+          </section>
 
           <section className="channel-receipt-section channel-receipt-bank-section">
             <div className="channel-receipt-section-title-row">
