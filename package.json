@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "vercel-build": "bash scripts/vercel-production-build.sh",
+    "vercel-build": "bash scripts/vercel-production-build-v2.sh",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest"
