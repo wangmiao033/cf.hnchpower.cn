@@ -26,6 +26,7 @@ ROLE_CONTRACT_PERMISSIONS = {
 TEXT_FIELDS = {
     "settlement_mode": 100,
     "settlement_basis": 200,
+    "commercial_variant": 80,
     "currency": 12,
     "settlement_cycle": 100,
     "payment_terms": 100,
@@ -167,6 +168,7 @@ def _row(row: dict) -> dict:
         "contract_id": str(row["contract_id"]),
         "settlement_mode": row.get("settlement_mode") or "",
         "settlement_basis": row.get("settlement_basis") or "",
+        "commercial_variant": row.get("commercial_variant") or "",
         "unit_price": str(row["unit_price"]) if row.get("unit_price") is not None else None,
         "currency": row.get("currency") or "CNY",
         "settlement_cycle": row.get("settlement_cycle") or "",
@@ -237,14 +239,14 @@ def upsert_terms(access_item_id: str, request: Request, payload: dict) -> dict:
         row = conn.execute(
             """
             INSERT INTO cf_contract_access_terms (
-              access_item_id, contract_id, settlement_mode, settlement_basis,
+              access_item_id, contract_id, settlement_mode, settlement_basis, commercial_variant,
               unit_price, currency, settlement_cycle, payment_terms,
               invoice_tax_rate, invoice_type, refund_rule, testing_fee,
               server_cost_bearer, prepayment_amount, minimum_guarantee_amount,
               deduction_rule
             )
             VALUES (
-              %s, %s, %s, %s,
+              %s, %s, %s, %s, %s,
               %s, %s, %s, %s,
               %s, %s, %s, %s,
               %s, %s, %s,
@@ -254,6 +256,7 @@ def upsert_terms(access_item_id: str, request: Request, payload: dict) -> dict:
               contract_id = EXCLUDED.contract_id,
               settlement_mode = EXCLUDED.settlement_mode,
               settlement_basis = EXCLUDED.settlement_basis,
+              commercial_variant = EXCLUDED.commercial_variant,
               unit_price = EXCLUDED.unit_price,
               currency = EXCLUDED.currency,
               settlement_cycle = EXCLUDED.settlement_cycle,
@@ -274,6 +277,7 @@ def upsert_terms(access_item_id: str, request: Request, payload: dict) -> dict:
                 actual_contract_id,
                 clean["settlement_mode"],
                 clean["settlement_basis"],
+                clean["commercial_variant"],
                 clean["unit_price"],
                 clean["currency"],
                 clean["settlement_cycle"],
