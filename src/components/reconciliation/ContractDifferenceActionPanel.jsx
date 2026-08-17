@@ -20,6 +20,7 @@ const HANDLING_LABELS = {
   carry_forward: '待下月冲抵'
 }
 
+const SPECIAL_SETTLEMENT_REASON = '商务特殊约定'
 const REASON_OPTIONS = ['商务协商', '四舍五入', '历史遗留', '特殊活动', '其他']
 
 function money(value) {
@@ -34,6 +35,10 @@ function dateTime(value) {
 
 function directionText(item) {
   return item.variance_direction === 'under' ? '少结' : item.variance_direction === 'over' ? '多结' : '差异'
+}
+
+function isSpecialSettlement(item) {
+  return item?.handling_type === 'accept_difference' && item?.reason_type === SPECIAL_SETTLEMENT_REASON
 }
 
 function emptyForm() {
@@ -130,16 +135,19 @@ export default function ContractDifferenceActionPanel({
   }
 
   const startEditor = (item, action) => {
-    setEditor({ caseId: item.id, action })
+    setEditor({ caseId: item.id, action, item })
     setForm({
       ...emptyForm(),
+      reasonType: action === 'special_settlement' ? SPECIAL_SETTLEMENT_REASON : '商务协商',
       owner: item.owner || '',
       description:
-        action === 'create_adjustment'
-          ? '合同应结与账单实际差异'
-          : action === 'carry_forward'
-            ? '本期差额转下月冲抵'
-            : ''
+        action === 'special_settlement'
+          ? '本期按商务特殊约定结算，保留合同理论金额，以当前账单实际结算金额作为本期最终核对金额。'
+          : action === 'create_adjustment'
+            ? '合同应结与账单实际差异'
+            : action === 'carry_forward'
+              ? '本期差额转下月冲抵'
+              : ''
     })
     setMessage('')
   }
@@ -147,16 +155,21 @@ export default function ContractDifferenceActionPanel({
   const submitEditor = async () => {
     if (!editor) return
     const { caseId, action } = editor
+    if (action === 'special_settlement' && !String(form.description || '').trim()) {
+      setMessage('特殊结算必须填写处理说明，说明本期为什么不按合同理论金额结算。')
+      return
+    }
     const evidence = form.evidenceText
       .split(/\r?\n/)
       .map((item) => item.trim())
       .filter(Boolean)
+    const transportAction = action === 'special_settlement' ? 'accept_difference' : action
     setWorkingId(caseId)
     setMessage('')
     try {
       await handleContractDifferenceCase(caseId, {
-        action,
-        reason_type: form.reasonType,
+        action: transportAction,
+        reason_type: action === 'special_settlement' ? SPECIAL_SETTLEMENT_REASON : form.reasonType,
         description: form.description,
         owner: form.owner,
         evidence,
@@ -165,11 +178,13 @@ export default function ContractDifferenceActionPanel({
       setEditor(null)
       setForm(emptyForm())
       setMessage(
-        action === 'accept_difference'
-          ? '差异已接受并留痕。'
-          : action === 'create_adjustment'
-            ? '补差单已生成。'
-            : '已登记下月冲抵。'
+        action === 'special_settlement'
+          ? '特殊结算已人工核准：合同原值已保留，本期按账单实际金额继续。'
+          : action === 'accept_difference'
+            ? '差异已接受并留痕。'
+            : action === 'create_adjustment'
+              ? '补差单已生成。'
+              : '已登记下月冲抵。'
       )
       await refreshAfterAction(caseId)
     } catch (error) {
@@ -253,7 +268,7 @@ export default function ContractDifferenceActionPanel({
         <div>
           <span>V3.0 · 差异处置闭环</span>
           <h3>合同差异处理</h3>
-          <p>系统负责算清楚和生成处理动作，不会自动修改账单历史金额。</p>
+          <p>正常差异按原流程处理；商务临时约定可走“特殊结算确认”，合同原值不会被改写。</p>
         </div>
         {summary ? (
           <div className="contract-difference-panel__summary">
@@ -269,6 +284,7 @@ export default function ContractDifferenceActionPanel({
         {items.map((item) => {
           const isEditing = editor?.caseId === item.id
           const isExpanded = expandedId === item.id
+          const specialSettlement = isSpecialSettlement(item)
           return (
             <article key={item.id} className={`contract-difference-card is-${item.status}`}>
               <div className="contract-difference-card__top">
@@ -281,7 +297,11 @@ export default function ContractDifferenceActionPanel({
                 </div>
                 <div className="contract-difference-card__status">
                   <em>{STATUS_LABELS[item.status] || item.status}</em>
-                  {item.handling_type ? <small>{HANDLING_LABELS[item.handling_type] || item.handling_type}</small> : null}
+                  {specialSettlement
+                    ? <small>特殊结算 · 已人工核准</small>
+                    : item.handling_type
+                      ? <small>{HANDLING_LABELS[item.handling_type] || item.handling_type}</small>
+                      : null}
                 </div>
               </div>
 
@@ -297,6 +317,7 @@ export default function ContractDifferenceActionPanel({
                 {item.status === 'pending' ? (
                   <>
                     <button type="button" disabled={workingId === item.id} onClick={() => void markEditBill(item)}>修改当前账单</button>
+                    <button type="button" className="is-primary" disabled={workingId === item.id} onClick={() => startEditor(item, 'special_settlement')}>特殊结算确认</button>
                     <button type="button" disabled={workingId === item.id} onClick={() => startEditor(item, 'accept_difference')}>接受差异</button>
                     <button type="button" disabled={workingId === item.id} onClick={() => startEditor(item, 'create_adjustment')}>生成补差项</button>
                     <button type="button" disabled={workingId === item.id} onClick={() => startEditor(item, 'carry_forward')}>转下月冲抵</button>
@@ -312,6 +333,26 @@ export default function ContractDifferenceActionPanel({
 
               {isEditing ? (
                 <div className="contract-difference-editor">
+                  {editor.action === 'special_settlement' ? (
+                    <>
+                      <label>
+                        <span>处理类型</span>
+                        <input value={SPECIAL_SETTLEMENT_REASON} readOnly />
+                      </label>
+                      <label>
+                        <span>本期最终结算</span>
+                        <input value={money(editor.item?.actual_amount)} readOnly />
+                      </label>
+                      <label>
+                        <span>合同理论金额</span>
+                        <input value={money(editor.item?.expected_amount)} readOnly />
+                      </label>
+                      <label>
+                        <span>本期差异</span>
+                        <input value={`${directionText(editor.item)} ${money(editor.item?.variance_abs)}`} readOnly />
+                      </label>
+                    </>
+                  ) : null}
                   {editor.action === 'accept_difference' ? (
                     <label>
                       <span>原因类型</span>
@@ -331,8 +372,8 @@ export default function ContractDifferenceActionPanel({
                     <input value={form.owner} onChange={(event) => setForm((current) => ({ ...current, owner: event.target.value }))} placeholder="例如：王淼 / 财务" />
                   </label>
                   <label className="is-wide">
-                    <span>处理说明</span>
-                    <textarea value={form.description} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} placeholder="说明为什么接受、补差或冲抵" />
+                    <span>处理说明{editor.action === 'special_settlement' ? '（必填）' : ''}</span>
+                    <textarea value={form.description} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} placeholder={editor.action === 'special_settlement' ? '说明本期为什么按特殊约定金额结算，以及双方约定依据' : '说明为什么接受、补差或冲抵'} />
                   </label>
                   <label className="is-wide">
                     <span>附件 / 聊天记录</span>
@@ -341,7 +382,7 @@ export default function ContractDifferenceActionPanel({
                   <div className="contract-difference-editor__actions">
                     <button type="button" className="is-muted" onClick={() => setEditor(null)}>取消</button>
                     <button type="button" className="is-primary" disabled={workingId === item.id} onClick={() => void submitEditor()}>
-                      {workingId === item.id ? '保存中…' : '确认处理'}
+                      {workingId === item.id ? '保存中…' : editor.action === 'special_settlement' ? '确认特殊结算' : '确认处理'}
                     </button>
                   </div>
                 </div>
