@@ -5,6 +5,7 @@ import BillScanAttachments from '@/components/billing/BillScanAttachments.jsx'
 import ChannelBillingForm from '@/components/channel/ChannelBillingForm.jsx'
 import ChannelCumulativeSettlementCard from '@/components/channel/ChannelCumulativeSettlementCard.jsx'
 import ChannelSmartEntryBar from '@/components/channel/ChannelSmartEntryBar.jsx'
+import { findExactPartner } from '@/components/shared/PartnerPicker.jsx'
 import { CoreBillLoadingState } from '@/pages/CoreBillLoadingState.jsx'
 import { VIEWS } from '@/app/routes.js'
 import { apiChannelRowToFrontend, getChannelRecord } from '@/lib/api/channel.ts'
@@ -273,6 +274,17 @@ function CoreChannelBillFormPage({ mode }) {
 
   const zeroSettlementPreview = isZeroSettlement(previewAmount)
   const currentRecord = safety.currentRecord || smartRecord || safety.draftRecord || stableRecord || {}
+  const smartEntryPartner = !isEdit
+    ? findExactPartner(settings?.partners || [], currentRecord.partnerName || currentRecord.channelName)
+    : null
+  const smartEntryRecord = smartEntryPartner
+    ? currentRecord
+    : {
+        ...currentRecord,
+        partnerName: '',
+        channelName: '',
+        items: []
+      }
 
   return (
     <PageContainer
@@ -293,7 +305,7 @@ function CoreChannelBillFormPage({ mode }) {
               ? zeroSettlementPreview
                 ? '当前为零结算账单，可直接“确认核对并结清”，系统会跳过开票与收款环节。'
                 : '修改完成后可直接“保存并确认核对”；累计结算合作方会在核对后自动进入累计池。'
-              : '选择合作方后，V3.2 会按合同/上月自动准备游戏清单；充值流水仍由你手工填写。'}
+              : '只有从客户库明确选中合作方后，V3.2 才会读取合同/上月清单；输入中的半截名称不会触发智能生成。'}
           </span>
           {isEdit ? <span className="core-bill-review-hint">账单核对与实际结算已分离：未达累计门槛也可以正常完成核对</span> : null}
           <div className={`core-bill-draft-state ${safety.dirty ? 'is-dirty' : 'is-clean'}`}>
@@ -310,7 +322,7 @@ function CoreChannelBillFormPage({ mode }) {
 
       {!isEdit ? (
         <ChannelSmartEntryBar
-          record={currentRecord}
+          record={smartEntryRecord}
           channelRecords={recon.channelRecords || []}
           onApply={applySmartRecord}
           onNotice={(message, tone = 'info') => showToast(message, tone)}
