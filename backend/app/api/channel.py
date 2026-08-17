@@ -14,6 +14,8 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.core.blob_storage import delete_private_blob, private_blob_response, upload_private_blob
 from app.core.deps import get_db
+from app.models.bank_reconciliation_match import BankReconciliationMatch
+from app.models.bank_transaction import BankTransaction
 from app.models.channel import ChannelReceipt, ChannelRecord, ChannelRecordLineItem
 from app.schemas.channel import (
     ChannelLineItemCreate,
@@ -31,6 +33,7 @@ from app.services.channel_cumulative_invoice import assert_single_bill_collectio
 from app.services.channel_settlement_engine import aggregate_validation, calculate_channel_line
 
 router = APIRouter()
+RECEIPT_EPS = 0.01
 
 
 def _recompute_receipt_rollup(db: Session, row: ChannelRecord) -> None:
@@ -38,14 +41,67 @@ def _recompute_receipt_rollup(db: Session, row: ChannelRecord) -> None:
         select(func.coalesce(func.sum(ChannelReceipt.amount), 0)).where(ChannelReceipt.channel_record_id == row.id)
     ).scalar_one()
     row.received_amount = float(total_raw or 0)
-    receivable = float(row.settlement_amount or 0)
+    receivable = max(0.0, float(row.settlement_amount or 0))
     recv = row.received_amount
-    if recv + 1e-9 >= receivable:
+    if receivable <= RECEIPT_EPS:
+        row.receipt_status = "paid" if recv <= RECEIPT_EPS else "overpaid"
+    elif recv > receivable + RECEIPT_EPS:
+        row.receipt_status = "overpaid"
+    elif recv + RECEIPT_EPS >= receivable:
         row.receipt_status = "paid"
-    elif recv <= 0:
+    elif recv <= RECEIPT_EPS:
         row.receipt_status = "unpaid"
     else:
         row.receipt_status = "partial"
+
+
+def _receipt_total(db: Session, record_id: str) -> float:
+    total_raw = db.execute(
+        select(func.coalesce(func.sum(ChannelReceipt.amount), 0)).where(ChannelReceipt.channel_record_id == record_id)
+    ).scalar_one()
+    return float(total_raw or 0)
+
+
+def _receipt_source_maps(db: Session, receipt_ids: list[str]) -> tuple[dict[str, BankReconciliationMatch], dict[str, BankTransaction]]:
+    if not receipt_ids:
+        return {}, {}
+    matches = (
+        db.execute(
+            select(BankReconciliationMatch)
+            .where(BankReconciliationMatch.generated_receipt_id.in_(receipt_ids))
+            .order_by(BankReconciliationMatch.confirmed_at.desc())
+        )
+        .scalars()
+        .all()
+    )
+    match_map: dict[str, BankReconciliationMatch] = {}
+    for match in matches:
+        receipt_id = str(match.generated_receipt_id or "")
+        if not receipt_id:
+            continue
+        current = match_map.get(receipt_id)
+        if current is None or (current.status != "confirmed" and match.status == "confirmed"):
+            match_map[receipt_id] = match
+    tx_ids = list({str(match.bank_transaction_id) for match in match_map.values() if match.bank_transaction_id})
+    tx_rows = db.execute(select(BankTransaction).where(BankTransaction.id.in_(tx_ids))).scalars().all() if tx_ids else []
+    tx_map = {str(row.id): row for row in tx_rows}
+    return match_map, tx_map
+
+
+def _receipt_read(row: ChannelReceipt, match: BankReconciliationMatch | None, tx: BankTransaction | None) -> ChannelReceiptRead:
+    base = ChannelReceiptRead.model_validate(row)
+    if match is None:
+        return base
+    active = str(match.status or "") == "confirmed"
+    return base.model_copy(update={
+        "source_type": "bank_allocation",
+        "source_label": "银行流水核销" if active else "银行核销已撤销",
+        "bank_match_id": str(match.id),
+        "bank_transaction_id": str(match.bank_transaction_id),
+        "bank_transaction_no": str(tx.transaction_no or "") if tx is not None else None,
+        "bank_match_status": str(match.status or ""),
+        "can_delete_directly": not active,
+    })
 
 
 def _sync_denormalized_totals(row: ChannelRecord, db: Session) -> None:
@@ -163,20 +219,57 @@ async def download_channel_receipt_attachment(file_id: str) -> StreamingResponse
 
 @router.get("/{record_id}/receipts", response_model=ChannelReceiptListResponse)
 def list_channel_receipts(record_id: str, db: Session = Depends(get_db)) -> ChannelReceiptListResponse:
-    if db.get(ChannelRecord, record_id) is None: raise HTTPException(status_code=404, detail={"error": "not_found", "id": record_id})
-    rows = db.execute(select(ChannelReceipt).where(ChannelReceipt.channel_record_id == record_id).order_by(ChannelReceipt.created_at.desc())).scalars().all()
-    return ChannelReceiptListResponse(items=[ChannelReceiptRead.model_validate(r) for r in rows])
+    if db.get(ChannelRecord, record_id) is None:
+        raise HTTPException(status_code=404, detail={"error": "not_found", "id": record_id})
+    rows = db.execute(
+        select(ChannelReceipt)
+        .where(ChannelReceipt.channel_record_id == record_id)
+        .order_by(ChannelReceipt.created_at.desc())
+    ).scalars().all()
+    receipt_ids = [str(row.id) for row in rows]
+    match_map, tx_map = _receipt_source_maps(db, receipt_ids)
+    items = []
+    for row in rows:
+        match = match_map.get(str(row.id))
+        tx = tx_map.get(str(match.bank_transaction_id)) if match is not None else None
+        items.append(_receipt_read(row, match, tx))
+    return ChannelReceiptListResponse(items=items)
 
 
 @router.delete("/{record_id}/receipts/{receipt_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_channel_receipt(record_id: str, receipt_id: str, db: Session = Depends(get_db)) -> None:
-    parent = db.get(ChannelRecord, record_id)
-    if parent is None: raise HTTPException(status_code=404, detail={"error": "not_found", "id": record_id})
+    parent = db.execute(
+        select(ChannelRecord).where(ChannelRecord.id == record_id).with_for_update()
+    ).scalar_one_or_none()
+    if parent is None:
+        raise HTTPException(status_code=404, detail={"error": "not_found", "id": record_id})
     rec = db.get(ChannelReceipt, receipt_id)
-    if rec is None or rec.channel_record_id != record_id: raise HTTPException(status_code=404, detail={"error": "receipt_not_found", "id": receipt_id})
+    if rec is None or rec.channel_record_id != record_id:
+        raise HTTPException(status_code=404, detail={"error": "receipt_not_found", "id": receipt_id})
+    linked_match = db.execute(
+        select(BankReconciliationMatch).where(
+            BankReconciliationMatch.generated_receipt_id == receipt_id,
+            BankReconciliationMatch.status == "confirmed",
+        )
+    ).scalar_one_or_none()
+    if linked_match is not None:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": "bank_generated_receipt_locked",
+                "message": "这笔收款来自银行流水核销，不能直接删除。请在银行中心撤销对应核销分配，系统会同步撤回收款。",
+                "bank_match_id": str(linked_match.id),
+            },
+        )
     attachment_url = str(rec.attachment_url or "")
-    if attachment_url.startswith("/api/channel-records/receipt-attachments/"): await delete_private_blob(f"channel-receipts/{Path(attachment_url).name}")
-    db.delete(rec); parent.updated_at = datetime.now(timezone.utc); db.flush(); _recompute_receipt_rollup(db, parent); refresh_batches_for_bill(db, record_id); db.commit()
+    if attachment_url.startswith("/api/channel-records/receipt-attachments/"):
+        await delete_private_blob(f"channel-receipts/{Path(attachment_url).name}")
+    db.delete(rec)
+    parent.updated_at = datetime.now(timezone.utc)
+    db.flush()
+    _recompute_receipt_rollup(db, parent)
+    refresh_batches_for_bill(db, record_id)
+    db.commit()
 
 
 @router.get("/{record_id}", response_model=ChannelRecordRead)
@@ -188,16 +281,52 @@ def get_channel_record(record_id: str, db: Session = Depends(get_db)) -> Channel
 
 @router.post("/{record_id}/receipts", response_model=ChannelRecordRead, status_code=status.HTTP_201_CREATED)
 def create_channel_receipt(record_id: str, payload: ChannelReceiptCreate, db: Session = Depends(get_db)) -> ChannelRecordRead:
-    row = db.get(ChannelRecord, record_id)
-    if row is None: raise HTTPException(status_code=404, detail={"error": "not_found", "id": record_id})
+    row = db.execute(
+        select(ChannelRecord).where(ChannelRecord.id == record_id).with_for_update()
+    ).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(status_code=404, detail={"error": "not_found", "id": record_id})
     assert_single_bill_collection_allowed(db, row)
+    receivable = max(0.0, float(row.settlement_amount or 0))
+    received = max(0.0, _receipt_total(db, record_id))
+    outstanding = max(0.0, round(receivable - received, 2))
+    amount = round(float(payload.amount or 0), 2)
+    if outstanding <= RECEIPT_EPS:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": "channel_bill_already_collected",
+                "message": "该渠道账单已经没有未收余额，不能继续登记收款。",
+                "receivable": round(receivable, 2),
+                "received": round(received, 2),
+                "outstanding": round(outstanding, 2),
+            },
+        )
+    if amount > outstanding + RECEIPT_EPS:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": "channel_receipt_overpay",
+                "message": f"本次收款 {amount:.2f} 超过未收金额 {outstanding:.2f}，请核对后再提交。",
+                "receivable": round(receivable, 2),
+                "received": round(received, 2),
+                "outstanding": round(outstanding, 2),
+            },
+        )
     data = payload.model_dump()
-    if not str(data.get("receipt_date") or "").strip(): data["receipt_date"] = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    data["amount"] = amount
+    if not str(data.get("receipt_date") or "").strip():
+        data["receipt_date"] = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     db.add(ChannelReceipt(id=str(uuid4()), channel_record_id=record_id, **data))
-    row.updated_at = datetime.now(timezone.utc); db.flush(); _recompute_receipt_rollup(db, row); refresh_batches_for_bill(db, record_id)
-    try: db.commit()
+    row.updated_at = datetime.now(timezone.utc)
+    db.flush()
+    _recompute_receipt_rollup(db, row)
+    refresh_batches_for_bill(db, record_id)
+    try:
+        db.commit()
     except IntegrityError:
-        db.rollback(); raise HTTPException(status_code=409, detail={"error": "conflict"}) from None
+        db.rollback()
+        raise HTTPException(status_code=409, detail={"error": "conflict"}) from None
     row = db.execute(select(ChannelRecord).options(selectinload(ChannelRecord.line_items)).where(ChannelRecord.id == record_id)).scalar_one()
     return _to_read(row)
 
