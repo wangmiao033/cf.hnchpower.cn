@@ -57,6 +57,29 @@ def _walk_dicts(value: Any):
             yield from _walk_dicts(child)
 
 
+def _safe_db_metadata(payload: Any) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+    for item in _walk_dicts(payload):
+        key = str(item.get("key") or "")
+        if not key or not any(token in key.upper() for token in ("DATABASE", "POSTGRES", "NEON", "QUICKSDK")):
+            continue
+        env_id = str(item.get("id") or "")
+        identity = (key, env_id)
+        if identity in seen:
+            continue
+        seen.add(identity)
+        rows.append({
+            "key": key,
+            "target": item.get("target"),
+            "type": item.get("type"),
+            "decrypted": item.get("decrypted"),
+            "value_present": isinstance(item.get("value"), str) and bool(item.get("value")),
+            "id_present": bool(env_id),
+        })
+    return rows
+
+
 def _project_env_values(
     payload: Any,
     token: str,
@@ -157,19 +180,10 @@ def resolve_database_env() -> tuple[dict[str, str], str]:
     if values:
         return values, "shared"
 
-    project_keys = sorted({
-        str(item.get("key") or "")
-        for item in _walk_dicts(project_payload)
-        if item.get("key") and any(token in str(item.get("key")).upper() for token in ("DATABASE", "POSTGRES", "NEON", "QUICKSDK"))
-    })
-    shared_keys = sorted({
-        str(item.get("key") or "")
-        for item in _walk_dicts(shared_payload)
-        if item.get("key") and any(token in str(item.get("key")).upper() for token in ("DATABASE", "POSTGRES", "NEON", "QUICKSDK"))
-    })
     raise RuntimeError(
-        "No Production DATABASE_URL/QUICKSDK_DATABASE_URL found in project or linked shared env. "
-        f"Project DB-like keys={project_keys or 'none'}, shared DB-like keys={shared_keys or 'none'}"
+        "No Production DATABASE_URL/QUICKSDK_DATABASE_URL value resolved. "
+        f"Project DB metadata={_safe_db_metadata(project_payload) or 'none'}; "
+        f"shared DB metadata={_safe_db_metadata(shared_payload) or 'none'}"
     )
 
 
