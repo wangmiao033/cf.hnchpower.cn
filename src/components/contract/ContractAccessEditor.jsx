@@ -8,6 +8,7 @@ import {
   listContractAccessTerms,
   upsertContractAccessTerms
 } from '@/lib/api/contractTerms.ts'
+import ContractRuleReadinessNotice from './ContractRuleReadinessNotice.jsx'
 import './ContractAccessEditor.css'
 import './ContractAccessListSimple.css'
 
@@ -544,6 +545,8 @@ function ContractAccessEditor({ contract, item, onClose, onSaved, onToast }) {
                   </div>
                   <small>游戏名称必填，其余可按合同实际情况填写</small>
                 </div>
+
+                <ContractRuleReadinessNotice form={form} contract={contract} />
 
                 <div className="contract-access-simple-grid">
                   <Field
