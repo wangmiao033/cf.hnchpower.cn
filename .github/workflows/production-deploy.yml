@@ -219,58 +219,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          ENV_JSON="$(mktemp)"
-          ENV_EXPORTS="$(mktemp)"
-          trap 'rm -f "$ENV_JSON" "$ENV_EXPORTS"' EXIT
-
-          CODE="$(curl -sS -o "$ENV_JSON" -w '%{http_code}' \
-            "https://api.vercel.com/v10/projects/${VERCEL_PROJECT_ID}/env?teamId=${VERCEL_ORG_ID}&decrypt=true" \
-            -H "Authorization: Bearer ${VERCEL_TOKEN}")"
-          if [ "$CODE" != "200" ]; then
-            echo "::error::Unable to read decrypted Vercel Production database variables (HTTP $CODE)."
-            exit 1
-          fi
-
-          python - "$ENV_JSON" "$ENV_EXPORTS" <<'PY'
-          import json
-          import shlex
-          import sys
-
-          payload = json.load(open(sys.argv[1], encoding='utf-8'))
-          output_path = sys.argv[2]
-          wanted = {'DATABASE_URL', 'QUICKSDK_DATABASE_URL'}
-          found = {}
-
-          def is_production(target):
-              return target == 'production' or (isinstance(target, list) and 'production' in target)
-
-          def walk(value):
-              if isinstance(value, dict):
-                  key = value.get('key')
-                  target = value.get('target')
-                  env_value = value.get('value')
-                  if key in wanted and is_production(target) and isinstance(env_value, str) and env_value:
-                      found[key] = env_value
-                  for child in value.values():
-                      walk(child)
-              elif isinstance(value, list):
-                  for child in value:
-                      walk(child)
-
-          walk(payload)
-          if not found:
-              print('::error::Neither DATABASE_URL nor QUICKSDK_DATABASE_URL is available for Production.')
-              raise SystemExit(1)
-          with open(output_path, 'w', encoding='utf-8') as handle:
-              for key, value in found.items():
-                  handle.write(f'export {key}={shlex.quote(value)}\n')
-          print('Production database environment prepared for migration without exposing values.')
-          PY
-
-          source "$ENV_EXPORTS"
-          export MIGRATION_EXECUTION_CONTEXT=deploy
           export PYTHONPATH=backend:.
-          python backend/scripts/run_schema_migrations.py
+          python backend/scripts/run_vercel_production_migrations.py
 
       - name: Deploy latest main to Vercel Production
         id: vercel
