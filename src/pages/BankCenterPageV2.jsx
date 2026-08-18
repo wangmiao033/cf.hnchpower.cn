@@ -293,7 +293,6 @@ export default function BankCenterPageV2() {
   }, [activeTab, dataRevision, ledgerSearch, ledgerRange.from, ledgerRange.to, accountFilter])
 
   useEffect(() => {
-    if (activeTab !== 'imports') return undefined
     let cancelled = false
     setImportsLoading(true)
     setImportsError('')
@@ -308,7 +307,7 @@ export default function BankCenterPageV2() {
       })
       .finally(() => { if (!cancelled) setImportsLoading(false) })
     return () => { cancelled = true }
-  }, [activeTab, dataRevision])
+  }, [dataRevision])
 
   const suggestions = dashboard?.suggestions || []
   const queueRange = useMemo(() => {
@@ -511,6 +510,21 @@ export default function BankCenterPageV2() {
   }
 
   const primaryAccount = accounts.length === 1 ? accounts[0] : null
+  const primaryImportBatches = primaryAccount
+    ? importBatches.filter((batch) => !batch.bank_account || String(batch.bank_account) === String(primaryAccount.bank_account))
+    : importBatches
+  const importedRangeDates = primaryImportBatches
+    .flatMap((batch) => [batch.date_from, batch.date_to])
+    .map((value) => String(value || '').trim())
+    .filter(Boolean)
+    .sort()
+  const importedRangeFrom = importedRangeDates[0] || ''
+  const importedRangeTo = importedRangeDates[importedRangeDates.length - 1] || primaryAccount?.latest_trade_date || ''
+  const importedRangeText = importedRangeFrom && importedRangeTo
+    ? `${importedRangeFrom.slice(0, 7)} ～ ${importedRangeTo.slice(0, 7)}`
+    : importedRangeTo
+      ? importedRangeTo.slice(0, 7)
+      : '-'
   const activeQueueRangeText = queueRange.from || queueRange.to
     ? `${queueRange.from || '最早'} ～ ${queueRange.to || '今天'}`
     : '全部日期'
@@ -526,8 +540,7 @@ export default function BankCenterPageV2() {
             <div className="bank-v2-account-note">
               <b>{primaryAccount.source_bank || 'BANK'}</b>
               <span>{accountTail(primaryAccount.bank_account)}</span>
-              <span>{primaryAccount.transaction_count} 笔流水</span>
-              <span>最近交易 {primaryAccount.latest_trade_date || '-'}</span>
+              <span>流水范围 {importedRangeText} · 共 {primaryAccount.transaction_count} 笔</span>
               <strong>{money(primaryAccount.latest_balance, '余额未知')}</strong>
             </div>
           ) : null}
