@@ -2,7 +2,7 @@ import React from 'react'
 import CoreChannelBillFormPage from './CoreChannelBillFormPage.jsx'
 import './ChannelBillInputColumns.css'
 
-// Display density is handled by the shared core channel bill page.
+// Shared input-column and bill-remarks layout is loaded for channel bill entry.
 function ChannelReconciliationCreatePage() {
   return <CoreChannelBillFormPage mode="create" />
 }
