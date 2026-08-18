@@ -17,7 +17,10 @@ permissions:
 
 concurrency:
   group: cf-hnchpower-production-deploy
-  cancel-in-progress: false
+  # Only the newest main revision is releasable. Older queued runs perform the same
+  # expensive test matrix and can starve the real release for hours; the deploy job
+  # also re-checks origin/main immediately before invoking Vercel.
+  cancel-in-progress: true
 
 env:
   VERCEL_ORG_ID: team_YfsD5pM9JFtkqXnJIUdbF2eI
