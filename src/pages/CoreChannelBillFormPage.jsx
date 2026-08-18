@@ -23,6 +23,7 @@ import { useBillFormSafety } from '@/hooks/useBillFormSafety.js'
 import './CoreBillFormPages.css'
 import '@/components/reconciliation/reconciliation-admin.css'
 import '@/styles/SimplifiedBillReview.css'
+import './ChannelBillCompact.css'
 
 const FORM_ID = 'core-channel-bill-form'
 
@@ -38,6 +39,40 @@ function normalizedAmount(value) {
 
 function isZeroSettlement(value) {
   return normalizedAmount(value) === 0
+}
+
+function hasNonZeroValue(value) {
+  const amount = Number(value)
+  return Number.isFinite(amount) && Math.abs(amount) > 0.000001
+}
+
+function hasAdvancedChannelData(record) {
+  const items = Array.isArray(record?.items) ? record.items : []
+  return items.some((item) => {
+    const discountText = String(item?.discountFactor ?? '').trim()
+    const discount = discountText === '' ? 1 : Number(discountText)
+    const hasDiscount = Number.isFinite(discount) && Math.abs(discount - 1) > 0.000001
+    const hasSpecialAmount = [
+      item?.voucherCost,
+      item?.noWorryCost,
+      item?.refundCost,
+      item?.testCost,
+      item?.welfareCost,
+      item?.coinCost
+    ].some(hasNonZeroValue)
+    return hasDiscount || hasSpecialAmount
+  })
+}
+
+function hasChannelFeeConfiguration(record) {
+  const headerMode = String(record?.channelFeeMode || '').trim()
+  if (headerMode && headerMode !== 'none') return true
+  if (hasNonZeroValue(record?.channelFeeRate)) return true
+  const items = Array.isArray(record?.items) ? record.items : []
+  return items.some((item) => {
+    const mode = String(item?.channelFeeMode || '').trim()
+    return (mode && mode !== 'none') || hasNonZeroValue(item?.channelFeeRate) || hasNonZeroValue(item?.gatewayCost)
+  })
 }
 
 function reviewValidation(record) {
@@ -74,6 +109,7 @@ function CoreChannelBillFormPage({ mode }) {
   const [reviewing, setReviewing] = useState(false)
   const [smartRecord, setSmartRecord] = useState(null)
   const [smartRevision, setSmartRevision] = useState(0)
+  const [compactMode, setCompactMode] = useState(true)
 
   useEffect(() => {
     setSmartRecord(null)
@@ -274,6 +310,8 @@ function CoreChannelBillFormPage({ mode }) {
 
   const zeroSettlementPreview = isZeroSettlement(previewAmount)
   const currentRecord = safety.currentRecord || smartRecord || safety.draftRecord || stableRecord || {}
+  const hasAdvancedData = hasAdvancedChannelData(currentRecord)
+  const hasChannelFee = hasChannelFeeConfiguration(currentRecord)
   const smartEntryPartner = !isEdit
     ? findExactPartner(settings?.partners || [], currentRecord.partnerName || currentRecord.channelName)
     : null
@@ -289,7 +327,7 @@ function CoreChannelBillFormPage({ mode }) {
   return (
     <PageContainer
       hideHeader
-      className={`core-bill-form-page core-bill-form-page--channel ${isEdit ? 'is-edit' : 'is-create'}`}
+      className={`core-bill-form-page core-bill-form-page--channel ${isEdit ? 'is-edit' : 'is-create'} ${compactMode ? 'is-compact-view' : 'is-full-view'} ${hasAdvancedData ? 'has-advanced-data' : ''} ${hasChannelFee ? 'has-channel-fee' : ''}`}
     >
       <section className="core-bill-form-head">
         <div className="core-bill-form-head__context">
@@ -299,6 +337,17 @@ function CoreChannelBillFormPage({ mode }) {
             <span className={`core-bill-state-tag ${isEdit ? 'is-pending' : ''}`}>
               {isEdit ? '待核对' : '新建账单'}
             </span>
+            <button
+              type="button"
+              className="core-bill-density-toggle"
+              title={compactMode ? '展开合同参数、扣减项和完整计算字段' : '只保留本次录账常用字段'}
+              onClick={() => setCompactMode((value) => !value)}
+            >
+              {compactMode ? '显示完整字段' : '返回简洁模式'}
+            </button>
+            {compactMode && hasAdvancedData ? (
+              <span className="core-bill-density-note">本单有特殊项，已保留高级列</span>
+            ) : null}
           </div>
           <span className="core-bill-form-tip">
             {isEdit
