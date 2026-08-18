@@ -39,6 +39,32 @@ function dateTime(value) {
   return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString('zh-CN', { hour12: false })
 }
 
+function monthText(value) {
+  const raw = String(value || '').trim()
+  if (!raw) return '-'
+  const normalized = raw.match(/(20\d{2})\D{0,4}(\d{1,2})/)
+  if (normalized) return `${normalized[1]}年${Number(normalized[2])}月`
+  return raw
+}
+
+function historyBillMeta(match, recon) {
+  const rows = match?.bill_type === 'rd' ? recon?.records : recon?.channelRecords
+  const bill = (rows || []).find((row) => String(row?.id || '') === String(match?.bill_id || ''))
+  const partner = String(
+    match?.partner_name ||
+    bill?.partnerName ||
+    bill?.partner_name ||
+    bill?.channelName ||
+    bill?.channel_name ||
+    ''
+  ).trim()
+  const settlementMonth = match?.settlement_month || bill?.settlementMonth || bill?.settlement_month || ''
+  return {
+    partnerName: partner || '-',
+    settlementMonth: monthText(settlementMonth)
+  }
+}
+
 function isoDate(value) {
   return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`
 }
@@ -142,7 +168,7 @@ function Pagination({ total, page, pageSize, onPage, onPageSize }) {
 }
 
 export default function BankCenterPageV2() {
-  const { setActiveView, openBill360, showToast } = useAppState()
+  const { recon, setActiveView, openBill360, showToast } = useAppState()
   const { can } = useAuth()
   const canManage = can('funds.manage')
 
@@ -339,8 +365,14 @@ export default function BankCenterPageV2() {
   }, [queueSearch, queueDirection, queueFilter, queueRangeMode, queueDateFrom, queueDateTo, queuePageSize])
 
   const visibleHistory = useMemo(
-    () => (dashboard?.recent_matches || []).filter((item) => item.status === historyMode),
-    [dashboard?.recent_matches, historyMode]
+    () => (dashboard?.recent_matches || [])
+      .filter((item) => item.status === historyMode)
+      .map((item) => ({ ...item, ...historyBillMeta(item, recon) })),
+    [dashboard?.recent_matches, historyMode, recon?.records, recon?.channelRecords]
+  )
+  const visibleHistoryAmount = useMemo(
+    () => visibleHistory.reduce((sum, item) => sum + Number(item.linked_amount || 0), 0),
+    [visibleHistory]
   )
 
   const filteredLedger = useMemo(() => ledgerRows.filter((row) => {
@@ -668,25 +700,47 @@ export default function BankCenterPageV2() {
         <div className="bank-center-pane bank-v2-pane">
           <section className="bank-center-card bank-v2-card">
             <header className="bank-v2-card-head">
-              <div><h2>核销记录</h2><p>核销与撤销完整保留操作人、时间和原因；撤销后流水重新回到待处理。</p></div>
-              <div className="bank-center-segments"><button type="button" className={historyMode === 'confirmed' ? 'is-active' : ''} onClick={() => setHistoryMode('confirmed')}>有效核销</button><button type="button" className={historyMode === 'reversed' ? 'is-active' : ''} onClick={() => setHistoryMode('reversed')}>已撤销</button></div>
+              <div><h2>核销记录</h2><p>资金事实、收/付主体、账单月份和账单编号统一展示；撤销后原流水自动回到待处理。</p></div>
+              <div className="bank-v2-card-actions">
+                <span>{historyMode === 'confirmed' ? '有效核销' : '已撤销'} <strong>{visibleHistory.length}</strong> 笔 · {money(visibleHistoryAmount)}</span>
+                <div className="bank-center-segments"><button type="button" className={historyMode === 'confirmed' ? 'is-active' : ''} onClick={() => setHistoryMode('confirmed')}>有效核销</button><button type="button" className={historyMode === 'reversed' ? 'is-active' : ''} onClick={() => setHistoryMode('reversed')}>已撤销</button></div>
+              </div>
             </header>
             <div className="bank-center-table-wrap">
-              <table className="bank-center-table bank-center-table--history bank-v2-table">
-                <thead><tr><th>银行日期</th><th>方向</th><th>账单</th><th className="is-right">金额</th><th>匹配度</th><th>确认人 / 时间</th><th>状态</th><th>操作</th></tr></thead>
+              <table className="bank-center-table bank-center-table--history bank-v2-table" style={{ minWidth: 1280, tableLayout: 'fixed' }}>
+                <colgroup>
+                  <col style={{ width: 105 }} />
+                  <col style={{ width: 70 }} />
+                  <col style={{ width: 220 }} />
+                  <col style={{ width: 100 }} />
+                  <col style={{ width: 180 }} />
+                  <col style={{ width: 110 }} />
+                  <col style={{ width: 90 }} />
+                  <col style={{ width: 175 }} />
+                  <col style={{ width: 95 }} />
+                  <col style={{ width: 105 }} />
+                </colgroup>
+                <thead><tr><th>银行日期</th><th>方向</th><th>收 / 付主体</th><th>账单月份</th><th>账单编号</th><th className="is-right">金额</th><th>匹配度</th><th>操作人 / 时间</th><th>状态</th><th>操作</th></tr></thead>
                 <tbody>
-                  {visibleHistory.length === 0 ? <tr><td colSpan={8} className="bank-center-empty">暂无记录。</td></tr> : null}
-                  {visibleHistory.map((match) => (
-                    <tr key={match.match_id}>
-                      <td>{match.trade_date || '-'}</td><td>{match.direction_label || '-'}</td>
-                      <td><button type="button" className="bank-center-bill-link" onClick={() => openBill360(match.bill_type, match.bill_id)}>{match.bill_number || match.bill_id}</button><small>{billTypeLabel(match.bill_type)}</small></td>
-                      <td className="is-right"><strong>{money(match.linked_amount)}</strong></td>
-                      <td><span className={`bank-center-confidence is-${match.confidence_level}`}>{confidenceLabel(match.confidence_level)} {Number(match.confidence_score || 0).toFixed(0)}</span></td>
-                      <td>{match.confirmed_email || '-'}<small>{dateTime(match.confirmed_at)}</small></td>
-                      <td>{match.status === 'confirmed' ? <span className="bank-center-ledger-status is-linked">有效</span> : <span className="bank-center-ledger-status">已撤销</span>}{match.reverse_reason ? <small>{match.reverse_reason}</small> : null}</td>
-                      <td>{canManage && match.status === 'confirmed' ? <button type="button" className="bank-center-more-action" disabled={busyId === match.match_id} onClick={() => reverseMatch(match)}>{busyId === match.match_id ? '处理中…' : '撤销核销'}</button> : '-'}</td>
-                    </tr>
-                  ))}
+                  {visibleHistory.length === 0 ? <tr><td colSpan={10} className="bank-center-empty">暂无记录。</td></tr> : null}
+                  {visibleHistory.map((match) => {
+                    const operator = match.status === 'reversed' ? (match.reversed_email || match.confirmed_email) : match.confirmed_email
+                    const operatedAt = match.status === 'reversed' ? (match.reversed_at || match.confirmed_at) : match.confirmed_at
+                    return (
+                      <tr key={match.match_id}>
+                        <td style={{ whiteSpace: 'nowrap' }}>{match.trade_date || '-'}</td>
+                        <td><span className={`bank-center-direction is-${match.direction}`}>{match.direction_label || '-'}</span></td>
+                        <td className="bank-center-strong bank-v2-counterparty" title={match.partnerName}>{match.partnerName}</td>
+                        <td style={{ whiteSpace: 'nowrap' }}>{match.settlementMonth}</td>
+                        <td><button type="button" className="bank-center-bill-link" onClick={() => openBill360(match.bill_type, match.bill_id)}>{match.bill_number || match.bill_id}</button><small>{billTypeLabel(match.bill_type)}</small></td>
+                        <td className="is-right"><strong>{money(match.linked_amount)}</strong></td>
+                        <td><span className={`bank-center-confidence is-${match.confidence_level}`}>{confidenceLabel(match.confidence_level)} {Number(match.confidence_score || 0).toFixed(0)}</span></td>
+                        <td><strong>{operator || '-'}</strong><small>{dateTime(operatedAt)}</small></td>
+                        <td>{match.status === 'confirmed' ? <span className="bank-center-ledger-status is-linked">有效</span> : <span className="bank-center-ledger-status">已撤销</span>}{match.reverse_reason ? <small title={match.reverse_reason}>{match.reverse_reason}</small> : null}</td>
+                        <td>{canManage && match.status === 'confirmed' ? <button type="button" className="bank-center-more-action" disabled={busyId === match.match_id} onClick={() => reverseMatch(match)}>{busyId === match.match_id ? '处理中…' : '撤销核销'}</button> : '-'}</td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
