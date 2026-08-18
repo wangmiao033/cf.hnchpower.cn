@@ -153,6 +153,6 @@ BEGIN
     WHERE existing.dedupe_key = src.k
   );
   IF present_count <> 261 THEN
-    RAISE EXCEPTION 'ICBC 2025-H2 import integrity check failed: expected 261 rows, found %', present_count;
+    RAISE EXCEPTION USING MESSAGE = 'ICBC 2025-H2 import integrity check failed: expected 261 rows, found ' || present_count::TEXT;
   END IF;
 END $$;
