@@ -1,0 +1,367 @@
+/*
+ * UI V4 — finance workbench theme
+ * Goal: quieter hierarchy, higher information density and clearer financial status semantics.
+ * Loaded after the existing design system so business pages keep their current structure.
+ */
+
+:root {
+  --primary: #3f67ad;
+  --primary-hover: #31558f;
+  --primary-soft: #edf3fc;
+  --bg-main: #f3f6fa;
+  --bg-card: #ffffff;
+  --bg-soft: #f8fafc;
+  --text-main: #223047;
+  --text-sub: #5f6f83;
+  --text-light: #8b98a9;
+  --border: #dce3ec;
+  --border-soft: #e9edf3;
+  --admin-border-strong: #c9d4e2;
+  --admin-sidebar-active-bg: #eaf1fc;
+  --admin-focus-ring: rgba(63, 103, 173, 0.14);
+  --admin-shadow: 0 1px 2px rgba(15, 23, 42, 0.045);
+  --admin-shadow-md: 0 10px 30px rgba(25, 42, 68, 0.09);
+}
+
+body {
+  background: #f3f6fa;
+  color: var(--admin-text-main);
+}
+
+.app-main-shell,
+.app-workspace {
+  background: #f3f6fa !important;
+}
+
+.app-workspace {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0.34)),
+    radial-gradient(circle at 90% 0%, rgba(74, 112, 170, 0.05), transparent 34%) !important;
+}
+
+/* Navigation: lighter chrome, stronger current-location signal. */
+.app-sidebar {
+  border-right-color: #dce4ee !important;
+  background: #fbfcfe !important;
+  box-shadow: 1px 0 0 rgba(15, 23, 42, 0.015);
+}
+
+.sidebar-brand {
+  border-bottom-color: #e8edf3 !important;
+}
+
+.sidebar-brand__logo {
+  background: linear-gradient(145deg, #426caf, #34588f) !important;
+  box-shadow: 0 5px 14px rgba(55, 91, 146, 0.18) !important;
+}
+
+.sidebar-group-entry,
+.sidebar-item {
+  transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease !important;
+}
+
+.sidebar-group-entry:hover,
+.sidebar-item:hover {
+  background: #f1f5fa !important;
+}
+
+.sidebar-group-entry.active,
+.sidebar-item.active {
+  background: #eaf1fc !important;
+  color: #315a98 !important;
+}
+
+.sidebar-item.active {
+  box-shadow: inset 3px 0 0 #4772b4;
+}
+
+/* Shell bars should read as chrome, not another content card. */
+.app-admin-header,
+.app-top-subnav,
+.app-top-subnav--workspace {
+  border-color: #e1e7ef !important;
+  background: rgba(255, 255, 255, 0.94) !important;
+  backdrop-filter: blur(12px);
+}
+
+.sidebar-rail-button {
+  border-color: #d7e0ea !important;
+  box-shadow: 0 4px 14px rgba(36, 52, 75, 0.08) !important;
+}
+
+/* Page surfaces: reduce "boxes inside boxes" while retaining financial separation. */
+.app :where(
+  .admin-table-card,
+  .admin-page-section,
+  .toolbar-section,
+  .table-section,
+  .form-section,
+  .config-section,
+  .invoice-section,
+  .invoice-list,
+  .rec-stat-card,
+  .core-recon-card,
+  .core-dashboard-card
+) {
+  border-color: #dde4ed !important;
+  box-shadow: 0 1px 2px rgba(26, 43, 67, 0.035) !important;
+}
+
+.app :where(.admin-table-card, .admin-page-section, .rec-stat-card) {
+  border-radius: 10px !important;
+}
+
+/* Tables: slightly stronger header, quieter rows, numeric scan support. */
+.app thead,
+.app thead tr {
+  background: #f6f8fb !important;
+}
+
+.app thead th {
+  color: #617086 !important;
+  border-bottom-color: #dbe3ed !important;
+  letter-spacing: 0.01em;
+}
+
+.app tbody td {
+  border-bottom-color: #ebeff4 !important;
+}
+
+.app tbody tr:hover {
+  background: #f6f9fd !important;
+}
+
+.app td,
+.app th,
+.bill360-drawer {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Controls: one primary blue; secondary actions stay neutral. */
+.app input,
+.app select,
+.app textarea {
+  border-color: #d4dde8 !important;
+  background: #fff !important;
+}
+
+.app input:hover,
+.app select:hover,
+.app textarea:hover {
+  border-color: #bccadc !important;
+}
+
+.app input:focus,
+.app select:focus,
+.app textarea:focus {
+  border-color: #6689bf !important;
+  box-shadow: 0 0 0 3px rgba(63, 103, 173, 0.11) !important;
+}
+
+.app .admin-btn--primary,
+.app .rec-btn--primary {
+  background: #3f67ad !important;
+  border-color: #3f67ad !important;
+  box-shadow: none !important;
+}
+
+.app .admin-btn--primary:hover,
+.app .rec-btn--primary:hover {
+  background: #34588f !important;
+  border-color: #34588f !important;
+}
+
+.app :where(.admin-btn--secondary, .admin-btn--ghost, .rec-btn--secondary, .rec-btn--ghost) {
+  box-shadow: none !important;
+}
+
+/* Bill 360 becomes visually consistent with the main shell. */
+.bill360-drawer {
+  background: #f4f7fa !important;
+}
+
+.bill360-header,
+.bill360-tabs {
+  border-color: #dfe6ef !important;
+  background: rgba(255, 255, 255, 0.97) !important;
+}
+
+.bill360-kpis article,
+.bill360-card {
+  border-color: #dde5ee !important;
+  border-radius: 10px !important;
+  box-shadow: 0 1px 2px rgba(26, 43, 67, 0.035) !important;
+}
+
+.bill360-type {
+  border-radius: 10px !important;
+}
+
+.bill360-command-dock {
+  border-color: #d8e1eb !important;
+  border-radius: 12px !important;
+  box-shadow: 0 14px 34px rgba(26, 43, 67, 0.14) !important;
+}
+
+/* Scrollbars stay visible enough for long ledgers but do not dominate. */
+.app-workspace *,
+.bill360-drawer * {
+  scrollbar-color: #c8d2df transparent;
+  scrollbar-width: thin;
+}
+
+.app-workspace *::-webkit-scrollbar,
+.bill360-drawer *::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.app-workspace *::-webkit-scrollbar-thumb,
+.bill360-drawer *::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: #c8d2df;
+  background-clip: padding-box;
+}
+
+.app-workspace *::-webkit-scrollbar-track,
+.bill360-drawer *::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Keep the existing dark appearance fully usable after loading UI V4. */
+[data-theme='dark'] body,
+[data-theme='dark'] .app-main-shell,
+[data-theme='dark'] .app-workspace {
+  background: var(--admin-page-bg) !important;
+  color: var(--admin-text-main);
+}
+
+[data-theme='dark'] .app-workspace {
+  background-image: none !important;
+}
+
+[data-theme='dark'] .app-sidebar {
+  border-right-color: var(--admin-border) !important;
+  background: var(--admin-card-bg) !important;
+}
+
+[data-theme='dark'] .sidebar-brand {
+  border-bottom-color: var(--admin-border) !important;
+}
+
+[data-theme='dark'] .sidebar-group-entry:hover,
+[data-theme='dark'] .sidebar-item:hover {
+  background: var(--admin-elevated-bg) !important;
+}
+
+[data-theme='dark'] .sidebar-group-entry.active,
+[data-theme='dark'] .sidebar-item.active {
+  background: var(--admin-sidebar-active-bg) !important;
+  color: #b9d2ff !important;
+}
+
+[data-theme='dark'] .app-admin-header,
+[data-theme='dark'] .app-top-subnav,
+[data-theme='dark'] .app-top-subnav--workspace {
+  border-color: var(--admin-border) !important;
+  background: rgba(26, 29, 46, 0.96) !important;
+}
+
+[data-theme='dark'] .app :where(
+  .admin-table-card,
+  .admin-page-section,
+  .toolbar-section,
+  .table-section,
+  .form-section,
+  .config-section,
+  .invoice-section,
+  .invoice-list,
+  .rec-stat-card,
+  .core-recon-card,
+  .core-dashboard-card
+) {
+  border-color: var(--admin-border) !important;
+  box-shadow: var(--admin-shadow-sm) !important;
+}
+
+[data-theme='dark'] .app thead,
+[data-theme='dark'] .app thead tr {
+  background: var(--admin-elevated-bg) !important;
+}
+
+[data-theme='dark'] .app thead th {
+  color: var(--admin-text-sub) !important;
+  border-bottom-color: var(--admin-border) !important;
+}
+
+[data-theme='dark'] .app tbody td {
+  border-bottom-color: var(--admin-border-soft) !important;
+}
+
+[data-theme='dark'] .app tbody tr:hover {
+  background: var(--admin-elevated-bg) !important;
+}
+
+[data-theme='dark'] .app input,
+[data-theme='dark'] .app select,
+[data-theme='dark'] .app textarea {
+  border-color: var(--admin-border-strong) !important;
+  background: var(--admin-card-bg) !important;
+  color: var(--admin-text-main) !important;
+}
+
+[data-theme='dark'] .bill360-drawer {
+  background: var(--admin-page-bg) !important;
+}
+
+[data-theme='dark'] .bill360-header,
+[data-theme='dark'] .bill360-tabs,
+[data-theme='dark'] .bill360-kpis article,
+[data-theme='dark'] .bill360-card,
+[data-theme='dark'] .bill360-command-dock {
+  border-color: var(--admin-border) !important;
+  background: var(--admin-card-bg) !important;
+  box-shadow: var(--admin-shadow-sm) !important;
+}
+
+[data-theme='dark'] .bill360-workspace-bar,
+[data-theme='dark'] .bill360-workspace-picker {
+  border-color: var(--admin-border) !important;
+  background: rgba(26, 29, 46, 0.98) !important;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.34) !important;
+}
+
+[data-theme='dark'] .bill360-workspace-tab,
+[data-theme='dark'] .bill360-workspace-picker__search {
+  border-color: var(--admin-border) !important;
+  background: var(--admin-elevated-bg) !important;
+}
+
+[data-theme='dark'] .bill360-workspace-tab strong,
+[data-theme='dark'] .bill360-workspace-picker__head strong,
+[data-theme='dark'] .bill360-workspace-picker__list strong {
+  color: var(--admin-text-main) !important;
+}
+
+[data-theme='dark'] .bill360-workspace-tab small,
+[data-theme='dark'] .bill360-workspace-picker__head span,
+[data-theme='dark'] .bill360-workspace-picker__list span {
+  color: var(--admin-text-sub) !important;
+}
+
+[data-theme='dark'] .bill360-workspace-picker__search input {
+  border-color: var(--admin-border-strong) !important;
+  background: var(--admin-card-bg) !important;
+  color: var(--admin-text-main) !important;
+}
+
+[data-theme='dark'] .bill360-workspace-picker__list > button:hover {
+  background: var(--admin-elevated-bg) !important;
+}
+
+@media (max-width: 1500px) and (min-width: 961px) {
+  .app-workspace {
+    padding: 10px 12px 14px !important;
+  }
+}

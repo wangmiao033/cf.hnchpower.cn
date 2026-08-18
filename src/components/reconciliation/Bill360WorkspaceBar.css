@@ -1,0 +1,494 @@
+.bill360-workspace-bar-host {
+  position: fixed;
+  inset: 0;
+  z-index: 1450;
+  pointer-events: none;
+}
+
+.bill360-workspace-bar {
+  position: fixed;
+  top: 10px;
+  left: 50%;
+  z-index: 1452;
+  width: min(980px, calc(100vw - 28px));
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid rgba(203, 213, 225, 0.92);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.97);
+  box-shadow: 0 14px 40px rgba(15, 23, 42, 0.16);
+  backdrop-filter: blur(14px);
+  transform: translateX(-50%);
+  pointer-events: auto;
+}
+
+.bill360-workspace-bar__brand {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 8px;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.bill360-workspace-bar__brand strong {
+  display: inline-grid;
+  place-items: center;
+  min-width: 30px;
+  height: 26px;
+  padding: 0 7px;
+  border-radius: 8px;
+  background: #eef4ff;
+  color: #315b9d;
+  font-size: 11px;
+}
+
+.bill360-workspace-bar__tabs {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.bill360-workspace-tab {
+  min-width: 0;
+  flex: 1 1 0;
+  max-width: 280px;
+  height: 36px;
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) 24px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 6px;
+  border: 1px solid #e1e7ef;
+  border-radius: 9px;
+  background: #f8fafc;
+}
+
+.bill360-workspace-tab > span {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
+  background: #eaf1ff;
+  color: #315b9d;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.bill360-workspace-tab > div {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+
+.bill360-workspace-tab strong,
+.bill360-workspace-tab small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bill360-workspace-tab strong {
+  color: #263448;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.bill360-workspace-tab small {
+  color: #8a97a8;
+  font-size: 9px;
+}
+
+.bill360-workspace-tab button,
+.bill360-workspace-picker__head button {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #8b98a9;
+  font-size: 17px;
+  cursor: pointer;
+}
+
+.bill360-workspace-tab button:hover,
+.bill360-workspace-picker__head button:hover {
+  background: #edf1f6;
+  color: #334155;
+}
+
+.bill360-workspace-bar__add,
+.bill360-workspace-bar__close-all {
+  flex: 0 0 auto;
+  height: 34px;
+  padding: 0 11px;
+  border-radius: 9px;
+  font-size: 10px;
+  font-weight: 800;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.bill360-workspace-bar__add {
+  border: 1px solid #bcd0f0;
+  background: #edf4ff;
+  color: #2f5f9f;
+}
+
+.bill360-workspace-bar__add:hover {
+  border-color: #95b4e2;
+  background: #e2edff;
+}
+
+.bill360-workspace-bar__close-all {
+  border: 1px solid #e0e6ee;
+  background: #fff;
+  color: #68778a;
+}
+
+.bill360-workspace-bar__close-all:hover {
+  background: #f7f9fc;
+  color: #334155;
+}
+
+.bill360-workspace-bar__mode {
+  flex: 0 0 auto;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 9px;
+  border-radius: 999px;
+  background: #eaf8f1;
+  color: #18704f;
+  font-size: 9px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.bill360-workspace-picker {
+  position: fixed;
+  top: 66px;
+  left: 50%;
+  z-index: 1453;
+  width: min(620px, calc(100vw - 32px));
+  max-height: min(640px, calc(100vh - 84px));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid #d9e1eb;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.22);
+  transform: translateX(-50%);
+  pointer-events: auto;
+}
+
+.bill360-workspace-picker__head {
+  min-height: 58px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid #e7ebf1;
+}
+
+.bill360-workspace-picker__head > div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.bill360-workspace-picker__head span {
+  color: #8a96a7;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .08em;
+}
+
+.bill360-workspace-picker__head strong {
+  color: #223047;
+  font-size: 13px;
+}
+
+.bill360-workspace-picker__search {
+  padding: 10px 12px;
+  border-bottom: 1px solid #edf0f4;
+  background: #fbfcfe;
+}
+
+.bill360-workspace-picker__search input {
+  width: 100%;
+  height: 38px;
+  padding: 0 12px;
+  border: 1px solid #d6dee9;
+  border-radius: 9px;
+  outline: none;
+  background: #fff;
+  color: #24334a;
+  font-size: 12px;
+}
+
+.bill360-workspace-picker__search input:focus {
+  border-color: #7da2dc;
+  box-shadow: 0 0 0 3px rgba(66, 115, 184, .12);
+}
+
+.bill360-workspace-picker__list {
+  min-height: 160px;
+  overflow: auto;
+  padding: 6px;
+}
+
+.bill360-workspace-picker__list > button {
+  width: 100%;
+  min-height: 54px;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.bill360-workspace-picker__list > button:hover {
+  background: #f4f7fb;
+}
+
+.bill360-workspace-picker__type {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: #eaf2ff;
+  color: #315f9f;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.bill360-workspace-picker__type.is-channel {
+  background: #e9f8f1;
+  color: #17704e;
+}
+
+.bill360-workspace-picker__list > button > div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.bill360-workspace-picker__list strong,
+.bill360-workspace-picker__list span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bill360-workspace-picker__list strong {
+  color: #26364d;
+  font-size: 11px;
+}
+
+.bill360-workspace-picker__list span {
+  color: #7c899a;
+  font-size: 9px;
+}
+
+.bill360-workspace-picker__list em {
+  color: #3567a8;
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.bill360-workspace-picker__empty {
+  min-height: 160px;
+  display: grid;
+  place-items: center;
+  color: #94a0af;
+  font-size: 11px;
+}
+
+/* Single bill: preserve the current 360° drawer, only reserve room for the workspace bar. */
+.bill360-workspace-host.is-single .bill360-header,
+.bill360-workspace-host.is-dual .bill360-header {
+  padding-top: 70px;
+}
+
+/* Dual bill: both existing Bill360 drawers stay fully interactive and get their own half of the viewport. */
+.bill360-workspace-host.is-dual .bill360-workspace-pane--primary .bill360-backdrop,
+.bill360-workspace-host.is-dual .bill360-workspace-pane--secondary .bill360-backdrop {
+  top: 0;
+  bottom: 0;
+  width: 50vw;
+  background: rgba(15, 23, 42, .10);
+}
+
+.bill360-workspace-host.is-dual .bill360-workspace-pane--primary .bill360-backdrop {
+  left: 0;
+  right: auto;
+  justify-content: flex-start;
+  border-right: 1px solid #cfd8e5;
+}
+
+.bill360-workspace-host.is-dual .bill360-workspace-pane--secondary .bill360-backdrop {
+  left: 50vw;
+  right: auto;
+  justify-content: flex-start;
+}
+
+.bill360-workspace-host.is-dual .bill360-drawer {
+  width: 50vw;
+  max-width: 50vw;
+  box-shadow: none;
+}
+
+.bill360-workspace-host.is-dual .bill360-header {
+  align-items: flex-start;
+  gap: 10px;
+  padding-right: 14px;
+  padding-left: 14px;
+}
+
+.bill360-workspace-host.is-dual .bill360-title-wrap {
+  gap: 9px;
+}
+
+.bill360-workspace-host.is-dual .bill360-title-wrap p {
+  max-width: 34vw;
+}
+
+.bill360-workspace-host.is-dual .bill360-header-actions {
+  gap: 5px;
+}
+
+.bill360-workspace-host.is-dual .bill360-header-actions > button:not(.bill360-close) {
+  padding-right: 9px;
+  padding-left: 9px;
+}
+
+.bill360-workspace-host.is-dual .bill360-kpis {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 10px 14px;
+}
+
+.bill360-workspace-host.is-dual .bill360-kpis article {
+  padding: 11px 12px;
+}
+
+.bill360-workspace-host.is-dual .bill360-kpis strong {
+  font-size: 16px;
+}
+
+.bill360-workspace-host.is-dual .bill360-tabs {
+  gap: 0;
+  padding: 0 14px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.bill360-workspace-host.is-dual .bill360-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.bill360-workspace-host.is-dual .bill360-tabs button {
+  flex: 0 0 auto;
+  padding-right: 10px;
+  padding-left: 10px;
+}
+
+.bill360-workspace-host.is-dual .bill360-content {
+  padding-right: 14px;
+  padding-left: 14px;
+}
+
+.bill360-workspace-host.is-dual .bill360-overview-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.bill360-workspace-host.is-dual .bill360-workspace-pane--primary .bill360-command-dock {
+  left: 25%;
+  max-width: calc(50vw - 28px);
+}
+
+/* The secondary bill remains a complete read/inspect drawer. Keep one action dock to avoid duplicate floating controls. */
+.bill360-workspace-host.is-dual .bill360-workspace-pane--secondary .bill360-command-dock {
+  display: none;
+}
+
+@media (max-width: 1180px) {
+  .bill360-workspace-bar {
+    width: calc(100vw - 16px);
+  }
+
+  .bill360-workspace-bar__brand,
+  .bill360-workspace-bar__close-all {
+    display: none;
+  }
+
+  .bill360-workspace-host.is-dual .bill360-title-wrap p,
+  .bill360-workspace-host.is-dual .bill360-status {
+    display: none;
+  }
+
+  .bill360-workspace-host.is-dual .bill360-type {
+    width: 34px;
+    height: 34px;
+    flex-basis: 34px;
+    border-radius: 9px;
+  }
+
+  .bill360-workspace-host.is-dual .bill360-title-wrap h2 {
+    font-size: 17px;
+  }
+}
+
+@media (max-width: 760px) {
+  .bill360-workspace-bar {
+    left: 8px;
+    right: 8px;
+    width: auto;
+    transform: none;
+  }
+
+  .bill360-workspace-bar__tabs {
+    overflow-x: auto;
+  }
+
+  .bill360-workspace-tab {
+    min-width: 180px;
+  }
+
+  .bill360-workspace-host.is-dual .bill360-workspace-pane--primary .bill360-backdrop,
+  .bill360-workspace-host.is-dual .bill360-workspace-pane--secondary .bill360-backdrop,
+  .bill360-workspace-host.is-dual .bill360-drawer {
+    width: 100vw;
+    max-width: 100vw;
+  }
+
+  .bill360-workspace-host.is-dual .bill360-workspace-pane--secondary .bill360-backdrop {
+    left: 0;
+  }
+
+  .bill360-workspace-host.is-dual .bill360-workspace-pane--primary {
+    display: none;
+  }
+}
