@@ -1,4 +1,8 @@
-"""Persist customer-library links for research reconciliation records."""
+"""Persist customer-library links for research reconciliation records.
+
+The schema is provisioned by versioned migration 052. Runtime API requests must
+never create or alter tables/indexes here.
+"""
 
 from __future__ import annotations
 
@@ -17,31 +21,6 @@ def _name_key(value: object) -> str:
         .replace("（", "(")
         .replace("）", ")")
         .replace(" ", "")
-    )
-
-
-def ensure_link_table(db: Session) -> None:
-    db.execute(
-        text(
-            """
-            CREATE TABLE IF NOT EXISTS cf_reconciliation_partner_links (
-              reconciliation_id TEXT PRIMARY KEY,
-              partner_id TEXT NOT NULL REFERENCES cf_partner_records(id) ON DELETE RESTRICT,
-              partner_name_snapshot TEXT NOT NULL DEFAULT '',
-              match_method TEXT NOT NULL DEFAULT 'exact_name',
-              created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-              updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-            )
-            """
-        )
-    )
-    db.execute(
-        text(
-            """
-            CREATE INDEX IF NOT EXISTS idx_cf_reconciliation_partner_links_partner
-            ON cf_reconciliation_partner_links (partner_id)
-            """
-        )
     )
 
 
@@ -113,7 +92,6 @@ def save_partner_link(
     partner_id: str | None,
     partner_name: str | None,
 ) -> dict | None:
-    ensure_link_table(db)
     selected = resolve_partner(
         db,
         partner_id=partner_id,
@@ -161,7 +139,6 @@ def load_partner_links(db: Session, record_ids: Iterable[str]) -> dict[str, dict
     ids = [str(item) for item in record_ids if item]
     if not ids:
         return {}
-    ensure_link_table(db)
     rows = (
         db.execute(
             text(
@@ -187,7 +164,6 @@ def load_partner_links(db: Session, record_ids: Iterable[str]) -> dict[str, dict
 
 
 def delete_partner_link(db: Session, reconciliation_id: str) -> None:
-    ensure_link_table(db)
     db.execute(
         text(
             """
