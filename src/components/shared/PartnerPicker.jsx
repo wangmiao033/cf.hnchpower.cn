@@ -88,8 +88,10 @@ function PartnerPicker({
           onBlur={() => window.setTimeout(() => setOpen(false), 120)}
           onChange={(event) => {
             const nextValue = event.target.value
-            const matched = findExactPartner(partners, nextValue)
-            onChange(nextValue, matched ? String(matched.id || '') : '', matched)
+            // Typing an exact company name is still only text input. A stable customer
+            // relationship is established only by selecting a result (click/Enter), so
+            // contract matching cannot start from an accidental exact-string match.
+            onChange(nextValue, '', null)
             setOpen(true)
           }}
           onKeyDown={(event) => {
