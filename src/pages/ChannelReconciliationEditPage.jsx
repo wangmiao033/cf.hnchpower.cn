@@ -4,6 +4,7 @@ import { VIEWS } from '@/app/routes.js'
 import LockedBillEditNotice from '@/components/reconciliation/LockedBillEditNotice.jsx'
 import { isBillLockedStatus } from '@/domain/reconciliation/billLifecycle.js'
 import CoreChannelBillFormPage from './CoreChannelBillFormPage.jsx'
+import './ChannelBillInputColumns.css'
 
 function ChannelReconciliationEditPage() {
   const {
