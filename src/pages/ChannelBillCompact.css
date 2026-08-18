@@ -1,0 +1,462 @@
+/* Channel bill workbench: default to the fields finance actually uses.
+   Full mode remains available from the page header, so no input is removed. */
+
+.core-bill-form-page--channel .core-bill-density-toggle {
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 4px;
+  padding: 0 9px;
+  border: 1px solid #cfe2d7;
+  border-radius: 7px;
+  background: #f7fbf8;
+  color: #227247;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.core-bill-form-page--channel .core-bill-density-toggle:hover {
+  border-color: #8bc6a5;
+  background: #eef9f2;
+  color: #16643b;
+}
+
+.core-bill-form-page--channel .core-bill-density-note {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  margin: 0 !important;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: #fff7e8;
+  color: #99620a !important;
+  font-size: 9px !important;
+  font-weight: 700;
+  line-height: 1 !important;
+  white-space: nowrap;
+}
+
+/* ----- Page header ----- */
+.core-bill-form-page--channel.is-compact-view .page-container-body {
+  gap: 6px;
+}
+
+.core-bill-form-page--channel.is-compact-view .core-bill-form-head {
+  min-height: 48px;
+  padding: 7px 10px 7px 12px;
+  align-items: center;
+}
+
+.core-bill-form-page--channel.is-compact-view .core-bill-form-head__context {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.core-bill-form-page--channel.is-compact-view .core-bill-form-title-row {
+  flex: 0 1 auto;
+  gap: 6px;
+}
+
+.core-bill-form-page--channel.is-compact-view .core-bill-form-tip,
+.core-bill-form-page--channel.is-compact-view .core-bill-review-hint,
+.core-bill-form-page--channel.is-compact-view .core-bill-form-total,
+.core-bill-form-page--channel.is-compact-view .core-bill-draft-state small {
+  display: none !important;
+}
+
+.core-bill-form-page--channel.is-compact-view .core-bill-draft-state {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  white-space: nowrap;
+}
+
+.core-bill-form-page--channel.is-compact-view .core-bill-draft-state > span {
+  margin: 0;
+}
+
+.core-bill-form-page--channel.is-compact-view .core-bill-draft-state strong {
+  font-size: 10px;
+  font-weight: 650;
+}
+
+/* ----- V3.2 smart entry ----- */
+.core-bill-form-page--channel.is-compact-view .channel-smart-entry {
+  margin: 0;
+  border-radius: 10px;
+  box-shadow: 0 2px 10px rgb(30 64 105 / 4%);
+}
+
+.core-bill-form-page--channel.is-compact-view .channel-smart-entry__head {
+  align-items: center;
+  gap: 10px;
+  padding: 7px 11px;
+}
+
+.core-bill-form-page--channel.is-compact-view .channel-smart-entry__head > div {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.core-bill-form-page--channel.is-compact-view .channel-smart-entry__head span {
+  flex: 0 0 auto;
+  font-size: 9px;
+  letter-spacing: 0.04em;
+}
+
+.core-bill-form-page--channel.is-compact-view .channel-smart-entry__head strong {
+  overflow: hidden;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.core-bill-form-page--channel.is-compact-view .channel-smart-entry__head small {
+  display: none;
+}
+
+.core-bill-form-page--channel.is-compact-view .channel-smart-entry__head em {
+  padding: 3px 7px;
+  font-size: 9px;
+}
+
+.core-bill-form-page--channel.is-compact-view .channel-smart-entry__controls {
+  grid-template-columns: minmax(185px, 230px) auto minmax(220px, 1fr);
+  align-items: center;
+  gap: 8px;
+  padding: 8px 11px;
+}
+
+.core-bill-form-page--channel.is-compact-view .channel-smart-entry__controls label {
+  grid-template-columns: auto minmax(120px, 1fr);
+  align-items: center;
+  gap: 7px;
+}
+
+.core-bill-form-page--channel.is-compact-view .channel-smart-entry__controls label > span {
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.core-bill-form-page--channel.is-compact-view .channel-smart-entry__controls input {
+  min-height: 30px;
+  height: 30px;
+  padding: 4px 8px;
+  border-radius: 7px;
+  font-size: 11px;
+}
+
+.core-bill-form-page--channel.is-compact-view .channel-smart-entry__actions {
+  flex-wrap: nowrap;
+  gap: 6px;
+}
+
+.core-bill-form-page--channel.is-compact-view .channel-smart-entry__actions button {
+  min-height: 30px;
+  padding: 4px 9px;
+  border-radius: 7px;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.core-bill-form-page--channel.is-compact-view .channel-smart-entry__source {
+  gap: 1px;
+}
+
+.core-bill-form-page--channel.is-compact-view .channel-smart-entry__source strong {
+  font-size: 10px;
+}
+
+.core-bill-form-page--channel.is-compact-view .channel-smart-entry__source span {
+  overflow: hidden;
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.core-bill-form-page--channel.is-compact-view .channel-smart-entry__text-action {
+  font-size: 9px;
+}
+
+/* Errors, missing contracts and pending items remain visible, only their spacing is reduced. */
+.core-bill-form-page--channel.is-compact-view .channel-smart-entry__notice,
+.core-bill-form-page--channel.is-compact-view .channel-smart-entry__missing,
+.core-bill-form-page--channel.is-compact-view .channel-smart-entry__inline-tools,
+.core-bill-form-page--channel.is-compact-view .channel-smart-entry__pending {
+  margin: 0 11px 8px;
+  padding: 7px 9px;
+}
+
+.core-bill-form-page--channel.is-compact-view .channel-smart-entry__inline-tools span,
+.core-bill-form-page--channel.is-compact-view .channel-smart-entry__missing span,
+.core-bill-form-page--channel.is-compact-view .channel-smart-entry__pending span {
+  font-size: 10px;
+}
+
+/* ----- Bill meta + contract rule ----- */
+.core-bill-form-page--channel.is-compact-view .channel-form--page {
+  gap: 6px;
+}
+
+.core-bill-form-page--channel.is-compact-view .channel-form--page > .channel-form-section,
+.core-bill-form-page--channel.is-compact-view .channel-bill-meta-section {
+  padding: 8px 10px 9px !important;
+  border-radius: 9px;
+}
+
+.core-bill-form-page--channel.is-compact-view .form-section-title {
+  min-height: 23px;
+  margin-bottom: 6px;
+  padding-bottom: 5px;
+  font-size: 10px;
+}
+
+.core-bill-form-page--channel.is-compact-view .channel-bill-meta-grid {
+  grid-template-columns: minmax(360px, 1.25fr) minmax(260px, 0.75fr);
+  gap: 7px;
+}
+
+.core-bill-form-page--channel.is-compact-view .channel-bill-meta-grid__partner,
+.core-bill-form-page--channel.is-compact-view .channel-bill-meta-grid__remark {
+  grid-column: auto;
+}
+
+.core-bill-form-page--channel.is-compact-view .channel-rule-panel {
+  margin-top: 6px;
+  padding: 7px 9px;
+  border-radius: 8px;
+}
+
+.core-bill-form-page--channel.is-compact-view .channel-rule-panel__head {
+  align-items: center;
+  margin-bottom: 0;
+}
+
+.core-bill-form-page--channel.is-compact-view .channel-rule-panel__head span {
+  font-size: 8px;
+}
+
+.core-bill-form-page--channel.is-compact-view .channel-rule-panel__head strong {
+  margin-top: 1px;
+  font-size: 10px;
+}
+
+.core-bill-form-page--channel.is-compact-view .channel-rule-panel__head small,
+.core-bill-form-page--channel.is-compact-view .channel-rule-grid,
+.core-bill-form-page--channel.is-compact-view .channel-rule-formula {
+  display: none;
+}
+
+.core-bill-form-page--channel.is-compact-view .channel-contract-rule-status {
+  margin: 6px 0 0;
+  padding: 6px 8px;
+}
+
+.core-bill-form-page--channel.is-compact-view .channel-contract-rule-status strong {
+  font-size: 9px;
+}
+
+.core-bill-form-page--channel.is-compact-view .channel-contract-rule-status span {
+  overflow: hidden;
+  margin-top: 1px;
+  font-size: 8px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.core-bill-form-page--channel.is-compact-view .channel-contract-rule-status small {
+  display: none;
+}
+
+.core-bill-form-page--channel.is-compact-view .channel-contract-rule-status button {
+  padding: 4px 7px;
+}
+
+.core-bill-form-page--channel.is-compact-view .channel-contract-rule-override {
+  grid-template-columns: minmax(200px, 0.7fr) minmax(260px, 1.3fr);
+  gap: 8px;
+  margin: 6px 0 0;
+  padding: 6px 8px;
+}
+
+/* ----- Line items ----- */
+.core-bill-form-page--channel.is-compact-view .channel-discount-hint {
+  display: none;
+}
+
+.core-bill-form-page--channel.is-compact-view .channel-line-items-table-wrap {
+  max-height: 46vh;
+}
+
+.core-bill-form-page--channel.is-compact-view:not(.has-advanced-data) .channel-line-items-table {
+  min-width: 1000px;
+}
+
+/* Simple bill: hide fields that are only needed for discount / deductions / calculation audit. */
+.core-bill-form-page--channel.is-compact-view:not(.has-advanced-data) .channel-line-items-table th:nth-child(4),
+.core-bill-form-page--channel.is-compact-view:not(.has-advanced-data) .channel-line-items-table td:nth-child(4),
+.core-bill-form-page--channel.is-compact-view:not(.has-advanced-data) .channel-line-items-table th:nth-child(5),
+.core-bill-form-page--channel.is-compact-view:not(.has-advanced-data) .channel-line-items-table td:nth-child(5),
+.core-bill-form-page--channel.is-compact-view:not(.has-advanced-data) .channel-line-items-table th:nth-child(6),
+.core-bill-form-page--channel.is-compact-view:not(.has-advanced-data) .channel-line-items-table td:nth-child(6),
+.core-bill-form-page--channel.is-compact-view:not(.has-advanced-data) .channel-line-items-table th:nth-child(7),
+.core-bill-form-page--channel.is-compact-view:not(.has-advanced-data) .channel-line-items-table td:nth-child(7),
+.core-bill-form-page--channel.is-compact-view:not(.has-advanced-data) .channel-line-items-table th:nth-child(8),
+.core-bill-form-page--channel.is-compact-view:not(.has-advanced-data) .channel-line-items-table td:nth-child(8),
+.core-bill-form-page--channel.is-compact-view:not(.has-advanced-data) .channel-line-items-table th:nth-child(9),
+.core-bill-form-page--channel.is-compact-view:not(.has-advanced-data) .channel-line-items-table td:nth-child(9),
+.core-bill-form-page--channel.is-compact-view:not(.has-advanced-data) .channel-line-items-table th:nth-child(10),
+.core-bill-form-page--channel.is-compact-view:not(.has-advanced-data) .channel-line-items-table td:nth-child(10),
+.core-bill-form-page--channel.is-compact-view:not(.has-advanced-data) .channel-line-items-table th:nth-child(11),
+.core-bill-form-page--channel.is-compact-view:not(.has-advanced-data) .channel-line-items-table td:nth-child(11),
+.core-bill-form-page--channel.is-compact-view:not(.has-advanced-data) .channel-line-items-table th:nth-child(15),
+.core-bill-form-page--channel.is-compact-view:not(.has-advanced-data) .channel-line-items-table td:nth-child(15),
+.core-bill-form-page--channel.is-compact-view:not(.has-advanced-data) .channel-line-items-table th:nth-child(16),
+.core-bill-form-page--channel.is-compact-view:not(.has-advanced-data) .channel-line-items-table td:nth-child(16) {
+  display: none;
+}
+
+/* If the current rule has no channel fee, its column is also unnecessary. */
+.core-bill-form-page--channel.is-compact-view:not(.has-channel-fee) .channel-line-items-table th:nth-child(14),
+.core-bill-form-page--channel.is-compact-view:not(.has-channel-fee) .channel-line-items-table td:nth-child(14) {
+  display: none;
+}
+
+.core-bill-form-page--channel.is-compact-view .channel-line-items-table th,
+.core-bill-form-page--channel.is-compact-view .channel-line-items-table td {
+  height: 36px;
+  padding: 3px 5px;
+}
+
+.core-bill-form-page--channel.is-compact-view .channel-line-items-table input[type='text'],
+.core-bill-form-page--channel.is-compact-view .channel-line-items-table input[type='number'],
+.core-bill-form-page--channel.is-compact-view .channel-line-items-table input[type='month'] {
+  height: 28px;
+  min-height: 28px;
+  font-size: 10px;
+}
+
+/* ----- Summary: keep decision fields, collapse audit fields ----- */
+.core-bill-form-page--channel.is-compact-view:not(.has-advanced-data) .channel-line-items-summary {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.core-bill-form-page--channel.is-compact-view:not(.has-advanced-data) .channel-line-items-summary .summary-item:nth-child(1),
+.core-bill-form-page--channel.is-compact-view:not(.has-advanced-data) .channel-line-items-summary .summary-item:nth-child(3),
+.core-bill-form-page--channel.is-compact-view:not(.has-advanced-data) .channel-line-items-summary .summary-item:nth-child(4) {
+  display: none;
+}
+
+.core-bill-form-page--channel.is-compact-view .channel-line-items-summary .summary-item {
+  min-height: 48px;
+  padding: 6px 9px;
+}
+
+.core-bill-form-page--channel.is-compact-view .channel-line-items-summary .summary-item .value {
+  margin-top: 2px;
+  font-size: 13px;
+}
+
+.core-bill-form-page--channel.is-compact-view .channel-line-items-summary .summary-item--hero .value {
+  font-size: 15px;
+}
+
+.core-bill-form-page--channel.is-compact-view .channel-rule-summary {
+  grid-template-columns: repeat(4, minmax(120px, 1fr));
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.core-bill-form-page--channel.is-compact-view .channel-rule-summary > div {
+  min-height: 45px;
+  padding: 7px 9px;
+}
+
+.core-bill-form-page--channel.is-compact-view .channel-rule-summary > div:nth-child(5) {
+  display: none;
+}
+
+.core-bill-form-page--channel.is-compact-view .channel-rule-summary strong {
+  margin-top: 2px;
+  font-size: 11px;
+}
+
+/* ----- Cumulative settlement and attachments ----- */
+.core-bill-form-page--channel.is-compact-view .channel-cumulative-card.is-periodic .channel-cumulative-card__head {
+  min-height: 42px;
+  padding-top: 7px;
+  padding-bottom: 7px;
+}
+
+.core-bill-form-page--channel.is-compact-view .channel-cumulative-card.is-periodic .channel-cumulative-card__head small {
+  display: none;
+}
+
+.core-bill-form-page--channel.is-compact-view .bill-scan-attachments__empty {
+  display: none;
+}
+
+/* The sticky footer is the single always-visible amount summary in compact mode. */
+.core-bill-form-page--channel.is-compact-view .core-bill-footer {
+  min-height: 48px;
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+
+@media (max-width: 1180px) {
+  .core-bill-form-page--channel.is-compact-view .core-bill-form-head__context {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .core-bill-form-page--channel.is-compact-view .channel-smart-entry__controls {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .core-bill-form-page--channel.is-compact-view .channel-smart-entry__source {
+    grid-column: 1 / -1;
+  }
+
+  .core-bill-form-page--channel.is-compact-view .channel-bill-meta-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .core-bill-form-page--channel.is-compact-view .channel-rule-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .core-bill-form-page--channel .core-bill-form-title-row {
+    flex-wrap: wrap;
+  }
+
+  .core-bill-form-page--channel.is-compact-view .channel-smart-entry__head > div {
+    display: grid;
+  }
+
+  .core-bill-form-page--channel.is-compact-view .channel-smart-entry__controls,
+  .core-bill-form-page--channel.is-compact-view .channel-rule-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .core-bill-form-page--channel.is-compact-view .channel-smart-entry__source {
+    grid-column: auto;
+  }
+}
