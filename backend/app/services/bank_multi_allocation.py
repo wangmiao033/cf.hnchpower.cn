@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from fastapi import HTTPException
-from sqlalchemy import or_, select, text
+from sqlalchemy import func, or_, select, text
 from sqlalchemy.orm import Session
 
 from app.models.bank_reconciliation_match import BankReconciliationMatch
@@ -188,7 +188,13 @@ def _specific_bill(db: Session, direction: str, bill_type: str, bill_id: str) ->
         if row is None or not _active_bill(row):
             raise HTTPException(status_code=404, detail="渠道账单不存在或已取消")
         bill_amount = abs(_num(row.settlement_amount))
-        outstanding = max(0.0, bill_amount - max(0.0, _num(row.received_amount)))
+        received_raw = db.execute(
+            select(func.coalesce(func.sum(ChannelReceipt.amount), 0)).where(
+                ChannelReceipt.channel_record_id == str(row.id)
+            )
+        ).scalar_one()
+        received = max(0.0, _num(received_raw))
+        outstanding = max(0.0, bill_amount - received)
         return row, {
             "bill_type": "channel", "bill_id": str(row.id),
             "bill_number": str(row.statement_no or f"CH-{str(row.id)[:8]}"),
@@ -374,7 +380,12 @@ def bill_summary(db: Session, bill_type: str, bill_id: str) -> dict:
         if row is None:
             raise HTTPException(status_code=404, detail="渠道账单不存在")
         bill_amount = abs(_num(row.settlement_amount))
-        cash_total = max(0.0, _num(row.received_amount))
+        cash_raw = db.execute(
+            select(func.coalesce(func.sum(ChannelReceipt.amount), 0)).where(
+                ChannelReceipt.channel_record_id == str(row.id)
+            )
+        ).scalar_one()
+        cash_total = max(0.0, _num(cash_raw))
         bill_number = str(row.statement_no or f"CH-{bill_id[:8]}")
         partner_name = str(row.partner_name or row.channel_name or "")
     else:
