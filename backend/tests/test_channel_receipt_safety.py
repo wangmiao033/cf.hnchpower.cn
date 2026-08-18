@@ -18,6 +18,7 @@ from app.api.channel import (
 from app.models.bank_reconciliation_match import BankReconciliationMatch
 from app.models.channel import ChannelReceipt, ChannelRecord, ChannelRecordLineItem
 from app.schemas.channel import ChannelLineItemCreate, ChannelReceiptCreate, ChannelRecordUpdate
+from app.services.bank_multi_allocation import _specific_bill, bill_summary
 
 
 class ChannelReceiptSafetyTests(unittest.TestCase):
@@ -174,6 +175,17 @@ class ChannelReceiptSafetyTests(unittest.TestCase):
         self.assertEqual(ctx.exception.detail["error"], "channel_bill_has_bank_receipts")
         self.assertEqual(ctx.exception.detail["action"], "reverse_in_bank_center")
         self.assertIsNotNone(self.db.get(ChannelRecord, "bill-1"))
+
+    def test_bank_capacity_uses_receipt_facts_not_stale_rollup(self):
+        self.bill.received_amount = 0
+        self.db.commit()
+        self._manual_receipt("receipt-80", 80)
+
+        _row, candidate = _specific_bill(self.db, "collection", "channel", "bill-1")
+        summary = bill_summary(self.db, "channel", "bill-1")
+        self.assertAlmostEqual(float(candidate["outstanding_amount"]), 20.0, places=2)
+        self.assertAlmostEqual(float(summary["cash_total_amount"]), 80.0, places=2)
+        self.assertAlmostEqual(float(summary["remaining_amount"]), 20.0, places=2)
 
     def test_unreceived_bill_can_still_be_deleted(self):
         delete_channel_record("bill-1", self.db)
