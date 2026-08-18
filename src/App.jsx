@@ -24,9 +24,11 @@ import { apiRowToFrontend, getReconciliationRecord } from '@/lib/api/reconciliat
 import { apiChannelRowToFrontend, getChannelRecord } from '@/lib/api/channel.ts'
 import { getBillInvoiceSummary } from '@/lib/api/billInvoiceAllocations.ts'
 import { prefetchEditRecord } from '@/lib/api/editRecordCache.js'
+import Bill360WorkspaceBar from './components/reconciliation/Bill360WorkspaceBar.jsx'
 import CoreDashboardPage from './pages/CoreDashboardPage.jsx'
 import LoginPage from './pages/LoginPage.jsx'
 import '@/styles/admin-polish.css'
+import '@/styles/ui-v4.css'
 
 const PAGE_LOADERS = Object.freeze({
   financeWorkbench: () => import('./pages/FinanceWorkbenchPage.jsx'),
@@ -130,6 +132,10 @@ function scheduleIdleTask(callback) {
   return () => window.clearTimeout(id)
 }
 
+function billTargetKey(target) {
+  return `${target?.billType === 'channel' ? 'channel' : 'rd'}:${String(target?.billId || '')}`
+}
+
 function WorkspaceLoadingFallback() {
   return (
     <div style={{ padding: '18px 22px', minHeight: 420, background: '#f5f7fb' }} aria-label="正在打开页面">
@@ -169,7 +175,7 @@ function App() {
   const [channelEditRecordId, setChannelEditRecordId] = useState(null)
   const [channelReturnView, setChannelReturnView] = useState(VIEWS.RECON_CHANNEL)
   const [invoiceEditId, setInvoiceEditId] = useState(null)
-  const [bill360Target, setBill360Target] = useState(null)
+  const [bill360Targets, setBill360Targets] = useState([])
   const [reconDataActivated, setReconDataActivated] = useState(false)
   const [invoiceDataActivated, setInvoiceDataActivated] = useState(false)
   const prevActiveViewRef = useRef(activeView)
@@ -257,7 +263,7 @@ function App() {
     if (!canOpenView(can, activeView)) {
       navigationBlockerRef.current = null
       setActiveViewState(user?.role === 'finance' && canOpenView(can, VIEWS.FINANCE_WORKBENCH) ? VIEWS.FINANCE_WORKBENCH : VIEWS.DASHBOARD)
-      setBill360Target(null)
+      setBill360Targets([])
     }
   }, [isAuthenticated, loading, can, activeView, user?.role])
 
@@ -369,10 +375,30 @@ function App() {
       return
     }
     const billId = String(id || '')
-    if (billId) setBill360Target({ billType: billType === 'channel' ? 'channel' : 'rd', billId, initialRecord })
+    if (!billId) return
+    const target = { billType: billType === 'channel' ? 'channel' : 'rd', billId, initialRecord }
+    setBill360Targets((current) => {
+      const key = billTargetKey(target)
+      const existingIndex = current.findIndex((item) => billTargetKey(item) === key)
+      if (existingIndex >= 0) {
+        const next = [...current]
+        next[existingIndex] = target
+        return next
+      }
+      if (current.length >= 2) return current
+      return [...current, target]
+    })
   }, [can, showToast])
 
-  const closeBill360 = useCallback(() => setBill360Target(null), [])
+  const closeBill360 = useCallback((target = null) => {
+    if (!target) {
+      setBill360Targets([])
+      return
+    }
+    const key = billTargetKey(target)
+    setBill360Targets((current) => current.filter((item) => billTargetKey(item) !== key))
+  }, [])
+
   const openInvoiceEdit = useCallback((id) => { setInvoiceEditId(String(id)); navigate(VIEWS.INVOICE_EDIT) }, [navigate])
   const navigateBankPaymentForReconciliation = useCallback(() => navigate(VIEWS.BANK_RECONCILIATION), [navigate])
 
@@ -452,10 +478,27 @@ function App() {
         >
           <Suspense fallback={<WorkspaceLoadingFallback />}>{renderView()}</Suspense>
         </AppShell>
-        {bill360Target ? (
-          <Suspense fallback={<Bill360LoadingFallback onClose={closeBill360} />}>
-            <Bill360Drawer target={bill360Target} onClose={closeBill360} />
-          </Suspense>
+        {bill360Targets.length ? (
+          <div className={`bill360-workspace-host is-${bill360Targets.length === 2 ? 'dual' : 'single'}`}>
+            <Bill360WorkspaceBar
+              targets={bill360Targets}
+              rdRecords={recon.records || []}
+              channelRecords={recon.channelRecords || []}
+              onOpen={openBill360}
+              onClose={closeBill360}
+              onCloseAll={() => closeBill360()}
+            />
+            {bill360Targets.map((target, index) => (
+              <div
+                className={`bill360-workspace-pane ${index === 0 ? 'bill360-workspace-pane--primary' : 'bill360-workspace-pane--secondary'}`}
+                key={billTargetKey(target)}
+              >
+                <Suspense fallback={<Bill360LoadingFallback onClose={() => closeBill360(target)} />}>
+                  <Bill360Drawer target={target} onClose={() => closeBill360(target)} />
+                </Suspense>
+              </div>
+            ))}
+          </div>
         ) : null}
         <ConfirmDialog isOpen={recon.showDeleteConfirm} title="确认删除" message="确定要删除这条研发对账记录吗？此操作无法撤销。" onConfirm={recon.confirmDelete} onCancel={recon.cancelDelete} confirmText="删除" cancelText="取消" />
         <ConfirmDialog isOpen={recon.showBatchDeleteConfirm} title="确认批量删除" message={`确定要删除选中的 ${recon.selectedIds.length} 条研发对账记录吗？此操作无法撤销。`} onConfirm={recon.confirmBatchDelete} onCancel={recon.cancelBatchDelete} confirmText="删除" cancelText="取消" />
