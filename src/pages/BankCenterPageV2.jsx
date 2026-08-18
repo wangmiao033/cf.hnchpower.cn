@@ -39,6 +39,14 @@ function dateTime(value) {
   return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString('zh-CN', { hour12: false })
 }
 
+function shortDateTime(value) {
+  if (!value) return '-'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return String(value)
+  const two = (part) => String(part).padStart(2, '0')
+  return `${String(date.getFullYear()).slice(-2)}-${two(date.getMonth() + 1)}-${two(date.getDate())} ${two(date.getHours())}:${two(date.getMinutes())}`
+}
+
 function monthText(value) {
   const raw = String(value || '').trim()
   if (!raw) return '-'
@@ -364,12 +372,22 @@ export default function BankCenterPageV2() {
     setQueuePage(1)
   }, [queueSearch, queueDirection, queueFilter, queueRangeMode, queueDateFrom, queueDateTo, queuePageSize])
 
-  const visibleHistory = useMemo(
-    () => (dashboard?.recent_matches || [])
-      .filter((item) => item.status === historyMode)
-      .map((item) => ({ ...item, ...historyBillMeta(item, recon) })),
-    [dashboard?.recent_matches, historyMode, recon?.records, recon?.channelRecords]
-  )
+  const visibleHistory = useMemo(() => {
+    const rows = (dashboard?.recent_matches || []).filter((item) => item.status === historyMode)
+    const counts = rows.reduce((map, item) => {
+      const key = String(item.bank_transaction_id || item.match_id || '')
+      map.set(key, (map.get(key) || 0) + 1)
+      return map
+    }, new Map())
+    return rows.map((item) => {
+      const key = String(item.bank_transaction_id || item.match_id || '')
+      return {
+        ...item,
+        ...historyBillMeta(item, recon),
+        transactionAllocationCount: counts.get(key) || 1
+      }
+    })
+  }, [dashboard?.recent_matches, historyMode, recon?.records, recon?.channelRecords])
   const visibleHistoryAmount = useMemo(
     () => visibleHistory.reduce((sum, item) => sum + Number(item.linked_amount || 0), 0),
     [visibleHistory]
@@ -700,7 +718,7 @@ export default function BankCenterPageV2() {
         <div className="bank-center-pane bank-v2-pane">
           <section className="bank-center-card bank-v2-card">
             <header className="bank-v2-card-head">
-              <div><h2>核销记录</h2><p>资金事实、收/付主体、账单月份和账单编号统一展示；撤销后原流水自动回到待处理。</p></div>
+              <div><h2>核销记录</h2><p>每行就是一笔银行流水到一张账单的核销分配；多对多用“同流水 N 单”提示，整行保持紧凑。</p></div>
               <div className="bank-v2-card-actions">
                 <span>{historyMode === 'confirmed' ? '有效核销' : '已撤销'} <strong>{visibleHistory.length}</strong> 笔 · {money(visibleHistoryAmount)}</span>
                 <div className="bank-center-segments"><button type="button" className={historyMode === 'confirmed' ? 'is-active' : ''} onClick={() => setHistoryMode('confirmed')}>有效核销</button><button type="button" className={historyMode === 'reversed' ? 'is-active' : ''} onClick={() => setHistoryMode('reversed')}>已撤销</button></div>
@@ -709,34 +727,41 @@ export default function BankCenterPageV2() {
             <div className="bank-center-table-wrap">
               <table className="bank-center-table bank-center-table--history bank-v2-table" style={{ minWidth: 1280, tableLayout: 'fixed' }}>
                 <colgroup>
-                  <col style={{ width: 105 }} />
-                  <col style={{ width: 70 }} />
-                  <col style={{ width: 220 }} />
                   <col style={{ width: 100 }} />
-                  <col style={{ width: 180 }} />
+                  <col style={{ width: 68 }} />
+                  <col style={{ width: 210 }} />
+                  <col style={{ width: 100 }} />
+                  <col style={{ width: 235 }} />
                   <col style={{ width: 110 }} />
+                  <col style={{ width: 82 }} />
+                  <col style={{ width: 205 }} />
+                  <col style={{ width: 80 }} />
                   <col style={{ width: 90 }} />
-                  <col style={{ width: 175 }} />
-                  <col style={{ width: 95 }} />
-                  <col style={{ width: 105 }} />
                 </colgroup>
-                <thead><tr><th>银行日期</th><th>方向</th><th>收 / 付主体</th><th>账单月份</th><th>账单编号</th><th className="is-right">金额</th><th>匹配度</th><th>操作人 / 时间</th><th>状态</th><th>操作</th></tr></thead>
+                <thead><tr><th>银行日期</th><th>方向</th><th>收 / 付主体</th><th>账单月份</th><th>核销账单</th><th className="is-right">核销金额</th><th>匹配度</th><th>操作人 / 时间</th><th>状态</th><th>操作</th></tr></thead>
                 <tbody>
                   {visibleHistory.length === 0 ? <tr><td colSpan={10} className="bank-center-empty">暂无记录。</td></tr> : null}
                   {visibleHistory.map((match) => {
                     const operator = match.status === 'reversed' ? (match.reversed_email || match.confirmed_email) : match.confirmed_email
                     const operatedAt = match.status === 'reversed' ? (match.reversed_at || match.confirmed_at) : match.confirmed_at
+                    const allocationCount = Math.max(1, Number(match.transactionAllocationCount || 1))
+                    const relationText = allocationCount > 1 ? `同流水${allocationCount}单` : '1笔流水'
+                    const billNumber = match.bill_number || match.bill_id
+                    const transactionRef = match.transaction_no || match.bank_transaction_id || '-'
                     return (
-                      <tr key={match.match_id}>
-                        <td style={{ whiteSpace: 'nowrap' }}>{match.trade_date || '-'}</td>
+                      <tr key={match.match_id} style={{ whiteSpace: 'nowrap' }}>
+                        <td title={`银行流水 ${transactionRef}`}>{match.trade_date || '-'}</td>
                         <td><span className={`bank-center-direction is-${match.direction}`}>{match.direction_label || '-'}</span></td>
-                        <td className="bank-center-strong bank-v2-counterparty" title={match.partnerName}>{match.partnerName}</td>
-                        <td style={{ whiteSpace: 'nowrap' }}>{match.settlementMonth}</td>
-                        <td><button type="button" className="bank-center-bill-link" onClick={() => openBill360(match.bill_type, match.bill_id)}>{match.bill_number || match.bill_id}</button><small>{billTypeLabel(match.bill_type)}</small></td>
+                        <td className="bank-center-strong bank-v2-counterparty" style={{ overflow: 'hidden', textOverflow: 'ellipsis' }} title={match.partnerName}>{match.partnerName}</td>
+                        <td>{match.settlementMonth}</td>
+                        <td style={{ overflow: 'hidden', textOverflow: 'ellipsis' }} title={`银行流水 ${transactionRef} → ${billTypeLabel(match.bill_type)} ${billNumber} · 核销 ${money(match.linked_amount)}`}>
+                          <button type="button" className="bank-center-bill-link" onClick={() => openBill360(match.bill_type, match.bill_id)}>{billNumber}</button>
+                          <span style={{ color: '#7d8999', fontSize: 10 }}> · {match.bill_type === 'rd' ? '研发' : '渠道'} · {relationText}</span>
+                        </td>
                         <td className="is-right"><strong>{money(match.linked_amount)}</strong></td>
                         <td><span className={`bank-center-confidence is-${match.confidence_level}`}>{confidenceLabel(match.confidence_level)} {Number(match.confidence_score || 0).toFixed(0)}</span></td>
-                        <td><strong>{operator || '-'}</strong><small>{dateTime(operatedAt)}</small></td>
-                        <td>{match.status === 'confirmed' ? <span className="bank-center-ledger-status is-linked">有效</span> : <span className="bank-center-ledger-status">已撤销</span>}{match.reverse_reason ? <small title={match.reverse_reason}>{match.reverse_reason}</small> : null}</td>
+                        <td style={{ overflow: 'hidden', textOverflow: 'ellipsis' }} title={`${operator || '-'} · ${dateTime(operatedAt)}`}><strong>{operator || '-'}</strong><span style={{ color: '#7d8999', fontSize: 10 }}> · {shortDateTime(operatedAt)}</span></td>
+                        <td title={match.reverse_reason || (match.status === 'confirmed' ? '有效核销' : '已撤销')}>{match.status === 'confirmed' ? <span className="bank-center-ledger-status is-linked">有效</span> : <span className="bank-center-ledger-status">已撤销</span>}</td>
                         <td>{canManage && match.status === 'confirmed' ? <button type="button" className="bank-center-more-action" disabled={busyId === match.match_id} onClick={() => reverseMatch(match)}>{busyId === match.match_id ? '处理中…' : '撤销核销'}</button> : '-'}</td>
                       </tr>
                     )
