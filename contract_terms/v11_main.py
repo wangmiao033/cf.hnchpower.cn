@@ -11,7 +11,7 @@ from __future__ import annotations
 from typing import Any
 
 import psycopg
-from fastapi import HTTPException, Query, Request
+from fastapi import Query, Request
 from psycopg.rows import dict_row
 
 try:
@@ -96,17 +96,18 @@ def _special_overrides_for_bill(bill_id: str) -> tuple[dict[str, str], str]:
         return result, str(snapshot.get("id") or "")
 
 
-def _can_manage_contracts(request: Request) -> bool:
-    try:
-        _v9._require_permission(request, "contracts.manage")
-        return True
-    except HTTPException:
-        return False
-
-
 def _auto_accept_special_settlements(request: Request, bill_id: str, result: dict) -> int:
+    """Consume an already-saved special-settlement decision during reconciliation.
+
+    The approval decision is the persisted R&D entry snapshot itself: the user had
+    to save a line that materially deviates from the contract and provide an
+    explicit special-settlement reason. Requiring ``contracts.manage`` again here
+    incorrectly blocks finance users who are allowed to edit/confirm bills but not
+    contract master data. Reconciliation already requires ``contracts.view``; this
+    step merely closes the difference case from the immutable saved audit evidence.
+    """
     overrides, snapshot_id = _special_overrides_for_bill(bill_id)
-    if not overrides or not _can_manage_contracts(request):
+    if not overrides:
         return 0
 
     accepted = 0
