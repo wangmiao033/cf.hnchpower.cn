@@ -273,7 +273,8 @@ def archive_snapshot(db: Session, bill_type: str, *, run_auto: bool = True) -> d
         if bill_id in archived_ids:
             continue
         eligible, _, _ = archive_eligibility(db, bill_type, bill)
-        if eligible:
+        # 研发账单不再暴露“可手工归档”状态：满足条件时由自动扫描直接处理。
+        if eligible and bill_type != "rd":
             eligible_ids.append(bill_id)
 
     items = [
