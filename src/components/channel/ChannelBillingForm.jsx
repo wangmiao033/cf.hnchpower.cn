@@ -509,7 +509,15 @@ function ChannelBillingForm({
             <PartnerPicker value={header.partnerName || header.channelName} partnerId={partnerId} partners={partners} onChange={handlePartnerChange} onAddPartner={onAddPartner} required linkedText={selectedPartner ? `已关联客户库 · 简称：${selectedPartner.shortName || selectedPartner.name}` : '已关联客户库'} unlinkedText="输入简称或公司全称，并从客户库结果中选择" />
           </div>
           <div className="form-group channel-bill-meta-grid__remark">
-            <label>备注</label><input type="text" value={header.remark} onChange={(e) => handleHeaderChange('remark', e.target.value)} className="admin-input" placeholder="选填，记录发票、回款、N1/N2 或本期特殊说明" />
+            <label>备注 / 特殊说明</label>
+            <textarea
+              rows={3}
+              value={header.remark}
+              onChange={(e) => handleHeaderChange('remark', e.target.value)}
+              className="admin-input channel-bill-remark-textarea"
+              placeholder="选填，例如：10月差异结转至12月；特殊扣款；双方确认按实际金额结算；下月冲抵等"
+              style={{ height: 'auto', minHeight: 72, padding: '8px 10px', lineHeight: 1.5, resize: 'vertical' }}
+            />
           </div>
         </div>
 
