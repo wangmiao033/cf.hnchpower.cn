@@ -1,0 +1,41 @@
+/* Keep the channel line-item entry grid complete even when the surrounding page uses compact mode.
+   These fields are operational inputs, not optional display-only details. */
+
+.core-bill-form-page--channel.is-compact-view .channel-line-items-table {
+  min-width: 1580px !important;
+}
+
+.core-bill-form-page--channel.is-compact-view .channel-line-items-table th,
+.core-bill-form-page--channel.is-compact-view .channel-line-items-table td {
+  display: table-cell !important;
+}
+
+/* Keep the most common manual-entry fields readable instead of compressing them away. */
+.core-bill-form-page--channel.is-compact-view .channel-line-items-table th:nth-child(1),
+.core-bill-form-page--channel.is-compact-view .channel-line-items-table td:nth-child(1) {
+  min-width: 118px;
+}
+
+.core-bill-form-page--channel.is-compact-view .channel-line-items-table th:nth-child(2),
+.core-bill-form-page--channel.is-compact-view .channel-line-items-table td:nth-child(2) {
+  min-width: 140px;
+}
+
+.core-bill-form-page--channel.is-compact-view .channel-line-items-table th:nth-child(3),
+.core-bill-form-page--channel.is-compact-view .channel-line-items-table td:nth-child(3),
+.core-bill-form-page--channel.is-compact-view .channel-line-items-table th:nth-child(6),
+.core-bill-form-page--channel.is-compact-view .channel-line-items-table td:nth-child(6),
+.core-bill-form-page--channel.is-compact-view .channel-line-items-table th:nth-child(7),
+.core-bill-form-page--channel.is-compact-view .channel-line-items-table td:nth-child(7),
+.core-bill-form-page--channel.is-compact-view .channel-line-items-table th:nth-child(8),
+.core-bill-form-page--channel.is-compact-view .channel-line-items-table td:nth-child(8),
+.core-bill-form-page--channel.is-compact-view .channel-line-items-table th:nth-child(9),
+.core-bill-form-page--channel.is-compact-view .channel-line-items-table td:nth-child(9),
+.core-bill-form-page--channel.is-compact-view .channel-line-items-table th:nth-child(10),
+.core-bill-form-page--channel.is-compact-view .channel-line-items-table td:nth-child(10),
+.core-bill-form-page--channel.is-compact-view .channel-line-items-table th:nth-child(11),
+.core-bill-form-page--channel.is-compact-view .channel-line-items-table td:nth-child(11),
+.core-bill-form-page--channel.is-compact-view .channel-line-items-table th:nth-child(18),
+.core-bill-form-page--channel.is-compact-view .channel-line-items-table td:nth-child(18) {
+  min-width: 82px;
+}
