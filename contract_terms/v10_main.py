@@ -9,9 +9,11 @@ Versioned SQL migrations are executed once by the production build.
 
 from __future__ import annotations
 
+import logging
 import re
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
 
 try:
     from . import extended_main as _extended
@@ -31,6 +33,8 @@ except ImportError:
     import v4_main as _v4
     import v8_main as _v8
     import v9_main as _v9
+
+logger = logging.getLogger("contract_terms")
 
 
 def _require_relations(conn, names: tuple[str, ...], feature: str) -> None:
@@ -166,3 +170,31 @@ app = FastAPI(
     openapi_url=None,
 )
 app.router.routes.extend(list(_v9.app.router.routes))
+
+
+@app.exception_handler(Exception)
+async def _unhandled_contract_service_error(request: Request, exc: Exception) -> JSONResponse:
+    """Return a real HTTP 500 instead of leaking an unhandled ASGI exception.
+
+    Vercel can otherwise record the wrapper request as HTTP 200 while the ASGI
+    application crashes after dispatch, which makes monitoring misleading.  The
+    stack trace is still logged server-side, while callers receive a stable,
+    explicit technical error that the UI can distinguish from a business-level
+    "contract not matched" result.
+    """
+    logger.error(
+        "Unhandled contract service error path=%s method=%s",
+        request.url.path,
+        request.method,
+        exc_info=(type(exc), exc, exc.__traceback__),
+    )
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": {
+                "error": "contract_service_internal_error",
+                "message": "合同服务发生内部错误，请稍后重试；本次账单可保留为待核对状态。",
+                "retryable": True,
+            }
+        },
+    )
