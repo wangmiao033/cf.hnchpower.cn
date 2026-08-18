@@ -1,7 +1,7 @@
 """Persist customer-library links for research reconciliation records.
 
 The schema is provisioned by versioned migration 052. Runtime API requests must
-never create or alter tables/indexes here.
+remain schema-DDL-free; all structural changes belong in versioned migrations.
 """
 
 from __future__ import annotations
