@@ -47,9 +47,9 @@ function validationText(status) {
 
 function contractRuleLabel(state) {
   if (state.loading) return '正在读取合同清单…'
-  if (state.tone === 'applied') return '已按合同清单带入'
-  if (state.tone === 'review') return '合同规则需确认'
-  if (state.tone === 'error') return '合同规则读取失败'
+  if (state.tone === 'applied') return '合同规则已应用'
+  if (state.tone === 'review') return '合同规则已匹配 · 待确认'
+  if (state.tone === 'error') return '技术异常 · 合同规则读取失败'
   return '合同规则自动匹配'
 }
 
@@ -165,8 +165,11 @@ function ChannelBillingForm({
       const byId = (partners || []).find((partner) => String(partner?.id || '') === String(partnerId))
       if (byId) return byId
     }
-    return findExactPartner(partners, header.partnerName || header.channelName)
-  }, [partners, partnerId, header.partnerName, header.channelName])
+    // Existing records predate stable partner IDs. Restore their link by exact name only
+    // in edit mode; a new bill must be explicitly selected from PartnerPicker.
+    if (mode === 'edit') return findExactPartner(partners, header.partnerName || header.channelName)
+    return null
+  }, [partners, partnerId, header.partnerName, header.channelName, mode])
 
   const effectiveRuleHeader = applyTargetedChannelRule(header)
   const feeMode = effectiveRuleHeader.channelFeeMode || 'fixed'
@@ -230,21 +233,32 @@ function ChannelBillingForm({
   }, [mode, sourceRecord?.id, draftRecord])
 
   useEffect(() => {
-    if (partnerId) return
+    // Legacy/edit records only: recover their stable customer link from the persisted
+    // exact name. New bills are intentionally excluded so typing cannot impersonate
+    // an explicit selection.
+    if (mode === 'add' || partnerId) return
     const matched = findExactPartner(partners, header.partnerName || header.channelName)
     if (!matched) return
     setPartnerId(String(matched.id || ''))
     setHeader((current) => applyTargetedChannelRule({ ...current, partnerName: current.partnerName || matched.name, channelName: current.channelName || matched.shortName || matched.name }))
-  }, [partners, header.partnerName, header.channelName, partnerId])
+  }, [partners, header.partnerName, header.channelName, partnerId, mode])
 
   useEffect(() => {
     if (!contractAwareMode) return undefined
     const partnerName = String(header.partnerName || '').trim()
     if (!partnerName) return undefined
+    if (mode === 'add' && !partnerId) {
+      setContractRuleState({
+        ...emptyContractRuleState(),
+        tone: 'review',
+        message: '待选择合作方：请从客户库结果中明确选中后再读取合同规则。'
+      })
+      return undefined
+    }
 
     const preciseLines = identityRows(lines)
     const fingerprint = recommendationFingerprint(partnerName, header.channelName, lines)
-    const requestKey = `${fingerprint}:${contractRuleRevision}`
+    const requestKey = `${partnerId || 'legacy-edit'}:${fingerprint}:${contractRuleRevision}`
     if (requestKey === lastContractRuleKey) return undefined
 
     setContractRuleState((current) => ({
@@ -282,26 +296,35 @@ function ChannelBillingForm({
           )
           const allPreciseLinesApplied = preciseLines.length > 0 && preciseLines.every((line) => lineRecommendations.has(line.line_index))
 
-          setLines((current) => current.map((row, index) => {
-            const rec = lineRecommendations.get(index) || baseline
-            return rec ? applyContractRecommendationToLine(row, rec) : clearLineContractRule(row)
-          }))
+          // New bills consume the latest contract values immediately and recalculate.
+          // Historical/edit bills are comparison-only: never mutate persisted/manual
+          // financial rules just because the contract was edited after the bill period.
+          if (mode === 'add') {
+            setLines((current) => current.map((row, index) => {
+              const rec = lineRecommendations.get(index) || baseline
+              return rec ? applyContractRecommendationToLine(row, rec) : clearLineContractRule(row)
+            }))
+          }
 
           if (chosenHeader) {
-            setHeader((current) => targeted ? applyTargetedChannelRule(current) : ({
-              ...current,
-              settlementRuleCode: chosenHeader.settlement_rule_code,
-              channelFeeMode: chosenHeader.channel_fee_mode,
-              channelFeeRate: String(chosenHeader.channel_fee_rate ?? ''),
-              taxMode: chosenHeader.tax_mode,
-              validationTolerance: String(chosenHeader.validation_tolerance ?? 0.05)
-            }))
+            if (mode === 'add') {
+              setHeader((current) => targeted ? applyTargetedChannelRule(current) : ({
+                ...current,
+                settlementRuleCode: chosenHeader.settlement_rule_code,
+                channelFeeMode: chosenHeader.channel_fee_mode,
+                channelFeeRate: String(chosenHeader.channel_fee_rate ?? ''),
+                taxMode: chosenHeader.tax_mode,
+                validationTolerance: String(chosenHeader.validation_tolerance ?? 0.05)
+              }))
+            }
             setContractRuleState({
               loading: false,
-              tone: 'applied',
-              message: preciseHeader
-                ? `${result.message}；当前明细已按具体合同合作清单填充。`
-                : `${result.partner_rule_message}；选择游戏和账期后还会再次精确核对。`,
+              tone: mode === 'add' ? 'applied' : 'review',
+              message: mode === 'edit'
+                ? '已匹配当前最新合同规则；历史账单原值保持不变，仅做核验。如需改成新口径，请人工修改并填写覆盖原因。'
+                : preciseHeader
+                  ? `${result.message}；当前明细已按具体合同合作清单填充并重新计算。`
+                  : `${result.partner_rule_message}；选择游戏和账期后还会再次精确核对。`,
               contracts: contractNames,
               recommendation: result,
               fingerprint
@@ -323,7 +346,7 @@ function ChannelBillingForm({
               tone: 'review',
               message: mode === 'edit'
                 ? '未找到该合作方合同清单，已保留这张历史账单原有规则，不会用默认值覆盖。'
-                : '未找到该合作方合同清单，已回退到原有人工/渠道规则；本次不会把旧默认值冒充合同值。',
+                : '待补规则：未找到该合作方合同清单，已回退到原有人工/渠道规则；本次不会把旧默认值冒充合同值。',
               contracts: contractNames,
               recommendation: result,
               fingerprint
@@ -342,10 +365,12 @@ function ChannelBillingForm({
           }
           setContractRuleState({
             loading: false,
-            tone: allPreciseLinesApplied ? 'applied' : 'review',
-            message: allPreciseLinesApplied
-              ? '本账单存在多套合同结算规则，已按每个游戏明细对应的合同分别计算；不会再把账单头部的统一通道费套到所有游戏。'
-              : result.partner_rule_message || result.message || '合同规则存在歧义，请按具体游戏和账期确认。',
+            tone: mode === 'edit' ? 'review' : allPreciseLinesApplied ? 'applied' : 'review',
+            message: mode === 'edit'
+              ? '已读取最新合同清单用于核验；历史账单规则不会自动覆盖。'
+              : allPreciseLinesApplied
+                ? '本账单存在多套合同结算规则，已按每个游戏明细对应的合同分别计算；不会再把账单头部的统一通道费套到所有游戏。'
+                : result.partner_rule_message || result.message || '待补规则：合同规则存在歧义，请按具体游戏和账期确认。',
             contracts: contractNames,
             recommendation: result,
             fingerprint
@@ -356,7 +381,7 @@ function ChannelBillingForm({
           setContractRuleState({
             loading: false,
             tone: 'error',
-            message: error instanceof Error ? error.message : '合同规则读取失败，请重新匹配后再保存。',
+            message: error instanceof Error ? error.message : '技术异常：合同规则读取失败，请重新匹配后再保存。',
             contracts: [],
             recommendation: null,
             fingerprint: ''
@@ -368,7 +393,7 @@ function ChannelBillingForm({
       cancelled = true
       window.clearTimeout(timer)
     }
-  }, [contractAwareMode, mode, header.partnerName, header.channelName, lines, contractRuleRevision, lastContractRuleKey])
+  }, [contractAwareMode, mode, partnerId, header.partnerName, header.channelName, lines, contractRuleRevision, lastContractRuleKey])
 
   const handleHeaderChange = (field, value) => setHeader((current) => ({ ...current, [field]: value }))
   const clearAllLineContractRules = () => setLines((current) => current.map(clearLineContractRule))
@@ -386,7 +411,9 @@ function ChannelBillingForm({
     setLastContractRuleKey('')
     setContractRuleState(emptyContractRuleState())
     setContractOverrideReason('')
-    setLines((current) => current.map(clearLineContractRule))
+    if (mode === 'add' || (selected && nextPartnerId)) {
+      setLines((current) => current.map(clearLineContractRule))
+    }
     const channelName = selected && nextPartnerId ? selected.shortName || selected.name : partnerName
     const preset = detectChannelRulePreset(channelName || partnerName)
     if (mode === 'add' && preset !== XIAN_WEIZHEN_9917_RULE) {
@@ -423,7 +450,7 @@ function ChannelBillingForm({
       : null
     let next = { ...initialLineItem(), settlementCycle: lastCycle }
     if (!targetedRuleLocked) {
-      if (baseline) next = applyContractRecommendationToLine(next, baseline)
+      if (mode === 'add' && baseline) next = applyContractRecommendationToLine(next, baseline)
       else {
         next.shareRate = String(last.shareRate ?? '')
         next.taxRate = String(last.taxRate ?? '')
@@ -441,6 +468,10 @@ function ChannelBillingForm({
     if (!(header.partnerName || header.channelName)?.trim()) {
       const msg = '请填写合作方'; onError?.(msg) ?? window.alert(msg); return
     }
+    if (mode === 'add' && !partnerId) {
+      const msg = '请从客户库搜索结果中明确选择合作方后再保存；仅输入名称不会触发合同智能匹配。'
+      onError?.(msg) ?? window.alert(msg); return
+    }
     for (let i = 0; i < lines.length; i += 1) {
       const row = lines[i]
       if (!normalizeChannelSettlementCycle(row.settlementCycle)) { const msg = `第 ${i + 1} 行：请选择结算月份`; onError?.(msg) ?? window.alert(msg); return }
@@ -456,7 +487,7 @@ function ChannelBillingForm({
         onError?.(msg) ?? window.alert(msg); return
       }
       if (contractRuleState.tone === 'error') {
-        const msg = '合同规则读取失败，不能直接用旧默认值保存；请重新匹配合同。'
+        const msg = '技术异常：合同规则读取失败，不能直接用旧默认值保存；请重新匹配合同。'
         onError?.(msg) ?? window.alert(msg); return
       }
       if (contractRuleNeedsOverride && !contractOverrideReason.trim()) {
@@ -524,7 +555,7 @@ function ChannelBillingForm({
         <section className="channel-rule-panel">
           <div className="channel-rule-panel__head">
             <div><span>结算规则引擎</span><strong>{targetedRuleLocked ? '渠道专属规则已锁定' : mixedLineContractRules ? '已按游戏明细分别套用合同规则' : '合同清单优先，人工覆盖需留痕'}</strong></div>
-            <small>{targetedRuleLocked ? '西安维真（客户 9917）：代金券、福利币仅记录；其余原扣减项保持现有规则，分成后扣 5% 通道费，税率仅记录。' : mixedLineContractRules ? '同一张账单可以包含不同分成/通道费口径；系统按每行对应合同独立计算，上方规则只作为未匹配明细的兜底。' : '选择合作方后先读取合同清单统一规则；填写游戏和账期后再锁定具体合作清单。旧 30%/5% 默认值不会再冒充合同值。'}</small>
+            <small>{targetedRuleLocked ? '西安维真（客户 9917）：代金券、福利币仅记录；其余原扣减项保持现有规则，分成后扣 5% 通道费，税率仅记录。' : mixedLineContractRules ? '同一张账单可以包含不同分成/通道费口径；系统按每行对应合同独立计算，上方规则只作为未匹配明细的兜底。' : '明确选择合作方后先读取合同清单统一规则；填写游戏和账期后再锁定具体合作清单。旧 30%/5% 默认值不会再冒充合同值。'}</small>
           </div>
           {contractAwareMode && (contractRuleState.loading || contractRuleState.message) ? (
             <div className={`channel-contract-rule-status is-${contractRuleState.tone || 'idle'}`}>
@@ -533,12 +564,12 @@ function ChannelBillingForm({
                 <span>{contractRuleState.message}</span>
                 {contractRuleState.contracts?.length ? <small>{contractRuleState.contracts.join(' · ')}</small> : null}
               </div>
-              <button type="button" onClick={() => { setLastContractRuleKey(''); setContractRuleRevision((value) => value + 1) }} disabled={contractRuleState.loading}>重新匹配</button>
+              <button type="button" onClick={() => { setLastContractRuleKey(''); setContractRuleRevision((value) => value + 1) }} disabled={contractRuleState.loading || (mode === 'add' && !partnerId)}>重新匹配</button>
             </div>
           ) : null}
           {contractAwareMode && contractRuleNeedsOverride && !targetedRuleLocked ? (
             <div className="channel-contract-rule-override">
-              <div><strong>当前值未完全按合同清单</strong><span>如确需人工覆盖，必须填写原因；该原因会随账单备注保存。</span></div>
+              <div><strong>业务差异 · 当前值未完全按合同清单</strong><span>如确需人工覆盖，必须填写原因；该原因会随账单备注保存。</span></div>
               <input type="text" value={contractOverrideReason} onChange={(event) => setContractOverrideReason(event.target.value)} placeholder="例如：商务临时约定、历史口径、合同清单待补录" />
             </div>
           ) : null}
