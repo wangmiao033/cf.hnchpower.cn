@@ -651,3 +651,33 @@
 
   .bank-v2-account-note { display: none; }
 }
+
+/* Reconciled history: keep only decision-useful fields visible. Audit operator/time is still retained in data. */
+.bank-center-v2 .bank-center-table--history {
+  min-width: 1080px !important;
+}
+
+.bank-center-v2 .bank-center-table--history col:nth-child(8) {
+  visibility: collapse;
+  width: 0 !important;
+}
+
+.bank-center-v2 .bank-center-table--history th:nth-child(8),
+.bank-center-v2 .bank-center-table--history td:nth-child(8) {
+  display: none;
+}
+
+/* Use a shorter action label in the dense table while preserving the existing reversal behavior. */
+.bank-center-v2 .bank-center-table--history .bank-center-more-action {
+  min-width: 48px;
+  font-size: 0 !important;
+}
+
+.bank-center-v2 .bank-center-table--history .bank-center-more-action::after {
+  content: '撤回';
+  font-size: 10.5px;
+}
+
+.bank-center-v2 .bank-center-table--history .bank-center-more-action:disabled::after {
+  content: '处理中…';
+}
