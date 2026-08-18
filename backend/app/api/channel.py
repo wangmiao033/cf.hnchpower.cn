@@ -345,7 +345,9 @@ def create_channel_record(payload: ChannelRecordCreate, db: Session = Depends(ge
 
 @router.put("/{record_id}", response_model=ChannelRecordRead)
 def update_channel_record(record_id: str, payload: ChannelRecordUpdate, db: Session = Depends(get_db)) -> ChannelRecordRead:
-    row = db.get(ChannelRecord, record_id)
+    row = db.execute(
+        select(ChannelRecord).where(ChannelRecord.id == record_id).with_for_update()
+    ).scalar_one_or_none()
     if row is None: raise HTTPException(status_code=404, detail={"error": "not_found", "id": record_id})
     data = payload.model_dump(exclude_unset=True); items_payload = data.pop("items", None)
     for key, value in data.items(): setattr(row, key, value)
@@ -353,6 +355,19 @@ def update_channel_record(record_id: str, payload: ChannelRecordUpdate, db: Sess
     if items_payload is not None:
         if not items_payload: raise HTTPException(status_code=422, detail={"error": "items_required", "message": "至少保留一行游戏明细"})
         _replace_line_items(db, row, [ChannelLineItemCreate(**x) for x in items_payload]); _sync_denormalized_totals(row, db)
+    received = max(0.0, _receipt_total(db, record_id))
+    projected_settlement = max(0.0, float(row.settlement_amount or 0))
+    if received > projected_settlement + RECEIPT_EPS:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": "channel_settlement_below_received",
+                "message": "账单修改后的应收金额不能低于已确认收款；如需调整，请先按收款来源撤销对应收款/银行核销。",
+                "settlement_amount": round(projected_settlement, 2),
+                "received_amount": round(received, 2),
+            },
+        )
     _recompute_receipt_rollup(db, row)
     try: db.commit()
     except IntegrityError:
@@ -363,6 +378,35 @@ def update_channel_record(record_id: str, payload: ChannelRecordUpdate, db: Sess
 
 @router.delete("/{record_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_channel_record(record_id: str, db: Session = Depends(get_db)) -> None:
-    row = db.get(ChannelRecord, record_id)
+    row = db.execute(
+        select(ChannelRecord).where(ChannelRecord.id == record_id).with_for_update()
+    ).scalar_one_or_none()
     if row is None: raise HTTPException(status_code=404, detail={"error": "not_found", "id": record_id})
+    bank_match = db.execute(
+        select(BankReconciliationMatch).where(
+            BankReconciliationMatch.bill_type == "channel",
+            BankReconciliationMatch.bill_id == record_id,
+            BankReconciliationMatch.status == "confirmed",
+        ).limit(1)
+    ).scalar_one_or_none()
+    if bank_match is not None:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": "channel_bill_has_bank_receipts",
+                "message": "该账单存在已确认的银行核销，不能直接删除。请先在银行中心撤销对应核销分配。",
+                "bank_match_id": str(bank_match.id),
+                "action": "reverse_in_bank_center",
+            },
+        )
+    received = max(0.0, _receipt_total(db, record_id))
+    if received > RECEIPT_EPS:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": "channel_bill_has_receipts",
+                "message": "该账单已有收款事实，不能直接删除。请先撤销手工收款；银行核销收款必须从银行中心撤销。",
+                "received_amount": round(received, 2),
+            },
+        )
     db.delete(row); db.commit()
