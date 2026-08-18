@@ -24,6 +24,25 @@ def _money(value: Any) -> Decimal:
     return _decimal(value).quantize(CENT, rounding=ROUND_HALF_UP)
 
 
+def _relation_exists(row: Any, key: str = "relation_name") -> bool:
+    """Return whether a ``to_regclass`` probe resolved a relation.
+
+    Production contract connections use psycopg ``dict_row``.  Older code read
+    the probe with ``row[0]``, which raises ``KeyError: 0`` for mapping rows and
+    breaks the whole R&D contract recommendation path.  Keep this helper
+    compatible with both mapping rows and positional rows so tests/future callers
+    cannot reintroduce the same class of bug.
+    """
+    if row is None:
+        return False
+    if hasattr(row, "get"):
+        return bool(row.get(key))
+    try:
+        return bool(row[0])
+    except (KeyError, IndexError, TypeError):
+        return False
+
+
 def ensure_rd_prepayment_table(conn) -> None:
     conn.execute(
         """
@@ -75,8 +94,10 @@ def enrich_prepayment_candidates(
     used_map: dict[str, Decimal] = {}
     funded_map: dict[str, Decimal] = {}
     funding_count_map: dict[str, int] = {}
-    funding_table = conn.execute("SELECT to_regclass('public.cf_rd_prepayment_fundings')").fetchone()
-    if access_ids and funding_table and funding_table[0]:
+    funding_table = conn.execute(
+        "SELECT to_regclass('public.cf_rd_prepayment_fundings') AS relation_name"
+    ).fetchone()
+    if access_ids and _relation_exists(funding_table):
         placeholders = ",".join(["%s"] * len(access_ids))
         for row in conn.execute(
             f"""
@@ -202,10 +223,12 @@ def replace_bill_prepayment_deductions(
             [access_item_id],
         ).fetchone()
         used = max(ZERO, _money(used_row.get("used_amount") if used_row else 0))
-        funding_table = conn.execute("SELECT to_regclass('public.cf_rd_prepayment_fundings')").fetchone()
+        funding_table = conn.execute(
+            "SELECT to_regclass('public.cf_rd_prepayment_fundings') AS relation_name"
+        ).fetchone()
         funded = ZERO
         funding_count = 0
-        if funding_table and funding_table[0]:
+        if _relation_exists(funding_table):
             funding_row = conn.execute(
                 """
                 SELECT COALESCE(SUM(funded_amount), 0) AS funded_amount, COUNT(*) AS funding_count
