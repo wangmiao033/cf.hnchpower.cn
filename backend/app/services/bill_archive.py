@@ -72,12 +72,18 @@ def archive_eligibility(db: Session, bill_type: str, bill) -> tuple[bool, str, d
         return False, "账单尚未完成核对或已作废", None
 
     financial = bill_financial_state(db, bill_type, bill)
-    if financial.bill_amount > 0.01 and financial.payment_phase != "paid":
-        verb = "付款" if bill_type == "rd" else "收款"
-        return False, f"{verb}尚未结清", None
     if financial.bill_amount <= 0.01:
         return False, "零结算账单暂不自动归档", None
 
+    if bill_type == "rd" and financial.invoice_coverage_status != "complete":
+        return False, "研发账单发票尚未收齐", None
+
+    if financial.payment_phase != "paid":
+        verb = "付款" if bill_type == "rd" else "收款"
+        return False, f"{verb}尚未结清", None
+
+    if bill_type == "rd":
+        return True, "发票已收齐且付款已结清，可自动归档", _last_activity_at(db, bill_type, bill)
     return True, "已结清，可归档", _last_activity_at(db, bill_type, bill)
 
 
@@ -111,7 +117,11 @@ def _write_archive_log(
             metadata_json={
                 "archive_source": source,
                 "closure_at": closure_at.isoformat() if closure_at else None,
-                "auto_archive_days": AUTO_ARCHIVE_DAYS if source == "auto" else None,
+                "auto_archive_days": (
+                    0 if source == "auto" and bill_type == "rd"
+                    else AUTO_ARCHIVE_DAYS if source == "auto"
+                    else None
+                ),
             },
         )
     )
@@ -163,6 +173,25 @@ def archive_bill(
     return {"bill_type": bill_type, "bill_id": bill_id, "archived": True, "already_archived": False}
 
 
+def auto_archive_bill_if_ready(db: Session, bill_type: str, bill_id: str) -> bool:
+    """Immediately archive a single RD bill once invoice and payment are both complete."""
+    if bill_type != "rd" or _is_archived(db, bill_type, bill_id):
+        return False
+    bill = _load_bill(db, bill_type, bill_id)
+    eligible, _, _ = archive_eligibility(db, bill_type, bill)
+    if not eligible:
+        return False
+    archive_bill(
+        db,
+        bill_type,
+        bill_id,
+        user=None,
+        source="auto",
+        enforce_eligibility=False,
+    )
+    return True
+
+
 def unarchive_bill(db: Session, bill_type: str, bill_id: str, *, user: AuthUser) -> dict:
     bill = _load_bill(db, bill_type, bill_id)
     if not _is_archived(db, bill_type, bill_id):
@@ -195,11 +224,18 @@ def auto_archive_settled_bills(db: Session, bill_type: str) -> int:
         if bill_id in archived_ids:
             continue
         eligible, _, closure_at = archive_eligibility(db, bill_type, bill)
-        if not eligible or closure_at is None:
+        if not eligible:
             continue
-        safe_closure = closure_at if closure_at.tzinfo else closure_at.replace(tzinfo=timezone.utc)
-        if safe_closure > cutoff:
-            continue
+
+        # 研发账单：收到完整进项发票且付款结清后立即归档，不再等待 7 天。
+        # 渠道账单继续保留原来的 7 天缓冲期，避免改变应收侧既有习惯。
+        if bill_type != "rd":
+            if closure_at is None:
+                continue
+            safe_closure = closure_at if closure_at.tzinfo else closure_at.replace(tzinfo=timezone.utc)
+            if safe_closure > cutoff:
+                continue
+
         archive_bill(
             db,
             bill_type,
@@ -256,5 +292,5 @@ def archive_snapshot(db: Session, bill_type: str, *, run_auto: bool = True) -> d
         "eligible_ids": sorted(eligible_ids),
         "items": items,
         "auto_archived_count": auto_count,
-        "auto_archive_days": AUTO_ARCHIVE_DAYS,
+        "auto_archive_days": 0 if bill_type == "rd" else AUTO_ARCHIVE_DAYS,
     }
