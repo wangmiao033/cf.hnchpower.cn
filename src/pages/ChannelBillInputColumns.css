@@ -39,3 +39,43 @@
 .core-bill-form-page--channel.is-compact-view .channel-line-items-table td:nth-child(18) {
   min-width: 82px;
 }
+
+/* Bill-level remarks are operational data too. Give them a dedicated, obvious row so
+   special settlement situations can be recorded without leaving the bill page. */
+.core-bill-form-page--channel .channel-bill-meta-grid__partner,
+.core-bill-form-page--channel .channel-bill-meta-grid__remark {
+  grid-column: 1 / -1 !important;
+}
+
+.core-bill-form-page--channel .channel-bill-meta-grid__remark {
+  margin-top: 2px;
+  padding: 7px 9px 8px;
+  border: 1px solid #eadfbf;
+  border-radius: 8px;
+  background: #fffdf7;
+}
+
+.core-bill-form-page--channel .channel-bill-meta-grid__remark > label {
+  color: #7a5a16;
+  font-weight: 700;
+}
+
+.core-bill-form-page--channel .channel-bill-meta-grid__remark > label::after {
+  content: ' / 特殊说明';
+  color: #9a7a36;
+  font-weight: 600;
+}
+
+.core-bill-form-page--channel .channel-bill-meta-grid__remark .admin-input {
+  width: 100%;
+  min-height: 42px;
+  height: 42px;
+  border-color: #ddcfaa;
+  background: #ffffff;
+  font-size: 11px;
+}
+
+.core-bill-form-page--channel .channel-bill-meta-grid__remark .admin-input:focus {
+  border-color: #c9a85f;
+  box-shadow: 0 0 0 3px rgb(201 168 95 / 10%);
+}
