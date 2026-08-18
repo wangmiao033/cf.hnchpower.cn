@@ -9,10 +9,15 @@ from fastapi import HTTPException
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from app.api.channel import create_channel_receipt, delete_channel_receipt
+from app.api.channel import (
+    create_channel_receipt,
+    delete_channel_receipt,
+    delete_channel_record,
+    update_channel_record,
+)
 from app.models.bank_reconciliation_match import BankReconciliationMatch
 from app.models.channel import ChannelReceipt, ChannelRecord, ChannelRecordLineItem
-from app.schemas.channel import ChannelReceiptCreate
+from app.schemas.channel import ChannelLineItemCreate, ChannelReceiptCreate, ChannelRecordUpdate
 
 
 class ChannelReceiptSafetyTests(unittest.TestCase):
@@ -57,14 +62,17 @@ class ChannelReceiptSafetyTests(unittest.TestCase):
         self.db.close()
         self.engine.dispose()
 
-    def test_manual_receipt_cannot_exceed_outstanding_amount(self):
+    def _manual_receipt(self, receipt_id: str, amount: float) -> None:
         self.db.add(ChannelReceipt(
-            id="receipt-80",
+            id=receipt_id,
             channel_record_id="bill-1",
-            amount=80,
+            amount=amount,
             receipt_date="2026-08-18",
         ))
         self.db.commit()
+
+    def test_manual_receipt_cannot_exceed_outstanding_amount(self):
+        self._manual_receipt("receipt-80", 80)
 
         with patch("app.api.channel.assert_single_bill_collection_allowed"), patch("app.api.channel.refresh_batches_for_bill"):
             with self.assertRaises(HTTPException) as ctx:
@@ -79,13 +87,7 @@ class ChannelReceiptSafetyTests(unittest.TestCase):
         self.assertEqual(count, 1)
 
     def test_manual_receipt_can_close_exact_remaining_balance(self):
-        self.db.add(ChannelReceipt(
-            id="receipt-80",
-            channel_record_id="bill-1",
-            amount=80,
-            receipt_date="2026-08-18",
-        ))
-        self.db.commit()
+        self._manual_receipt("receipt-80", 80)
 
         with patch("app.api.channel.assert_single_bill_collection_allowed"), patch("app.api.channel.refresh_batches_for_bill"):
             result = create_channel_receipt(
@@ -97,12 +99,7 @@ class ChannelReceiptSafetyTests(unittest.TestCase):
         self.assertEqual(result.receipt_status, "paid")
 
     def test_bank_generated_receipt_must_be_reversed_from_bank_allocation(self):
-        self.db.add(ChannelReceipt(
-            id="receipt-bank",
-            channel_record_id="bill-1",
-            amount=50,
-            receipt_date="2026-08-18",
-        ))
+        self._manual_receipt("receipt-bank", 50)
         self.db.add(BankReconciliationMatch(
             id="match-1",
             bank_transaction_id="tx-1",
@@ -126,6 +123,61 @@ class ChannelReceiptSafetyTests(unittest.TestCase):
         self.assertEqual(ctx.exception.status_code, 409)
         self.assertEqual(ctx.exception.detail["error"], "bank_generated_receipt_locked")
         self.assertIsNotNone(self.db.get(ChannelReceipt, "receipt-bank"))
+
+    def test_bill_cannot_be_repriced_below_confirmed_receipts(self):
+        self._manual_receipt("receipt-80", 80)
+        payload = ChannelRecordUpdate(items=[ChannelLineItemCreate(
+            game_name="测试游戏",
+            billing_flow=50,
+            share_rate=100,
+            settlement_rule_code="share_only",
+            channel_fee_mode="none",
+            tax_mode="none",
+        )])
+
+        with self.assertRaises(HTTPException) as ctx:
+            update_channel_record("bill-1", payload, self.db)
+        self.assertEqual(ctx.exception.status_code, 409)
+        self.assertEqual(ctx.exception.detail["error"], "channel_settlement_below_received")
+        self.assertAlmostEqual(float(self.db.get(ChannelRecord, "bill-1").settlement_amount), 100.0, places=2)
+
+    def test_bill_with_manual_receipt_cannot_be_deleted(self):
+        self._manual_receipt("receipt-20", 20)
+        with self.assertRaises(HTTPException) as ctx:
+            delete_channel_record("bill-1", self.db)
+        self.assertEqual(ctx.exception.status_code, 409)
+        self.assertEqual(ctx.exception.detail["error"], "channel_bill_has_receipts")
+        self.assertIsNotNone(self.db.get(ChannelRecord, "bill-1"))
+
+    def test_bill_with_confirmed_bank_allocation_must_be_reversed_in_bank_center(self):
+        self._manual_receipt("receipt-bank", 50)
+        self.db.add(BankReconciliationMatch(
+            id="match-1",
+            bank_transaction_id="tx-1",
+            direction="collection",
+            bill_type="channel",
+            bill_id="bill-1",
+            bill_number="QD-TEST-001",
+            linked_amount=50,
+            confidence_score=100,
+            confidence_level="high",
+            generated_receipt_id="receipt-bank",
+            status="confirmed",
+            original_transaction_type="statement_import",
+            confirmed_at=datetime.now(timezone.utc),
+        ))
+        self.db.commit()
+
+        with self.assertRaises(HTTPException) as ctx:
+            delete_channel_record("bill-1", self.db)
+        self.assertEqual(ctx.exception.status_code, 409)
+        self.assertEqual(ctx.exception.detail["error"], "channel_bill_has_bank_receipts")
+        self.assertEqual(ctx.exception.detail["action"], "reverse_in_bank_center")
+        self.assertIsNotNone(self.db.get(ChannelRecord, "bill-1"))
+
+    def test_unreceived_bill_can_still_be_deleted(self):
+        delete_channel_record("bill-1", self.db)
+        self.assertIsNone(self.db.get(ChannelRecord, "bill-1"))
 
 
 if __name__ == "__main__":
