@@ -1,95 +1,403 @@
 /*
- * UI V4 — finance workbench theme
- * Goal: quieter hierarchy, higher information density and clearer financial status semantics.
- * Loaded after the existing design system so business pages keep their current structure.
+ * UI V4.1 — visible finance workspace redesign
+ * This layer intentionally changes the visual language, not just token values.
+ * Business components keep their behavior while the shell, navigation, tables,
+ * cards and Bill 360 workspace receive a stronger, more coherent hierarchy.
  */
 
 :root {
-  --primary: #3f67ad;
-  --primary-hover: #31558f;
-  --primary-soft: #edf3fc;
-  --bg-main: #f3f6fa;
+  --primary: #2f67e8;
+  --primary-hover: #2456c8;
+  --primary-soft: #eaf1ff;
+  --bg-main: #eef2f7;
   --bg-card: #ffffff;
-  --bg-soft: #f8fafc;
-  --text-main: #223047;
-  --text-sub: #5f6f83;
-  --text-light: #8b98a9;
-  --border: #dce3ec;
+  --bg-soft: #f7f9fc;
+  --text-main: #172033;
+  --text-sub: #5f6d82;
+  --text-light: #8a97aa;
+  --border: #dce3ed;
   --border-soft: #e9edf3;
-  --admin-border-strong: #c9d4e2;
-  --admin-sidebar-active-bg: #eaf1fc;
-  --admin-focus-ring: rgba(63, 103, 173, 0.14);
-  --admin-shadow: 0 1px 2px rgba(15, 23, 42, 0.045);
-  --admin-shadow-md: 0 10px 30px rgba(25, 42, 68, 0.09);
+
+  --admin-sidebar-w: 224px;
+  --admin-header-h: 64px;
+  --admin-workspace-pad-x: 22px;
+  --admin-sidebar-item-h: 42px;
+  --admin-sidebar-item-gap: 11px;
+  --admin-sidebar-group-gap: 8px;
+  --admin-sidebar-active-bar-w: 0px;
+  --admin-radius-sm: 8px;
+  --admin-radius: 12px;
+  --admin-radius-lg: 14px;
+  --admin-border-strong: #c7d2e2;
+  --admin-sidebar-active-bg: #2f67e8;
+  --admin-focus-ring: rgba(47, 103, 232, 0.15);
+  --admin-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+  --admin-shadow-md: 0 14px 36px rgba(31, 45, 70, 0.10);
+}
+
+html,
+body,
+#root {
+  background: #eef2f7;
 }
 
 body {
-  background: #f3f6fa;
   color: var(--admin-text-main);
 }
 
-.app-main-shell,
-.app-workspace {
-  background: #f3f6fa !important;
+/* -------------------------------------------------------------------------- */
+/* 1. APPLICATION FRAME                                                       */
+/* -------------------------------------------------------------------------- */
+
+.app-dashboard {
+  background: #eef2f7 !important;
+}
+
+.app-main-shell {
+  position: relative;
+  background: #eef2f7 !important;
 }
 
 .app-workspace {
-  background-image:
-    linear-gradient(rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0.34)),
-    radial-gradient(circle at 90% 0%, rgba(74, 112, 170, 0.05), transparent 34%) !important;
+  position: relative;
+  padding: 18px 20px 22px !important;
+  background:
+    radial-gradient(circle at 92% 2%, rgba(47, 103, 232, 0.055), transparent 30%),
+    #eef2f7 !important;
 }
 
-/* Navigation: lighter chrome, stronger current-location signal. */
+.app-workspace::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 86px;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.54), rgba(255, 255, 255, 0));
+}
+
+.app-workspace > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* -------------------------------------------------------------------------- */
+/* 2. DARK BRAND SIDEBAR                                                      */
+/* -------------------------------------------------------------------------- */
+
 .app-sidebar {
-  border-right-color: #dce4ee !important;
-  background: #fbfcfe !important;
-  box-shadow: 1px 0 0 rgba(15, 23, 42, 0.015);
+  border-right: 0 !important;
+  background: #101827 !important;
+  box-shadow: 8px 0 28px rgba(15, 23, 42, 0.08);
+}
+
+.app-sidebar-inner {
+  padding: 0 10px 16px !important;
+  background:
+    radial-gradient(circle at 10% 0%, rgba(62, 116, 255, 0.17), transparent 28%),
+    linear-gradient(180deg, #101827 0%, #111b2d 54%, #0d1522 100%) !important;
+  scrollbar-color: rgba(148, 163, 184, 0.25) transparent !important;
 }
 
 .sidebar-brand {
-  border-bottom-color: #e8edf3 !important;
+  min-height: 78px !important;
+  grid-template-columns: 38px 1fr !important;
+  column-gap: 10px !important;
+  padding: 12px 9px 11px !important;
+  margin-bottom: 10px !important;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.13) !important;
 }
 
 .sidebar-brand__logo {
-  background: linear-gradient(145deg, #426caf, #34588f) !important;
-  box-shadow: 0 5px 14px rgba(55, 91, 146, 0.18) !important;
+  width: 38px !important;
+  height: 38px !important;
+  border: 1px solid rgba(255, 255, 255, 0.20) !important;
+  border-radius: 11px !important;
+  background: linear-gradient(145deg, #4d7eff 0%, #2f67e8 52%, #2456c8 100%) !important;
+  color: #fff !important;
+  font-size: 15px !important;
+  box-shadow: 0 10px 22px rgba(47, 103, 232, 0.34) !important;
+}
+
+.sidebar-brand__title {
+  color: #f8fbff !important;
+  font-size: 14px !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.01em !important;
+}
+
+.sidebar-brand__subtitle {
+  margin-top: 2px !important;
+  color: #8294ac !important;
+  font-size: 10px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.08em !important;
+  text-transform: uppercase;
+}
+
+.sidebar-nav {
+  gap: 2px !important;
+}
+
+.sidebar-group,
+.sidebar-group--singleton {
+  margin-bottom: 5px !important;
 }
 
 .sidebar-group-entry,
 .sidebar-item {
-  transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease !important;
+  border-radius: 9px !important;
+  color: #9eacc0 !important;
+  transition:
+    background 0.16s ease,
+    color 0.16s ease,
+    transform 0.16s ease !important;
 }
 
-.sidebar-group-entry:hover,
-.sidebar-item:hover {
-  background: #f1f5fa !important;
+.sidebar-group-entry {
+  padding: 0 12px !important;
+}
+
+.sidebar-item:hover,
+.sidebar-group-entry:hover {
+  background: rgba(255, 255, 255, 0.065) !important;
+  color: #f5f8ff !important;
+  transform: translateX(1px);
+}
+
+.sidebar-group-entry__mark,
+.sidebar-item-icon {
+  color: #7f91aa !important;
+}
+
+.sidebar-item:hover .sidebar-item-icon,
+.sidebar-group-entry:hover .sidebar-group-entry__mark {
+  color: #bdd0ff !important;
 }
 
 .sidebar-group-entry.active,
 .sidebar-item.active {
-  background: #eaf1fc !important;
-  color: #315a98 !important;
+  background: linear-gradient(135deg, #376ee9 0%, #2f67e8 58%, #285bd2 100%) !important;
+  color: #ffffff !important;
+  box-shadow:
+    0 8px 18px rgba(47, 103, 232, 0.24),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.10) !important;
 }
 
-.sidebar-item.active {
-  box-shadow: inset 3px 0 0 #4772b4;
+.sidebar-group-entry.active::before,
+.sidebar-item.active::before {
+  display: none !important;
 }
 
-/* Shell bars should read as chrome, not another content card. */
-.app-admin-header,
-.app-top-subnav,
-.app-top-subnav--workspace {
-  border-color: #e1e7ef !important;
-  background: rgba(255, 255, 255, 0.94) !important;
-  backdrop-filter: blur(12px);
+.sidebar-group-entry.active .sidebar-group-entry__mark,
+.sidebar-item.active .sidebar-item-icon {
+  color: #ffffff !important;
+}
+
+.sidebar-sub-list--nested {
+  gap: 3px !important;
+  margin: 5px 0 2px !important;
+  padding: 3px 0 3px 21px !important;
+  border-left: 1px solid rgba(148, 163, 184, 0.17) !important;
+}
+
+.sidebar-item--nested {
+  min-height: 34px !important;
+  height: 34px !important;
+  border-radius: 8px !important;
+  padding: 0 8px !important;
+  color: #91a0b4 !important;
+  font-size: 12px !important;
+}
+
+.sidebar-item--nested.active {
+  background: rgba(74, 120, 232, 0.23) !important;
+  color: #dce7ff !important;
+  box-shadow: inset 0 0 0 1px rgba(119, 156, 255, 0.16) !important;
+}
+
+.sidebar-group-entry__arrow {
+  color: #6f819a !important;
 }
 
 .sidebar-rail-button {
-  border-color: #d7e0ea !important;
-  box-shadow: 0 4px 14px rgba(36, 52, 75, 0.08) !important;
+  top: 148px !important;
+  left: -14px !important;
+  width: 28px !important;
+  height: 32px !important;
+  border: 1px solid #d8e0ea !important;
+  border-radius: 8px !important;
+  background: #ffffff !important;
+  color: #66758a !important;
+  box-shadow: 0 7px 18px rgba(15, 23, 42, 0.13) !important;
 }
 
-/* Page surfaces: reduce "boxes inside boxes" while retaining financial separation. */
+.sidebar-toggle-rail.is-collapsed .sidebar-rail-button {
+  left: 7px !important;
+}
+
+.sidebar-rail-button:hover {
+  border-color: #9fb7dc !important;
+  background: #f3f7ff !important;
+  color: #2f67e8 !important;
+}
+
+/* -------------------------------------------------------------------------- */
+/* 3. TOP HEADER + WORKSPACE TABS                                             */
+/* -------------------------------------------------------------------------- */
+
+.app-admin-header {
+  min-height: 64px !important;
+  border-bottom: 1px solid #e4e9f1 !important;
+  background: rgba(255, 255, 255, 0.96) !important;
+  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.02) !important;
+  backdrop-filter: blur(14px);
+}
+
+.app-admin-header__toolbar {
+  min-height: 64px !important;
+  padding: 0 20px !important;
+}
+
+.app-admin-header__title-block {
+  gap: 3px !important;
+}
+
+.app-admin-header__title-block strong {
+  color: #172033 !important;
+  font-size: 17px !important;
+  font-weight: 800 !important;
+  letter-spacing: -0.01em;
+}
+
+.app-admin-header__title-block span {
+  color: #8b97a8 !important;
+  font-size: 11px !important;
+}
+
+.app-admin-header__utility-group {
+  min-height: 38px !important;
+  padding: 4px !important;
+  border-color: #e2e7ef !important;
+  border-radius: 9px !important;
+  background: #f7f9fc !important;
+}
+
+.app-admin-header__utility-group .help-btn,
+.app-admin-header__utility-group .settings-btn,
+.app-admin-header__utility-group .notification-btn {
+  border-radius: 7px !important;
+}
+
+.app-admin-header__utility-group .help-btn:hover,
+.app-admin-header__utility-group .settings-btn:hover,
+.app-admin-header__utility-group .notification-btn:hover {
+  background: #e8f0ff !important;
+  color: #2f67e8 !important;
+}
+
+.app-admin-header__user {
+  height: 38px !important;
+  padding: 0 10px 0 5px !important;
+  border-color: #dfe6ef !important;
+  border-radius: 9px !important;
+  background: #ffffff !important;
+}
+
+.app-admin-header__user-avatar {
+  background: linear-gradient(145deg, #2f67e8, #4f7ef0) !important;
+  border-color: #2f67e8 !important;
+  color: #fff !important;
+}
+
+.app-top-subnav,
+.app-top-subnav--workspace {
+  top: 64px !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+  background: #f8fafc !important;
+  box-shadow: none !important;
+}
+
+.app-top-subnav__inner {
+  min-height: 52px !important;
+  align-items: center !important;
+  gap: 12px !important;
+  padding: 0 20px !important;
+}
+
+.app-top-subnav__group {
+  min-width: 110px !important;
+}
+
+.app-top-subnav__caption {
+  color: #9aa5b5 !important;
+  font-size: 10px !important;
+  font-weight: 600 !important;
+}
+
+.app-top-subnav__group strong {
+  color: #344054 !important;
+  font-size: 12px !important;
+}
+
+.app-top-subnav__tabs {
+  align-items: center !important;
+  gap: 6px !important;
+}
+
+.app-top-subnav__tab {
+  min-width: 122px !important;
+  height: 36px !important;
+  border: 1px solid transparent !important;
+  border-radius: 9px !important;
+  color: #67768b !important;
+}
+
+.app-top-subnav__tab:hover {
+  border-color: #dfe6ef !important;
+  background: #ffffff !important;
+  color: #344054 !important;
+}
+
+.app-top-subnav__tab.active {
+  border-color: #d8e1ee !important;
+  background: #ffffff !important;
+  color: #2456c8 !important;
+  box-shadow: 0 3px 10px rgba(30, 48, 75, 0.07) !important;
+}
+
+.app-top-subnav__tab.active::after {
+  display: none !important;
+}
+
+.app-top-subnav__tab-main {
+  min-height: 34px !important;
+  padding: 0 7px 0 11px !important;
+  font-size: 12px !important;
+}
+
+.app-top-subnav__icon {
+  width: 21px !important;
+  height: 21px !important;
+  border-radius: 6px !important;
+  background: #eef3fb !important;
+}
+
+.app-top-subnav__tab.active .app-top-subnav__icon {
+  background: #e8f0ff !important;
+  color: #2f67e8 !important;
+}
+
+.app-top-subnav__close {
+  width: 22px !important;
+  height: 22px !important;
+  margin-right: 5px !important;
+  border-radius: 6px !important;
+}
+
+/* -------------------------------------------------------------------------- */
+/* 4. CONTENT SURFACES                                                        */
+/* -------------------------------------------------------------------------- */
+
 .app :where(
   .admin-table-card,
   .admin-page-section,
@@ -101,34 +409,98 @@ body {
   .invoice-list,
   .rec-stat-card,
   .core-recon-card,
-  .core-dashboard-card
+  .core-dashboard-card,
+  .bank-stat-card,
+  .contract-stat-card
 ) {
-  border-color: #dde4ed !important;
-  box-shadow: 0 1px 2px rgba(26, 43, 67, 0.035) !important;
+  border: 1px solid #dde4ed !important;
+  border-radius: 12px !important;
+  background: #ffffff !important;
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.035),
+    0 8px 24px rgba(31, 45, 70, 0.028) !important;
 }
 
-.app :where(.admin-table-card, .admin-page-section, .rec-stat-card) {
-  border-radius: 10px !important;
+.app :where(
+  .admin-table-card,
+  .admin-page-section,
+  .toolbar-section,
+  .table-section,
+  .form-section,
+  .config-section,
+  .invoice-section,
+  .invoice-list
+) + :where(
+  .admin-table-card,
+  .admin-page-section,
+  .toolbar-section,
+  .table-section,
+  .form-section,
+  .config-section,
+  .invoice-section,
+  .invoice-list
+) {
+  margin-top: 12px;
 }
 
-/* Tables: slightly stronger header, quieter rows, numeric scan support. */
+.app :where(.rec-stat-card, .core-recon-card, .core-dashboard-card, .bank-stat-card, .contract-stat-card) {
+  min-height: 86px !important;
+  padding: 14px 16px !important;
+}
+
+/* Visually distinguish metric cards without turning them into colorful tiles. */
+.app :where(.rec-stat-card, .core-recon-card, .core-dashboard-card) strong {
+  color: #172033;
+  font-variant-numeric: tabular-nums;
+}
+
+/* -------------------------------------------------------------------------- */
+/* 5. TABLES                                                                  */
+/* -------------------------------------------------------------------------- */
+
+.app table {
+  border-collapse: separate;
+  border-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+
 .app thead,
 .app thead tr {
-  background: #f6f8fb !important;
+  background: #f7f9fc !important;
 }
 
 .app thead th {
-  color: #617086 !important;
-  border-bottom-color: #dbe3ed !important;
-  letter-spacing: 0.01em;
+  height: 42px;
+  padding-top: 9px !important;
+  padding-bottom: 9px !important;
+  border-top: 1px solid #edf0f5 !important;
+  border-bottom: 1px solid #dfe6ef !important;
+  color: #66758b !important;
+  font-size: 11px !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.015em;
+}
+
+.app thead th:first-child {
+  border-left-color: transparent !important;
 }
 
 .app tbody td {
-  border-bottom-color: #ebeff4 !important;
+  min-height: 46px;
+  border-bottom-color: #edf1f5 !important;
+  color: #344054;
+}
+
+.app tbody tr {
+  transition: background 0.12s ease, box-shadow 0.12s ease;
 }
 
 .app tbody tr:hover {
-  background: #f6f9fd !important;
+  background: #f5f8fe !important;
+}
+
+.app tbody tr:hover td:first-child {
+  box-shadow: inset 2px 0 0 #6e92e9;
 }
 
 .app td,
@@ -137,76 +509,248 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-/* Controls: one primary blue; secondary actions stay neutral. */
+/* -------------------------------------------------------------------------- */
+/* 6. INPUTS + BUTTONS                                                        */
+/* -------------------------------------------------------------------------- */
+
 .app input,
 .app select,
-.app textarea {
-  border-color: #d4dde8 !important;
-  background: #fff !important;
+.app textarea,
+.admin-input {
+  border: 1px solid #d4dde8 !important;
+  border-radius: 8px !important;
+  background: #ffffff !important;
+  color: #263247 !important;
+  box-shadow: inset 0 1px 0 rgba(15, 23, 42, 0.015) !important;
 }
 
 .app input:hover,
 .app select:hover,
-.app textarea:hover {
-  border-color: #bccadc !important;
+.app textarea:hover,
+.admin-input:hover {
+  border-color: #b9c8dc !important;
 }
 
 .app input:focus,
 .app select:focus,
-.app textarea:focus {
-  border-color: #6689bf !important;
-  box-shadow: 0 0 0 3px rgba(63, 103, 173, 0.11) !important;
+.app textarea:focus,
+.admin-input:focus {
+  outline: none !important;
+  border-color: #6d91e9 !important;
+  box-shadow: 0 0 0 3px rgba(47, 103, 232, 0.12) !important;
+}
+
+.app .admin-btn,
+.app .rec-btn {
+  border-radius: 8px !important;
+  font-weight: 700 !important;
 }
 
 .app .admin-btn--primary,
 .app .rec-btn--primary {
-  background: #3f67ad !important;
-  border-color: #3f67ad !important;
-  box-shadow: none !important;
+  border-color: #2f67e8 !important;
+  background: linear-gradient(180deg, #3c72eb 0%, #2f67e8 100%) !important;
+  color: #ffffff !important;
+  box-shadow: 0 5px 12px rgba(47, 103, 232, 0.16) !important;
 }
 
 .app .admin-btn--primary:hover,
 .app .rec-btn--primary:hover {
-  background: #34588f !important;
-  border-color: #34588f !important;
+  border-color: #2456c8 !important;
+  background: linear-gradient(180deg, #3265db 0%, #285bd2 100%) !important;
+  box-shadow: 0 6px 14px rgba(47, 103, 232, 0.21) !important;
 }
 
 .app :where(.admin-btn--secondary, .admin-btn--ghost, .rec-btn--secondary, .rec-btn--ghost) {
+  border-color: #d6dee9 !important;
+  background: #ffffff !important;
+  color: #526176 !important;
   box-shadow: none !important;
 }
 
-/* Bill 360 becomes visually consistent with the main shell. */
-.bill360-drawer {
-  background: #f4f7fa !important;
+.app :where(.admin-btn--secondary, .admin-btn--ghost, .rec-btn--secondary, .rec-btn--ghost):hover {
+  border-color: #b8c8dc !important;
+  background: #f7f9fc !important;
+  color: #2456c8 !important;
 }
 
-.bill360-header,
-.bill360-tabs {
-  border-color: #dfe6ef !important;
-  background: rgba(255, 255, 255, 0.97) !important;
+/* -------------------------------------------------------------------------- */
+/* 7. BILL 360 WORKBENCH                                                      */
+/* -------------------------------------------------------------------------- */
+
+.bill360-backdrop {
+  background: rgba(12, 20, 34, 0.48) !important;
+  backdrop-filter: blur(2px) !important;
+}
+
+.bill360-drawer {
+  background: #eef2f7 !important;
+  box-shadow: -26px 0 80px rgba(15, 23, 42, 0.27) !important;
+}
+
+.bill360-header {
+  padding: 19px 24px 17px !important;
+  border-bottom: 0 !important;
+  background:
+    radial-gradient(circle at 72% -30%, rgba(82, 129, 255, 0.28), transparent 42%),
+    linear-gradient(135deg, #101827 0%, #17243a 58%, #132038 100%) !important;
+}
+
+.bill360-type {
+  width: 46px !important;
+  height: 46px !important;
+  flex-basis: 46px !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  border-radius: 12px !important;
+  background: rgba(77, 126, 255, 0.19) !important;
+  color: #d9e5ff !important;
+}
+
+.bill360-type.is-channel {
+  background: rgba(38, 191, 133, 0.15) !important;
+  color: #b8f3d8 !important;
+}
+
+.bill360-eyebrow {
+  color: #8294ae !important;
+}
+
+.bill360-title-wrap h2 {
+  color: #ffffff !important;
+  font-size: 22px !important;
+}
+
+.bill360-title-wrap p {
+  color: #a9b7cb !important;
+}
+
+.bill360-header-actions button {
+  border-color: rgba(255, 255, 255, 0.14) !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: #e7edf7 !important;
+}
+
+.bill360-header-actions button:hover {
+  border-color: rgba(141, 175, 255, 0.45) !important;
+  background: rgba(82, 129, 255, 0.16) !important;
+}
+
+.bill360-close {
+  color: #d1daea !important;
+}
+
+.bill360-status {
+  border: 1px solid rgba(255, 255, 255, 0.11) !important;
+  background: rgba(255, 255, 255, 0.09) !important;
+  color: #d8e2f1 !important;
+}
+
+.bill360-status.is-confirmed,
+.bill360-status.is-invoiced,
+.bill360-status.is-settled,
+.bill360-status.is-reconciled,
+.bill360-status.is-completed {
+  border-color: rgba(61, 201, 143, 0.24) !important;
+  background: rgba(39, 178, 120, 0.16) !important;
+  color: #bcf3da !important;
+}
+
+.bill360-kpis {
+  gap: 10px !important;
+  padding: 14px 20px 12px !important;
 }
 
 .bill360-kpis article,
 .bill360-card {
-  border-color: #dde5ee !important;
-  border-radius: 10px !important;
-  box-shadow: 0 1px 2px rgba(26, 43, 67, 0.035) !important;
+  border: 1px solid #dce4ee !important;
+  border-radius: 11px !important;
+  background: #ffffff !important;
+  box-shadow: 0 2px 7px rgba(26, 43, 67, 0.045) !important;
 }
 
-.bill360-type {
-  border-radius: 10px !important;
+.bill360-kpis article {
+  padding: 13px 14px 12px !important;
+}
+
+.bill360-kpis article > span {
+  color: #7b8799 !important;
+}
+
+.bill360-kpis strong {
+  color: #172033 !important;
+  font-size: 19px !important;
+}
+
+.bill360-tabs {
+  gap: 4px !important;
+  padding: 7px 20px !important;
+  border-top: 1px solid #e2e8f0 !important;
+  border-bottom: 1px solid #dce3ed !important;
+  background: #f7f9fc !important;
+}
+
+.bill360-tabs button {
+  padding: 9px 13px !important;
+  border-radius: 8px !important;
+  color: #68778b !important;
+}
+
+.bill360-tabs button:hover {
+  background: #ffffff !important;
+  color: #344054 !important;
+}
+
+.bill360-tabs button.is-active {
+  border: 1px solid #d9e3f2 !important;
+  background: #ffffff !important;
+  color: #2456c8 !important;
+  box-shadow: 0 2px 7px rgba(30, 48, 75, 0.06) !important;
+}
+
+.bill360-tabs button.is-active::after {
+  display: none !important;
 }
 
 .bill360-command-dock {
-  border-color: #d8e1eb !important;
-  border-radius: 12px !important;
-  box-shadow: 0 14px 34px rgba(26, 43, 67, 0.14) !important;
+  border: 1px solid #d6e0ec !important;
+  border-radius: 13px !important;
+  background: rgba(255, 255, 255, 0.97) !important;
+  box-shadow: 0 18px 44px rgba(26, 43, 67, 0.19) !important;
+  backdrop-filter: blur(12px);
 }
 
-/* Scrollbars stay visible enough for long ledgers but do not dominate. */
+/* Dual bill workspace bar should feel like a real workstation control. */
+.bill360-workspace-bar {
+  border-color: #d6dfeb !important;
+  background: rgba(255, 255, 255, 0.98) !important;
+  box-shadow: 0 12px 34px rgba(27, 43, 67, 0.13) !important;
+  backdrop-filter: blur(14px);
+}
+
+.bill360-workspace-tab {
+  border-color: #dce4ee !important;
+  background: #f7f9fc !important;
+}
+
+.bill360-workspace-tab.is-active,
+.bill360-workspace-tab:hover {
+  border-color: #b8cae7 !important;
+  background: #eef4ff !important;
+}
+
+.bill360-workspace-picker {
+  border-color: #d5deea !important;
+  background: #ffffff !important;
+  box-shadow: 0 24px 60px rgba(20, 34, 55, 0.22) !important;
+}
+
+/* -------------------------------------------------------------------------- */
+/* 8. SCROLLBARS                                                              */
+/* -------------------------------------------------------------------------- */
+
 .app-workspace *,
 .bill360-drawer * {
-  scrollbar-color: #c8d2df transparent;
+  scrollbar-color: #c3cedb transparent;
   scrollbar-width: thin;
 }
 
@@ -220,7 +764,7 @@ body {
 .bill360-drawer *::-webkit-scrollbar-thumb {
   border: 2px solid transparent;
   border-radius: 999px;
-  background: #c8d2df;
+  background: #c3cedb;
   background-clip: padding-box;
 }
 
@@ -229,43 +773,81 @@ body {
   background: transparent;
 }
 
-/* Keep the existing dark appearance fully usable after loading UI V4. */
+/* -------------------------------------------------------------------------- */
+/* 9. DARK THEME                                                              */
+/* -------------------------------------------------------------------------- */
+
+[data-theme='dark'] {
+  --bg-main: #0d1119;
+  --bg-card: #171d29;
+  --bg-soft: #1d2432;
+  --text-main: #eef3fb;
+  --text-sub: #a1afc2;
+  --text-light: #718198;
+  --border: rgba(148, 163, 184, 0.18);
+  --border-soft: rgba(148, 163, 184, 0.11);
+}
+
 [data-theme='dark'] body,
+[data-theme='dark'] .app-dashboard,
 [data-theme='dark'] .app-main-shell,
 [data-theme='dark'] .app-workspace {
-  background: var(--admin-page-bg) !important;
+  background: #0d1119 !important;
   color: var(--admin-text-main);
 }
 
 [data-theme='dark'] .app-workspace {
-  background-image: none !important;
+  background-image: radial-gradient(circle at 92% 2%, rgba(65, 111, 222, 0.08), transparent 30%) !important;
 }
 
-[data-theme='dark'] .app-sidebar {
-  border-right-color: var(--admin-border) !important;
-  background: var(--admin-card-bg) !important;
+[data-theme='dark'] .app-workspace::before {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.025), transparent) !important;
 }
 
-[data-theme='dark'] .sidebar-brand {
-  border-bottom-color: var(--admin-border) !important;
+[data-theme='dark'] .app-sidebar,
+[data-theme='dark'] .app-sidebar-inner {
+  background: #0b1220 !important;
 }
 
-[data-theme='dark'] .sidebar-group-entry:hover,
-[data-theme='dark'] .sidebar-item:hover {
-  background: var(--admin-elevated-bg) !important;
+[data-theme='dark'] .app-admin-header {
+  border-color: rgba(148, 163, 184, 0.14) !important;
+  background: rgba(18, 24, 35, 0.97) !important;
 }
 
-[data-theme='dark'] .sidebar-group-entry.active,
-[data-theme='dark'] .sidebar-item.active {
-  background: var(--admin-sidebar-active-bg) !important;
-  color: #b9d2ff !important;
+[data-theme='dark'] .app-admin-header__title-block strong,
+[data-theme='dark'] .app-top-subnav__group strong {
+  color: #eef3fb !important;
 }
 
-[data-theme='dark'] .app-admin-header,
+[data-theme='dark'] .app-admin-header__title-block span,
+[data-theme='dark'] .app-top-subnav__caption {
+  color: #718198 !important;
+}
+
+[data-theme='dark'] .app-admin-header__utility-group,
+[data-theme='dark'] .app-admin-header__user,
 [data-theme='dark'] .app-top-subnav,
 [data-theme='dark'] .app-top-subnav--workspace {
-  border-color: var(--admin-border) !important;
-  background: rgba(26, 29, 46, 0.96) !important;
+  border-color: rgba(148, 163, 184, 0.15) !important;
+  background: #151c28 !important;
+  color: #dce4ef !important;
+}
+
+[data-theme='dark'] .app-top-subnav__tab {
+  color: #8d9cb1 !important;
+}
+
+[data-theme='dark'] .app-top-subnav__tab:hover,
+[data-theme='dark'] .app-top-subnav__tab.active {
+  border-color: rgba(148, 163, 184, 0.18) !important;
+  background: #1d2635 !important;
+  color: #a9c5ff !important;
+  box-shadow: none !important;
+}
+
+[data-theme='dark'] .app-top-subnav__icon,
+[data-theme='dark'] .app-top-subnav__tab.active .app-top-subnav__icon {
+  background: #222c3b !important;
 }
 
 [data-theme='dark'] .app :where(
@@ -279,89 +861,127 @@ body {
   .invoice-list,
   .rec-stat-card,
   .core-recon-card,
-  .core-dashboard-card
+  .core-dashboard-card,
+  .bank-stat-card,
+  .contract-stat-card
 ) {
-  border-color: var(--admin-border) !important;
-  box-shadow: var(--admin-shadow-sm) !important;
+  border-color: rgba(148, 163, 184, 0.15) !important;
+  background: #171d29 !important;
+  box-shadow: none !important;
 }
 
 [data-theme='dark'] .app thead,
 [data-theme='dark'] .app thead tr {
-  background: var(--admin-elevated-bg) !important;
+  background: #1c2431 !important;
 }
 
 [data-theme='dark'] .app thead th {
-  color: var(--admin-text-sub) !important;
-  border-bottom-color: var(--admin-border) !important;
+  border-color: rgba(148, 163, 184, 0.14) !important;
+  color: #94a4b8 !important;
 }
 
 [data-theme='dark'] .app tbody td {
-  border-bottom-color: var(--admin-border-soft) !important;
+  border-bottom-color: rgba(148, 163, 184, 0.10) !important;
+  color: #dce4ef !important;
 }
 
 [data-theme='dark'] .app tbody tr:hover {
-  background: var(--admin-elevated-bg) !important;
+  background: #1b2534 !important;
 }
 
 [data-theme='dark'] .app input,
 [data-theme='dark'] .app select,
-[data-theme='dark'] .app textarea {
-  border-color: var(--admin-border-strong) !important;
-  background: var(--admin-card-bg) !important;
-  color: var(--admin-text-main) !important;
+[data-theme='dark'] .app textarea,
+[data-theme='dark'] .admin-input {
+  border-color: rgba(148, 163, 184, 0.23) !important;
+  background: #111824 !important;
+  color: #e8eef7 !important;
+}
+
+[data-theme='dark'] .app :where(.admin-btn--secondary, .admin-btn--ghost, .rec-btn--secondary, .rec-btn--ghost) {
+  border-color: rgba(148, 163, 184, 0.20) !important;
+  background: #192231 !important;
+  color: #b3c0d2 !important;
 }
 
 [data-theme='dark'] .bill360-drawer {
-  background: var(--admin-page-bg) !important;
+  background: #0f151f !important;
 }
 
-[data-theme='dark'] .bill360-header,
-[data-theme='dark'] .bill360-tabs,
 [data-theme='dark'] .bill360-kpis article,
 [data-theme='dark'] .bill360-card,
+[data-theme='dark'] .bill360-tabs,
 [data-theme='dark'] .bill360-command-dock {
-  border-color: var(--admin-border) !important;
-  background: var(--admin-card-bg) !important;
-  box-shadow: var(--admin-shadow-sm) !important;
+  border-color: rgba(148, 163, 184, 0.15) !important;
+  background: #171f2c !important;
+  box-shadow: none !important;
+}
+
+[data-theme='dark'] .bill360-kpis strong {
+  color: #eef3fb !important;
+}
+
+[data-theme='dark'] .bill360-tabs button {
+  color: #91a0b4 !important;
+}
+
+[data-theme='dark'] .bill360-tabs button:hover,
+[data-theme='dark'] .bill360-tabs button.is-active {
+  border-color: rgba(148, 163, 184, 0.18) !important;
+  background: #222c3b !important;
+  color: #a9c5ff !important;
 }
 
 [data-theme='dark'] .bill360-workspace-bar,
 [data-theme='dark'] .bill360-workspace-picker {
-  border-color: var(--admin-border) !important;
-  background: rgba(26, 29, 46, 0.98) !important;
+  border-color: rgba(148, 163, 184, 0.18) !important;
+  background: rgba(20, 27, 39, 0.98) !important;
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.34) !important;
 }
 
 [data-theme='dark'] .bill360-workspace-tab,
 [data-theme='dark'] .bill360-workspace-picker__search {
-  border-color: var(--admin-border) !important;
-  background: var(--admin-elevated-bg) !important;
+  border-color: rgba(148, 163, 184, 0.17) !important;
+  background: #1d2635 !important;
 }
 
 [data-theme='dark'] .bill360-workspace-tab strong,
 [data-theme='dark'] .bill360-workspace-picker__head strong,
 [data-theme='dark'] .bill360-workspace-picker__list strong {
-  color: var(--admin-text-main) !important;
+  color: #eef3fb !important;
 }
 
 [data-theme='dark'] .bill360-workspace-tab small,
 [data-theme='dark'] .bill360-workspace-picker__head span,
 [data-theme='dark'] .bill360-workspace-picker__list span {
-  color: var(--admin-text-sub) !important;
+  color: #91a0b4 !important;
 }
 
-[data-theme='dark'] .bill360-workspace-picker__search input {
-  border-color: var(--admin-border-strong) !important;
-  background: var(--admin-card-bg) !important;
-  color: var(--admin-text-main) !important;
-}
-
-[data-theme='dark'] .bill360-workspace-picker__list > button:hover {
-  background: var(--admin-elevated-bg) !important;
-}
+/* -------------------------------------------------------------------------- */
+/* 10. RESPONSIVE                                                             */
+/* -------------------------------------------------------------------------- */
 
 @media (max-width: 1500px) and (min-width: 961px) {
+  :root {
+    --admin-sidebar-w: 214px;
+  }
+
   .app-workspace {
-    padding: 10px 12px 14px !important;
+    padding: 14px 14px 18px !important;
+  }
+}
+
+@media (max-width: 960px) {
+  .app-admin-header__toolbar {
+    min-height: 58px !important;
+  }
+
+  .app-top-subnav,
+  .app-top-subnav--workspace {
+    top: 0 !important;
+  }
+
+  .app-workspace {
+    padding: 12px !important;
   }
 }
