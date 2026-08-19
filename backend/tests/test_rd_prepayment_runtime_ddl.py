@@ -12,6 +12,8 @@ class RdPrepaymentRuntimeDdlTests(unittest.TestCase):
         ).upper()
         for token in ("CREATE TABLE", "ALTER TABLE", "CREATE INDEX"):
             self.assertNotIn(token, source)
+        self.assertIn("RD_PREPAYMENT_SCHEMA_MISSING", source)
+        self.assertIn("TO_REGCLASS", source)
 
     def test_rd_prepayment_deductions_schema_is_versioned_and_registered(self):
         migration = REPO_ROOT / "backend" / "sql" / "060_rd_prepayment_deductions.sql"
