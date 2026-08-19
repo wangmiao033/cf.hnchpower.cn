@@ -1,3 +1,4 @@
+# Acceptance probe branch: exercises the same production quality matrix before finalizing main.
 from __future__ import annotations
 
 import asyncio
