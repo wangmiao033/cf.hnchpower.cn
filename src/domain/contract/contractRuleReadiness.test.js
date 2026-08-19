@@ -40,6 +40,30 @@ describe('contract rule readiness', () => {
     expect(result.issues).not.toContain('缺分成比例')
   })
 
+  it('blocks a fixed unit-price rule when unit price is missing', () => {
+    const result = getContractRuleReadiness({
+      ...base,
+      share_rate: '',
+      settlement_mode: 'CPA固定单价',
+      settlement_basis: '有效激活',
+      unit_price: ''
+    }, { partnerLinked: true })
+    expect(result.ready).toBe(false)
+    expect(result.issues).toContain('缺结算单价')
+  })
+
+  it('blocks a rule when settlement basis and numeric pricing are all absent', () => {
+    const result = getContractRuleReadiness({
+      ...base,
+      share_rate: '',
+      settlement_mode: '',
+      settlement_basis: '',
+      unit_price: ''
+    }, { partnerLinked: true })
+    expect(result.ready).toBe(false)
+    expect(result.issues).toContain('缺结算规则')
+  })
+
   it('treats missing partner link and authorization period as blocking', () => {
     const result = getContractRuleReadiness({ ...base, authorization_end: '' }, { partnerLinked: false })
     expect(result.ready).toBe(false)
