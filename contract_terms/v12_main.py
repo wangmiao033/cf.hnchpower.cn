@@ -16,9 +16,13 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 
 try:
-    from .v11_main import app
+    from . import v11_main as _v11
 except ImportError:  # Vercel imports modules from the service root.
-    from v11_main import app
+    import v11_main as _v11
+
+# Keep an explicit module-level assignment so Vercel's Python entrypoint scanner
+# can resolve ``v12_main:app`` without needing to follow imported symbols.
+app = _v11.app
 
 logger = logging.getLogger("contract_terms")
 
