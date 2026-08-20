@@ -167,7 +167,7 @@ export default function ChannelSmartEntryBar({
   const [aliasMemory, setAliasMemory] = useState(() => loadAliasMemory())
   const canonicalChannelName = resolveAlias(aliasMemory, 'channel', channelName)
   const partnerKey = `${textKey(partnerName)}|${textKey(canonicalChannelName)}`
-  const [targetMonth, setTargetMonth] = useState(() => recordMonth(record) || currentMonth())
+  const [targetMonth, setTargetMonth] = useState(() => recordMonth(record))
   const [contractState, setContractState] = useState({ key: '', loading: false, items: [], error: '' })
 
   const [quickOpen, setQuickOpen] = useState(false)
@@ -211,8 +211,7 @@ export default function ChannelSmartEntryBar({
   const autoAliasKeyRef = useRef('')
 
   useEffect(() => {
-    const fromRecord = recordMonth(record)
-    if (fromRecord) setTargetMonth(fromRecord)
+    setTargetMonth(recordMonth(record))
   }, [record?.settlementMonth, record?.items])
 
   const loadContracts = useCallback(async () => {
@@ -647,7 +646,7 @@ export default function ChannelSmartEntryBar({
       <div className="channel-smart-entry__controls">
         <label>
           <span>本次账单月份</span>
-          <input type="month" value={targetMonth} onChange={(event) => setTargetMonth(event.target.value)} />
+          <input type="month" max={currentMonth()} value={targetMonth} onChange={(event) => setTargetMonth(event.target.value)} />
         </label>
         <div className="channel-smart-entry__actions">
           <button type="button" className="is-primary" disabled={!partnerName || !targetMonth || !loaded} onClick={generateAll}>
