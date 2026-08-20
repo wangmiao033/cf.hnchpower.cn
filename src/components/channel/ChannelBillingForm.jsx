@@ -41,6 +41,43 @@ function periodSummary(lines) {
   return `${label(period.firstMonth)} – ${label(period.lastMonth)} · ${period.months.length}个月`
 }
 
+function currentMonth() {
+  const now = new Date()
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+}
+
+function monthDistance(olderMonth, newerMonth) {
+  const older = String(olderMonth || '').match(/^(20\d{2})-(\d{2})$/)
+  const newer = String(newerMonth || '').match(/^(20\d{2})-(\d{2})$/)
+  if (!older || !newer) return 0
+  return (Number(newer[1]) - Number(older[1])) * 12 + Number(newer[2]) - Number(older[2])
+}
+
+function settlementMonthRisk(value, current = currentMonth()) {
+  const month = normalizeChannelSettlementCycle(value)
+  if (!/^(20\d{2})-(\d{2})$/.test(month)) return 'normal'
+  if (month > current) return 'future'
+  return monthDistance(month, current) >= 12 ? 'history' : 'normal'
+}
+
+function recordMonths(record) {
+  const values = (Array.isArray(record?.items) ? record.items : [])
+    .map((item) => normalizeChannelSettlementCycle(item?.settlementCycle))
+    .filter((value) => /^(20\d{2})-(\d{2})$/.test(value))
+  if (!values.length) {
+    const fallback = normalizeChannelSettlementCycle(record?.settlementMonth)
+    if (/^(20\d{2})-(\d{2})$/.test(fallback)) values.push(fallback)
+  }
+  return [...new Set(values)].sort()
+}
+
+function monthListLabel(values) {
+  return (values || []).map((value) => {
+    const match = String(value || '').match(/^(20\d{2})-(\d{2})$/)
+    return match ? `${match[1]}年${Number(match[2])}月` : value
+  }).join('、') || '未填写'
+}
+
 function validationText(status) {
   return { pass: '一致', fail: '差异', partial: '部分校验', unvalidated: '未校验' }[status] || '未校验'
 }
@@ -142,6 +179,7 @@ function ChannelBillingForm({
   const [contractRuleRevision, setContractRuleRevision] = useState(0)
   const [lastContractRuleKey, setLastContractRuleKey] = useState('')
   const [contractOverrideReason, setContractOverrideReason] = useState('')
+  const currentMonthKey = currentMonth()
 
   const fullRecord = useMemo(
     () => buildFullChannelRecord({ ...header, status: header.status || 'pending' }, lines),
@@ -474,10 +512,31 @@ function ChannelBillingForm({
     }
     for (let i = 0; i < lines.length; i += 1) {
       const row = lines[i]
-      if (!normalizeChannelSettlementCycle(row.settlementCycle)) { const msg = `第 ${i + 1} 行：请选择结算月份`; onError?.(msg) ?? window.alert(msg); return }
+      const cycle = normalizeChannelSettlementCycle(row.settlementCycle)
+      if (!cycle) { const msg = `第 ${i + 1} 行：请选择结算月份`; onError?.(msg) ?? window.alert(msg); return }
+      if (cycle > currentMonthKey) { const msg = `第 ${i + 1} 行：结算月份 ${monthListLabel([cycle])} 晚于当前月份 ${monthListLabel([currentMonthKey])}，未来账期不能保存`; onError?.(msg) ?? window.alert(msg); return }
       if (!row.gameName?.trim()) { const msg = `第 ${i + 1} 行：请填写游戏名称`; onError?.(msg) ?? window.alert(msg); return }
       if (mode === 'add' && !targetedRuleLocked && String(row.shareRate ?? '').trim() === '') { const msg = `第 ${i + 1} 行：分成比例尚未由合同确定，请等待合同匹配或人工填写`; onError?.(msg) ?? window.alert(msg); return }
       if (mode === 'add' && !targetedRuleLocked && String(row.taxRate ?? '').trim() === '') { const msg = `第 ${i + 1} 行：税率尚未由合同确定，请等待合同匹配或人工填写 0`; onError?.(msg) ?? window.alert(msg); return }
+    }
+
+    const nextMonths = recordMonths({ settlementMonth: fullRecord.settlementMonth, items: lines })
+    if (mode === 'edit') {
+      const originalMonths = recordMonths(sourceRecord)
+      if (JSON.stringify(originalMonths) !== JSON.stringify(nextMonths)) {
+        const confirmedMonthChange = window.confirm(
+          `你正在修改账单结算周期。\n\n原：${monthListLabel(originalMonths)}\n新：${monthListLabel(nextMonths)}\n\n账期变化会影响对账、收款、发票和统计归属。确认修改吗？`
+        )
+        if (!confirmedMonthChange) return
+      }
+    } else {
+      const historicalMonths = nextMonths.filter((month) => settlementMonthRisk(month, currentMonthKey) === 'history')
+      if (historicalMonths.length) {
+        const confirmedHistory = window.confirm(
+          `当前录入的是历史账期：${monthListLabel(historicalMonths)}。\n\n历史账单允许保存，请再确认年份和月份是否正确。`
+        )
+        if (!confirmedHistory) return
+      }
     }
 
     if (contractAwareMode && !targetedRuleLocked) {
@@ -586,16 +645,23 @@ function ChannelBillingForm({
 
       <div className="channel-form-section">
         <div className="form-section-title channel-bill-detail-title"><span>2）游戏明细</span><span className="channel-bill-period-badge">{periodSummary(lines)}</span></div>
-        <LineItemsTable onAddRow={addLine} showAddButton={false} hint="每行可填平台账单的最终结算金额。系统金额与平台金额差异超过容差时会标红并阻止确认核对。">
+        <LineItemsTable onAddRow={addLine} showAddButton={false} hint="结算月份只能选择本月或过去月份；历史账期允许保存但会提醒核对，未来账期会被前后端同时拦截。">
           <table className="channel-line-items-table">
             <thead><tr><th>结算月份</th><th>游戏名称</th><th>后台流水</th><th>折扣系数</th><th>总流水</th><th>代金券</th><th>无忧试</th><th>玩家退款</th><th>测试费</th><th>福利币</th><th>其他扣减</th><th>分成%</th><th>税率%</th><th>通道费</th><th>计费额</th><th>分成额</th><th>系统结算</th><th>平台结算</th><th>差异</th><th>校验</th><th>操作</th></tr></thead>
             <tbody>{lines.map((row, index) => {
               const rowRuleHeader = resolveChannelLineRuleHeader(row, effectiveRuleHeader)
               const rowFeeMode = rowRuleHeader.channelFeeMode || 'fixed'
               const details = calculateSettlementDetails(row, rowRuleHeader)
+              const monthRisk = settlementMonthRisk(row.settlementCycle, currentMonthKey)
               return (
                 <tr key={row.id || `line-${index}`}>
-                  <td style={{ minWidth: 132 }}><input type="month" className="admin-input" value={normalizeChannelSettlementCycle(row.settlementCycle)} onChange={(e) => handleLineChange(index, 'settlementCycle', e.target.value)} required /></td>
+                  <td style={{ minWidth: 132 }}>
+                    <div style={{ display: 'grid', gap: 4 }}>
+                      <input type="month" max={currentMonthKey} className="admin-input" value={normalizeChannelSettlementCycle(row.settlementCycle)} onChange={(e) => handleLineChange(index, 'settlementCycle', e.target.value)} required aria-invalid={monthRisk === 'future'} />
+                      {monthRisk === 'future' ? <small style={{ color: '#b42318', fontSize: 10 }}>未来账期不能保存</small> : null}
+                      {monthRisk === 'history' ? <small style={{ color: '#9a6700', fontSize: 10 }}>历史账期 · 请核对年份</small> : null}
+                    </div>
+                  </td>
                   <td><input type="text" className="admin-input" value={row.gameName} onChange={(e) => handleLineChange(index, 'gameName', e.target.value)} placeholder="必填" /></td>
                   <td><input type="number" step="0.01" className="admin-input" value={row.flow} onChange={(e) => handleLineChange(index, 'flow', e.target.value)} /></td>
                   <td><input type="number" step="0.000001" min="0" className="admin-input" value={row.discountFactor} onChange={(e) => handleLineChange(index, 'discountFactor', e.target.value)} placeholder="默认1" /></td>
