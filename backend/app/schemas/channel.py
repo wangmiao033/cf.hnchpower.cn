@@ -2,10 +2,37 @@
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from typing import Annotated
+from zoneinfo import ZoneInfo
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+
+_BUSINESS_TZ = ZoneInfo("Asia/Shanghai")
+_SETTLEMENT_MONTH_RE = re.compile(r"^(20\d{2})(?:[-/.]|年)\s*(0?[1-9]|1[0-2])月?$")
+
+
+def _current_business_month() -> str:
+    now = datetime.now(_BUSINESS_TZ)
+    return f"{now.year:04d}-{now.month:02d}"
+
+
+def _normalize_safe_settlement_month(value: str | None) -> str | None:
+    if value is None:
+        return None
+    raw = str(value).strip()
+    if not raw:
+        return None
+    match = _SETTLEMENT_MONTH_RE.match(raw)
+    if match is None:
+        raise ValueError("结算月份必须使用 YYYY-MM 格式，例如 2025-10")
+    normalized = f"{match.group(1)}-{int(match.group(2)):02d}"
+    current = _current_business_month()
+    if normalized > current:
+        raise ValueError(f"结算月份不能晚于当前月份（{current}）")
+    return normalized
 
 
 class ChannelReceiptCreate(BaseModel):
@@ -66,6 +93,11 @@ class ChannelLineItemCreate(BaseModel):
     validation_status: str = "unvalidated"
     settlement_amount: float = 0
 
+    @field_validator("settlement_cycle", mode="before")
+    @classmethod
+    def validate_settlement_cycle(cls, value: str | None) -> str | None:
+        return _normalize_safe_settlement_month(value)
+
 
 class ChannelLineItemRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -121,6 +153,11 @@ class ChannelRecordCreate(BaseModel):
     validation_tolerance: float = Field(default=0.05, ge=0, le=1000)
     items: Annotated[list[ChannelLineItemCreate], Field(min_length=1)]
 
+    @field_validator("settlement_month", mode="before")
+    @classmethod
+    def validate_settlement_month(cls, value: str | None) -> str | None:
+        return _normalize_safe_settlement_month(value)
+
 
 class ChannelRecordUpdate(BaseModel):
     statement_no: str | None = None
@@ -141,6 +178,11 @@ class ChannelRecordUpdate(BaseModel):
     tax_mode: str | None = None
     validation_tolerance: float | None = Field(default=None, ge=0, le=1000)
     items: list[ChannelLineItemCreate] | None = None
+
+    @field_validator("settlement_month", mode="before")
+    @classmethod
+    def validate_settlement_month(cls, value: str | None) -> str | None:
+        return _normalize_safe_settlement_month(value)
 
 
 class ChannelRecordRead(BaseModel):
