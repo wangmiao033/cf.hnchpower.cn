@@ -19,6 +19,11 @@ import {
   isMeaningfulChannelDraft,
   normalizeChannelDraft
 } from '@/domain/drafts/billDrafts.js'
+import {
+  isSmartGeneratedMessage,
+  resolveChannelContractAuthority,
+  sanitizeGeneratedHistoryRules
+} from '@/domain/channel/channelRuleAuthority.js'
 import { useBillFormSafety } from '@/hooks/useBillFormSafety.js'
 import './CoreBillFormPages.css'
 import '@/components/reconciliation/reconciliation-admin.css'
@@ -87,6 +92,17 @@ function reviewValidation(record) {
   return ''
 }
 
+function authorityText(state) {
+  if (state.status === 'loading') return '正在按游戏 + 渠道 + 账期读取合同规则；历史账单只用于识别和参考，不会覆盖合同。'
+  if (state.status === 'error') return '合同规则读取失败；系统已阻止自动沿用上月分成/税率/通道费，请稍后重试或人工确认。'
+  if (state.status === 'ok') return `合同规则已明确应用 ${state.matched}/${state.total} 个游戏；历史账单不会反向覆盖合同。`
+  if (state.status === 'warning') {
+    const confirmText = state.needsConfirmation ? `，其中 ${state.needsConfirmation} 个存在合同候选需确认` : ''
+    return `合同规则已应用 ${state.matched}/${state.total} 个游戏；${state.unmatched} 个未自动套用历史规则${confirmText}。`
+  }
+  return ''
+}
+
 function CoreChannelBillFormPage({ mode }) {
   const {
     recon,
@@ -101,6 +117,7 @@ function CoreChannelBillFormPage({ mode }) {
   const isEdit = mode === 'edit'
   const view = isEdit ? VIEWS.CHANNEL_RECON_EDIT : VIEWS.CHANNEL_RECON_CREATE
   const submitIntentRef = useRef('back')
+  const authorityRequestRef = useRef(0)
   const [previewAmount, setPreviewAmount] = useState(0)
   const [remoteRecord, setRemoteRecord] = useState(null)
   const [loading, setLoading] = useState(isEdit)
@@ -110,10 +127,19 @@ function CoreChannelBillFormPage({ mode }) {
   const [smartRecord, setSmartRecord] = useState(null)
   const [smartRevision, setSmartRevision] = useState(0)
   const [compactMode, setCompactMode] = useState(true)
+  const [ruleAuthority, setRuleAuthority] = useState({
+    status: 'idle',
+    total: 0,
+    matched: 0,
+    unmatched: 0,
+    needsConfirmation: 0
+  })
 
   useEffect(() => {
+    authorityRequestRef.current += 1
     setSmartRecord(null)
     setSmartRevision(0)
+    setRuleAuthority({ status: 'idle', total: 0, matched: 0, unmatched: 0, needsConfirmation: 0 })
   }, [mode, channelEditRecordId])
 
   useEffect(() => {
@@ -206,9 +232,11 @@ function CoreChannelBillFormPage({ mode }) {
   }
 
   const handleAfterSubmit = (intent) => {
+    authorityRequestRef.current += 1
     safety.clearAfterSubmit()
     setSmartRecord(null)
     setSmartRevision((value) => value + 1)
+    setRuleAuthority({ status: 'idle', total: 0, matched: 0, unmatched: 0, needsConfirmation: 0 })
     if (isEdit && channelEditRecordId) {
       invalidateEditRecord('channel', String(channelEditRecordId))
     }
@@ -219,10 +247,63 @@ function CoreChannelBillFormPage({ mode }) {
     goList()
   }
 
-  const applySmartRecord = (nextRecord, message = '', tone = 'success') => {
-    setSmartRecord(nextRecord)
-    setSmartRevision((value) => value + 1)
-    if (message) showToast(message, tone)
+  const applySmartRecord = async (nextRecord, message = '', tone = 'success') => {
+    const shouldResolve = /(已生成|游戏清单|上月账单|自动重新匹配|名称映射|合同规则已更新|补入合同合作清单|合作清单已创建)/.test(String(message || ''))
+    if (!shouldResolve) {
+      authorityRequestRef.current += 1
+      setSmartRecord(nextRecord)
+      setSmartRevision((value) => value + 1)
+      if (message) showToast(message, tone)
+      return
+    }
+
+    const generated = isSmartGeneratedMessage(message)
+    const requestId = authorityRequestRef.current + 1
+    authorityRequestRef.current = requestId
+    const safeFallback = generated ? sanitizeGeneratedHistoryRules(nextRecord) : nextRecord
+    const namedCount = (Array.isArray(nextRecord?.items) ? nextRecord.items : [])
+      .filter((line) => String(line?.gameName || '').trim()).length
+    setRuleAuthority({
+      status: 'loading',
+      total: namedCount,
+      matched: 0,
+      unmatched: namedCount,
+      needsConfirmation: 0
+    })
+
+    try {
+      const resolved = await resolveChannelContractAuthority(nextRecord, { generated })
+      if (requestId !== authorityRequestRef.current) return
+      const summary = resolved.summary || {}
+      const matched = Number(summary.matched || 0)
+      const total = Number(summary.total || 0)
+      const needsConfirmation = Number(summary.needsConfirmation || 0)
+      const unmatched = Number(summary.unmatched ?? Math.max(0, total - matched))
+      setSmartRecord(resolved.record)
+      setSmartRevision((value) => value + 1)
+      setRuleAuthority({
+        status: total > 0 && matched === total && needsConfirmation === 0 ? 'ok' : 'warning',
+        total,
+        matched,
+        unmatched,
+        needsConfirmation
+      })
+      if (message) showToast(message, tone)
+    } catch (error) {
+      if (requestId !== authorityRequestRef.current) return
+      setSmartRecord(safeFallback)
+      setSmartRevision((value) => value + 1)
+      setRuleAuthority({
+        status: 'error',
+        total: namedCount,
+        matched: 0,
+        unmatched: namedCount,
+        needsConfirmation: 0
+      })
+      if (message) showToast(message, tone)
+      showToast('合同规则暂时读取失败；已阻止自动沿用上月分成，请稍后重试或人工确认。', 'error')
+      console.warn('渠道账单合同优先规则读取失败', error)
+    }
   }
 
   const confirmReview = async () => {
@@ -282,8 +363,10 @@ function CoreChannelBillFormPage({ mode }) {
   const discardDraft = () => {
     const confirmed = window.confirm('确定清除当前本机草稿并恢复为空白/服务器版本吗？')
     if (confirmed) {
+      authorityRequestRef.current += 1
       setSmartRecord(null)
       setSmartRevision((value) => value + 1)
+      setRuleAuthority({ status: 'idle', total: 0, matched: 0, unmatched: 0, needsConfirmation: 0 })
       safety.discardDraft()
     }
   }
@@ -354,7 +437,7 @@ function CoreChannelBillFormPage({ mode }) {
               ? zeroSettlementPreview
                 ? '当前为零结算账单，可直接“确认核对并结清”，系统会跳过开票与收款环节。'
                 : '修改完成后可直接“保存并确认核对”；累计结算合作方会在核对后自动进入累计池。'
-              : '只有从客户库明确选中合作方后，V3.2 才会读取合同/上月清单；输入中的半截名称不会触发智能生成。'}
+              : '合同优先模式：游戏先识别，分成/税率/通道费按当前游戏 + 渠道 + 账期匹配合同；历史账单只作参考，不会自动覆盖合同。'}
           </span>
           {isEdit ? <span className="core-bill-review-hint">账单核对与实际结算已分离：未达累计门槛也可以正常完成核对</span> : null}
           <div className={`core-bill-draft-state ${safety.dirty ? 'is-dirty' : 'is-clean'}`}>
@@ -376,6 +459,13 @@ function CoreChannelBillFormPage({ mode }) {
           onApply={applySmartRecord}
           onNotice={(message, tone = 'info') => showToast(message, tone)}
         />
+      ) : null}
+
+      {!isEdit && ruleAuthority.status !== 'idle' ? (
+        <div className={`channel-smart-entry__notice ${ruleAuthority.status === 'warning' || ruleAuthority.status === 'error' ? 'is-warning' : ''}`} role="status">
+          <strong>规则依据：合同优先</strong>
+          <span>{authorityText(ruleAuthority)}</span>
+        </div>
       ) : null}
 
       <section className="core-bill-card core-bill-card--embedded">
