@@ -58,13 +58,15 @@ function samePartner(record, partnerName, channelName, aliasMemory) {
   return actual.some((value) => wanted.has(value))
 }
 
-function accessItemCoversMonth(item, targetMonth) {
+function accessItemCoversMonth(item, targetMonth, contract = null) {
   if (!targetMonth) return true
-  if (['已过期', '已终止'].includes(String(item?.timeline_status || ''))) return false
-  const start = monthValue(item?.authorization_start)
-  const end = monthValue(item?.authorization_end)
+  const timelineStatus = String(item?.timeline_status || '')
+  const start = monthValue(item?.authorization_start || contract?.effective_date)
+  const end = monthValue(item?.authorization_end || contract?.end_date)
   if (start && targetMonth < start) return false
   if (end && targetMonth > end) return false
+  // 已结束的历史合作项只在存在结构化有效期时按账期恢复，避免无日期旧数据误匹配。
+  if (['已过期', '已终止'].includes(timelineStatus) && !start && !end) return false
   return true
 }
 
@@ -225,7 +227,8 @@ export default function ChannelSmartEntryBar({
       const result = await listContracts({ q: partnerName, limit: 100, offset: 0 })
       const rows = Array.isArray(result?.items) ? result.items : []
       const exact = rows.filter((contract) => contractMatchesPartner(contract, partnerName, canonicalChannelName, aliasMemory))
-      const selected = (exact.length ? exact : rows).filter((contract) => contract?.timeline_status !== '已过期')
+      // 不按“今天是否过期”提前丢掉历史合同；具体账期是否可用由合作项有效期判断。
+      const selected = exact.length ? exact : rows
       setContractState({ key: loadKey, loading: false, items: selected, error: '' })
       return selected
     } catch (error) {
@@ -244,7 +247,7 @@ export default function ChannelSmartEntryBar({
     for (const contract of contractState.items || []) {
       for (const item of contract?.access_items || []) {
         const name = String(item?.product_name || '').trim()
-        if (!name || !accessItemCoversMonth(item, targetMonth)) continue
+        if (!name || !accessItemCoversMonth(item, targetMonth, contract)) continue
         const key = textKey(name)
         if (!map.has(key)) map.set(key, { gameName: name, contract, accessItem: item })
       }
