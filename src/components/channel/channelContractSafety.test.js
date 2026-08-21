@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 
 const pickerSource = readFileSync(new URL('../shared/PartnerPicker.jsx', import.meta.url), 'utf8')
 const billingSource = readFileSync(new URL('./ChannelBillingForm.jsx', import.meta.url), 'utf8')
+const smartEntrySource = readFileSync(new URL('./ChannelSmartEntryBar.jsx', import.meta.url), 'utf8')
 
 describe('channel contract safety guards', () => {
   it('does not turn typed exact partner text into an explicit customer selection', () => {
@@ -28,6 +29,15 @@ describe('channel contract safety guards', () => {
     expect(billingSource).toContain('if (!item?.match) continue')
     expect(billingSource).toContain('未匹配行暂不视为业务差异')
     expect(billingSource).toContain('业务差异 · 当前值未完全按合同清单')
+  })
+
+  it('matches historical contracts by the bill month instead of today\'s status', () => {
+    expect(smartEntrySource).toContain('const selected = exact.length ? exact : rows')
+    expect(smartEntrySource).toContain('item?.authorization_start || contract?.effective_date')
+    expect(smartEntrySource).toContain('item?.authorization_end || contract?.end_date')
+    expect(smartEntrySource).toContain('accessItemCoversMonth(item, targetMonth, contract)')
+    expect(smartEntrySource).not.toContain("contract?.timeline_status !== '已过期'")
+    expect(smartEntrySource).not.toContain("if (['已过期', '已终止'].includes(String(item?.timeline_status || ''))) return false")
   })
 
   it('labels technical errors separately from business rule gaps', () => {
