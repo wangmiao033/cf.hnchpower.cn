@@ -1,0 +1,102 @@
+name: One-off channel smart entry historical patch
+
+on:
+  push:
+    branches:
+      - fix/channel-smart-entry-historical-contracts-20260821
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/channel-smart-entry-historical-contracts-20260821
+          fetch-depth: 0
+      - name: Patch smart-entry historical period handling
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          smart = Path('src/components/channel/ChannelSmartEntryBar.jsx')
+          source = smart.read_text(encoding='utf-8')
+          old = """function accessItemCoversMonth(item, targetMonth) {
+            if (!targetMonth) return true
+            if (['已过期', '已终止'].includes(String(item?.timeline_status || ''))) return false
+            const start = monthValue(item?.authorization_start)
+            const end = monthValue(item?.authorization_end)
+            if (start && targetMonth < start) return false
+            if (end && targetMonth > end) return false
+            return true
+          }
+          """
+          new = """function accessItemCoversMonth(item, targetMonth, contract = null) {
+            if (!targetMonth) return true
+            const timelineStatus = String(item?.timeline_status || '')
+            const start = monthValue(item?.authorization_start || contract?.effective_date)
+            const end = monthValue(item?.authorization_end || contract?.end_date)
+            if (start && targetMonth < start) return false
+            if (end && targetMonth > end) return false
+            // 已结束的历史合作项只在存在结构化有效期时按账期恢复，避免无日期旧数据误匹配。
+            if (['已过期', '已终止'].includes(timelineStatus) && !start && !end) return false
+            return true
+          }
+          """
+          if old not in source:
+            raise SystemExit('accessItemCoversMonth target not found')
+          source = source.replace(old, new, 1)
+
+          old = "      const selected = (exact.length ? exact : rows).filter((contract) => contract?.timeline_status !== '已过期')\n"
+          new = "      // 不按“今天是否过期”提前丢掉历史合同；具体账期是否可用由合作项有效期判断。\n      const selected = exact.length ? exact : rows\n"
+          if old not in source:
+            raise SystemExit('contract timeline filter target not found')
+          source = source.replace(old, new, 1)
+
+          old = "        if (!name || !accessItemCoversMonth(item, targetMonth)) continue\n"
+          new = "        if (!name || !accessItemCoversMonth(item, targetMonth, contract)) continue\n"
+          if old not in source:
+            raise SystemExit('access coverage call target not found')
+          source = source.replace(old, new, 1)
+          smart.write_text(source, encoding='utf-8')
+
+          test_file = Path('src/components/channel/channelContractSafety.test.js')
+          test_source = test_file.read_text(encoding='utf-8')
+          if "const smartEntrySource =" not in test_source:
+            test_source = test_source.replace(
+              "const billingSource = readFileSync(new URL('./ChannelBillingForm.jsx', import.meta.url), 'utf8')\n",
+              "const billingSource = readFileSync(new URL('./ChannelBillingForm.jsx', import.meta.url), 'utf8')\nconst smartEntrySource = readFileSync(new URL('./ChannelSmartEntryBar.jsx', import.meta.url), 'utf8')\n",
+              1,
+            )
+          marker = "  it('labels technical errors separately from business rule gaps', () => {\n"
+          block = """  it('matches historical contracts by the bill month instead of today\'s status', () => {
+            expect(smartEntrySource).toContain('const selected = exact.length ? exact : rows')
+            expect(smartEntrySource).toContain('item?.authorization_start || contract?.effective_date')
+            expect(smartEntrySource).toContain('item?.authorization_end || contract?.end_date')
+            expect(smartEntrySource).toContain('accessItemCoversMonth(item, targetMonth, contract)')
+            expect(smartEntrySource).not.toContain("contract?.timeline_status !== '已过期'")
+            expect(smartEntrySource).not.toContain("if (['已过期', '已终止'].includes(String(item?.timeline_status || ''))) return false")
+          })
+
+"""
+          if block not in test_source:
+            if marker not in test_source:
+              raise SystemExit('test insertion marker not found')
+            test_source = test_source.replace(marker, block + marker, 1)
+          test_file.write_text(test_source, encoding='utf-8')
+          PY
+
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src/components/channel/ChannelSmartEntryBar.jsx src/components/channel/channelContractSafety.test.js
+          git diff --cached --check
+          if git diff --cached --quiet; then
+            echo 'No patch needed.'
+            exit 0
+          fi
+          git commit -m 'fix: match historical contracts in channel smart entry'
+          git push origin HEAD:fix/channel-smart-entry-historical-contracts-20260821
