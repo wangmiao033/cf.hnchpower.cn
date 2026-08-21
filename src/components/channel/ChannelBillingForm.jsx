@@ -101,6 +101,12 @@ function sameNumber(left, right, tolerance = 0.0001) {
   return Number.isFinite(a) && Number.isFinite(b) && Math.abs(a - b) <= tolerance
 }
 
+function canAutoApplyContractRules(mode, status) {
+  if (mode === 'add') return true
+  if (mode !== 'edit') return false
+  return String(status || 'pending').trim().toLowerCase() !== 'confirmed'
+}
+
 function identityRows(lines) {
   return (lines || []).map((row, index) => ({
     line_index: index,
@@ -213,6 +219,7 @@ function ChannelBillingForm({
   const feeMode = effectiveRuleHeader.channelFeeMode || 'fixed'
   const targetedRuleLocked = effectiveRuleHeader.settlementRuleCode === XIAN_WEIZHEN_9917_RULE
   const contractAwareMode = mode === 'add' || mode === 'edit'
+  const autoApplyContractRules = canAutoApplyContractRules(mode, header.status)
   const lineRuleSignatures = useMemo(() => new Set(
     lines
       .filter((row) => String(row.channelFeeMode || row.taxMode || row.settlementRuleCode || '').trim())
@@ -228,16 +235,14 @@ function ChannelBillingForm({
     const result = contractRuleState.recommendation
     if (!result) return false
     if (result.partner_rule_status === 'none') return false
-    const partnerBaseline = result.partner_recommendation && (result.partner_auto_apply || mode === 'add')
-      ? result.partner_recommendation
-      : null
     for (let index = 0; index < lines.length; index += 1) {
       const row = lines[index]
       if (!String(row.gameName || '').trim() || !normalizeChannelSettlementCycle(row.settlementCycle)) continue
       const item = (result.lines || []).find((candidate) => candidate.line_index === index)
-      if (!item?.match) return true
-      const rec = item.auto_apply && item.recommended ? item.recommended : partnerBaseline
-      if (!rec) return true
+      // 未匹配到具体游戏合作清单时，只做“待确认”提示，不视为人工覆盖合同。
+      if (!item?.match) continue
+      const rec = item.auto_apply && item.recommended ? item.recommended : null
+      if (!rec) continue
       const rowRule = resolveChannelLineRuleHeader(row, effectiveRuleHeader)
       if (rec.share_rate != null && !sameNumber(row.shareRate, rec.share_rate)) return true
       if (rec.tax_rate != null && !sameNumber(row.taxRate, rec.tax_rate)) return true
@@ -246,7 +251,7 @@ function ChannelBillingForm({
       if (rec.tax_mode && rowRule.taxMode !== rec.tax_mode) return true
     }
     return false
-  }, [contractAwareMode, contractRuleState.recommendation, effectiveRuleHeader, lines, mode, targetedRuleLocked])
+  }, [contractAwareMode, contractRuleState.recommendation, effectiveRuleHeader, lines, targetedRuleLocked])
 
   useEffect(() => { onPreviewChange?.(previewSettlement) }, [previewSettlement, onPreviewChange])
 
@@ -329,18 +334,25 @@ function ChannelBillingForm({
           const chosenHeader = preciseHeader || baseline
           const lineRecommendations = new Map(
             (result.lines || [])
-              .filter((item) => item.auto_apply && item.recommended)
+              .filter((item) => item.match && item.auto_apply && item.recommended)
               .map((item) => [item.line_index, item.recommended])
           )
+          const unmatchedPreciseLines = preciseLines.filter((line) => {
+            const item = (result.lines || []).find((candidate) => candidate.line_index === line.line_index)
+            return !item?.match
+          })
+          const hasUnmatchedPreciseLines = unmatchedPreciseLines.length > 0
           const allPreciseLinesApplied = preciseLines.length > 0 && preciseLines.every((line) => lineRecommendations.has(line.line_index))
 
-          // New bills consume the latest contract values immediately and recalculate.
-          // Historical/edit bills are comparison-only: never mutate persisted/manual
-          // financial rules just because the contract was edited after the bill period.
-          if (mode === 'add') {
+          // 新增账单：可使用合作方默认规则兜底。
+          // 待核对/未确认的编辑账单：只有精确匹配到“游戏 + 账期”时才自动套用，避免通用规则误套。
+          // 已确认账单：仍保持历史快照，只做比较，不自动覆盖。
+          if (autoApplyContractRules) {
             setLines((current) => current.map((row, index) => {
-              const rec = lineRecommendations.get(index) || baseline
-              return rec ? applyContractRecommendationToLine(row, rec) : clearLineContractRule(row)
+              const preciseRec = lineRecommendations.get(index)
+              if (preciseRec) return applyContractRecommendationToLine(row, preciseRec)
+              if (mode === 'add' && baseline) return applyContractRecommendationToLine(row, baseline)
+              return row
             }))
           }
 
@@ -357,9 +369,15 @@ function ChannelBillingForm({
             }
             setContractRuleState({
               loading: false,
-              tone: mode === 'add' ? 'applied' : 'review',
+              tone: mode === 'edit'
+                ? autoApplyContractRules && allPreciseLinesApplied ? 'applied' : 'review'
+                : 'applied',
               message: mode === 'edit'
-                ? '已匹配当前最新合同规则；历史账单原值保持不变，仅做核验。如需改成新口径，请人工修改并填写覆盖原因。'
+                ? !autoApplyContractRules
+                  ? '已匹配当前最新合同规则；已确认账单原值保持不变，仅做核验。如需改成新口径，请人工修改并填写覆盖原因。'
+                  : hasUnmatchedPreciseLines
+                    ? '部分游戏未匹配到具体合作清单；未匹配行暂不视为业务差异，请先核对游戏名称或合同合作清单。已精确匹配的行已自动套用规则。'
+                    : '已按当前游戏和账期自动套用合同规则并重新计算。'
                 : preciseHeader
                   ? `${result.message}；当前明细已按具体合同合作清单填充并重新计算。`
                   : `${result.partner_rule_message}；选择游戏和账期后还会再次精确核对。`,
@@ -383,7 +401,7 @@ function ChannelBillingForm({
               loading: false,
               tone: 'review',
               message: mode === 'edit'
-                ? '未找到该合作方合同清单，已保留这张历史账单原有规则，不会用默认值覆盖。'
+                ? '未找到该合作方合同清单，已保留当前账单原有规则；这类“未匹配”不直接判为业务差异。'
                 : '待补规则：未找到该合作方合同清单，已回退到原有人工/渠道规则；本次不会把旧默认值冒充合同值。',
               contracts: contractNames,
               recommendation: result,
@@ -403,9 +421,15 @@ function ChannelBillingForm({
           }
           setContractRuleState({
             loading: false,
-            tone: mode === 'edit' ? 'review' : allPreciseLinesApplied ? 'applied' : 'review',
+            tone: mode === 'edit'
+              ? autoApplyContractRules && allPreciseLinesApplied ? 'applied' : 'review'
+              : allPreciseLinesApplied ? 'applied' : 'review',
             message: mode === 'edit'
-              ? '已读取最新合同清单用于核验；历史账单规则不会自动覆盖。'
+              ? !autoApplyContractRules
+                ? '已读取最新合同清单用于核验；已确认账单规则不会自动覆盖。'
+                : hasUnmatchedPreciseLines
+                  ? '部分游戏未匹配到具体合作清单；未匹配行暂不视为业务差异，请先核对游戏名称或合同合作清单。已精确匹配的行已自动套用规则。'
+                  : '已按当前游戏和账期自动套用合同规则并重新计算。'
               : allPreciseLinesApplied
                 ? '本账单存在多套合同结算规则，已按每个游戏明细对应的合同分别计算；不会再把账单头部的统一通道费套到所有游戏。'
                 : result.partner_rule_message || result.message || '待补规则：合同规则存在歧义，请按具体游戏和账期确认。',
@@ -431,7 +455,7 @@ function ChannelBillingForm({
       cancelled = true
       window.clearTimeout(timer)
     }
-  }, [contractAwareMode, mode, partnerId, header.partnerName, header.channelName, lines, contractRuleRevision, lastContractRuleKey])
+  }, [contractAwareMode, mode, partnerId, header.partnerName, header.channelName, header.status, lines, contractRuleRevision, lastContractRuleKey, autoApplyContractRules])
 
   const handleHeaderChange = (field, value) => setHeader((current) => ({ ...current, [field]: value }))
   const clearAllLineContractRules = () => setLines((current) => current.map(clearLineContractRule))
