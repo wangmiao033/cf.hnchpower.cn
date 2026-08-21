@@ -15,15 +15,23 @@ describe('channel contract safety guards', () => {
     expect(billingSource).toContain('明确选择合作方后再保存')
   })
 
-  it('auto-applies contract rules only to new bills', () => {
-    expect(billingSource).toContain("if (mode === 'add') {\n            setLines")
-    expect(billingSource).toContain('历史账单原值保持不变')
-    expect(billingSource).toContain('历史账单规则不会自动覆盖')
+  it('auto-applies exact game rules to new or unconfirmed bills but preserves confirmed bills', () => {
+    expect(billingSource).toContain('function canAutoApplyContractRules(mode, status)')
+    expect(billingSource).toContain("String(status || 'pending').trim().toLowerCase() !== 'confirmed'")
+    expect(billingSource).toContain('if (autoApplyContractRules)')
+    expect(billingSource).toContain('item.match && item.auto_apply && item.recommended')
+    expect(billingSource).toContain('已确认账单原值保持不变')
+    expect(billingSource).toContain('已确认账单规则不会自动覆盖')
+  })
+
+  it('does not classify an unmatched game as a business override', () => {
+    expect(billingSource).toContain('if (!item?.match) continue')
+    expect(billingSource).toContain('未匹配行暂不视为业务差异')
+    expect(billingSource).toContain('业务差异 · 当前值未完全按合同清单')
   })
 
   it('labels technical errors separately from business rule gaps', () => {
     expect(billingSource).toContain('技术异常 · 合同规则读取失败')
     expect(billingSource).toContain('待补规则：未找到该合作方合同清单')
-    expect(billingSource).toContain('业务差异 · 当前值未完全按合同清单')
   })
 })
