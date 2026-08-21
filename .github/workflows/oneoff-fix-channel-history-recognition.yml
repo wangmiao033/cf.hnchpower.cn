@@ -109,3 +109,5 @@ jobs:
           fi
           git commit -m 'fix: recognize previous-month games without contract supplement'
           git push origin HEAD:fix/channel-history-recognized-not-missing-20260821
+
+# trigger after workflow registration
