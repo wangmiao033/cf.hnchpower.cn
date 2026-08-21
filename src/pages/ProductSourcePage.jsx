@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import * as XLSX from 'xlsx'
 import PageContainer from '@/components/layout/PageContainer.jsx'
+import GameRegistryPreviewPanel from '@/components/data/GameRegistryPreviewPanel.jsx'
 import {
   importProductSources,
   listProductSources
@@ -31,6 +32,7 @@ function findHeader(headers, matcher) {
 
 function ProductSourcePage() {
   const fileInputRef = useRef(null)
+  const [activeTab, setActiveTab] = useState('game-registry')
   const [rows, setRows] = useState([])
   const [total, setTotal] = useState(0)
   const [allTotal, setAllTotal] = useState(0)
@@ -140,115 +142,144 @@ function ProductSourcePage() {
     <PageContainer hideHeader className="product-source-page">
       <section className="ps-head">
         <div className="ps-title">
-          <span className="ps-title-icon">源</span>
+          <span className="ps-title-icon">游</span>
           <div>
-            <h1>数据源</h1>
-            <p>QuickSDK 游戏名称与 ProductCode 原始台账，仅用于保存和核对源数据。</p>
+            <h1>游戏库</h1>
+            <p>先从历史已确认渠道账单整理游戏与结算规则；确认无误后再接入新账单自动匹配。</p>
           </div>
         </div>
         <div className="ps-actions">
-          <input
-            ref={fileInputRef}
-            className="ps-file-input"
-            type="file"
-            accept=".xlsx,.xls"
-            onChange={handleFile}
-          />
-          <button
-            type="button"
-            className="ps-primary"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={importing}
-          >
-            {importing ? '导入中' : '导入 Excel'}
-          </button>
+          {activeTab === 'product-codes' ? (
+            <>
+              <input
+                ref={fileInputRef}
+                className="ps-file-input"
+                type="file"
+                accept=".xlsx,.xls"
+                onChange={handleFile}
+              />
+              <button
+                type="button"
+                className="ps-primary"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={importing}
+              >
+                {importing ? '导入中' : '导入 Excel'}
+              </button>
+            </>
+          ) : null}
         </div>
       </section>
 
-      <section className="ps-overview" aria-label="数据源概览">
-        <div>
-          <span>ProductCode 总数</span>
-          <strong>{allTotal.toLocaleString('zh-CN')}</strong>
-          <small>按 ProductCode 唯一保存</small>
-        </div>
-        <div>
-          <span>当前结果</span>
-          <strong>{total.toLocaleString('zh-CN')}</strong>
-          <small>{appliedKeyword ? `匹配“${appliedKeyword}”` : '显示全部游戏'}</small>
-        </div>
-        <div>
-          <span>最近更新</span>
-          <strong className="ps-date">{dateTime(latestImportAt)}</strong>
-          <small>来源：{sourceFile}</small>
-        </div>
-      </section>
-
-      <section className="ps-toolbar" aria-label="数据源筛选">
-        <label>
-          <span>搜索</span>
-          <input
-            type="search"
-            value={keyword}
-            onChange={(event) => setKeyword(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') search()
-            }}
-            placeholder="输入游戏名称或 QuickSDK ProductCode"
-          />
-        </label>
-        <button type="button" className="ps-search" onClick={search} disabled={loading}>
-          搜索
+      <section className="ps-workspace-tabs" aria-label="游戏库工作区">
+        <button
+          type="button"
+          className={activeTab === 'game-registry' ? 'is-active' : ''}
+          onClick={() => setActiveTab('game-registry')}
+        >
+          游戏与结算规则
+          <small>只读验证</small>
         </button>
-        <button type="button" className="ps-reset" onClick={reset} disabled={loading}>
-          重置
+        <button
+          type="button"
+          className={activeTab === 'product-codes' ? 'is-active' : ''}
+          onClick={() => setActiveTab('product-codes')}
+        >
+          ProductCode 数据源
+          <small>原功能保留</small>
         </button>
       </section>
 
-      {message ? (
-        <div className={`ps-message ps-message-${message.type}`}>{message.text}</div>
+      {activeTab === 'game-registry' ? <GameRegistryPreviewPanel /> : null}
+
+      {activeTab === 'product-codes' ? (
+        <>
+          <section className="ps-overview" aria-label="数据源概览">
+            <div>
+              <span>ProductCode 总数</span>
+              <strong>{allTotal.toLocaleString('zh-CN')}</strong>
+              <small>按 ProductCode 唯一保存</small>
+            </div>
+            <div>
+              <span>当前结果</span>
+              <strong>{total.toLocaleString('zh-CN')}</strong>
+              <small>{appliedKeyword ? `匹配“${appliedKeyword}”` : '显示全部游戏'}</small>
+            </div>
+            <div>
+              <span>最近更新</span>
+              <strong className="ps-date">{dateTime(latestImportAt)}</strong>
+              <small>来源：{sourceFile}</small>
+            </div>
+          </section>
+
+          <section className="ps-toolbar" aria-label="数据源筛选">
+            <label>
+              <span>搜索</span>
+              <input
+                type="search"
+                value={keyword}
+                onChange={(event) => setKeyword(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') search()
+                }}
+                placeholder="输入游戏名称或 QuickSDK ProductCode"
+              />
+            </label>
+            <button type="button" className="ps-search" onClick={search} disabled={loading}>
+              搜索
+            </button>
+            <button type="button" className="ps-reset" onClick={reset} disabled={loading}>
+              重置
+            </button>
+          </section>
+
+          {message ? (
+            <div className={`ps-message ps-message-${message.type}`}>{message.text}</div>
+          ) : null}
+
+          <section className="ps-table-panel">
+            <header>
+              <div>
+                <h2>QuickSDK ProductCode 台账</h2>
+                <p>保留原数据源能力；本表仍不直接修改历史账单、合同或 V4 结算规则。</p>
+              </div>
+              <span>{loading ? '读取中' : `${total} 条`}</span>
+            </header>
+
+            <div className="ps-table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>序号</th>
+                    <th>游戏名称</th>
+                    <th>QuickSDK ProductCode</th>
+                    <th>来源文件</th>
+                    <th>更新时间</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((row, index) => (
+                    <tr key={row.id || row.product_code}>
+                      <td>{index + 1}</td>
+                      <td><strong>{row.game_name}</strong></td>
+                      <td><code>{row.product_code}</code></td>
+                      <td title={row.source_file || ''}>{row.source_file || '-'}</td>
+                      <td>{dateTime(row.updated_at)}</td>
+                    </tr>
+                  ))}
+                  {!loading && rows.length === 0 ? (
+                    <tr>
+                      <td className="ps-empty" colSpan="5">
+                        {appliedKeyword ? '没有匹配的数据源记录' : '暂无数据，请导入 QuickSDK 游戏清单'}
+                      </td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </>
       ) : null}
-
-      <section className="ps-table-panel">
-        <header>
-          <div>
-            <h2>QuickSDK ProductCode 台账</h2>
-            <p>当前仅展示原始数据，不与数据库流水、账单或合同建立关联。</p>
-          </div>
-          <span>{loading ? '读取中' : `${total} 条`}</span>
-        </header>
-
-        <div className="ps-table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>序号</th>
-                <th>游戏名称</th>
-                <th>QuickSDK ProductCode</th>
-                <th>来源文件</th>
-                <th>更新时间</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row, index) => (
-                <tr key={row.id || row.product_code}>
-                  <td>{index + 1}</td>
-                  <td><strong>{row.game_name}</strong></td>
-                  <td><code>{row.product_code}</code></td>
-                  <td title={row.source_file || ''}>{row.source_file || '-'}</td>
-                  <td>{dateTime(row.updated_at)}</td>
-                </tr>
-              ))}
-              {!loading && rows.length === 0 ? (
-                <tr>
-                  <td className="ps-empty" colSpan="5">
-                    {appliedKeyword ? '没有匹配的数据源记录' : '暂无数据，请导入 QuickSDK 游戏清单'}
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
-        </div>
-      </section>
     </PageContainer>
   )
 }
