@@ -24,7 +24,7 @@ class RdPrepaymentRuntimeDdlTests(unittest.TestCase):
         registry_source = (
             REPO_ROOT / "backend" / "app" / "core" / "migrations.py"
         ).read_text(encoding="utf-8")
-        self.assertIn("range(1, 61)", registry_source)
+        self.assertIn("range(1, 62)", registry_source)
 
 
 if __name__ == "__main__":
