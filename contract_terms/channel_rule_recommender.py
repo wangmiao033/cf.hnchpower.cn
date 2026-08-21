@@ -10,27 +10,36 @@ except ImportError:  # Vercel service-root import.
     from matcher import normalize_company, normalize_game, score_candidate
 
 EPS = 0.01
-EXPLICITLY_DISABLED_STATUSES = {
+ALWAYS_DISABLED_STATUSES = {
     "停用",
     "已停用",
     "禁用",
     "已禁用",
     "作废",
     "已作废",
-    "终止",
-    "已终止",
     "取消",
     "已取消",
-    "失效",
-    "已失效",
     "disabled",
-    "inactive",
-    "terminated",
     "cancelled",
     "canceled",
     "void",
     "voided",
 }
+HISTORICAL_CLOSED_STATUSES = {
+    "终止",
+    "已终止",
+    "失效",
+    "已失效",
+    "过期",
+    "已过期",
+    "归档",
+    "已归档",
+    "inactive",
+    "terminated",
+    "expired",
+    "archived",
+}
+EXPLICITLY_DISABLED_STATUSES = ALWAYS_DISABLED_STATUSES | HISTORICAL_CLOSED_STATUSES
 
 
 def _number(value: Any) -> float | None:
@@ -98,17 +107,41 @@ def _status_key(value: Any) -> str:
     return str(value or "").strip().lower().replace(" ", "")
 
 
-def _candidate_explicitly_disabled(candidate: dict) -> bool:
-    """Ignore only explicit negative states; free-text positive states are not guessed.
+def _candidate_statuses(candidate: dict) -> set[str]:
+    return {
+        key
+        for key in (
+            _status_key(candidate.get("access_status")),
+            _status_key(candidate.get("performance_status")),
+        )
+        if key
+    }
 
-    Contract/access status fields are free text in the current data model. We
-    therefore never maintain an allow-list of "active" labels. Only explicit
-    stop/void/disable values are excluded, which avoids making historical
-    backdated bills impossible to inspect merely because wording differs.
+
+def _candidate_explicitly_disabled(candidate: dict) -> bool:
+    """Exclude closed/disabled rows from the partner-wide default baseline.
+
+    Partner-wide defaults do not have a settlement month, so a historical closed
+    contract must not define today's generic baseline. Precise line matching is
+    handled separately and may still use an ended contract when the requested
+    bill month is proven to be inside its authorization period.
     """
-    for field in ("access_status", "performance_status"):
-        if _status_key(candidate.get(field)) in EXPLICITLY_DISABLED_STATUSES:
-            return True
+    return bool(_candidate_statuses(candidate) & EXPLICITLY_DISABLED_STATUSES)
+
+
+def _candidate_unusable_for_period(candidate: dict, authorization_status: str) -> bool:
+    """Return whether a candidate is unusable for this exact historical bill month.
+
+    Hard-invalid states (void/cancel/disabled) are never revived. Lifecycle-end
+    states (terminated/expired/archived/inactive) remain valid evidence for a
+    backdated bill only when structured authorization dates prove that the bill
+    month was covered at that time.
+    """
+    statuses = _candidate_statuses(candidate)
+    if statuses & ALWAYS_DISABLED_STATUSES:
+        return True
+    if statuses & HISTORICAL_CLOSED_STATUSES:
+        return authorization_status != "covered"
     return False
 
 
@@ -207,7 +240,7 @@ def _partner_rule_summary(partner_name: str, candidates: list[dict]) -> dict:
     if incomplete_count:
         ignored_bits.append(f"{incomplete_count} 条结算字段不完整历史/辅助记录")
     if disabled_count:
-        ignored_bits.append(f"{disabled_count} 条停用/作废记录")
+        ignored_bits.append(f"{disabled_count} 条停用/作废/已结束记录")
     ignored_text = f"；已忽略{'、'.join(ignored_bits)}" if ignored_bits else ""
     return {
         "status": "uniform",
@@ -230,11 +263,12 @@ def _partner_rule_summary(partner_name: str, candidates: list[dict]) -> dict:
 def _rank_candidates(bill: dict, line: dict, candidates: list[dict]) -> list[tuple[dict, dict, dict]]:
     ranked: list[tuple[dict, dict, dict]] = []
     for candidate in candidates:
-        if _candidate_explicitly_disabled(candidate):
-            continue
         score = score_candidate(bill, line, candidate)
-        if score.get("eligible"):
-            ranked.append((candidate, score, _rule_fields(candidate)))
+        if not score.get("eligible"):
+            continue
+        if _candidate_unusable_for_period(candidate, str(score.get("authorization_status") or "unknown")):
+            continue
+        ranked.append((candidate, score, _rule_fields(candidate)))
     ranked.sort(
         key=lambda item: (
             float(item[1].get("score") or 0),
@@ -485,7 +519,7 @@ def recommend_channel_rules(
         message = partner_summary["message"]
 
     return {
-        "version": "contract-channel-rule-v2.8",
+        "version": "contract-channel-rule-v2.9",
         "auto_apply": bool(overall_auto and header),
         "matched_lines": len(matched),
         "total_lines": len(results),
