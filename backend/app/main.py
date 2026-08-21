@@ -24,6 +24,7 @@ from app.api.bill_attachment import router as bill_attachment_router
 from app.api.bill_invoice_allocation import router as bill_invoice_allocation_router
 from app.api.electronic_invoice import router as electronic_invoice_router
 from app.api.finance_invoice_task import router as finance_invoice_task_router
+from app.api.game_registry import router as game_registry_router
 from app.api.health import router as health_router
 from app.api.auth import router as auth_router
 from app.api.invoice import router as invoice_router
@@ -235,6 +236,7 @@ app.include_router(reconciliation_router, prefix="/api/reconciliation", tags=["r
 app.include_router(bill360_performance_router, prefix="/api/reconciliation", tags=["bill360-performance"], dependencies=[reconciliation_access])
 app.include_router(reconciliation_period_router, prefix="/api/reconciliation-periods", tags=["reconciliation-periods"], dependencies=[reconciliation_access])
 app.include_router(channel_router, prefix="/api/channel-records", tags=["channel-records"], dependencies=[reconciliation_access])
+app.include_router(game_registry_router, prefix="/api/game-registry", tags=["game-registry"], dependencies=[reconciliation_access])
 app.include_router(channel_cumulative_settlement_router, prefix="/api/channel-cumulative-settlement", tags=["channel-cumulative-settlement"])
 app.include_router(bill_lifecycle_router, prefix="/api/bill-lifecycle", tags=["bill-lifecycle"], dependencies=[reconciliation_access])
 app.include_router(business_dashboard_router, prefix="/api/business-dashboard", tags=["business-dashboard"], dependencies=[analytics_access])
