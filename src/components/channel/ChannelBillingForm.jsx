@@ -390,11 +390,17 @@ function ChannelBillingForm({
 
           if (result.partner_rule_status === 'none') {
             if (mode === 'add') {
-              setHeader((current) => fallbackHeader(current))
+              setHeader((current) => targeted ? applyTargetedChannelRule(current) : ({
+                ...current,
+                settlementRuleCode: 'custom',
+                channelFeeMode: 'none',
+                channelFeeRate: '',
+                taxMode: 'none'
+              }))
               setLines((current) => current.map((row) => ({
                 ...clearLineContractRule(row),
-                shareRate: String(row.shareRate || '30'),
-                taxRate: String(row.taxRate || '5')
+                shareRate: '',
+                taxRate: ''
               })))
             }
             setContractRuleState({
@@ -402,7 +408,7 @@ function ChannelBillingForm({
               tone: 'review',
               message: mode === 'edit'
                 ? '未找到该合作方合同清单，已保留当前账单原有规则；这类“未匹配”不直接判为业务差异。'
-                : '待补规则：未找到该合作方合同清单，已回退到原有人工/渠道规则；本次不会把旧默认值冒充合同值。',
+                : '待补规则：未找到该合作方合同清单；新增账单的分成/税率/通道费保持空白，不使用历史值或30%/5%默认值。',
               contracts: contractNames,
               recommendation: result,
               fingerprint
@@ -498,8 +504,13 @@ function ChannelBillingForm({
   const handleLineChange = (index, field, value) => {
     setLines((current) => current.map((row, rowIndex) => {
       if (rowIndex !== index) return row
-      const next = field === 'gameName' || field === 'settlementCycle' ? clearLineContractRule(row) : row
-      return { ...next, [field]: value }
+      const identityChanged = field === 'gameName' || field === 'settlementCycle'
+      const next = identityChanged ? clearLineContractRule(row) : row
+      return {
+        ...next,
+        ...(identityChanged && mode === 'add' ? { shareRate: '', taxRate: '' } : {}),
+        [field]: value
+      }
     }))
   }
 
@@ -513,9 +524,12 @@ function ChannelBillingForm({
     let next = { ...initialLineItem(), settlementCycle: lastCycle }
     if (!targetedRuleLocked) {
       if (mode === 'add' && baseline) next = applyContractRecommendationToLine(next, baseline)
-      else {
+      else if (mode !== 'add') {
         next.shareRate = String(last.shareRate ?? '')
         next.taxRate = String(last.taxRate ?? '')
+      } else {
+        next.shareRate = ''
+        next.taxRate = ''
       }
     }
     setLines((current) => [...current, next])
