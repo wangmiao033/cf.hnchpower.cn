@@ -1,0 +1,206 @@
+name: One-off 3733 live contract diagnostic
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    if: github.head_ref == 'diag/3733-contract-live-20260824'
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_ORG_ID: team_YfsD5pM9JFtkqXnJIUdbF2eI
+      VERCEL_PROJECT_ID: prj_eMuMpXX2hUKvy7lSQ1deDIzoQDRN
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Pull production environment safely
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${VERCEL_TOKEN:-}" ]; then
+            echo '::error::VERCEL_TOKEN unavailable'
+            exit 1
+          fi
+          npx --yes vercel@latest pull --yes --environment=production --token "$VERCEL_TOKEN" >/tmp/vercel-pull.log 2>&1
+          test -f .vercel/.env.production.local
+          echo 'Production environment pulled.'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install diagnostic dependencies
+        run: python -m pip install 'psycopg[binary]==3.3.4' 'python-dotenv==1.2.2' 'fastapi==0.141.1' 'PyJWT==2.13.0'
+      - name: Run read-only live diagnostic
+        env:
+          PYTHONPATH: contract_terms:.
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import sys
+          from pathlib import Path
+          from dotenv import dotenv_values
+          import psycopg
+          from psycopg.rows import dict_row
+
+          env = dotenv_values('.vercel/.env.production.local')
+          url = str(env.get('QUICKSDK_DATABASE_URL') or env.get('DATABASE_URL') or '').strip()
+          if not url:
+              raise SystemExit('Production database URL not found in pulled environment')
+          if url.startswith('postgresql+psycopg://'):
+              url = 'postgresql://' + url.removeprefix('postgresql+psycopg://')
+
+          sys.path.insert(0, str(Path('contract_terms').resolve()))
+          from extended_main import _CANDIDATE_SQL
+          from game_identity import enrich_candidates_with_game_ids, enrich_lines_with_game_ids
+          from channel_rule_recommender import recommend_channel_rules
+
+          partner = '厦门三七三三网络科技有限公司'
+          channel = '3733游戏'
+          game = '一起来修仙（0.05折）'
+          cycle = '2026-07'
+
+          def compact(obj):
+              return json.dumps(obj, ensure_ascii=False, default=str, sort_keys=True)
+
+          with psycopg.connect(url, connect_timeout=15, row_factory=dict_row) as conn:
+              conn.execute('SET TRANSACTION READ ONLY')
+
+              print('=== TARGET ===')
+              print(compact({'partner': partner, 'channel': channel, 'game': game, 'cycle': cycle}))
+
+              partners = conn.execute(
+                  '''
+                  SELECT id, name, short_name, category
+                  FROM cf_partner_records
+                  WHERE name ILIKE %s OR short_name ILIKE %s
+                  ORDER BY name
+                  ''',
+                  ['%三七三三%', '%3733%'],
+              ).fetchall()
+              print('=== PARTNERS ===')
+              print(compact([dict(row) for row in partners]))
+
+              access_rows = conn.execute(
+                  '''
+                  SELECT
+                    access.id AS access_item_id,
+                    access.contract_id,
+                    access.channel_name,
+                    access.product_name,
+                    access.authorization_start,
+                    access.authorization_end,
+                    access.share_rate,
+                    access.channel_fee_rate,
+                    access.status AS access_status,
+                    contract.contract_name,
+                    contract.contract_no,
+                    contract.counterparty,
+                    contract.partner_id,
+                    contract.effective_date,
+                    contract.end_date,
+                    contract.performance_status,
+                    partner.name AS partner_name,
+                    partner.short_name AS partner_short_name,
+                    terms.invoice_tax_rate,
+                    terms.settlement_mode,
+                    terms.settlement_basis
+                  FROM cf_contract_access_items AS access
+                  JOIN cf_contract_records AS contract ON contract.id = access.contract_id
+                  LEFT JOIN cf_partner_records AS partner ON partner.id = contract.partner_id
+                  LEFT JOIN cf_contract_access_terms AS terms ON terms.access_item_id = access.id
+                  WHERE
+                    access.product_name ILIKE %s
+                    OR access.channel_name ILIKE %s
+                    OR contract.counterparty ILIKE %s
+                    OR partner.name ILIKE %s
+                    OR partner.short_name ILIKE %s
+                  ORDER BY contract.updated_at DESC, access.updated_at DESC
+                  LIMIT 100
+                  ''',
+                  ['%一起来修仙%', '%3733%', '%三七三三%', '%三七三三%', '%3733%'],
+              ).fetchall()
+              print('=== RELEVANT CONTRACT ACCESS ITEMS ===')
+              print(compact([dict(row) for row in access_rows]))
+
+              games = conn.execute(
+                  '''
+                  SELECT id, canonical_name, normalized_name, source, status
+                  FROM game_registry_games
+                  WHERE canonical_name ILIKE %s OR normalized_name ILIKE %s
+                  ORDER BY canonical_name
+                  ''',
+                  ['%一起来修仙%', '%一起来修仙%'],
+              ).fetchall()
+              print('=== GAME REGISTRY ===')
+              print(compact([dict(row) for row in games]))
+
+              aliases = []
+              if conn.execute("SELECT to_regclass('public.game_registry_aliases') AS name").fetchone()['name']:
+                  aliases = conn.execute(
+                      '''
+                      SELECT alias.id, alias.alias_name, alias.normalized_alias, alias.game_id, game.canonical_name, alias.source
+                      FROM game_registry_aliases AS alias
+                      JOIN game_registry_games AS game ON game.id = alias.game_id
+                      WHERE alias.alias_name ILIKE %s OR game.canonical_name ILIKE %s
+                      ORDER BY game.canonical_name, alias.alias_name
+                      ''',
+                      ['%一起来修仙%', '%一起来修仙%'],
+                  ).fetchall()
+              print('=== GAME ALIASES ===')
+              print(compact([dict(row) for row in aliases]))
+
+              links = []
+              if conn.execute("SELECT to_regclass('public.contract_access_game_links') AS name").fetchone()['name']:
+                  links = conn.execute(
+                      '''
+                      SELECT link.access_item_id, link.game_id, link.match_method, link.confirmed,
+                             access.product_name, access.channel_name, access.share_rate, access.channel_fee_rate,
+                             game.canonical_name
+                      FROM contract_access_game_links AS link
+                      JOIN cf_contract_access_items AS access ON access.id = link.access_item_id
+                      JOIN game_registry_games AS game ON game.id = link.game_id
+                      WHERE access.product_name ILIKE %s OR game.canonical_name ILIKE %s OR access.channel_name ILIKE %s
+                      ORDER BY access.product_name
+                      LIMIT 100
+                      ''',
+                      ['%一起来修仙%', '%一起来修仙%', '%3733%'],
+                  ).fetchall()
+              print('=== ACCESS ITEM -> GAME LINKS ===')
+              print(compact([dict(row) for row in links]))
+
+              history = conn.execute(
+                  '''
+                  SELECT record.id AS bill_id, record.settlement_month, record.partner_name, record.channel_name,
+                         record.status AS bill_status, line.game_name, line.game_id,
+                         line.share_rate, line.tax_rate, line.channel_fee_rate,
+                         line.settlement_cycle, line.platform_settlement_amount, line.system_settlement_amount
+                  FROM channel_records AS record
+                  JOIN channel_record_line_items AS line ON line.channel_record_id = record.id
+                  WHERE (record.partner_name ILIKE %s OR record.channel_name ILIKE %s)
+                    AND line.game_name ILIKE %s
+                  ORDER BY line.settlement_cycle, record.id
+                  ''',
+                  ['%三七三三%', '%3733%', '%一起来修仙%'],
+              ).fetchall()
+              print('=== CHANNEL HISTORY ===')
+              print(compact([dict(row) for row in history]))
+
+              raw_candidates = [dict(row) for row in conn.execute(_CANDIDATE_SQL).fetchall()]
+              candidates = enrich_candidates_with_game_ids(conn, raw_candidates)
+              resolved_lines = enrich_lines_with_game_ids(conn, [
+                  {'line_index': 0, 'game_name': game, 'settlement_cycle': cycle}
+              ])
+              result = recommend_channel_rules(partner, channel, resolved_lines, candidates)
+              print('=== RESOLVED INPUT LINE ===')
+              print(compact(resolved_lines))
+              print('=== LIVE MATCHER RESULT ===')
+              print(compact(result))
+          PY
