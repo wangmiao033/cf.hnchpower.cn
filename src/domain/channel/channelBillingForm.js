@@ -3,6 +3,7 @@ import { getChannelLineItems } from '@/domain/channel/channelAggregates.js'
 
 export const XIAN_WEIZHEN_9917_RULE = 'xian_weizhen_9917'
 export const HONOR_UPFRONT_PERCENT_FEE_RULE = 'honor_upfront_percent_fee'
+export const ANJIU_PRE_DISCOUNT_DEDUCTION_RULE = 'anjiu_pre_discount_deduction'
 
 export const CHANNEL_RULE_PRESETS = {
   legacy_fixed_fee_tax: { label: '固定通道费 + 分成税（旧规则）', feeMode: 'fixed', taxMode: 'share' },
@@ -10,6 +11,7 @@ export const CHANNEL_RULE_PRESETS = {
   [HONOR_UPFRONT_PERCENT_FEE_RULE]: { label: '荣耀：流水先扣通道费后分成', feeMode: 'percent', taxMode: 'none', feeRate: 5 },
   xiaomi_percent_fee: { label: '百分比渠道费，税率仅记录（小米类）', feeMode: 'percent', taxMode: 'none', feeRate: 5 },
   [XIAN_WEIZHEN_9917_RULE]: { label: '西安维真（9917）专属规则', feeMode: 'percent', taxMode: 'none', feeRate: 5 },
+  [ANJIU_PRE_DISCOUNT_DEDUCTION_RULE]: { label: '广东安久 / 游戏fan：扣减后再折扣', feeMode: 'percent', taxMode: 'share' },
   percent_fee_after_tax: { label: '百分比渠道费后再扣税', feeMode: 'percent', taxMode: 'after_fee' },
   share_only: { label: '仅按可分成金额 × 分成比例', feeMode: 'none', taxMode: 'none' },
   custom: { label: '自定义规则', feeMode: 'fixed', taxMode: 'share' }
@@ -36,6 +38,7 @@ function hasLineRuleValue(value) { return value !== undefined && value !== null 
 export function detectChannelRulePreset(name) {
   const text = String(name || '').replace(/\s/g, '').toLowerCase()
   if (text.includes('西安维真') || text.includes('维真视界')) return XIAN_WEIZHEN_9917_RULE
+  if (text.includes('广东安久科技有限公司') || text.includes('游戏fan（安久）') || text.includes('游戏fan(安久)')) return ANJIU_PRE_DISCOUNT_DEDUCTION_RULE
   return text.includes('小米') || text.includes('xiaomi') || text.includes('瓦力') ? 'xiaomi_percent_fee' : ''
 }
 
@@ -52,8 +55,8 @@ export function applyChannelRulePreset(header, code) {
 
 export function applyTargetedChannelRule(header = initialHeaderForm) {
   const preset = detectChannelRulePreset(header.partnerName || header.channelName)
-  if (preset !== XIAN_WEIZHEN_9917_RULE) return header
-  return applyChannelRulePreset(header, XIAN_WEIZHEN_9917_RULE)
+  if (![XIAN_WEIZHEN_9917_RULE, ANJIU_PRE_DISCOUNT_DEDUCTION_RULE].includes(preset)) return header
+  return applyChannelRulePreset(header, preset)
 }
 
 export function resolveChannelLineRuleHeader(data = {}, header = initialHeaderForm) {
@@ -63,6 +66,17 @@ export function resolveChannelLineRuleHeader(data = {}, header = initialHeaderFo
   const hasLineRule = ['settlementRuleCode', 'channelFeeMode', 'channelFeeRate', 'taxMode', 'validationTolerance']
     .some((key) => hasLineRuleValue(data?.[key]))
   if (!hasLineRule) return effectiveHeader
+
+  if (effectiveHeader.settlementRuleCode === ANJIU_PRE_DISCOUNT_DEDUCTION_RULE) {
+    return {
+      ...effectiveHeader,
+      settlementRuleCode: ANJIU_PRE_DISCOUNT_DEDUCTION_RULE,
+      channelFeeMode: hasLineRuleValue(data.channelFeeMode) ? data.channelFeeMode : effectiveHeader.channelFeeMode,
+      channelFeeRate: hasLineRuleValue(data.channelFeeRate) ? data.channelFeeRate : effectiveHeader.channelFeeRate,
+      taxMode: 'share',
+      validationTolerance: hasLineRuleValue(data.validationTolerance) ? data.validationTolerance : effectiveHeader.validationTolerance
+    }
+  }
 
   return {
     ...effectiveHeader,
@@ -78,6 +92,9 @@ export function ruleFormulaText(header) {
   const effectiveHeader = applyTargetedChannelRule(header)
   if (effectiveHeader.settlementRuleCode === XIAN_WEIZHEN_9917_RULE) {
     return '西安维真9917：代金券/福利币仅记录；其余原扣减项参与 × 分成比例 × (1 - 5%通道费)，税率仅记录'
+  }
+  if (effectiveHeader.settlementRuleCode === ANJIU_PRE_DISCOUNT_DEDUCTION_RULE) {
+    return '广东安久 / 游戏fan：（后台流水 - 代金券/退款/测试费等扣减）× 折扣系数 × 分成比例 ×（1 - 渠道费率 - 税费率）'
   }
   if (effectiveHeader.settlementRuleCode === HONOR_UPFRONT_PERCENT_FEE_RULE) {
     return `荣耀： (总流水 - 总流水 × ${Number(effectiveHeader.channelFeeRate || 0)}%通道费 - 代金券/退款等扣减) × 分成比例；税率按合同记录`
@@ -128,6 +145,9 @@ export function calculateBillingAmount(data, header = initialHeaderForm) {
   const effectiveHeader = resolveChannelLineRuleHeader(data, header)
   const effectiveFlow = effectiveLineFlowFromFormData(data)
   const deductions = deductionFieldsForHeader(effectiveHeader).reduce((sum, key) => sum + Number(data[key] || 0), 0)
+  if (effectiveHeader.settlementRuleCode === ANJIU_PRE_DISCOUNT_DEDUCTION_RULE) {
+    return (Number(data.flow || 0) - deductions) * resolveDiscountFactor(data)
+  }
   if (effectiveHeader.settlementRuleCode === HONOR_UPFRONT_PERCENT_FEE_RULE) {
     const upfrontChannelFee = effectiveFlow * Number(effectiveHeader.channelFeeRate || 0) / 100
     return effectiveFlow - upfrontChannelFee - deductions
