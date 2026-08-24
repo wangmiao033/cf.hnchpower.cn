@@ -283,15 +283,9 @@ export default function ChannelSmartEntryBar({
   }, [contractGames, previousLines, resolveGameName])
 
   const contractGameKeys = useMemo(() => new Set(contractGames.map((item) => textKey(item.gameName))), [contractGames])
-  const historicalGameKeys = useMemo(() => new Set(previousLines
-    .map((item) => textKey(resolveGameName(item?.gameName)))
-    .filter(Boolean)), [previousLines, resolveGameName])
   const missingGames = useMemo(() => namedLines(record)
     .map((item) => String(item.gameName || '').trim())
-    .filter((name) => {
-      const key = textKey(resolveGameName(name))
-      return name && !contractGameKeys.has(key) && !historicalGameKeys.has(key)
-    }), [record, contractGameKeys, historicalGameKeys, resolveGameName])
+    .filter((name) => name && !contractGameKeys.has(textKey(resolveGameName(name)))), [record, contractGameKeys, resolveGameName])
 
   const pendingState = useMemo(() => parsePendingNotes(record?.remark), [record?.remark])
   const pendingItems = pendingState.items
@@ -639,17 +633,13 @@ export default function ChannelSmartEntryBar({
   const loaded = contractState.key === partnerKey && !contractState.loading
   const sourceText = `${contractGames.length} 个合同游戏${previousLines.length ? ` · 上月 ${previousLines.length} 个` : ''}`
   const matchedLineCount = namedLines(record).filter((line) => contractGameFor(line.gameName)).length
-  const historicalMatchedLineCount = namedLines(record).filter((line) => {
-    const key = textKey(resolveGameName(line.gameName))
-    return !contractGameKeys.has(key) && historicalGameKeys.has(key)
-  }).length
   const channelAliasRemembered = channelName && resolveAlias(aliasMemory, 'channel', channelName) !== channelName
 
   return (
     <section className="channel-smart-entry" aria-label="渠道账单智能录入">
       <div className="channel-smart-entry__head">
         <div>
-          <span>V3.3 · 智能账单录入</span>
+          <span>V3.2 · 智能账单录入</span>
           <strong>选渠道、补月份，系统准备游戏清单和合同规则</strong>
           <small>充值/后台流水不读取数据库、不自动写入，仍由你手工填写。</small>
         </div>
@@ -686,7 +676,7 @@ export default function ChannelSmartEntryBar({
         </div>
       ) : null}
 
-      {loaded && partnerName && contractState.items.length === 0 && previousLines.length === 0 ? (
+      {loaded && partnerName && contractState.items.length === 0 ? (
         <div className="channel-smart-entry__notice is-warning channel-smart-entry__notice--actions">
           <div>
             <strong>当前合作方没有可用合同</strong>
@@ -702,8 +692,8 @@ export default function ChannelSmartEntryBar({
       {missingGames.length ? (
         <div className="channel-smart-entry__missing">
           <div>
-            <strong>发现 {missingGames.length} 个游戏既无合同清单，也无上月账单记录</strong>
-            <span>只有真正的新游戏才需要补清单、映射名称或挂起待补。</span>
+            <strong>发现 {missingGames.length} 个游戏缺少合同合作清单</strong>
+            <span>补清单、映射名称、挂起待补，都在当前账单完成。</span>
           </div>
           <div className="channel-smart-entry__issue-list">
             {missingGames.map((gameName) => (
@@ -724,7 +714,7 @@ export default function ChannelSmartEntryBar({
         <div className="channel-smart-entry__inline-tools">
           <div>
             <strong>就地处理</strong>
-            <span>{matchedLineCount} 个游戏已匹配合同{historicalMatchedLineCount ? ` · ${historicalMatchedLineCount} 个按上月历史识别` : ''}；只有真正新游戏才需要补资料。</span>
+            <span>{matchedLineCount} 个游戏已匹配合同；规则不对或资料没齐都不用跳页面。</span>
           </div>
           <div>
             <button type="button" disabled={!matchedLineCount} onClick={openRuleEditor}>调整合同规则</button>
