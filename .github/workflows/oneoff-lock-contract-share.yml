@@ -1,0 +1,81 @@
+name: One-off lock contract share rate
+
+on:
+  push:
+    branches:
+      - fix/lock-contract-share-rate-20260824
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/lock-contract-share-rate-20260824
+          fetch-depth: 0
+      - name: Lock share rate when contract rule is authoritative
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/components/channel/ChannelBillingForm.jsx')
+          text = path.read_text(encoding='utf-8')
+
+          old = '''              const rowRuleHeader = resolveChannelLineRuleHeader(row, effectiveRuleHeader)
+              const rowFeeMode = rowRuleHeader.channelFeeMode || 'fixed'
+              const details = calculateSettlementDetails(row, rowRuleHeader)
+              const monthRisk = settlementMonthRisk(row.settlementCycle, currentMonthKey)
+              return ('''
+          new = '''              const rowRuleHeader = resolveChannelLineRuleHeader(row, effectiveRuleHeader)
+              const rowFeeMode = rowRuleHeader.channelFeeMode || 'fixed'
+              const contractLineRule = (contractRuleState.recommendation?.lines || []).find((item) => item.line_index === index)
+              const contractShareRate = autoApplyContractRules && contractLineRule?.match && contractLineRule?.auto_apply && contractLineRule?.recommended?.share_rate != null
+                ? Number(contractLineRule.recommended.share_rate)
+                : null
+              const details = calculateSettlementDetails(row, rowRuleHeader)
+              const monthRisk = settlementMonthRisk(row.settlementCycle, currentMonthKey)
+              return ('''
+          if old not in text:
+              raise SystemExit('row render anchor not found')
+          text = text.replace(old, new, 1)
+
+          old = '''                  <td><input type="number" step="0.01" className="admin-input" value={row.shareRate} onChange={(e) => handleLineChange(index, 'shareRate', e.target.value)} placeholder="合同带入/人工填写" /></td>'''
+          new = '''                  {contractShareRate != null ? (
+                    <td className="channel-line-num" title="来自合同合作清单；如需修改请先调整合同规则">{contractShareRate}%</td>
+                  ) : (
+                    <td><input type="number" step="0.01" className="admin-input" value={row.shareRate} onChange={(e) => handleLineChange(index, 'shareRate', e.target.value)} placeholder="待合同匹配/补清单" /></td>
+                  )}'''
+          if old not in text:
+              raise SystemExit('share rate cell not found')
+          text = text.replace(old, new, 1)
+          path.write_text(text, encoding='utf-8')
+
+          test_path = Path('src/components/channel/channelContractSafety.test.js')
+          test = test_path.read_text(encoding='utf-8')
+          anchor = '''  it('labels technical errors separately from business rule gaps', () => {'''
+          addition = '''  it('locks share rate to the matched contract rule instead of asking for repeated input', () => {
+    expect(billingSource).toContain('const contractShareRate = autoApplyContractRules')
+    expect(billingSource).toContain('contractLineRule?.match && contractLineRule?.auto_apply')
+    expect(billingSource).toContain('来自合同合作清单；如需修改请先调整合同规则')
+    expect(billingSource).toContain('待合同匹配/补清单')
+  })
+
+'''
+          if addition.strip() not in test:
+              if anchor not in test:
+                  raise SystemExit('test anchor not found')
+              test = test.replace(anchor, addition + anchor, 1)
+          test_path.write_text(test, encoding='utf-8')
+          PY
+
+          rm -f .github/workflows/oneoff-lock-contract-share.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'fix: lock channel share rate to matched contract rule'
+          git push origin HEAD:fix/lock-contract-share-rate-20260824
