@@ -143,6 +143,8 @@ def list_bank_transactions(
                 BankTransaction.instruction_no.ilike(term),
                 BankTransaction.remark.ilike(term),
                 BankTransaction.summary.ilike(term),
+                BankTransaction.purpose.ilike(term),
+                BankTransaction.raw_text.ilike(term),
                 BankTransaction.source_file_name.ilike(term),
                 BankTransaction.reconciliation_no.ilike(term),
             )

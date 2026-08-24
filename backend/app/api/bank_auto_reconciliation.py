@@ -48,10 +48,22 @@ router = APIRouter()
 @router.get("", response_model=BankAutoReconciliationDashboard)
 def get_bank_auto_reconciliation_dashboard(
     limit: int = Query(200, ge=1, le=500),
+    q: str | None = Query(None),
+    date_from: str | None = Query(None),
+    date_to: str | None = Query(None),
     db: Session = Depends(get_db),
     _user: AuthUser = Depends(require_current_user),
 ) -> BankAutoReconciliationDashboard:
-    result = filter_cumulative_bank_suggestions(db, build_dashboard(db, limit=limit))
+    result = filter_cumulative_bank_suggestions(
+        db,
+        build_dashboard(
+            db,
+            limit=limit,
+            q=q,
+            date_from=date_from,
+            date_to=date_to,
+        ),
+    )
     # 主表仍保留原一对一引擎；同时读取 P2 候选，把唯一精确多账单组合注入同一响应。
     # 这样银行中心主表即可直接处理“一笔流水 -> 多张账单”，无需切换旁路入口。
     p2_result = filter_cumulative_bank_suggestions(db, build_p2_dashboard(db, limit=limit))

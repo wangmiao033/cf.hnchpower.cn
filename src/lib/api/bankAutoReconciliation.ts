@@ -166,10 +166,21 @@ function afterBankMutation<T>(request: Promise<T>): Promise<T> {
   })
 }
 
-export function getBankAutoReconciliationDashboard(limit = 200) {
+export type BankDashboardFilters = {
+  q?: string
+  date_from?: string
+  date_to?: string
+}
+
+export function getBankAutoReconciliationDashboard(limit = 200, filters: BankDashboardFilters = {}) {
+  const params = new URLSearchParams({ limit: String(limit) })
+  if (filters.q) params.set('q', filters.q)
+  if (filters.date_from) params.set('date_from', filters.date_from)
+  if (filters.date_to) params.set('date_to', filters.date_to)
+  const query = params.toString()
   return loadDashboard(
-    `dashboard:${limit}`,
-    () => apiGet<BankAutoReconciliationDashboard>(`${PATH}?limit=${limit}`)
+    `dashboard:${query}`,
+    () => apiGet<BankAutoReconciliationDashboard>(`${PATH}?${query}`)
   )
 }
 
