@@ -23,47 +23,73 @@ def _relation_exists(conn, name: str) -> bool:
     return bool(row and row.get("name"))
 
 
-def _alias_map(conn, normalized_names: list[str]) -> dict[str, str]:
+def _identity_map(conn, normalized_names: list[str]) -> dict[str, dict[str, str]]:
     keys = sorted({key for key in normalized_names if key})
     if not keys or not _relation_exists(conn, "game_registry_games"):
         return {}
 
-    result: dict[str, str] = {}
+    result: dict[str, dict[str, str]] = {}
     rows = conn.execute(
         """
-        SELECT normalized_name AS normalized_alias, id AS game_id
+        SELECT normalized_name AS normalized_alias, id AS game_id, canonical_name
         FROM game_registry_games
         WHERE normalized_name = ANY(%s)
         """,
         [keys],
     ).fetchall()
     for row in rows:
-        result[str(row["normalized_alias"])] = str(row["game_id"])
+        result[str(row["normalized_alias"])] = {
+            "game_id": str(row["game_id"]),
+            "canonical_name": str(row["canonical_name"] or ""),
+        }
 
     if _relation_exists(conn, "game_registry_aliases"):
         rows = conn.execute(
             """
-            SELECT normalized_alias, game_id
-            FROM game_registry_aliases
-            WHERE normalized_alias = ANY(%s)
+            SELECT alias.normalized_alias, alias.game_id, game.canonical_name
+            FROM game_registry_aliases AS alias
+            JOIN game_registry_games AS game ON game.id = alias.game_id
+            WHERE alias.normalized_alias = ANY(%s)
             """,
             [keys],
         ).fetchall()
         for row in rows:
-            result[str(row["normalized_alias"])] = str(row["game_id"])
+            result[str(row["normalized_alias"])] = {
+                "game_id": str(row["game_id"]),
+                "canonical_name": str(row["canonical_name"] or ""),
+            }
     return result
+
+
+def _games_by_id(conn, game_ids: list[str]) -> dict[str, str]:
+    ids = sorted({str(value or "").strip() for value in game_ids if str(value or "").strip()})
+    if not ids or not _relation_exists(conn, "game_registry_games"):
+        return {}
+    rows = conn.execute(
+        """
+        SELECT id, canonical_name
+        FROM game_registry_games
+        WHERE id = ANY(%s)
+        """,
+        [ids],
+    ).fetchall()
+    return {str(row["id"]): str(row["canonical_name"] or "") for row in rows}
 
 
 def enrich_lines_with_game_ids(conn, lines: list[dict]) -> list[dict]:
     normalized = [normalize_registry_game(item.get("game_name") or item.get("gameName")) for item in lines]
-    aliases = _alias_map(conn, normalized)
+    identities = _identity_map(conn, normalized)
     enriched: list[dict] = []
     for item, key in zip(lines, normalized):
         row = dict(item)
-        game_id = aliases.get(key)
-        if game_id:
-            row["game_id"] = game_id
+        identity = identities.get(key)
+        if identity:
+            original_name = str(row.get("game_name") or row.get("gameName") or "")
+            row["input_game_name"] = original_name
+            row["game_id"] = identity["game_id"]
             row["game_identity_source"] = "registry"
+            if identity["canonical_name"]:
+                row["game_name"] = identity["canonical_name"]
         enriched.append(row)
     return enriched
 
@@ -86,18 +112,30 @@ def enrich_candidates_with_game_ids(conn, candidates: list[dict]) -> list[dict]:
         ).fetchall()
         explicit_links = {str(row["access_item_id"]): str(row["game_id"]) for row in rows}
 
+    linked_names = _games_by_id(conn, list(explicit_links.values()))
     normalized = [normalize_registry_game(item.get("product_name")) for item in candidates]
-    aliases = _alias_map(conn, normalized)
+    identities = _identity_map(conn, normalized)
 
     enriched: list[dict] = []
     for item, key in zip(candidates, normalized):
         row = dict(item)
+        original_name = str(row.get("product_name") or "")
         access_id = str(row.get("access_item_id") or "")
-        if access_id in explicit_links:
-            row["game_id"] = explicit_links[access_id]
+        game_id = explicit_links.get(access_id)
+        if game_id:
+            row["original_product_name"] = original_name
+            row["game_id"] = game_id
             row["game_identity_source"] = "access_link"
-        elif aliases.get(key):
-            row["game_id"] = aliases[key]
-            row["game_identity_source"] = "registry_alias"
+            canonical = linked_names.get(game_id)
+            if canonical:
+                row["product_name"] = canonical
+        else:
+            identity = identities.get(key)
+            if identity:
+                row["original_product_name"] = original_name
+                row["game_id"] = identity["game_id"]
+                row["game_identity_source"] = "registry_alias"
+                if identity["canonical_name"]:
+                    row["product_name"] = identity["canonical_name"]
         enriched.append(row)
     return enriched
