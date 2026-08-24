@@ -52,6 +52,14 @@ def _number(value: Any) -> float | None:
     return parsed if parsed == parsed else None
 
 
+def _is_honor_candidate(candidate: dict) -> bool:
+    text = " ".join(
+        str(candidate.get(field) or "")
+        for field in ("channel_name", "partner_name", "partner_short_name", "counterparty", "contract_name")
+    ).replace(" ", "").lower()
+    return "荣耀" in text or "honor" in text
+
+
 def _rule_fields(candidate: dict) -> dict:
     fee = _number(candidate.get("channel_fee_rate"))
     tax = _number(candidate.get("invoice_tax_rate"))
@@ -71,6 +79,12 @@ def _rule_fields(candidate: dict) -> dict:
         rule_code = "share_only"
         fee_mode = "none"
         fee_value = 0.0
+    elif _is_honor_candidate(candidate):
+        # HONOR settlement statement charges the payment-channel commission on gross flow
+        # before revenue share. The contract still supplies the actual fee percentage.
+        rule_code = "honor_upfront_percent_fee"
+        fee_mode = "percent"
+        fee_value = round(fee, 4)
     elif abs(fee - 5.0) <= EPS:
         rule_code = "five_percent_gateway_share"
         fee_mode = "percent"

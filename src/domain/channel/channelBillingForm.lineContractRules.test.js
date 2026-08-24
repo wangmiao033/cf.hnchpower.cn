@@ -90,4 +90,24 @@ describe('渠道账单按明细合同规则计算', () => {
     expect(record.settlementDifference).toBe(0)
     expect(record.validationStatus).toBe('pass')
   })
+  it('荣耀通道费按原始流水前置扣除后再分成', () => {
+    const row = baseLine({
+      gameName: '创世封神',
+      flow: '822',
+      voucherCost: '74.82',
+      shareRate: '50',
+      taxRate: '0',
+      platformSettlementAmount: '353.04',
+      settlementRuleCode: 'honor_upfront_percent_fee',
+      channelFeeMode: 'percent',
+      channelFeeRate: '5',
+      taxMode: 'none'
+    })
+
+    const details = calculateSettlementDetails(row, fivePercentHeader)
+    expect(details.systemSettlementAmount).toBe(353.04)
+    expect(details.settlementDifference).toBe(0)
+    expect(details.validationStatus).toBe('pass')
+  })
+
 })
