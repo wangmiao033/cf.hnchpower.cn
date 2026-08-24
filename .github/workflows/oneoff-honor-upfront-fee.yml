@@ -1,0 +1,144 @@
+name: One-off Honor upfront channel fee
+
+on:
+  push:
+    branches:
+      - fix/honor-upfront-channel-fee-20260824
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/honor-upfront-channel-fee-20260824
+          fetch-depth: 0
+      - name: Apply Honor upfront channel fee rule
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(text, old, new, label):
+              if old not in text:
+                  raise SystemExit(f'{label} anchor not found')
+              return text.replace(old, new, 1)
+
+          path = Path('src/domain/channel/channelBillingForm.js')
+          text = path.read_text(encoding='utf-8')
+          text = replace_once(
+              text,
+              "export const XIAN_WEIZHEN_9917_RULE = 'xian_weizhen_9917'\n",
+              "export const XIAN_WEIZHEN_9917_RULE = 'xian_weizhen_9917'\nexport const HONOR_UPFRONT_PERCENT_FEE_RULE = 'honor_upfront_percent_fee'\n",
+              'Honor rule constant',
+          )
+          text = replace_once(
+              text,
+              "  five_percent_gateway_share: { label: '5%支付通道费后分成（不扣税）', feeMode: 'percent', taxMode: 'none', feeRate: 5 },\n",
+              "  five_percent_gateway_share: { label: '5%支付通道费后分成（不扣税）', feeMode: 'percent', taxMode: 'none', feeRate: 5 },\n  [HONOR_UPFRONT_PERCENT_FEE_RULE]: { label: '荣耀：流水先扣通道费后分成', feeMode: 'percent', taxMode: 'none', feeRate: 5 },\n",
+              'Honor preset',
+          )
+          text = replace_once(
+              text,
+              "  if (effectiveHeader.settlementRuleCode === XIAN_WEIZHEN_9917_RULE) {\n    return '西安维真9917：代金券/福利币仅记录；其余原扣减项参与 × 分成比例 × (1 - 5%通道费)，税率仅记录'\n  }\n",
+              "  if (effectiveHeader.settlementRuleCode === XIAN_WEIZHEN_9917_RULE) {\n    return '西安维真9917：代金券/福利币仅记录；其余原扣减项参与 × 分成比例 × (1 - 5%通道费)，税率仅记录'\n  }\n  if (effectiveHeader.settlementRuleCode === HONOR_UPFRONT_PERCENT_FEE_RULE) {\n    return `荣耀： (总流水 - 总流水 × ${Number(effectiveHeader.channelFeeRate || 0)}%通道费 - 代金券/退款等扣减) × 分成比例；税率按合同记录`\n  }\n",
+              'Honor formula label',
+          )
+          text = replace_once(
+              text,
+              "export function calculateBillingAmount(data, header = initialHeaderForm) {\n  const effectiveHeader = resolveChannelLineRuleHeader(data, header)\n  return effectiveLineFlowFromFormData(data) - deductionFieldsForHeader(effectiveHeader).reduce((sum, key) => sum + Number(data[key] || 0), 0)\n}\n",
+              "export function calculateBillingAmount(data, header = initialHeaderForm) {\n  const effectiveHeader = resolveChannelLineRuleHeader(data, header)\n  const effectiveFlow = effectiveLineFlowFromFormData(data)\n  const deductions = deductionFieldsForHeader(effectiveHeader).reduce((sum, key) => sum + Number(data[key] || 0), 0)\n  if (effectiveHeader.settlementRuleCode === HONOR_UPFRONT_PERCENT_FEE_RULE) {\n    const upfrontChannelFee = effectiveFlow * Number(effectiveHeader.channelFeeRate || 0) / 100\n    return effectiveFlow - upfrontChannelFee - deductions\n  }\n  return effectiveFlow - deductions\n}\n",
+              'Honor billing base',
+          )
+          text = replace_once(
+              text,
+              "  if (feeMode === 'percent') afterFee = shareAmount * (1 - Number(effectiveHeader.channelFeeRate || 0) / 100)\n",
+              "  if (feeMode === 'percent' && effectiveHeader.settlementRuleCode !== HONOR_UPFRONT_PERCENT_FEE_RULE) afterFee = shareAmount * (1 - Number(effectiveHeader.channelFeeRate || 0) / 100)\n",
+              'Honor avoid double fee',
+          )
+          path.write_text(text, encoding='utf-8')
+
+          path = Path('src/domain/channel/channelBillingForm.lineContractRules.test.js')
+          text = path.read_text(encoding='utf-8')
+          addition = '''\n  it('荣耀通道费按原始流水前置扣除后再分成', () => {\n    const row = baseLine({\n      gameName: '创世封神',\n      flow: '822',\n      voucherCost: '74.82',\n      shareRate: '50',\n      taxRate: '0',\n      platformSettlementAmount: '353.04',\n      settlementRuleCode: 'honor_upfront_percent_fee',\n      channelFeeMode: 'percent',\n      channelFeeRate: '5',\n      taxMode: 'none'\n    })\n\n    const details = calculateSettlementDetails(row, fivePercentHeader)\n    expect(details.systemSettlementAmount).toBe(353.04)\n    expect(details.settlementDifference).toBe(0)\n    expect(details.validationStatus).toBe('pass')\n  })\n'''
+          if '荣耀通道费按原始流水前置扣除后再分成' not in text:
+              idx = text.rfind('\n})')
+              if idx < 0:
+                  raise SystemExit('frontend test closing anchor not found')
+              text = text[:idx] + addition + text[idx:]
+          path.write_text(text, encoding='utf-8')
+
+          path = Path('contract_terms/channel_rule_recommender.py')
+          text = path.read_text(encoding='utf-8')
+          helper = '''\n\ndef _is_honor_candidate(candidate: dict) -> bool:\n    text = " ".join(\n        str(candidate.get(field) or "")\n        for field in ("channel_name", "partner_name", "partner_short_name", "counterparty", "contract_name")\n    ).replace(" ", "").lower()\n    return "荣耀" in text or "honor" in text\n'''
+          marker = '\n\ndef _rule_fields(candidate: dict) -> dict:\n'
+          if helper.strip() not in text:
+              if marker not in text:
+                  raise SystemExit('Honor recommender helper anchor not found')
+              text = text.replace(marker, helper + marker, 1)
+          text = replace_once(
+              text,
+              "    elif abs(fee - 5.0) <= EPS:\n        rule_code = \"five_percent_gateway_share\"\n        fee_mode = \"percent\"\n        fee_value = round(fee, 4)\n",
+              "    elif _is_honor_candidate(candidate):\n        # HONOR settlement statement charges the payment-channel commission on gross flow\n        # before revenue share. The contract still supplies the actual fee percentage.\n        rule_code = \"honor_upfront_percent_fee\"\n        fee_mode = \"percent\"\n        fee_value = round(fee, 4)\n    elif abs(fee - 5.0) <= EPS:\n        rule_code = \"five_percent_gateway_share\"\n        fee_mode = \"percent\"\n        fee_value = round(fee, 4)\n",
+              'Honor recommender rule',
+          )
+          path.write_text(text, encoding='utf-8')
+          PY
+
+          cat > contract_terms/test_honor_upfront_fee.py <<'PYTEST'
+          import unittest
+
+          from channel_rule_recommender import recommend_channel_rules
+
+
+          class HonorUpfrontChannelFeeTests(unittest.TestCase):
+              def test_honor_contract_uses_gross_flow_upfront_fee_rule(self):
+                  candidate = {
+                      "contract_id": "C-HONOR",
+                      "contract_name": "荣耀渠道合作协议",
+                      "contract_no": "HT-HONOR",
+                      "access_item_id": "A-HONOR-GAME",
+                      "partner_name": "荣耀",
+                      "partner_short_name": "荣耀",
+                      "counterparty": "荣耀",
+                      "product_name": "创世封神",
+                      "channel_name": "荣耀",
+                      "authorization_start": "2026-01-01",
+                      "authorization_end": "2026-12-31",
+                      "share_rate": 50,
+                      "channel_fee_rate": 5,
+                      "invoice_tax_rate": 0,
+                      "settlement_mode": "流水分成",
+                      "settlement_basis": "按平台账单结算",
+                      "payment_terms": "月结",
+                      "access_status": "生效",
+                      "performance_status": "履约中",
+                  }
+                  result = recommend_channel_rules(
+                      "荣耀",
+                      "荣耀",
+                      [{"line_index": 0, "game_name": "创世封神", "settlement_cycle": "2026-02"}],
+                      [candidate],
+                  )
+                  row = result["lines"][0]
+                  self.assertTrue(row["auto_apply"])
+                  self.assertEqual(row["recommended"]["settlement_rule_code"], "honor_upfront_percent_fee")
+                  self.assertEqual(row["recommended"]["channel_fee_rate"], 5)
+                  self.assertEqual(row["recommended"]["share_rate"], 50)
+                  self.assertEqual(row["recommended"]["tax_rate"], 0)
+
+
+          if __name__ == "__main__":
+              unittest.main()
+          PYTEST
+
+          rm -f .github/workflows/oneoff-honor-upfront-fee.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'fix: apply Honor channel fee before revenue share'
+          git push origin HEAD:fix/honor-upfront-channel-fee-20260824
