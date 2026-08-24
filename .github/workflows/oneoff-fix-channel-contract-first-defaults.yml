@@ -1,6 +1,9 @@
 name: One-off fix channel contract-first defaults
 
 on:
+  push:
+    branches:
+      - fix/channel-contract-first-no-legacy-defaults-20260824
   pull_request:
     branches: [main]
 
@@ -9,12 +12,12 @@ permissions:
 
 jobs:
   patch:
-    if: github.head_ref == 'fix/channel-contract-first-no-legacy-defaults-20260824'
+    if: github.ref_name == 'fix/channel-contract-first-no-legacy-defaults-20260824' || github.head_ref == 'fix/channel-contract-first-no-legacy-defaults-20260824'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.head_ref }}
+          ref: ${{ github.head_ref || github.ref_name }}
           fetch-depth: 0
 
       - name: Patch contract-first fallback
@@ -125,9 +128,10 @@ jobs:
       - name: Remove one-off workflow and commit patch
         shell: bash
         run: |
+          BRANCH="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
           rm -f .github/workflows/oneoff-fix-channel-contract-first-defaults.yml
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add src/components/channel/ChannelBillingForm.jsx src/domain/channel/channelBillingForm.js .github/workflows/oneoff-fix-channel-contract-first-defaults.yml
           git commit -m 'fix: remove legacy 30/5 fallback from contract-first bills'
-          git push origin HEAD:${{ github.head_ref }}
+          git push origin HEAD:"$BRANCH"
