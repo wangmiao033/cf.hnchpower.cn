@@ -1,15 +1,15 @@
 name: One-off restore contract supplement fallback
 
 on:
-  push:
-    branches:
-      - fix/restore-contract-supplement-fallback-20260824
+  pull_request:
+    branches: [main]
 
 permissions:
   contents: write
 
 jobs:
   patch:
+    if: github.head_ref == 'fix/restore-contract-supplement-fallback-20260824'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
