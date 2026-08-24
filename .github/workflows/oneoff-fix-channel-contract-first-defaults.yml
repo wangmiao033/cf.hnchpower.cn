@@ -1,0 +1,133 @@
+name: One-off fix channel contract-first defaults
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.head_ref == 'fix/channel-contract-first-no-legacy-defaults-20260824'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+
+      - name: Patch contract-first fallback
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          form_path = Path('src/components/channel/ChannelBillingForm.jsx')
+          text = form_path.read_text(encoding='utf-8')
+
+          old = '''          if (result.partner_rule_status === 'none') {
+            if (mode === 'add') {
+              setHeader((current) => fallbackHeader(current))
+              setLines((current) => current.map((row) => ({
+                ...clearLineContractRule(row),
+                shareRate: String(row.shareRate || '30'),
+                taxRate: String(row.taxRate || '5')
+              })))
+            }
+            setContractRuleState({
+              loading: false,
+              tone: 'review',
+              message: mode === 'edit'
+                ? '未找到该合作方合同清单，已保留当前账单原有规则；这类“未匹配”不直接判为业务差异。'
+                : '待补规则：未找到该合作方合同清单，已回退到原有人工/渠道规则；本次不会把旧默认值冒充合同值。','''
+          new = '''          if (result.partner_rule_status === 'none') {
+            if (mode === 'add') {
+              setHeader((current) => targeted ? applyTargetedChannelRule(current) : ({
+                ...current,
+                settlementRuleCode: 'custom',
+                channelFeeMode: 'none',
+                channelFeeRate: '',
+                taxMode: 'none'
+              }))
+              setLines((current) => current.map((row) => ({
+                ...clearLineContractRule(row),
+                shareRate: '',
+                taxRate: ''
+              })))
+            }
+            setContractRuleState({
+              loading: false,
+              tone: 'review',
+              message: mode === 'edit'
+                ? '未找到该合作方合同清单，已保留当前账单原有规则；这类“未匹配”不直接判为业务差异。'
+                : '待补规则：未找到该合作方合同清单；新增账单的分成/税率/通道费保持空白，不使用历史值或30%/5%默认值。','''
+          if old not in text:
+              raise SystemExit('legacy none fallback block not found')
+          text = text.replace(old, new, 1)
+
+          old = '''  const handleLineChange = (index, field, value) => {
+    setLines((current) => current.map((row, rowIndex) => {
+      if (rowIndex !== index) return row
+      const next = field === 'gameName' || field === 'settlementCycle' ? clearLineContractRule(row) : row
+      return { ...next, [field]: value }
+    }))
+  }'''
+          new = '''  const handleLineChange = (index, field, value) => {
+    setLines((current) => current.map((row, rowIndex) => {
+      if (rowIndex !== index) return row
+      const identityChanged = field === 'gameName' || field === 'settlementCycle'
+      const next = identityChanged ? clearLineContractRule(row) : row
+      return {
+        ...next,
+        ...(identityChanged && mode === 'add' ? { shareRate: '', taxRate: '' } : {}),
+        [field]: value
+      }
+    }))
+  }'''
+          if old not in text:
+              raise SystemExit('handleLineChange block not found')
+          text = text.replace(old, new, 1)
+
+          old = '''      if (mode === 'add' && baseline) next = applyContractRecommendationToLine(next, baseline)
+      else {
+        next.shareRate = String(last.shareRate ?? '')
+        next.taxRate = String(last.taxRate ?? '')
+      }'''
+          new = '''      if (mode === 'add' && baseline) next = applyContractRecommendationToLine(next, baseline)
+      else if (mode !== 'add') {
+        next.shareRate = String(last.shareRate ?? '')
+        next.taxRate = String(last.taxRate ?? '')
+      } else {
+        next.shareRate = ''
+        next.taxRate = ''
+      }'''
+          if old not in text:
+              raise SystemExit('addLine legacy copy block not found')
+          text = text.replace(old, new, 1)
+          form_path.write_text(text, encoding='utf-8')
+
+          domain_path = Path('src/domain/channel/channelBillingForm.js')
+          domain = domain_path.read_text(encoding='utf-8')
+          old = "    shareRate: '30', taxRate: '5', gatewayCost: '', platformSettlementAmount: ''"
+          new = "    shareRate: '', taxRate: '', gatewayCost: '', platformSettlementAmount: ''"
+          if old not in domain:
+              raise SystemExit('initialLineItem 30/5 defaults not found')
+          domain = domain.replace(old, new, 1)
+          old = "shareRate: String(line.shareRate ?? '30'), taxRate: String(line.taxRate ?? '5'), gatewayCost:"
+          new = "shareRate: String(line.shareRate ?? ''), taxRate: String(line.taxRate ?? ''), gatewayCost:"
+          if old not in domain:
+              raise SystemExit('recordToLineForms 30/5 fallback not found')
+          domain = domain.replace(old, new, 1)
+          domain_path.write_text(domain, encoding='utf-8')
+          PY
+
+      - name: Remove one-off workflow and commit patch
+        shell: bash
+        run: |
+          rm -f .github/workflows/oneoff-fix-channel-contract-first-defaults.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/components/channel/ChannelBillingForm.jsx src/domain/channel/channelBillingForm.js .github/workflows/oneoff-fix-channel-contract-first-defaults.yml
+          git commit -m 'fix: remove legacy 30/5 fallback from contract-first bills'
+          git push origin HEAD:${{ github.head_ref }}
