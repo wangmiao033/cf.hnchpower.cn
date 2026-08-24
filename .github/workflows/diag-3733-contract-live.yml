@@ -20,7 +20,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Read production environment safely
+      - name: Read production environment metadata safely
         shell: bash
         run: |
           set -euo pipefail
@@ -29,10 +29,10 @@ jobs:
             exit 1
           fi
           code="$(curl -sS -o /tmp/vercel-env.json -w '%{http_code}' \
-            "https://api.vercel.com/v10/projects/${VERCEL_PROJECT_ID}/env?teamId=${VERCEL_ORG_ID}&decrypt=true" \
+            "https://api.vercel.com/v10/projects/${VERCEL_PROJECT_ID}/env?teamId=${VERCEL_ORG_ID}" \
             -H "Authorization: Bearer ${VERCEL_TOKEN}")"
           if [ "$code" != "200" ]; then
-            echo "::error::Unable to read Vercel production env (HTTP $code)"
+            echo "::error::Unable to read Vercel production env metadata (HTTP $code)"
             exit 1
           fi
           test -s /tmp/vercel-env.json
@@ -46,14 +46,17 @@ jobs:
         run: |
           python - <<'PY'
           import json
+          import os
           import sys
+          import urllib.parse
+          import urllib.request
           from pathlib import Path
           import psycopg
           from psycopg.rows import dict_row
 
           payload = json.load(open('/tmp/vercel-env.json', encoding='utf-8'))
           wanted = {'QUICKSDK_DATABASE_URL', 'DATABASE_URL'}
-          found = {}
+          candidates = []
 
           def production_target(value):
               target = value.get('target')
@@ -68,8 +71,9 @@ jobs:
           def walk(value):
               if isinstance(value, dict):
                   key = value.get('key')
-                  if key in wanted and production_target(value) and value.get('value'):
-                      found[key] = str(value.get('value'))
+                  env_id = value.get('id')
+                  if key in wanted and env_id and production_target(value):
+                      candidates.append((str(key), str(env_id)))
                   for item in value.values():
                       walk(item)
               elif isinstance(value, list):
@@ -77,11 +81,30 @@ jobs:
                       walk(item)
 
           walk(payload)
-          url = str(found.get('QUICKSDK_DATABASE_URL') or found.get('DATABASE_URL') or '').strip()
-          if not url:
-              raise SystemExit('Production database URL was not returned decrypted by Vercel API')
-          if url.startswith('postgresql+psycopg://'):
-              url = 'postgresql://' + url.removeprefix('postgresql+psycopg://')
+          token = os.environ['VERCEL_TOKEN']
+          project_id = os.environ['VERCEL_PROJECT_ID']
+          team_id = os.environ['VERCEL_ORG_ID']
+          found = {}
+          for key, env_id in candidates:
+              url = (
+                  f'https://api.vercel.com/v1/projects/{urllib.parse.quote(project_id)}/env/'
+                  f'{urllib.parse.quote(env_id)}?teamId={urllib.parse.quote(team_id)}'
+              )
+              request = urllib.request.Request(url, headers={'Authorization': f'Bearer {token}'})
+              try:
+                  with urllib.request.urlopen(request, timeout=20) as response:
+                      detail = json.load(response)
+              except Exception:
+                  continue
+              value = detail.get('value')
+              if value:
+                  found[key] = str(value)
+
+          db_url = str(found.get('QUICKSDK_DATABASE_URL') or found.get('DATABASE_URL') or '').strip()
+          if not db_url:
+              raise SystemExit('Production database URL could not be decrypted via Vercel project env endpoint')
+          if db_url.startswith('postgresql+psycopg://'):
+              db_url = 'postgresql://' + db_url.removeprefix('postgresql+psycopg://')
 
           sys.path.insert(0, str(Path('contract_terms').resolve()))
           from extended_main import _CANDIDATE_SQL
@@ -96,7 +119,7 @@ jobs:
           def compact(obj):
               return json.dumps(obj, ensure_ascii=False, default=str, sort_keys=True)
 
-          with psycopg.connect(url, connect_timeout=15, row_factory=dict_row) as conn:
+          with psycopg.connect(db_url, connect_timeout=15, row_factory=dict_row) as conn:
               conn.execute('SET TRANSACTION READ ONLY')
               print('=== TARGET ===')
               print(compact({'partner': partner, 'channel': channel, 'game': game, 'cycle': cycle}))
@@ -184,11 +207,11 @@ jobs:
               print(compact([dict(row) for row in history]))
 
               raw_candidates = [dict(row) for row in conn.execute(_CANDIDATE_SQL).fetchall()]
-              candidates = enrich_candidates_with_game_ids(conn, raw_candidates)
+              matcher_candidates = enrich_candidates_with_game_ids(conn, raw_candidates)
               resolved_lines = enrich_lines_with_game_ids(conn, [
                   {'line_index': 0, 'game_name': game, 'settlement_cycle': cycle}
               ])
-              result = recommend_channel_rules(partner, channel, resolved_lines, candidates)
+              result = recommend_channel_rules(partner, channel, resolved_lines, matcher_candidates)
               print('=== RESOLVED INPUT LINE ===')
               print(compact(resolved_lines))
               print('=== LIVE MATCHER RESULT ===')
