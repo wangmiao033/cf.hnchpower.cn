@@ -1,3 +1,4 @@
+import re
 import unittest
 from pathlib import Path
 
@@ -24,7 +25,9 @@ class RdPrepaymentRuntimeDdlTests(unittest.TestCase):
         registry_source = (
             REPO_ROOT / "backend" / "app" / "core" / "migrations.py"
         ).read_text(encoding="utf-8")
-        self.assertIn("range(1, 62)", registry_source)
+        match = re.search(r"range\(1,\s*(\d+)\)", registry_source)
+        self.assertIsNotNone(match)
+        self.assertGreaterEqual(int(match.group(1)), 61, "migration 060 must remain registered")
 
 
 if __name__ == "__main__":
