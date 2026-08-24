@@ -3,6 +3,7 @@ import { useAppState } from '@/app/AppStateContext.jsx'
 import PageContainer from '@/components/layout/PageContainer.jsx'
 import { VIEWS } from '@/app/routes.js'
 import { getProfitAnalysis } from '@/lib/api/profitAnalysis.ts'
+import ProjectProfitOverview from './ProjectProfitOverview.jsx'
 import {
   createOperatingExpense,
   deleteOperatingExpense,
@@ -256,6 +257,11 @@ export default function ProfitAnalysisPage() {
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
+    if (viewMode === 'project') {
+      setLoading(false)
+      setError('')
+      return undefined
+    }
     let cancelled = false
     setLoading(true)
     setError('')
@@ -362,12 +368,13 @@ export default function ProfitAnalysisPage() {
     <PageContainer hideHeader className="profit-analysis-page">
       <section className="profit-head">
         <div>
-          <span className="profit-kicker">PROFIT ANALYSIS · V2.3</span>
+          <span className="profit-kicker">PROFIT ANALYSIS · V2.4</span>
           <h1>利润分析</h1>
           <p>公司层扣除全部经营费用，产品层只扣可明确归属成本，公共费用不做虚假分摊。</p>
           <div className="profit-view-toggle" role="tablist" aria-label="利润分析视图">
             <button type="button" className={viewMode === 'monthly' ? 'is-active' : ''} onClick={() => switchView('monthly')}>月度分析</button>
             <button type="button" className={viewMode === 'annual' ? 'is-active' : ''} onClick={() => switchView('annual')}>年度总览</button>
+            <button type="button" className={viewMode === 'project' ? 'is-active' : ''} onClick={() => switchView('project')}>项目毛利</button>
           </div>
         </div>
         {viewMode === 'monthly' ? <div className="profit-head-actions">
@@ -380,6 +387,7 @@ export default function ProfitAnalysisPage() {
       {error && !data ? <section className="profit-error"><strong>利润分析读取失败</strong><span>{error}</span><button type="button" onClick={() => setRevision((value) => value + 1)}>重新读取</button></section> : null}
 
       {data && viewMode === 'annual' ? <AnnualProfitOverview data={data} selectedYear={selectedYear} setSelectedYear={setSelectedYear} onRefresh={() => setRevision((value) => value + 1)} loading={loading} /> : null}
+      {viewMode === 'project' ? <ProjectProfitOverview /> : null}
 
       {data && viewMode === 'monthly' ? <>
         <section className={`profit-hero ${profitPositive ? 'is-profit' : 'is-loss'}`}>
