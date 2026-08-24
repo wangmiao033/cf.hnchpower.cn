@@ -221,6 +221,25 @@ def _matching_registry_rules(
     return matched
 
 
+def _preferred_registry_rules(candidates: list[dict]) -> list[dict]:
+    """Prefer explicit/manual and later-effective rules before checking conflicts.
+
+    A manual rule entered for a newer period must not be treated as a conflict
+    with an older history-derived open interval that also happens to cover the
+    same month. Only rules at the highest authority and latest effective start
+    are compared for financial consensus.
+    """
+    if not candidates:
+        return []
+    max_source = max(_source_rank(rule) for rule in candidates)
+    source_pool = [rule for rule in candidates if _source_rank(rule) == max_source]
+    latest_start = max((_month_key(rule.get("start_month")) for rule in source_pool), default="")
+    if not latest_start:
+        return source_pool
+    latest_pool = [rule for rule in source_pool if _month_key(rule.get("start_month")) == latest_start]
+    return latest_pool or source_pool
+
+
 def _rebuild_header(result: dict) -> None:
     rows = list(result.get("lines") or [])
     recommended_rows = [item for item in rows if item.get("recommended")]
@@ -296,7 +315,9 @@ def apply_game_registry_fallback(
             continue
 
         source_line = by_index.get(int(item.get("line_index") or 0), {})
-        candidates = _matching_registry_rules(partner_name, channel_name, source_line, registry_rules)
+        candidates = _preferred_registry_rules(
+            _matching_registry_rules(partner_name, channel_name, source_line, registry_rules)
+        )
         if not candidates:
             reason = "游戏库也未找到同一游戏/渠道/账期的有效规则"
             if not str(source_line.get("game_id") or "").strip():
@@ -309,7 +330,7 @@ def apply_game_registry_fallback(
         signatures = {_rule_signature(rule) for rule in candidates if _recommended(rule) is not None}
         if len(signatures) != 1:
             conflict_count += 1
-            item["message"] = "合同未命中；游戏库存在多个重叠且结算数字不同的规则，需要先整理规则区间"
+            item["message"] = "合同未命中；游戏库存在多个同优先级、同生效月份且结算数字不同的规则，需要先整理规则"
             diagnostics.append(f"{game_name}：游戏库规则冲突，需整理")
             next_rows.append(item)
             continue
