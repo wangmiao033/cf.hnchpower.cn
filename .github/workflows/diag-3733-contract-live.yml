@@ -28,6 +28,8 @@ jobs:
             echo '::error::VERCEL_TOKEN unavailable'
             exit 1
           fi
+          mkdir -p .vercel
+          printf '{"orgId":"%s","projectId":"%s"}\n' "$VERCEL_ORG_ID" "$VERCEL_PROJECT_ID" > .vercel/project.json
           npx --yes vercel@latest env pull /tmp/env.production --environment=production --yes --token "$VERCEL_TOKEN" >/tmp/vercel-env-pull.log 2>&1 || { cat /tmp/vercel-env-pull.log; exit 1; }
           test -s /tmp/env.production
           echo 'Production environment pulled.'
@@ -71,64 +73,41 @@ jobs:
 
           with psycopg.connect(url, connect_timeout=15, row_factory=dict_row) as conn:
               conn.execute('SET TRANSACTION READ ONLY')
-
               print('=== TARGET ===')
               print(compact({'partner': partner, 'channel': channel, 'game': game, 'cycle': cycle}))
 
               partners = conn.execute(
-                  '''SELECT id, name, short_name, category
-                     FROM cf_partner_records
-                     WHERE name ILIKE %s OR short_name ILIKE %s
-                     ORDER BY name''',
+                  '''SELECT id, name, short_name, category FROM cf_partner_records
+                     WHERE name ILIKE %s OR short_name ILIKE %s ORDER BY name''',
                   ['%三七三三%', '%3733%'],
               ).fetchall()
               print('=== PARTNERS ===')
               print(compact([dict(row) for row in partners]))
 
               access_rows = conn.execute(
-                  '''SELECT
-                       access.id AS access_item_id,
-                       access.contract_id,
-                       access.channel_name,
-                       access.product_name,
-                       access.authorization_start,
-                       access.authorization_end,
-                       access.share_rate,
-                       access.channel_fee_rate,
-                       access.status AS access_status,
-                       contract.contract_name,
-                       contract.contract_no,
-                       contract.counterparty,
-                       contract.partner_id,
-                       contract.effective_date,
-                       contract.end_date,
-                       contract.performance_status,
-                       partner.name AS partner_name,
-                       partner.short_name AS partner_short_name,
-                       terms.invoice_tax_rate,
-                       terms.settlement_mode,
-                       terms.settlement_basis
+                  '''SELECT access.id AS access_item_id, access.contract_id, access.channel_name,
+                            access.product_name, access.authorization_start, access.authorization_end,
+                            access.share_rate, access.channel_fee_rate, access.status AS access_status,
+                            contract.contract_name, contract.contract_no, contract.counterparty,
+                            contract.partner_id, contract.effective_date, contract.end_date,
+                            contract.performance_status, partner.name AS partner_name,
+                            partner.short_name AS partner_short_name, terms.invoice_tax_rate,
+                            terms.settlement_mode, terms.settlement_basis
                      FROM cf_contract_access_items AS access
                      JOIN cf_contract_records AS contract ON contract.id = access.contract_id
                      LEFT JOIN cf_partner_records AS partner ON partner.id = contract.partner_id
                      LEFT JOIN cf_contract_access_terms AS terms ON terms.access_item_id = access.id
-                     WHERE access.product_name ILIKE %s
-                        OR access.channel_name ILIKE %s
-                        OR contract.counterparty ILIKE %s
-                        OR partner.name ILIKE %s
-                        OR partner.short_name ILIKE %s
-                     ORDER BY contract.updated_at DESC, access.updated_at DESC
-                     LIMIT 100''',
+                     WHERE access.product_name ILIKE %s OR access.channel_name ILIKE %s
+                        OR contract.counterparty ILIKE %s OR partner.name ILIKE %s OR partner.short_name ILIKE %s
+                     ORDER BY contract.updated_at DESC, access.updated_at DESC LIMIT 100''',
                   ['%一起来修仙%', '%3733%', '%三七三三%', '%三七三三%', '%3733%'],
               ).fetchall()
               print('=== RELEVANT CONTRACT ACCESS ITEMS ===')
               print(compact([dict(row) for row in access_rows]))
 
               games = conn.execute(
-                  '''SELECT id, canonical_name, normalized_name, source, status
-                     FROM game_registry_games
-                     WHERE canonical_name ILIKE %s OR normalized_name ILIKE %s
-                     ORDER BY canonical_name''',
+                  '''SELECT id, canonical_name, normalized_name, source, status FROM game_registry_games
+                     WHERE canonical_name ILIKE %s OR normalized_name ILIKE %s ORDER BY canonical_name''',
                   ['%一起来修仙%', '%一起来修仙%'],
               ).fetchall()
               print('=== GAME REGISTRY ===')
@@ -137,7 +116,8 @@ jobs:
               aliases = []
               if conn.execute("SELECT to_regclass('public.game_registry_aliases') AS name").fetchone()['name']:
                   aliases = conn.execute(
-                      '''SELECT alias.id, alias.alias_name, alias.normalized_alias, alias.game_id, game.canonical_name, alias.source
+                      '''SELECT alias.id, alias.alias_name, alias.normalized_alias, alias.game_id,
+                                game.canonical_name, alias.source
                          FROM game_registry_aliases AS alias
                          JOIN game_registry_games AS game ON game.id = alias.game_id
                          WHERE alias.alias_name ILIKE %s OR game.canonical_name ILIKE %s
@@ -151,24 +131,23 @@ jobs:
               if conn.execute("SELECT to_regclass('public.contract_access_game_links') AS name").fetchone()['name']:
                   links = conn.execute(
                       '''SELECT link.access_item_id, link.game_id, link.match_method, link.confirmed,
-                                access.product_name, access.channel_name, access.share_rate, access.channel_fee_rate,
-                                game.canonical_name
+                                access.product_name, access.channel_name, access.share_rate,
+                                access.channel_fee_rate, game.canonical_name
                          FROM contract_access_game_links AS link
                          JOIN cf_contract_access_items AS access ON access.id = link.access_item_id
                          JOIN game_registry_games AS game ON game.id = link.game_id
                          WHERE access.product_name ILIKE %s OR game.canonical_name ILIKE %s OR access.channel_name ILIKE %s
-                         ORDER BY access.product_name
-                         LIMIT 100''',
+                         ORDER BY access.product_name LIMIT 100''',
                       ['%一起来修仙%', '%一起来修仙%', '%3733%'],
                   ).fetchall()
               print('=== ACCESS ITEM -> GAME LINKS ===')
               print(compact([dict(row) for row in links]))
 
               history = conn.execute(
-                  '''SELECT record.id AS bill_id, record.settlement_month, record.partner_name, record.channel_name,
-                            record.status AS bill_status, line.game_name, line.game_id,
-                            line.share_rate, line.tax_rate, line.channel_fee_rate,
-                            line.settlement_cycle, line.platform_settlement_amount, line.system_settlement_amount
+                  '''SELECT record.id AS bill_id, record.settlement_month, record.partner_name,
+                            record.channel_name, record.status AS bill_status, line.game_name, line.game_id,
+                            line.share_rate, line.tax_rate, line.channel_fee_rate, line.settlement_cycle,
+                            line.platform_settlement_amount, line.system_settlement_amount
                      FROM channel_records AS record
                      JOIN channel_record_line_items AS line ON line.channel_record_id = record.id
                      WHERE (record.partner_name ILIKE %s OR record.channel_name ILIKE %s)
