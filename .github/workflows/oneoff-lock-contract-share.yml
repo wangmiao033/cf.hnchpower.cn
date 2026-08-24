@@ -79,3 +79,4 @@ jobs:
           git add -A
           git commit -m 'fix: lock channel share rate to matched contract rule'
           git push origin HEAD:fix/lock-contract-share-rate-20260824
+# trigger workflow after creation
