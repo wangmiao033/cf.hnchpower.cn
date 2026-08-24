@@ -2,10 +2,12 @@
 import { getChannelLineItems } from '@/domain/channel/channelAggregates.js'
 
 export const XIAN_WEIZHEN_9917_RULE = 'xian_weizhen_9917'
+export const HONOR_UPFRONT_PERCENT_FEE_RULE = 'honor_upfront_percent_fee'
 
 export const CHANNEL_RULE_PRESETS = {
   legacy_fixed_fee_tax: { label: '固定通道费 + 分成税（旧规则）', feeMode: 'fixed', taxMode: 'share' },
   five_percent_gateway_share: { label: '5%支付通道费后分成（不扣税）', feeMode: 'percent', taxMode: 'none', feeRate: 5 },
+  [HONOR_UPFRONT_PERCENT_FEE_RULE]: { label: '荣耀：流水先扣通道费后分成', feeMode: 'percent', taxMode: 'none', feeRate: 5 },
   xiaomi_percent_fee: { label: '百分比渠道费，税率仅记录（小米类）', feeMode: 'percent', taxMode: 'none', feeRate: 5 },
   [XIAN_WEIZHEN_9917_RULE]: { label: '西安维真（9917）专属规则', feeMode: 'percent', taxMode: 'none', feeRate: 5 },
   percent_fee_after_tax: { label: '百分比渠道费后再扣税', feeMode: 'percent', taxMode: 'after_fee' },
@@ -77,6 +79,9 @@ export function ruleFormulaText(header) {
   if (effectiveHeader.settlementRuleCode === XIAN_WEIZHEN_9917_RULE) {
     return '西安维真9917：代金券/福利币仅记录；其余原扣减项参与 × 分成比例 × (1 - 5%通道费)，税率仅记录'
   }
+  if (effectiveHeader.settlementRuleCode === HONOR_UPFRONT_PERCENT_FEE_RULE) {
+    return `荣耀： (总流水 - 总流水 × ${Number(effectiveHeader.channelFeeRate || 0)}%通道费 - 代金券/退款等扣减) × 分成比例；税率按合同记录`
+  }
   const feeMode = effectiveHeader.channelFeeMode || 'fixed'
   const taxMode = effectiveHeader.taxMode || 'share'
   const fee = feeMode === 'percent' ? ` × (1 - ${Number(effectiveHeader.channelFeeRate || 0)}%)` : feeMode === 'fixed' ? ' - 固定通道费' : ''
@@ -121,7 +126,13 @@ function deductionFieldsForHeader(header = initialHeaderForm) {
 
 export function calculateBillingAmount(data, header = initialHeaderForm) {
   const effectiveHeader = resolveChannelLineRuleHeader(data, header)
-  return effectiveLineFlowFromFormData(data) - deductionFieldsForHeader(effectiveHeader).reduce((sum, key) => sum + Number(data[key] || 0), 0)
+  const effectiveFlow = effectiveLineFlowFromFormData(data)
+  const deductions = deductionFieldsForHeader(effectiveHeader).reduce((sum, key) => sum + Number(data[key] || 0), 0)
+  if (effectiveHeader.settlementRuleCode === HONOR_UPFRONT_PERCENT_FEE_RULE) {
+    const upfrontChannelFee = effectiveFlow * Number(effectiveHeader.channelFeeRate || 0) / 100
+    return effectiveFlow - upfrontChannelFee - deductions
+  }
+  return effectiveFlow - deductions
 }
 export function calculateShareAmount(data, header = initialHeaderForm) { return calculateBillingAmount(data, header) * Number(data.shareRate || 0) / 100 }
 
@@ -130,7 +141,7 @@ function calculateSettlementRaw(data, header = initialHeaderForm) {
   const shareAmount = calculateShareAmount(data, effectiveHeader)
   const feeMode = effectiveHeader.channelFeeMode || 'fixed'; const taxMode = effectiveHeader.taxMode || 'share'
   let afterFee = shareAmount
-  if (feeMode === 'percent') afterFee = shareAmount * (1 - Number(effectiveHeader.channelFeeRate || 0) / 100)
+  if (feeMode === 'percent' && effectiveHeader.settlementRuleCode !== HONOR_UPFRONT_PERCENT_FEE_RULE) afterFee = shareAmount * (1 - Number(effectiveHeader.channelFeeRate || 0) / 100)
   else if (feeMode === 'fixed') afterFee = shareAmount - Number(data.gatewayCost || 0)
   const taxRate = Number(data.taxRate || 0) / 100
   if (taxMode === 'share') return afterFee - shareAmount * taxRate
