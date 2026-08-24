@@ -1,0 +1,85 @@
+name: One-off restore contract supplement fallback
+
+on:
+  push:
+    branches:
+      - fix/restore-contract-supplement-fallback-20260824
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/restore-contract-supplement-fallback-20260824
+          fetch-depth: 0
+      - name: Restore supplement action for every contract gap
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(text, old, new, label):
+              if old not in text:
+                  raise SystemExit(f'{label} not found')
+              return text.replace(old, new, 1)
+
+          path = Path('src/components/channel/ChannelSmartEntryBar.jsx')
+          text = path.read_text(encoding='utf-8')
+          old = '''  const missingGames = useMemo(() => namedLines(record)
+    .map((item) => String(item.gameName || '').trim())
+    .filter((name) => {
+      const key = textKey(resolveGameName(name))
+      return name && !contractGameKeys.has(key) && !historicalGameKeys.has(key)
+    }), [record, contractGameKeys, historicalGameKeys, resolveGameName])'''
+          new = '''  // 历史账单只负责“认游戏”，不能代替合同合作清单。
+  // 只要当前合同清单没有覆盖该游戏，就始终保留快捷补清单入口。
+  const missingGames = useMemo(() => namedLines(record)
+    .map((item) => String(item.gameName || '').trim())
+    .filter((name) => {
+      const key = textKey(resolveGameName(name))
+      return name && !contractGameKeys.has(key)
+    }), [record, contractGameKeys, resolveGameName])'''
+          text = replace_once(text, old, new, 'missingGames contract gap rule')
+          text = replace_once(
+              text,
+              '''            <strong>发现 {missingGames.length} 个游戏既无合同清单，也无上月账单记录</strong>
+            <span>只有真正的新游戏才需要补清单、映射名称或挂起待补。</span>''',
+              '''            <strong>发现 {missingGames.length} 个游戏尚未进入当前合同合作清单</strong>
+            <span>历史账单只用于识别游戏；只要当前合同清单未覆盖，就保留“补合作清单”入口。</span>''',
+              'missing games copy',
+          )
+          path.write_text(text, encoding='utf-8')
+
+          path = Path('src/components/channel/channelContractSafety.test.js')
+          text = path.read_text(encoding='utf-8')
+          old = '''  it('recognizes previous-month games before forcing a contract supplement', () => {
+    expect(smartEntrySource).toContain('const historicalGameKeys = useMemo')
+    expect(smartEntrySource).toContain('!contractGameKeys.has(key) && !historicalGameKeys.has(key)')
+    expect(smartEntrySource).toContain('const historicalMatchedLineCount = namedLines(record).filter')
+    expect(smartEntrySource).toContain('个按上月历史识别')
+    expect(smartEntrySource).toContain('只有真正的新游戏才需要补清单')
+    expect(smartEntrySource).toContain('contractState.items.length === 0 && previousLines.length === 0')
+  })'''
+          new = '''  it('keeps contract supplement available even when history already recognizes the game', () => {
+    expect(smartEntrySource).toContain('const historicalGameKeys = useMemo')
+    expect(smartEntrySource).toContain('return name && !contractGameKeys.has(key)')
+    expect(smartEntrySource).not.toContain('!contractGameKeys.has(key) && !historicalGameKeys.has(key)')
+    expect(smartEntrySource).toContain('历史账单只用于识别游戏')
+    expect(smartEntrySource).toContain('补合作清单')
+    expect(smartEntrySource).toContain('const historicalMatchedLineCount = namedLines(record).filter')
+  })'''
+          text = replace_once(text, old, new, 'supplement regression test')
+          path.write_text(text, encoding='utf-8')
+          PY
+
+          rm -f .github/workflows/oneoff-restore-contract-supplement.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'fix: always allow contract list supplement for unmatched games'
+          git push origin HEAD:fix/restore-contract-supplement-fallback-20260824
