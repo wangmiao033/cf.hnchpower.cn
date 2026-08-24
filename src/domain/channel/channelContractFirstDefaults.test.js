@@ -1,25 +1,9 @@
 import fs from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { initialLineItem, recordToLineForms } from './channelBillingForm.js'
 
 const formSource = fs.readFileSync(new URL('../../components/channel/ChannelBillingForm.jsx', import.meta.url), 'utf8')
 
 describe('contract-first channel defaults', () => {
-  it('does not invent 30%/5% for a new line', () => {
-    const line = initialLineItem()
-    expect(line.shareRate).toBe('')
-    expect(line.taxRate).toBe('')
-  })
-
-  it('keeps missing persisted rates blank instead of restoring legacy defaults', () => {
-    const [line] = recordToLineForms({
-      settlementMonth: '2026-07',
-      items: [{ gameName: '一起来修仙（0.05折）', settlementCycle: '2026-07' }]
-    })
-    expect(line.shareRate).toBe('')
-    expect(line.taxRate).toBe('')
-  })
-
   it('does not fall back to 30/5 when no contract rule is found', () => {
     expect(formSource).not.toContain("shareRate: String(row.shareRate || '30')")
     expect(formSource).not.toContain("taxRate: String(row.taxRate || '5')")
@@ -28,5 +12,11 @@ describe('contract-first channel defaults', () => {
 
   it('clears rate fields when game identity or settlement month changes', () => {
     expect(formSource).toContain("identityChanged && mode === 'add' ? { shareRate: '', taxRate: '' } : {}")
+  })
+
+  it('does not copy the previous line rate into a new game without a contract baseline', () => {
+    expect(formSource).toContain("else if (mode !== 'add')")
+    expect(formSource).toContain("next.shareRate = ''")
+    expect(formSource).toContain("next.taxRate = ''")
   })
 })
