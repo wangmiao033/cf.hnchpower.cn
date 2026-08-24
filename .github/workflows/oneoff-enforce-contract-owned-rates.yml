@@ -4,12 +4,16 @@ on:
   push:
     branches:
       - fix/enforce-contract-owned-rates-20260824
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: write
 
 jobs:
   patch:
+    if: github.event_name == 'push' || github.head_ref == 'fix/enforce-contract-owned-rates-20260824'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
