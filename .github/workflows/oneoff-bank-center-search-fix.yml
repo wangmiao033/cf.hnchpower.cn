@@ -1,0 +1,87 @@
+name: One-off bank center search fix
+
+on:
+  push:
+    branches:
+      - fix/bank-center-search-20260824
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/bank-center-search-20260824
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Apply focused search fix
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace(path, old, new, count=1):
+              p = Path(path)
+              text = p.read_text(encoding='utf-8')
+              if old not in text:
+                  raise SystemExit(f'missing patch anchor in {path}: {old[:100]!r}')
+              p.write_text(text.replace(old, new, count), encoding='utf-8')
+
+          path = 'backend/app/services/bank_auto_reconciliation.py'
+          replace(path, 'from sqlalchemy import func, select', 'from sqlalchemy import func, or_, select')
+          replace(path,
+          '''def build_dashboard(db: Session, limit: int = 200) -> dict:\n    funded_ids = bank_funding_transaction_ids(db)\n    predicate = BankTransaction.type == "statement_import"\n    if funded_ids:\n        predicate = predicate & ~BankTransaction.id.in_(funded_ids)\n    pending_total = int(\n        db.execute(select(func.count(BankTransaction.id)).where(predicate)).scalar_one()\n    )\n''',
+          '''def build_dashboard(\n    db: Session,\n    limit: int = 200,\n    q: str | None = None,\n    date_from: str | None = None,\n    date_to: str | None = None,\n) -> dict:\n    funded_ids = bank_funding_transaction_ids(db)\n    predicate = BankTransaction.type == "statement_import"\n    if funded_ids:\n        predicate = predicate & ~BankTransaction.id.in_(funded_ids)\n\n    term = str(q or "").strip()\n    if term:\n        like = f"%{term}%"\n        predicate = predicate & or_(\n            BankTransaction.payer_name.ilike(like),\n            BankTransaction.payee_name.ilike(like),\n            BankTransaction.payer_account.ilike(like),\n            BankTransaction.payee_account.ilike(like),\n            BankTransaction.bank_account.ilike(like),\n            BankTransaction.transaction_no.ilike(like),\n            BankTransaction.instruction_no.ilike(like),\n            BankTransaction.summary.ilike(like),\n            BankTransaction.purpose.ilike(like),\n            BankTransaction.remark.ilike(like),\n            BankTransaction.raw_text.ilike(like),\n        )\n    if date_from and str(date_from).strip():\n        predicate = predicate & (BankTransaction.trade_date >= str(date_from).strip())\n    if date_to and str(date_to).strip():\n        predicate = predicate & (BankTransaction.trade_date <= str(date_to).strip())\n\n    pending_total = int(\n        db.execute(select(func.count(BankTransaction.id)).where(predicate)).scalar_one()\n    )\n''')
+
+          path = 'backend/app/api/bank_auto_reconciliation.py'
+          replace(path,
+          '''def get_bank_auto_reconciliation_dashboard(\n    limit: int = Query(200, ge=1, le=500),\n    db: Session = Depends(get_db),\n    _user: AuthUser = Depends(require_current_user),\n) -> BankAutoReconciliationDashboard:\n    result = filter_cumulative_bank_suggestions(db, build_dashboard(db, limit=limit))\n''',
+          '''def get_bank_auto_reconciliation_dashboard(\n    limit: int = Query(200, ge=1, le=500),\n    q: str | None = Query(None),\n    date_from: str | None = Query(None),\n    date_to: str | None = Query(None),\n    db: Session = Depends(get_db),\n    _user: AuthUser = Depends(require_current_user),\n) -> BankAutoReconciliationDashboard:\n    result = filter_cumulative_bank_suggestions(\n        db,\n        build_dashboard(\n            db,\n            limit=limit,\n            q=q,\n            date_from=date_from,\n            date_to=date_to,\n        ),\n    )\n''')
+
+          path = 'backend/app/api/bank_transaction.py'
+          replace(path,
+          '''                BankTransaction.remark.ilike(term),\n                BankTransaction.summary.ilike(term),\n                BankTransaction.source_file_name.ilike(term),\n''',
+          '''                BankTransaction.remark.ilike(term),\n                BankTransaction.summary.ilike(term),\n                BankTransaction.purpose.ilike(term),\n                BankTransaction.raw_text.ilike(term),\n                BankTransaction.source_file_name.ilike(term),\n''')
+
+          path = 'src/lib/api/bankAutoReconciliation.ts'
+          replace(path,
+          '''export function getBankAutoReconciliationDashboard(limit = 200) {\n  return loadDashboard(\n    `dashboard:${limit}`,\n    () => apiGet<BankAutoReconciliationDashboard>(`${PATH}?limit=${limit}`)\n  )\n}\n''',
+          '''export type BankDashboardFilters = {\n  q?: string\n  date_from?: string\n  date_to?: string\n}\n\nexport function getBankAutoReconciliationDashboard(limit = 200, filters: BankDashboardFilters = {}) {\n  const params = new URLSearchParams({ limit: String(limit) })\n  if (filters.q) params.set('q', filters.q)\n  if (filters.date_from) params.set('date_from', filters.date_from)\n  if (filters.date_to) params.set('date_to', filters.date_to)\n  const query = params.toString()\n  return loadDashboard(\n    `dashboard:${query}`,\n    () => apiGet<BankAutoReconciliationDashboard>(`${PATH}?${query}`)\n  )\n}\n''')
+
+          path = 'src/pages/BankCenterPageV2.jsx'
+          replace(path, "  const [queueSearch, setQueueSearch] = useState('')\n", "  const [queueSearch, setQueueSearch] = useState('')\n  const [queueAppliedSearch, setQueueAppliedSearch] = useState('')\n")
+          replace(path, "  const [queueDateFrom, setQueueDateFrom] = useState(monthRange(0).from)\n  const [queueDateTo, setQueueDateTo] = useState(monthRange(0).to)\n", "  const [queueDateFrom, setQueueDateFrom] = useState('')\n  const [queueDateTo, setQueueDateTo] = useState('')\n")
+          replace(path, "  const [ledgerDateFrom, setLedgerDateFrom] = useState(monthRange(0).from)\n  const [ledgerDateTo, setLedgerDateTo] = useState(monthRange(0).to)\n", "  const [ledgerDateFrom, setLedgerDateFrom] = useState('')\n  const [ledgerDateTo, setLedgerDateTo] = useState('')\n")
+          replace(path,
+          '''  useEffect(() => {\n    let cancelled = false\n    setDashboardLoading(true)\n''',
+          '''  useEffect(() => {\n    const timer = window.setTimeout(() => setQueueAppliedSearch(queueSearch.trim()), 350)\n    return () => window.clearTimeout(timer)\n  }, [queueSearch])\n\n  useEffect(() => {\n    let cancelled = false\n    setDashboardLoading(true)\n''')
+          replace(path,
+          '''    getBankAutoReconciliationDashboard(500)\n      .then((result) => {\n''',
+          '''    const requestRange = queueRangeMode === 'custom'\n      ? { from: queueDateFrom, to: queueDateTo }\n      : quickRange(queueRangeMode)\n    getBankAutoReconciliationDashboard(500, {\n      q: queueAppliedSearch || undefined,\n      date_from: requestRange.from || undefined,\n      date_to: requestRange.to || undefined\n    })\n      .then((result) => {\n''')
+          replace(path, "  }, [dashboardRevision])\n", "  }, [dashboardRevision, queueAppliedSearch, queueRangeMode, queueDateFrom, queueDateTo])\n")
+          replace(path,
+          '''  const queueBase = useMemo(() => {\n    const term = queueSearch.trim().toLowerCase()\n    return suggestions.filter((item) => {\n      if (queueDirection !== 'all' && item.direction !== queueDirection) return false\n      const tradeDate = String(item.trade_date || '')\n      if (queueRange.from && tradeDate && tradeDate < queueRange.from) return false\n      if (queueRange.to && tradeDate && tradeDate > queueRange.to) return false\n      if (!term) return true\n      const candidateText = (item.candidates || []).map((candidate) => [\n        candidate.bill_number,\n        candidate.partner_name,\n        candidate.game_name,\n        candidate.settlement_month\n      ].filter(Boolean).join(' ')).join(' ')\n      const haystack = [\n        item.counterparty_name,\n        item.summary,\n        item.transaction_no,\n        item.amount,\n        candidateText\n      ].filter((value) => value != null).join(' ').toLowerCase()\n      return haystack.includes(term)\n    })\n  }, [suggestions, queueSearch, queueDirection, queueRange.from, queueRange.to])\n''',
+          '''  const queueBase = useMemo(() => suggestions.filter((item) => {\n    if (queueDirection !== 'all' && item.direction !== queueDirection) return false\n    const tradeDate = String(item.trade_date || '')\n    if (queueRange.from && tradeDate && tradeDate < queueRange.from) return false\n    if (queueRange.to && tradeDate && tradeDate > queueRange.to) return false\n    return true\n  }), [suggestions, queueDirection, queueRange.from, queueRange.to])\n''')
+          replace(path,
+          '''  const resetQueueFilters = () => {\n    const current = monthRange(0)\n    setQueueSearch('')\n    setQueueDirection('all')\n    setQueueFilter('all')\n    setQueueRangeMode('all')\n    setQueueDateFrom(current.from)\n    setQueueDateTo(current.to)\n  }\n\n  const resetLedgerFilters = () => {\n    const current = monthRange(0)\n    setLedgerSearch('')\n    setLedgerDirection('all')\n    setLedgerLinked('all')\n    setLedgerRangeMode('all')\n    setLedgerDateFrom(current.from)\n    setLedgerDateTo(current.to)\n    setAccountFilter('')\n  }\n''',
+          '''  const resetQueueFilters = () => {\n    setQueueSearch('')\n    setQueueAppliedSearch('')\n    setQueueDirection('all')\n    setQueueFilter('all')\n    setQueueRangeMode('all')\n    setQueueDateFrom('')\n    setQueueDateTo('')\n  }\n\n  const resetLedgerFilters = () => {\n    setLedgerSearch('')\n    setLedgerDirection('all')\n    setLedgerLinked('all')\n    setLedgerRangeMode('all')\n    setLedgerDateFrom('')\n    setLedgerDateTo('')\n    setAccountFilter('')\n  }\n''')
+          replace(path, 'placeholder="对方单位 / 摘要 / 流水号 / 账单号"', 'placeholder="对方单位 / 摘要 / 用途 / 附言 / 流水号"')
+          replace(path, 'placeholder="户名 / 摘要 / 流水号 / 账单号"', 'placeholder="户名 / 摘要 / 用途 / 附言 / 流水号"')
+          replace(path, 'onClick={() => setQueueRangeMode(key)}>{label}</button>', 'onClick={() => { const range = quickRange(key); setQueueRangeMode(key); setQueueDateFrom(range.from); setQueueDateTo(range.to) }}>{label}</button>')
+          replace(path, 'onClick={() => setLedgerRangeMode(key)}>{label}</button>', 'onClick={() => { const range = quickRange(key); setLedgerRangeMode(key); setLedgerDateFrom(range.from); setLedgerDateTo(range.to) }}>{label}</button>')
+          replace(path, '<em>筛选结果 {filteredQueue.length} 笔 · {money(filteredQueueAmount)}</em>', '<em>{queueAppliedSearch ? `全库命中 ${dashboard?.stats?.pending_transactions ?? filteredQueue.length} 笔 · 当前显示 ${filteredQueue.length} 笔` : `筛选结果 ${filteredQueue.length} 笔 · ${money(filteredQueueAmount)}`}</em>')
+
+          Path('src/pages/bankCenterSearchSafety.test.js').write_text('''import { describe, expect, it } from 'vitest'\nimport { readFileSync } from 'node:fs'\n\nconst page = readFileSync(new URL('./BankCenterPageV2.jsx', import.meta.url), 'utf8')\nconst api = readFileSync(new URL('../lib/api/bankAutoReconciliation.ts', import.meta.url), 'utf8')\n\ndescribe('bank center search safety', () => {\n  it('searches the pending queue on the server before the 500-row cap', () => {\n    expect(page).toContain('queueAppliedSearch')\n    expect(page).toContain('q: queueAppliedSearch || undefined')\n    expect(page).toContain('date_from: requestRange.from || undefined')\n    expect(api).toContain("params.set('q', filters.q)")\n  })\n\n  it('keeps the all-date preset visually consistent with the query', () => {\n    expect(page).toContain("setQueueDateFrom('')")\n    expect(page).toContain("setQueueDateTo('')")\n    expect(page).toContain('setQueueDateFrom(range.from)')\n    expect(page).toContain('setQueueDateTo(range.to)')\n  })\n})\n''', encoding='utf-8')
+          PY
+          rm -f .github/workflows/oneoff-bank-center-search-fix.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m 'fix: make bank center search query full pending ledger'
+          git push origin HEAD:fix/bank-center-search-20260824
