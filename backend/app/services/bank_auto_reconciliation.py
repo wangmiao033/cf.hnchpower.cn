@@ -7,7 +7,7 @@ import re
 from uuid import uuid4
 
 from fastapi import HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.models.bank_reconciliation_match import BankReconciliationMatch
@@ -317,11 +317,39 @@ def _history_row(match: BankReconciliationMatch, tx: BankTransaction | None) -> 
     }
 
 
-def build_dashboard(db: Session, limit: int = 200) -> dict:
+def build_dashboard(
+    db: Session,
+    limit: int = 200,
+    q: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+) -> dict:
     funded_ids = bank_funding_transaction_ids(db)
     predicate = BankTransaction.type == "statement_import"
     if funded_ids:
         predicate = predicate & ~BankTransaction.id.in_(funded_ids)
+
+    term = str(q or "").strip()
+    if term:
+        like = f"%{term}%"
+        predicate = predicate & or_(
+            BankTransaction.payer_name.ilike(like),
+            BankTransaction.payee_name.ilike(like),
+            BankTransaction.payer_account.ilike(like),
+            BankTransaction.payee_account.ilike(like),
+            BankTransaction.bank_account.ilike(like),
+            BankTransaction.transaction_no.ilike(like),
+            BankTransaction.instruction_no.ilike(like),
+            BankTransaction.summary.ilike(like),
+            BankTransaction.purpose.ilike(like),
+            BankTransaction.remark.ilike(like),
+            BankTransaction.raw_text.ilike(like),
+        )
+    if date_from and str(date_from).strip():
+        predicate = predicate & (BankTransaction.trade_date >= str(date_from).strip())
+    if date_to and str(date_to).strip():
+        predicate = predicate & (BankTransaction.trade_date <= str(date_to).strip())
+
     pending_total = int(
         db.execute(select(func.count(BankTransaction.id)).where(predicate)).scalar_one()
     )

@@ -194,11 +194,12 @@ export default function BankCenterPageV2() {
   const [importOpen, setImportOpen] = useState(false)
 
   const [queueSearch, setQueueSearch] = useState('')
+  const [queueAppliedSearch, setQueueAppliedSearch] = useState('')
   const [queueDirection, setQueueDirection] = useState('all')
   const [queueFilter, setQueueFilter] = useState('all')
   const [queueRangeMode, setQueueRangeMode] = useState('all')
-  const [queueDateFrom, setQueueDateFrom] = useState(monthRange(0).from)
-  const [queueDateTo, setQueueDateTo] = useState(monthRange(0).to)
+  const [queueDateFrom, setQueueDateFrom] = useState('')
+  const [queueDateTo, setQueueDateTo] = useState('')
   const [queuePage, setQueuePage] = useState(1)
   const [queuePageSize, setQueuePageSize] = useState(20)
 
@@ -210,8 +211,8 @@ export default function BankCenterPageV2() {
   const [ledgerDirection, setLedgerDirection] = useState('all')
   const [ledgerLinked, setLedgerLinked] = useState('all')
   const [ledgerRangeMode, setLedgerRangeMode] = useState('all')
-  const [ledgerDateFrom, setLedgerDateFrom] = useState(monthRange(0).from)
-  const [ledgerDateTo, setLedgerDateTo] = useState(monthRange(0).to)
+  const [ledgerDateFrom, setLedgerDateFrom] = useState('')
+  const [ledgerDateTo, setLedgerDateTo] = useState('')
   const [accountFilter, setAccountFilter] = useState('')
   const [ledgerPage, setLedgerPage] = useState(1)
   const [ledgerPageSize, setLedgerPageSize] = useState(50)
@@ -227,10 +228,22 @@ export default function BankCenterPageV2() {
   const refreshBankData = () => setDataRevision((value) => value + 1)
 
   useEffect(() => {
+    const timer = window.setTimeout(() => setQueueAppliedSearch(queueSearch.trim()), 350)
+    return () => window.clearTimeout(timer)
+  }, [queueSearch])
+
+  useEffect(() => {
     let cancelled = false
     setDashboardLoading(true)
     setDashboardError('')
-    getBankAutoReconciliationDashboard(500)
+    const requestRange = queueRangeMode === 'custom'
+      ? { from: queueDateFrom, to: queueDateTo }
+      : quickRange(queueRangeMode)
+    getBankAutoReconciliationDashboard(500, {
+      q: queueAppliedSearch || undefined,
+      date_from: requestRange.from || undefined,
+      date_to: requestRange.to || undefined
+    })
       .then((result) => {
         if (cancelled) return
         setDashboard(result)
@@ -249,7 +262,7 @@ export default function BankCenterPageV2() {
         if (!cancelled) setDashboardLoading(false)
       })
     return () => { cancelled = true }
-  }, [dashboardRevision])
+  }, [dashboardRevision, queueAppliedSearch, queueRangeMode, queueDateFrom, queueDateTo])
 
   useEffect(() => {
     let cancelled = false
@@ -315,30 +328,13 @@ export default function BankCenterPageV2() {
     return quickRange(queueRangeMode)
   }, [queueRangeMode, queueDateFrom, queueDateTo])
 
-  const queueBase = useMemo(() => {
-    const term = queueSearch.trim().toLowerCase()
-    return suggestions.filter((item) => {
-      if (queueDirection !== 'all' && item.direction !== queueDirection) return false
-      const tradeDate = String(item.trade_date || '')
-      if (queueRange.from && tradeDate && tradeDate < queueRange.from) return false
-      if (queueRange.to && tradeDate && tradeDate > queueRange.to) return false
-      if (!term) return true
-      const candidateText = (item.candidates || []).map((candidate) => [
-        candidate.bill_number,
-        candidate.partner_name,
-        candidate.game_name,
-        candidate.settlement_month
-      ].filter(Boolean).join(' ')).join(' ')
-      const haystack = [
-        item.counterparty_name,
-        item.summary,
-        item.transaction_no,
-        item.amount,
-        candidateText
-      ].filter((value) => value != null).join(' ').toLowerCase()
-      return haystack.includes(term)
-    })
-  }, [suggestions, queueSearch, queueDirection, queueRange.from, queueRange.to])
+  const queueBase = useMemo(() => suggestions.filter((item) => {
+    if (queueDirection !== 'all' && item.direction !== queueDirection) return false
+    const tradeDate = String(item.trade_date || '')
+    if (queueRange.from && tradeDate && tradeDate < queueRange.from) return false
+    if (queueRange.to && tradeDate && tradeDate > queueRange.to) return false
+    return true
+  }), [suggestions, queueDirection, queueRange.from, queueRange.to])
 
   const queueMetrics = useMemo(() => {
     const groups = {
@@ -473,23 +469,22 @@ export default function BankCenterPageV2() {
   }
 
   const resetQueueFilters = () => {
-    const current = monthRange(0)
     setQueueSearch('')
+    setQueueAppliedSearch('')
     setQueueDirection('all')
     setQueueFilter('all')
     setQueueRangeMode('all')
-    setQueueDateFrom(current.from)
-    setQueueDateTo(current.to)
+    setQueueDateFrom('')
+    setQueueDateTo('')
   }
 
   const resetLedgerFilters = () => {
-    const current = monthRange(0)
     setLedgerSearch('')
     setLedgerDirection('all')
     setLedgerLinked('all')
     setLedgerRangeMode('all')
-    setLedgerDateFrom(current.from)
-    setLedgerDateTo(current.to)
+    setLedgerDateFrom('')
+    setLedgerDateTo('')
     setAccountFilter('')
   }
 
@@ -569,7 +564,7 @@ export default function BankCenterPageV2() {
             <div className="bank-v2-filterbar__row">
               <label className="bank-v2-search">
                 <span>搜索流水</span>
-                <div><i>⌕</i><input value={queueSearch} onChange={(event) => setQueueSearch(event.target.value)} placeholder="对方单位 / 摘要 / 流水号 / 账单号" /></div>
+                <div><i>⌕</i><input value={queueSearch} onChange={(event) => setQueueSearch(event.target.value)} placeholder="对方单位 / 摘要 / 用途 / 附言 / 流水号" /></div>
               </label>
               <label className="bank-v2-date-field">
                 <span>交易日期</span>
@@ -586,11 +581,11 @@ export default function BankCenterPageV2() {
             <div className="bank-v2-presets">
               <span>快捷日期</span>
               {[['all', '全部'], ['7d', '近7天'], ['this-month', '本月'], ['last-month', '上月']].map(([key, label]) => (
-                <button key={key} type="button" className={queueRangeMode === key ? 'is-active' : ''} onClick={() => setQueueRangeMode(key)}>{label}</button>
+                <button key={key} type="button" className={queueRangeMode === key ? 'is-active' : ''} onClick={() => { const range = quickRange(key); setQueueRangeMode(key); setQueueDateFrom(range.from); setQueueDateTo(range.to) }}>{label}</button>
               ))}
               <i />
               <small>当前：{activeQueueRangeText}</small>
-              <em>筛选结果 {filteredQueue.length} 笔 · {money(filteredQueueAmount)}</em>
+              <em>{queueAppliedSearch ? `全库命中 ${dashboard?.stats?.pending_transactions ?? filteredQueue.length} 笔 · 当前显示 ${filteredQueue.length} 笔` : `筛选结果 ${filteredQueue.length} 笔 · ${money(filteredQueueAmount)}`}</em>
             </div>
           </section>
 
@@ -679,13 +674,13 @@ export default function BankCenterPageV2() {
       {activeTab === 'ledger' ? (
         <div className="bank-center-pane bank-v2-pane">
           <section className="bank-v2-ledger-toolbar">
-            <label className="bank-v2-search"><span>搜索流水</span><div><i>⌕</i><input value={ledgerSearch} onChange={(event) => setLedgerSearch(event.target.value)} placeholder="户名 / 摘要 / 流水号 / 账单号" /></div></label>
+            <label className="bank-v2-search"><span>搜索流水</span><div><i>⌕</i><input value={ledgerSearch} onChange={(event) => setLedgerSearch(event.target.value)} placeholder="户名 / 摘要 / 用途 / 附言 / 流水号" /></div></label>
             <label className="bank-v2-date-field"><span>交易日期</span><div><input type="date" value={ledgerDateFrom} onChange={(event) => { setLedgerDateFrom(event.target.value); setLedgerRangeMode('custom') }} /><b>至</b><input type="date" value={ledgerDateTo} onChange={(event) => { setLedgerDateTo(event.target.value); setLedgerRangeMode('custom') }} /></div></label>
             <label className="bank-v2-select-field"><span>银行账户</span><select value={accountFilter} onChange={(event) => setAccountFilter(event.target.value)}><option value="">全部账户</option>{accounts.map((account) => <option key={account.bank_account} value={account.bank_account}>{account.source_bank || 'BANK'} · {accountTail(account.bank_account)}</option>)}</select></label>
             <label className="bank-v2-select-field"><span>核销状态</span><select value={ledgerLinked} onChange={(event) => setLedgerLinked(event.target.value)}><option value="all">全部状态</option><option value="unlinked">待核销</option><option value="linked">已核销</option></select></label>
             <button type="button" className="bank-v2-reset" onClick={resetLedgerFilters}>重置</button>
             <div className="bank-v2-ledger-presets">
-              {[['all', '全部'], ['7d', '近7天'], ['this-month', '本月'], ['last-month', '上月']].map(([key, label]) => <button key={key} type="button" className={ledgerRangeMode === key ? 'is-active' : ''} onClick={() => setLedgerRangeMode(key)}>{label}</button>)}
+              {[['all', '全部'], ['7d', '近7天'], ['this-month', '本月'], ['last-month', '上月']].map(([key, label]) => <button key={key} type="button" className={ledgerRangeMode === key ? 'is-active' : ''} onClick={() => { const range = quickRange(key); setLedgerRangeMode(key); setLedgerDateFrom(range.from); setLedgerDateTo(range.to) }}>{label}</button>)}
               <i />
               <button type="button" className={ledgerDirection === 'income' ? 'is-active' : ''} onClick={() => setLedgerDirection(ledgerDirection === 'income' ? 'all' : 'income')}>收入</button>
               <button type="button" className={ledgerDirection === 'expense' ? 'is-active' : ''} onClick={() => setLedgerDirection(ledgerDirection === 'expense' ? 'all' : 'expense')}>支出</button>
