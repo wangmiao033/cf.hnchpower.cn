@@ -63,6 +63,54 @@ export type ProfitAnalysis = {
   notes: string[]
 }
 
+export type ProjectProfitMonthRow = {
+  month: string
+  channel_settlement: number
+  rd_cost: number
+  server_cost: number
+  attributed_expense: number
+  total_attributable_cost: number
+  gross_profit: number
+  gross_margin: number
+}
+
+export type ProjectProfitRow = {
+  game_name: string
+  channel_settlement: number
+  rd_cost: number
+  server_cost: number
+  attributed_expense: number
+  total_attributable_cost: number
+  gross_profit: number
+  gross_margin: number
+  channel_flow: number
+  rd_flow: number
+  active_months: number
+  first_month: string | null
+  last_month: string | null
+  monthly: ProjectProfitMonthRow[]
+}
+
+export type ProjectProfitAnalysis = {
+  scope: 'year' | 'lifetime'
+  year: string | null
+  available_years: string[]
+  summary: {
+    project_count: number
+    profitable_projects: number
+    loss_projects: number
+    channel_settlement: number
+    total_attributable_cost: number
+    gross_profit: number
+    gross_margin: number
+    shared_server_cost: number
+    shared_expense: number
+    data_months: number
+  }
+  projects: ProjectProfitRow[]
+  notes: string[]
+}
+
 export function getProfitAnalysis(params: {
   month?: string
   trendMonths?: number
@@ -72,4 +120,13 @@ export function getProfitAnalysis(params: {
   if (params.trendMonths != null) query.set('trend_months', String(params.trendMonths))
   const qs = query.toString()
   return apiGet(`/api/profit-analysis/monthly${qs ? `?${qs}` : ''}`)
+}
+
+export function getProjectProfitAnalysis(params: {
+  year?: string | null
+} = {}): Promise<ProjectProfitAnalysis> {
+  const query = new URLSearchParams()
+  if (params.year) query.set('year', params.year)
+  const qs = query.toString()
+  return apiGet(`/api/profit-analysis/projects${qs ? `?${qs}` : ''}`)
 }
