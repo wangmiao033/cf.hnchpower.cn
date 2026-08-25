@@ -1,7 +1,10 @@
 from types import SimpleNamespace
 import unittest
 
-from app.services.channel_settlement_engine import calculate_channel_line
+from app.services.channel_settlement_engine import (
+    ANJIU_PRE_DISCOUNT_DEDUCTION_RULE,
+    calculate_channel_line,
+)
 
 
 class ChannelSettlementEngineTests(unittest.TestCase):
@@ -93,6 +96,34 @@ class ChannelSettlementEngineTests(unittest.TestCase):
         result = calculate_channel_line(line, parent)
 
         self.assertEqual(float(result["system_settlement_amount"]), 300.0)
+
+    def test_anjiu_deductions_are_applied_before_discount(self):
+        record = SimpleNamespace(
+            settlement_rule_code=ANJIU_PRE_DISCOUNT_DEDUCTION_RULE,
+            channel_fee_mode="percent",
+            channel_fee_rate=5,
+            tax_mode="share",
+            validation_tolerance=0.05,
+        )
+        cases = [
+            (3534002, 7776, 5024.87, 17631.13, 5289.34),
+            (64406, 1944, 89.01, 312.31, 93.69),
+        ]
+        system_total = 0
+        for flow, voucher, platform, expected_billing, expected_share in cases:
+            line = self.line(flow, voucher, platform, tax=0)
+            line.discount_factor = 0.005
+            line.share_rate = 30
+            result = calculate_channel_line(line, record)
+
+            self.assertEqual(float(result["billing_amount"]), expected_billing)
+            self.assertEqual(float(result["share_amount"]), expected_share)
+            self.assertEqual(float(result["system_settlement_amount"]), platform)
+            self.assertEqual(float(result["settlement_difference"]), 0.0)
+            self.assertEqual(result["validation_status"], "pass")
+            system_total += float(result["system_settlement_amount"])
+
+        self.assertAlmostEqual(system_total, 5113.88, places=2)
 
 
 if __name__ == "__main__":

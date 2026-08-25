@@ -6,6 +6,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from typing import Any
 
 XIAN_WEIZHEN_9917_RULE = "xian_weizhen_9917"
+ANJIU_PRE_DISCOUNT_DEDUCTION_RULE = "anjiu_pre_discount_deduction"
 VALID_RULES = {
     "legacy_fixed_fee_tax",
     "xiaomi_percent_fee",
@@ -13,6 +14,7 @@ VALID_RULES = {
     "percent_fee_after_tax",
     "share_only",
     XIAN_WEIZHEN_9917_RULE,
+    ANJIU_PRE_DISCOUNT_DEDUCTION_RULE,
     "custom",
 }
 VALID_FEE_MODES = {"none", "percent", "fixed"}
@@ -71,6 +73,10 @@ def resolve_rule_settings(record: Any, fallback: Any = None) -> dict[str, Any]:
         # 代金券、福利币仅记录，不从可分成金额扣减；
         # 其余原扣减项仍参与；分成后统一扣 5% 通道费；税率仅记录。
         fee_mode, tax_mode, fee_rate = "percent", "none", Decimal("5")
+    elif code == ANJIU_PRE_DISCOUNT_DEDUCTION_RULE:
+        # 广东安久 / 游戏fan：扣减项必须先从后台流水扣除，再乘折扣系数。
+        # 该专属规则的税处理固定为“按分成额扣税”；渠道费模式/费率仍以合同明细为准。
+        tax_mode = "share"
     elif code in {"xiaomi_percent_fee", "five_percent_gateway_share"}:
         fee_mode, tax_mode = "percent", "none"
         if fee_rate <= 0:
@@ -103,10 +109,17 @@ def calculate_channel_line(item: Any, record: Any) -> dict[str, Any]:
         if settings["rule_code"] == XIAN_WEIZHEN_9917_RULE
         else DEFAULT_DEDUCTION_FIELDS
     )
-    billing_amount = effective_flow - sum(
+    deduction_total = sum(
         (_d(getattr(item, field, None)) for field in deduction_fields),
         Decimal("0"),
     )
+    if settings["rule_code"] == ANJIU_PRE_DISCOUNT_DEDUCTION_RULE:
+        # 与前端规则保持一致：(后台流水 - 代金券/退款/测试费等扣减) × 折扣系数。
+        # 不能先把后台流水乘折扣再减原始代金券，否则 0.005 这类折扣会把扣减放大约 200 倍。
+        billing_amount = (flow - deduction_total) * discount
+    else:
+        billing_amount = effective_flow - deduction_total
+
     share_rate = _d(getattr(item, "share_rate", None)) / Decimal("100")
     share_amount = billing_amount * share_rate
 
