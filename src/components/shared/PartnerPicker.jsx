@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 
 export function partnerKey(value) {
   return String(value || '')
@@ -54,6 +54,16 @@ function PartnerPicker({
       .slice(0, 8)
   }, [partners, query])
   const exactMatch = findExactPartner(partners, value)
+  const exactPartnerId = String(exactMatch?.id || '')
+
+  useEffect(() => {
+    // If the field already contains one unique customer-library name/short name,
+    // restore its stable ID automatically. This covers draft/smart-entry values and
+    // exact manual input, so an already-known partner does not need to be selected twice.
+    // Partial, ambiguous and brand-new names stay unlinked and still require selection.
+    if (partnerId || !exactMatch || !exactPartnerId) return
+    onChange(exactMatch.name, exactPartnerId, exactMatch)
+  }, [exactMatch, exactPartnerId, onChange, partnerId])
 
   const selectPartner = (partner) => {
     onChange(partner.name, String(partner.id || ''), partner)
@@ -88,9 +98,9 @@ function PartnerPicker({
           onBlur={() => window.setTimeout(() => setOpen(false), 120)}
           onChange={(event) => {
             const nextValue = event.target.value
-            // Typing an exact company name is still only text input. A stable customer
-            // relationship is established only by selecting a result (click/Enter), so
-            // contract matching cannot start from an accidental exact-string match.
+            // Clear a stale relationship while the text is being edited. If the result
+            // becomes one unique exact customer-library match, the effect above restores
+            // its stable ID automatically; otherwise it intentionally remains unlinked.
             onChange(nextValue, '', null)
             setOpen(true)
           }}
