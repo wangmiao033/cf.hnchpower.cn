@@ -73,8 +73,15 @@ export function sumChannelNumericLines(record, field) {
   return getChannelLineItems(record).reduce((s, line) => s + (parseFloat(line[field]) || 0), 0)
 }
 
+function recordSettlementTotal(record) {
+  if (record?.settlementAmount == null || String(record.settlementAmount).trim() === '') return null
+  const value = parseFloat(String(record.settlementAmount))
+  return Number.isFinite(value) ? value : null
+}
+
 export function getChannelTotals(record) {
   const lines = getChannelLineItems(record)
+  const persistedSettlement = recordSettlementTotal(record)
   if (lines.length === 0) {
     const raw = parseFloat(record.flow) || 0
     const fac = getLineDiscountFactor(record)
@@ -82,14 +89,16 @@ export function getChannelTotals(record) {
       flow: Math.round(raw * fac * 100) / 100,
       voucherCost: parseFloat(record.voucherCost) || 0,
       refundCost: parseFloat(record.refundCost) || 0,
-      settlementAmount: parseFloat(record.settlementAmount) || 0
+      settlementAmount: persistedSettlement ?? 0
     }
   }
   return {
     flow: lines.reduce((s, l) => s + getLineEffectiveFlow(l), 0),
     voucherCost: lines.reduce((s, l) => s + (parseFloat(l.voucherCost) || 0), 0),
     refundCost: lines.reduce((s, l) => s + (parseFloat(l.refundCost) || 0), 0),
-    settlementAmount: lines.reduce((s, l) => s + (parseFloat(l.settlementAmount) || 0), 0)
+    // 主表结算合计由后端统一处理跨行四舍五入尾差，是账单级应收的唯一权威值。
+    // 明细逐行各自保留 2 位后直接相加，可能比账单最终合计多/少 0.01 元。
+    settlementAmount: persistedSettlement ?? lines.reduce((s, l) => s + (parseFloat(l.settlementAmount) || 0), 0)
   }
 }
 
@@ -118,9 +127,10 @@ export function getChannelReceivedAmount(record) {
   return v != null ? parseFloat(String(v)) || 0 : 0
 }
 
-/** 未收 = 应收（结算合计）- 已收 */
+/** 未收 = 应收（结算合计）- 已收；1 分钱以内按财务尾差视为结清 */
 export function getChannelUnpaidAmount(record) {
-  return getChannelTotals(record).settlementAmount - getChannelReceivedAmount(record)
+  const difference = getChannelTotals(record).settlementAmount - getChannelReceivedAmount(record)
+  return Math.abs(difference) <= 0.01 + 1e-9 ? 0 : difference
 }
 
 export function getSimpleReceiptStatus(record) {
@@ -176,9 +186,9 @@ export function receiptProgressPercent(received, receivable) {
   return Math.min(100, Math.round((r / a) * 100))
 }
 
-/** 已收满应收（与后端 receipt_status=paid 一致） */
+/** 已收满应收（与后端 receipt_status=paid 的 0.01 元容差一致） */
 export function isChannelReceiptSettled(record) {
   const a = getChannelTotals(record).settlementAmount
   const r = getChannelReceivedAmount(record)
-  return r + 1e-9 >= a
+  return r + 0.01 + 1e-9 >= a
 }
