@@ -11,6 +11,7 @@ import { CoreBillLoadingState } from '@/pages/CoreBillLoadingState.jsx'
 import { VIEWS } from '@/app/routes.js'
 import { apiChannelRowToFrontend, getChannelRecord } from '@/lib/api/channel.ts'
 import { ContractDifferenceBlockedError, transitionBillLifecycle } from '@/lib/api/billLifecycle.ts'
+import { getRecentApiErrorMessage } from '@/lib/api/client.ts'
 import {
   getCachedEditRecord,
   invalidateEditRecord,
@@ -308,7 +309,8 @@ function CoreChannelBillFormPage({ mode }) {
     try {
       const result = await recon.onChannelUpdateRecord?.(recordId, record)
       if (result === false) {
-        reportIssue('服务器没有接受本次保存。请按当前页提示定位问题，修正后再次保存。', {
+        const serverMessage = getRecentApiErrorMessage()
+        reportIssue(serverMessage || '服务器没有接受本次保存。请按当前页提示定位问题，修正后再次保存。', {
           kind: 'save',
           title: '账单未保存'
         })
