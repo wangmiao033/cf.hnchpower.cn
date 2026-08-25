@@ -35,7 +35,16 @@
   color: #ffffff;
 }
 
-/* 渠道账单页签做轻：保留切换能力，但不再占一整条厚导航。 */
+/* 第一层：渠道账单标题 + 页面操作。标题说明在 Header 中已隐藏。 */
+body:has(.core-channel-recon-page) .app-admin-header__title-block {
+  gap: 0;
+}
+
+body:has(.core-channel-recon-page) .app-admin-header__title-block strong {
+  font-size: 16px;
+}
+
+/* 页签做轻：保留切换能力，但不再占一整条厚导航。 */
 body:has(.core-channel-recon-page) .app-top-subnav {
   box-shadow: none;
   background: rgba(255, 255, 255, 0.96);
@@ -83,6 +92,85 @@ body:has(.core-channel-recon-page) .app-top-subnav__close {
   height: 20px;
   margin-right: 6px;
   font-size: 16px;
+}
+
+/* 第二层只放筛选；原页面内重复的标题/操作保留 DOM 供功能触发，但不再占视觉空间。 */
+.core-channel-recon-page .core-recon-workbar {
+  display: block !important;
+  min-height: 44px !important;
+  overflow: visible !important;
+}
+
+.core-channel-recon-page .core-recon-workbar > .core-recon-head {
+  display: none !important;
+}
+
+.core-channel-recon-page .core-recon-workbar .core-recon-filters {
+  display: flex !important;
+  grid-column: auto !important;
+  grid-row: auto !important;
+  min-height: 44px !important;
+  padding: 5px 8px !important;
+  border-top: 0 !important;
+  background: #ffffff !important;
+}
+
+/* 金额统一回到中性文字色，仅应收加粗，避免蓝绿金额同时抢视线。 */
+.core-channel-recon-page .core-channel-recon-table .core-recon-money,
+.core-channel-recon-page .core-channel-recon-table .core-recon-money strong {
+  color: #334155 !important;
+}
+
+.core-channel-recon-page .core-channel-recon-table .core-recon-money--settlement {
+  color: #1f2937 !important;
+  font-weight: 750;
+}
+
+/* 收款状态只在状态标签上使用语义色。 */
+.core-channel-recon-page .core-channel-payment-status {
+  min-width: 72px;
+  border: 1px solid transparent !important;
+  border-radius: 7px !important;
+  box-shadow: none !important;
+}
+
+.core-channel-recon-page .core-channel-payment-status strong {
+  color: inherit !important;
+}
+
+.core-channel-recon-page .core-channel-payment-status small {
+  color: inherit !important;
+  opacity: 0.72;
+}
+
+.core-channel-recon-page .core-channel-payment-status.is-unpaid {
+  border-color: #fed7aa !important;
+  background: #fff7ed !important;
+  color: #c2410c !important;
+}
+
+.core-channel-recon-page .core-channel-payment-status.is-partial {
+  border-color: #bfdbfe !important;
+  background: #eff6ff !important;
+  color: #1d4ed8 !important;
+}
+
+.core-channel-recon-page .core-channel-payment-status.is-settled {
+  border-color: #bbf7d0 !important;
+  background: #f0fdf4 !important;
+  color: #15803d !important;
+}
+
+.core-channel-recon-page .core-channel-payment-status.is-anomaly {
+  border-color: #fecaca !important;
+  background: #fef2f2 !important;
+  color: #b91c1c !important;
+}
+
+.core-channel-recon-page .core-channel-payment-status.is-void {
+  border-color: #e2e8f0 !important;
+  background: #f8fafc !important;
+  color: #64748b !important;
 }
 
 @media (max-width: 1180px) {
