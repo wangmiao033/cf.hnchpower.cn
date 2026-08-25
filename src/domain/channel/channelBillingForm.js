@@ -32,6 +32,7 @@ export function initialLineItem() {
 }
 
 function round2(value) { return Math.round((Number(value) + Number.EPSILON) * 100) / 100 }
+function cents(value) { return Math.round(Number(value || 0) * 100) }
 function optionalNumber(value) { if (value === '' || value == null) return null; const n = Number(value); return Number.isFinite(n) ? n : null }
 function hasLineRuleValue(value) { return value !== undefined && value !== null && String(value).trim() !== '' }
 
@@ -200,14 +201,22 @@ export function buildFullChannelRecord(headerForm, lineFormList) {
   const items = lineFormList.map((row) => buildLineRecordFromForm(row, effectiveHeader)); const sum = (key) => round2(items.reduce((s, it) => s + Number(it[key] || 0), 0))
   const period = channelSettlementPeriodFromLines(items, effectiveHeader.settlementMonth)
   const platformRows = items.filter((i) => i.platformSettlementAmount != null)
+  const roundedLineSystemTotal = sum('systemSettlementAmount')
+  const precisionSystemTotal = round2(lineFormList.reduce((total, row) => total + calculateSettlementRaw(row, resolveChannelLineRuleHeader(row, effectiveHeader)), 0))
+  const platformTotal = platformRows.length ? round2(platformRows.reduce((s, i) => s + i.platformSettlementAmount, 0)) : null
+  const everyLineMatchesRoundedPlatform = items.length > 0 && platformRows.length === items.length && items.every((item) => item.settlementDifference != null && cents(item.settlementDifference) === 0)
+  const roundingTailApplied = everyLineMatchesRoundedPlatform && platformTotal != null && cents(platformTotal) === cents(roundedLineSystemTotal) && Math.abs(cents(precisionSystemTotal) - cents(roundedLineSystemTotal)) === 1
+  const systemTotal = roundingTailApplied ? precisionSystemTotal : roundedLineSystemTotal
+  const differenceTotal = platformTotal == null ? null : round2(systemTotal - platformTotal)
   const validationStatus = items.some((i) => i.validationStatus === 'fail') ? 'fail' : items.length && items.every((i) => i.validationStatus === 'pass') ? 'pass' : platformRows.length ? 'partial' : 'unvalidated'
+  const settlementTotal = roundingTailApplied ? precisionSystemTotal : sum('settlementAmount')
   return {
     channelName: effectiveHeader.channelName, partnerName: effectiveHeader.partnerName || '', settlementMonth: period.settlementMonth || normalizeChannelSettlementCycle(effectiveHeader.settlementMonth), invoiceStatus: effectiveHeader.invoiceStatus || 'pending_invoice', invoice_status: effectiveHeader.invoiceStatus || 'pending_invoice',
     startDate: period.startDate || effectiveHeader.startDate || '', endDate: period.endDate || effectiveHeader.endDate || '', remark: effectiveHeader.remark || '', status: effectiveHeader.status || 'pending', serverCost: parseOptionalNum(effectiveHeader.serverCost), discountType: effectiveHeader.discountType || null,
     channelFeeRate: parseOptionalNum(effectiveHeader.channelFeeRate), devShareRate: parseOptionalNum(effectiveHeader.devShareRate), profitRate: parseOptionalNum(effectiveHeader.profitRate),
     settlementRuleCode: effectiveHeader.settlementRuleCode || 'legacy_fixed_fee_tax', channelFeeMode: effectiveHeader.channelFeeMode || 'fixed', taxMode: effectiveHeader.taxMode || 'share', validationTolerance: Math.max(0, Number(effectiveHeader.validationTolerance || 0.05)),
     items, gameName: items.map((i) => i.gameName).filter(Boolean).join('、'), rawFlowTotal: sum('flow'), flow: sum('effectiveFlow'), voucherCost: sum('voucherCost'), noWorryCost: sum('noWorryCost'), refundCost: sum('refundCost'), testCost: sum('testCost'), welfareCost: sum('welfareCost'), coinCost: sum('coinCost'), billingAmount: sum('billingAmount'), shareAmount: sum('shareAmount'),
-    taxRate: items[0]?.taxRate || 0, shareRate: items[0]?.shareRate || 0, gatewayCost: sum('gatewayCost'), systemSettlementAmount: sum('systemSettlementAmount'), platformSettlementAmount: platformRows.length ? round2(platformRows.reduce((s, i) => s + i.platformSettlementAmount, 0)) : null, settlementDifference: platformRows.length ? round2(platformRows.reduce((s, i) => s + Number(i.settlementDifference || 0), 0)) : null, validationStatus, settlementAmount: sum('settlementAmount')
+    taxRate: items[0]?.taxRate || 0, shareRate: items[0]?.shareRate || 0, gatewayCost: sum('gatewayCost'), systemSettlementAmount: systemTotal, platformSettlementAmount: platformTotal, settlementDifference: differenceTotal, validationStatus, settlementAmount: settlementTotal
   }
 }
 

@@ -7,6 +7,7 @@ from typing import Any
 
 XIAN_WEIZHEN_9917_RULE = "xian_weizhen_9917"
 ANJIU_PRE_DISCOUNT_DEDUCTION_RULE = "anjiu_pre_discount_deduction"
+ROUNDING_TAIL = Decimal("0.01")
 VALID_RULES = {
     "legacy_fixed_fee_tax",
     "xiaomi_percent_fee",
@@ -95,9 +96,13 @@ def resolve_rule_settings(record: Any, fallback: Any = None) -> dict[str, Any]:
     return {"rule_code": code, "fee_mode": fee_mode, "tax_mode": tax_mode, "fee_rate": fee_rate, "tolerance": tolerance}
 
 
-def calculate_channel_line(item: Any, record: Any) -> dict[str, Any]:
-    # P0: contract rules belong to the game line, not only to the bill header.
-    # Legacy rows with null line-rule columns still fall back to the parent.
+def _calculate_channel_line_raw(item: Any, record: Any) -> tuple[dict[str, Any], Decimal, Decimal, Decimal]:
+    """Return rule settings plus unrounded billing/share/system amounts.
+
+    Line display values are still rounded to cents, but bill-level aggregation can
+    now add the unrounded system amounts first. This matches spreadsheets that
+    calculate each row at full precision and round only the final total.
+    """
     settings = resolve_rule_settings(item, record)
     flow = _d(getattr(item, "billing_flow", None))
     discount = _d(getattr(item, "discount_factor", None), "1")
@@ -114,8 +119,6 @@ def calculate_channel_line(item: Any, record: Any) -> dict[str, Any]:
         Decimal("0"),
     )
     if settings["rule_code"] == ANJIU_PRE_DISCOUNT_DEDUCTION_RULE:
-        # 与前端规则保持一致：(后台流水 - 代金券/退款/测试费等扣减) × 折扣系数。
-        # 不能先把后台流水乘折扣再减原始代金券，否则 0.005 这类折扣会把扣减放大约 200 倍。
         billing_amount = (flow - deduction_total) * discount
     else:
         billing_amount = effective_flow - deduction_total
@@ -137,7 +140,14 @@ def calculate_channel_line(item: Any, record: Any) -> dict[str, Any]:
     else:
         system_amount = after_fee
 
-    system_amount = _money(system_amount)
+    return settings, billing_amount, share_amount, system_amount
+
+
+def calculate_channel_line(item: Any, record: Any) -> dict[str, Any]:
+    # P0: contract rules belong to the game line, not only to the bill header.
+    # Legacy rows with null line-rule columns still fall back to the parent.
+    settings, billing_amount, share_amount, system_raw = _calculate_channel_line_raw(item, record)
+    system_amount = _money(system_raw)
     platform_raw = getattr(item, "platform_settlement_amount", None)
     platform_amount = None if platform_raw in (None, "") else _money(_d(platform_raw))
     if platform_amount is None:
@@ -160,13 +170,54 @@ def calculate_channel_line(item: Any, record: Any) -> dict[str, Any]:
     }
 
 
-def aggregate_validation(items: list[Any]) -> dict[str, Any]:
+def aggregate_validation(items: list[Any], record: Any = None) -> dict[str, Any]:
     if not items:
-        return {"system_total": Decimal("0"), "platform_total": None, "difference_total": None, "validation_status": "unvalidated"}
-    system_total = _money(sum((_d(getattr(item, "system_settlement_amount", None)) for item in items), Decimal("0")))
+        return {
+            "system_total": Decimal("0"),
+            "platform_total": None,
+            "difference_total": None,
+            "validation_status": "unvalidated",
+            "settlement_total": Decimal("0"),
+            "rounding_tail_applied": False,
+        }
+
+    rounded_line_system_total = _money(
+        sum((_d(getattr(item, "system_settlement_amount", None)) for item in items), Decimal("0"))
+    )
+    precision_system_total = rounded_line_system_total
+    if record is not None:
+        precision_system_total = _money(
+            sum((_calculate_channel_line_raw(item, record)[3] for item in items), Decimal("0"))
+        )
+
     provided = [item for item in items if getattr(item, "platform_settlement_amount", None) is not None]
-    platform_total = _money(sum((_d(getattr(item, "platform_settlement_amount", None)) for item in provided), Decimal("0"))) if provided else None
-    difference_total = _money(sum((_d(getattr(item, "settlement_difference", None)) for item in provided), Decimal("0"))) if provided else None
+    platform_total = _money(
+        sum((_d(getattr(item, "platform_settlement_amount", None)) for item in provided), Decimal("0"))
+    ) if provided else None
+
+    every_line_matches_rounded_platform = (
+        bool(items)
+        and len(provided) == len(items)
+        and all(
+            getattr(item, "settlement_difference", None) is not None
+            and _money(_d(getattr(item, "settlement_difference", None))) == Decimal("0.00")
+            for item in items
+        )
+    )
+    rounding_tail_applied = (
+        every_line_matches_rounded_platform
+        and platform_total is not None
+        and platform_total == rounded_line_system_total
+        and abs(precision_system_total - rounded_line_system_total) == ROUNDING_TAIL
+    )
+
+    system_total = precision_system_total if rounding_tail_applied else rounded_line_system_total
+    difference_total = _money(system_total - platform_total) if platform_total is not None else None
+    line_settlement_total = _money(
+        sum((_d(getattr(item, "settlement_amount", None)) for item in items), Decimal("0"))
+    )
+    settlement_total = precision_system_total if rounding_tail_applied else line_settlement_total
+
     statuses = [str(getattr(item, "validation_status", None) or "unvalidated") for item in items]
     if "fail" in statuses:
         status = "fail"
@@ -176,4 +227,12 @@ def aggregate_validation(items: list[Any]) -> dict[str, Any]:
         status = "partial"
     else:
         status = "unvalidated"
-    return {"system_total": system_total, "platform_total": platform_total, "difference_total": difference_total, "validation_status": status}
+
+    return {
+        "system_total": system_total,
+        "platform_total": platform_total,
+        "difference_total": difference_total,
+        "validation_status": status,
+        "settlement_total": settlement_total,
+        "rounding_tail_applied": rounding_tail_applied,
+    }

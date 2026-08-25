@@ -126,10 +126,10 @@ def _sync_denormalized_totals(row: ChannelRecord, db: Session) -> None:
     row.billing_amount = float(sum(float(i.billing_amount or 0) for i in items))
     row.share_amount = float(sum(float(i.share_amount or 0) for i in items))
     row.gateway_cost = float(sum(float(i.gateway_cost or 0) for i in items))
-    row.settlement_amount = float(sum(float(i.settlement_amount or 0) for i in items))
     row.tax_rate = float(items[0].tax_rate or 0)
     row.share_rate = float(items[0].share_rate or 0)
-    validation = aggregate_validation(items)
+    validation = aggregate_validation(items, row)
+    row.settlement_amount = float(validation["settlement_total"])
     row.system_settlement_amount = float(validation["system_total"])
     row.platform_settlement_amount = float(validation["platform_total"]) if validation["platform_total"] is not None else None
     row.settlement_difference = float(validation["difference_total"]) if validation["difference_total"] is not None else None
