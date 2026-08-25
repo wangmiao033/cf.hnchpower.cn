@@ -10,7 +10,7 @@ import { findExactPartner } from '@/components/shared/PartnerPicker.jsx'
 import { CoreBillLoadingState } from '@/pages/CoreBillLoadingState.jsx'
 import { VIEWS } from '@/app/routes.js'
 import { apiChannelRowToFrontend, getChannelRecord } from '@/lib/api/channel.ts'
-import { transitionBillLifecycle } from '@/lib/api/billLifecycle.ts'
+import { ContractDifferenceBlockedError, transitionBillLifecycle } from '@/lib/api/billLifecycle.ts'
 import {
   getCachedEditRecord,
   invalidateEditRecord,
@@ -126,7 +126,7 @@ function CoreChannelBillFormPage({ mode }) {
   const [loadAttempt, setLoadAttempt] = useState(0)
   const [reviewing, setReviewing] = useState(false)
   const [inlineIssue, setInlineIssue] = useState(null)
-  const [differenceRevision, setDifferenceRevision] = useState(0)
+  const [differenceSeedItems, setDifferenceSeedItems] = useState([])
   const [smartRecord, setSmartRecord] = useState(null)
   const [smartRevision, setSmartRevision] = useState(0)
   const [compactMode, setCompactMode] = useState(true)
@@ -143,7 +143,7 @@ function CoreChannelBillFormPage({ mode }) {
     setSmartRecord(null)
     setSmartRevision(0)
     setInlineIssue(null)
-    setDifferenceRevision(0)
+    setDifferenceSeedItems([])
     setRuleAuthority({ status: 'idle', total: 0, matched: 0, unmatched: 0, needsConfirmation: 0 })
   }, [mode, channelEditRecordId])
 
@@ -252,10 +252,9 @@ function CoreChannelBillFormPage({ mode }) {
 
   const openContractDifferenceWorkbench = () => {
     if (!isEdit) return
-    setDifferenceRevision((value) => value + 1)
     window.setTimeout(() => {
       focusProblemTarget(document.getElementById('channel-contract-difference-workbench'))
-    }, 90)
+    }, 30)
   }
 
   const locateIssue = (issue = inlineIssue) => {
@@ -443,6 +442,7 @@ function CoreChannelBillFormPage({ mode }) {
       await recon.refetchChannelFromApi?.()
       const deferred = Boolean(lifecycle?.settlement_condition?.deferred)
       setInlineIssue(null)
+      setDifferenceSeedItems([])
       showToast(
         zeroSettlement
           ? '零结算账单已核对并结清'
@@ -459,6 +459,10 @@ function CoreChannelBillFormPage({ mode }) {
           ? '账单修改已保存，但确认核对失败，请在当前页处理后重试。'
           : '保存并确认核对失败，请在当前页处理后重试。'
       const contractRelated = /合同|差异|核验|特殊结算|匹配/.test(message)
+      const contractDifferences = error instanceof ContractDifferenceBlockedError
+        ? error.contractDifferences || []
+        : []
+      if (contractDifferences.length) setDifferenceSeedItems(contractDifferences)
       const issue = reportIssue(message, {
         kind: contractRelated ? 'contract' : 'review',
         title: savedSuccessfully ? '修改已保存，但核对未完成' : '保存 / 核对未完成',
@@ -639,9 +643,9 @@ function CoreChannelBillFormPage({ mode }) {
       {isEdit ? (
         <div id="channel-contract-difference-workbench" className="core-bill-contract-difference-workbench">
           <ContractDifferenceActionPanel
-            key={`channel-difference-${stableRecord?.id || channelEditRecordId || ''}-${differenceRevision}`}
             billType="channel"
             billId={String(stableRecord?.id || channelEditRecordId || '')}
+            initialItems={differenceSeedItems}
             onEditBill={() => {
               const issue = {
                 kind: 'form',

@@ -54,10 +54,11 @@ function emptyForm() {
 export default function ContractDifferenceActionPanel({
   billType,
   billId,
+  initialItems,
   onEditBill,
   onChanged
 }) {
-  const [items, setItems] = useState([])
+  const [items, setItems] = useState(() => Array.isArray(initialItems) ? initialItems : [])
   const [summary, setSummary] = useState(null)
   const [loading, setLoading] = useState(false)
   const [workingId, setWorkingId] = useState('')
@@ -81,22 +82,27 @@ export default function ContractDifferenceActionPanel({
       setSummary(result.summary || null)
     } catch (error) {
       console.error(error)
-      setMessage('差异处置记录读取失败，请稍后重试。')
+      setMessage((current) => current || '差异处置记录读取失败，请稍后重试。')
     } finally {
       setLoading(false)
     }
   }, [billId, billType])
 
   useEffect(() => {
-    setItems([])
+    const seededItems = Array.isArray(initialItems) ? initialItems : []
+    setItems(seededItems)
     setSummary(null)
     setExpandedId('')
     setDetail(null)
     setEditor(null)
     setForm(emptyForm())
     setMessage('')
+    if (seededItems.length) {
+      setLoading(false)
+      return
+    }
     void load()
-  }, [load])
+  }, [load, initialItems])
 
   const loadDetail = useCallback(async (caseId) => {
     if (!caseId) {
