@@ -1,6 +1,9 @@
 import unittest
 
-from channel_line_verification import normalize_channel_line_fee_check
+from channel_line_verification import (
+    normalize_anjiu_contract_amount,
+    normalize_channel_line_fee_check,
+)
 
 
 class ChannelLineVerificationTests(unittest.TestCase):
@@ -114,6 +117,56 @@ class ChannelLineVerificationTests(unittest.TestCase):
 
         self.assertEqual(self.fee_check(result)["status"], "pass")
         self.assertEqual(result["status"], "fail")
+
+    def test_anjiu_contract_amount_uses_deductions_before_discount(self):
+        source = {
+            "line_id": "line-anjiu",
+            "status": "fail",
+            "match": {"confidence": "high"},
+            "binding": {"match_method": "auto_locked"},
+            "checks": [
+                {"key": "share_rate", "status": "pass"},
+                {"key": "channel_fee_rate", "status": "pass"},
+            ],
+            "contract_amount": {
+                "status": "fail",
+                "supported": True,
+                "deterministic": True,
+                "expected_amount": 299.87,
+                "actual_amount": 2321.19,
+                "tolerance": 0.05,
+            },
+        }
+        rule = {
+            "settlement_rule_code": "anjiu_pre_discount_deduction",
+            "channel_fee_mode": "percent",
+            "channel_fee_rate": 5,
+            "tax_mode": "share",
+            "validation_tolerance": 0.05,
+            "billing_flow": 1636031,
+            "discount_factor": 0.005,
+            "voucher_cost": 7128,
+            "no_worry_cost": 0,
+            "refund_cost": 0,
+            "test_cost": 0,
+            "welfare_cost": 0,
+            "coin_cost": 0,
+            "share_rate": 30,
+            "tax_rate": 0,
+            "gateway_cost": 0,
+            "settlement_amount": 2321.19,
+        }
+
+        result = normalize_anjiu_contract_amount(source, rule)
+
+        self.assertEqual(result["contract_amount"]["expected_amount"], 2321.19)
+        self.assertEqual(result["contract_amount"]["difference_amount"], 0)
+        self.assertEqual(result["contract_amount"]["status"], "pass")
+        self.assertEqual(result["status"], "pass")
+        self.assertEqual(
+            result["contract_amount"]["formula_code"],
+            "channel_anjiu_pre_discount_deduction",
+        )
 
 
 if __name__ == "__main__":
