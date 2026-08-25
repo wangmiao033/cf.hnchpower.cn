@@ -5,6 +5,7 @@ import HelpTooltip from '@/components/HelpTooltip.jsx'
 import MobileMenu from '@/components/MobileMenu.jsx'
 import ConfirmDialog from '@/components/ConfirmDialog.jsx'
 import GlobalSearch from '@/components/search/GlobalSearch.jsx'
+import ChannelLedgerHeaderActions from '@/components/channel/ChannelLedgerHeaderActions.jsx'
 import { getPageMeta, getTabView, SIDEBAR_GROUPS, VIEWS } from '@/app/routes.js'
 import { canOpenView } from '@/app/viewPermissions.js'
 import { useAuth } from '@/features/auth/AuthContext.jsx'
@@ -74,8 +75,9 @@ function Header({ activeView, onNavigate, onSettingsChange }) {
           </div>
           <div className="app-admin-header__title-block">
             <strong>{pageMeta.title}</strong>
-            <span>{pageMeta.description}</span>
+            {activeView !== VIEWS.RECON_CHANNEL ? <span>{pageMeta.description}</span> : null}
           </div>
+          <ChannelLedgerHeaderActions activeView={activeView} onNavigate={onNavigate} />
         </div>
         <div className="app-admin-header__right">
           <GlobalSearch />
