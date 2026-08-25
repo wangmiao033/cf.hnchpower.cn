@@ -24,7 +24,7 @@ from app.schemas.bank_multi_allocation import (
     P2TransactionSummaryRequest,
     P2TransactionSummaryResponse,
 )
-from app.services.bank_auto_reconciliation import build_dashboard
+from app.services.bank_auto_reconciliation import _candidate_pool, build_dashboard
 from app.services.bank_combination_match import enrich_auto_dashboard_with_p2
 from app.services.bank_cumulative_filter import filter_cumulative_bank_suggestions
 from app.services.bank_multi_allocation import (
@@ -65,9 +65,14 @@ def get_bank_auto_reconciliation_dashboard(
         ),
     )
     # 主表仍保留原一对一引擎；同时读取 P2 候选，把唯一精确多账单组合注入同一响应。
-    # 这样银行中心主表即可直接处理“一笔流水 -> 多张账单”，无需切换旁路入口。
+    # P2 页面只展示少量高分候选，但组合匹配必须使用完整未结账单池，否则历史账单
+    # 会因为不在 Top 8 中而永远无法组成精确金额组合。
     p2_result = filter_cumulative_bank_suggestions(db, build_p2_dashboard(db, limit=limit))
-    result = enrich_auto_dashboard_with_p2(result, p2_result)
+    result = enrich_auto_dashboard_with_p2(
+        result,
+        p2_result,
+        full_pool=_candidate_pool(db),
+    )
     result = enrich_reconciliation_dashboard(db, result)
     # 银行中心默认把最值得先处理的流水放在前面：高置信 -> 高分 -> 高区分度 -> 新日期。
     # 前端仍可按日期、方向和匹配状态继续筛选，不改变任何核销写入规则。
