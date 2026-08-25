@@ -16,6 +16,13 @@ function moneySummary(card) {
   }
 }
 
+function updateMetric(container, label, value) {
+  const small = container?.querySelector('small')
+  const strong = container?.querySelector('strong')
+  if (small && small.textContent !== label) small.textContent = label
+  if (strong && strong.textContent !== value) strong.textContent = value
+}
+
 function ensureDetailToolbar(card, details) {
   const channelName = card.querySelector('.channel-group-identity strong')?.textContent?.trim() || '当前渠道'
   const partnerName = card.querySelector('.channel-group-identity small')?.textContent?.trim() || ''
@@ -33,9 +40,9 @@ function ensureDetailToolbar(card, details) {
         <span></span>
       </div>
       <div class="channel-master-detail-metrics" aria-label="当前渠道账单汇总">
-        <span data-kind="settlement"></span>
-        <span data-kind="received"></span>
-        <span data-kind="unpaid"></span>
+        <span data-kind="settlement"><small></small><strong></strong></span>
+        <span data-kind="received"><small></small><strong></strong></span>
+        <span data-kind="unpaid"><small></small><strong></strong></span>
       </div>
     `
     details.prepend(toolbar)
@@ -50,12 +57,10 @@ function ensureDetailToolbar(card, details) {
   const settlement = toolbar.querySelector('[data-kind="settlement"]')
   const received = toolbar.querySelector('[data-kind="received"]')
   const unpaid = toolbar.querySelector('[data-kind="unpaid"]')
-  if (settlement) settlement.innerHTML = `<small>渠道应收</small><strong>${summary.settlement}</strong>`
-  if (received) received.innerHTML = `<small>已收</small><strong>${summary.received}</strong>`
-  if (unpaid) {
-    unpaid.innerHTML = `<small>未收</small><strong>${summary.unpaid}</strong>`
-    unpaid.classList.toggle('is-zero', Math.abs(parseMoneyText(summary.unpaid)) <= 0.01)
-  }
+  updateMetric(settlement, '渠道应收', summary.settlement)
+  updateMetric(received, '已收', summary.received)
+  updateMetric(unpaid, '未收', summary.unpaid)
+  unpaid?.classList.toggle('is-zero', Math.abs(parseMoneyText(summary.unpaid)) <= 0.01)
 }
 
 function normalizeMasterDetailLedger(root) {
@@ -90,7 +95,7 @@ function normalizeMasterDetailLedger(root) {
       const next = completed ? raw : '待处理'
       if (badge.textContent !== next) badge.textContent = next
       badge.classList.toggle('is-master-pending', !completed)
-      if (!completed && raw) badge.title = raw
+      if (!completed && raw && badge.title !== raw) badge.title = raw
     }
 
     const details = card.querySelector('.channel-group-details')
