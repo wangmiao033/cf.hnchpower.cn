@@ -7,8 +7,10 @@ const smartEntrySource = readFileSync(new URL('./ChannelSmartEntryBar.jsx', impo
 const settlementRuleCss = readFileSync(new URL('./ChannelSettlementRule.css', import.meta.url), 'utf8')
 
 describe('channel contract safety guards', () => {
-  it('does not turn typed exact partner text into an explicit customer selection', () => {
+  it('auto-links one unique exact customer match but keeps partial or ambiguous text unlinked', () => {
     expect(pickerSource).toContain("onChange(nextValue, '', null)")
+    expect(pickerSource).toContain('if (partnerId || !exactMatch || !exactPartnerId) return')
+    expect(pickerSource).toContain('onChange(exactMatch.name, exactPartnerId, exactMatch)')
     expect(pickerSource).toContain('selectPartner(matches[0])')
   })
 
