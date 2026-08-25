@@ -1,0 +1,149 @@
+/* Channel ledger master/detail refinement.
+   Default = channel overview. Clicking one channel enters a focused bill-detail view.
+   Click the selected channel row again to return to the overview. */
+
+.core-channel-recon-page .channel-group-expand-all {
+  display: none !important;
+}
+
+.core-channel-recon-page .channel-group-ledger {
+  background: #fff;
+}
+
+/* Channel overview stays calm and strictly one row per channel. */
+.core-channel-recon-page .channel-group-summary {
+  border-bottom: 1px solid #e7edf5;
+}
+
+.core-channel-recon-page .channel-group-card:last-child .channel-group-summary {
+  border-bottom: 0;
+}
+
+.core-channel-recon-page .channel-group-period {
+  font-weight: 600;
+}
+
+.core-channel-recon-page .channel-group-money {
+  color: #334155;
+}
+
+.core-channel-recon-page .channel-group-money.has-unpaid {
+  color: #1f2937;
+  font-weight: 800;
+}
+
+/* Master view uses a single, neutral action indicator. Exact bill states stay in detail. */
+.core-channel-recon-page .core-channel-status-badge.is-master-pending {
+  border-color: #dbe3ef !important;
+  background: #f8fafc !important;
+  color: #475569 !important;
+}
+
+/* Once a channel is selected, switch from accordion behavior to a focused detail workspace. */
+.core-channel-recon-page .channel-group-ledger:has(.channel-group-card.is-expanded) .channel-group-summary-head {
+  display: none;
+}
+
+.core-channel-recon-page .channel-group-ledger:has(.channel-group-card.is-expanded) .channel-group-card:not(.is-expanded) {
+  display: none;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded {
+  min-width: 0;
+  border-bottom: 0;
+  background: #fff;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-summary {
+  position: sticky;
+  top: 0;
+  z-index: 8;
+  min-width: 980px;
+  border-bottom: 1px solid #dce5f0;
+  background: #fff;
+  box-shadow: 0 4px 12px rgb(15 23 42 / 6%);
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-toggle {
+  position: relative;
+  min-height: 56px;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-chevron {
+  color: var(--admin-primary);
+  transform: rotate(180deg);
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-identity strong {
+  color: #0f2f5b;
+  font-size: 14px;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-identity small {
+  color: #64748b;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-toggle::after {
+  position: absolute;
+  right: 6px;
+  bottom: 2px;
+  color: #94a3b8;
+  font-size: 9px;
+  font-weight: 500;
+  content: '再次点击返回渠道总览';
+  pointer-events: none;
+}
+
+/* Detail is now a dedicated lower workspace, not a mini-table inserted between channels. */
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-details {
+  padding: 0 12px 14px;
+  overflow-x: auto;
+  background: #f8fafc;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-details::before {
+  display: flex;
+  align-items: center;
+  min-height: 42px;
+  padding: 0 2px;
+  color: #243b5a;
+  font-size: 13px;
+  font-weight: 750;
+  content: attr(data-channel) ' · 账单明细';
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-detail-table {
+  width: 100%;
+  min-width: 1040px;
+  border-color: #dce5ef;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-detail-table thead th {
+  height: 34px;
+  background: #f4f7fb;
+  color: #64748b;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-detail-table tbody td {
+  height: 44px;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-detail-table .core-channel-status-badge {
+  min-width: 52px;
+  height: 20px;
+  padding: 0 7px;
+  font-size: 9px;
+}
+
+@media (max-width: 900px) {
+  .core-channel-recon-page .channel-group-card.is-expanded .channel-group-summary {
+    min-width: 980px;
+  }
+
+  .core-channel-recon-page .channel-group-card.is-expanded .channel-group-details {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+}
