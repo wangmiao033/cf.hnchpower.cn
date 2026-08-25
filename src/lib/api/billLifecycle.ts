@@ -3,6 +3,10 @@ import {
   createContractReconciliationSnapshot,
   getContractBillReconciliation
 } from '@/lib/api/contractTerms.ts'
+import type {
+  ContractBillLineCheck,
+  ContractBillReconciliation
+} from '@/lib/api/contractTerms.ts'
 import { listContractDifferenceCases } from '@/lib/api/contractDifferences.ts'
 import type { ContractDifferenceCase } from '@/lib/api/contractDifferences.ts'
 import type { ChannelCumulativeBillCondition } from '@/lib/api/channelCumulativeSettlement.ts'
@@ -47,6 +51,111 @@ type ContractDifferenceApproval = {
   items: ContractDifferenceCase[]
 }
 
+function finiteNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function money(value: unknown): string {
+  const parsed = finiteNumber(value)
+  if (parsed === null) return '-'
+  return `¥${parsed.toLocaleString('zh-CN', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  })}`
+}
+
+function plainValue(value: unknown): string {
+  if (value === null || value === undefined || value === '') return '未填写'
+  if (typeof value === 'number') return String(Math.round(value * 10000) / 10000)
+  return String(value)
+}
+
+function varianceLabel(direction: unknown): string {
+  if (direction === 'under') return '少结'
+  if (direction === 'over') return '多结'
+  return '差额'
+}
+
+function linePrefix(gameName: unknown, settlementCycle: unknown): string {
+  const game = String(gameName || '').trim() || '账单明细'
+  const cycle = String(settlementCycle || '').trim()
+  return cycle ? `${game}（${cycle}）` : game
+}
+
+function describeDifferenceCase(item: ContractDifferenceCase): string {
+  const prefix = linePrefix(item.game_name, item.settlement_cycle)
+  const expected = finiteNumber(item.expected_amount)
+  const actual = finiteNumber(item.actual_amount)
+  const variance = finiteNumber(item.variance_abs)
+  if (expected !== null && actual !== null) {
+    const tail = variance === null
+      ? ''
+      : `，${varianceLabel(item.variance_direction)} ${money(Math.abs(variance))}`
+    return `${prefix}：合同应结 ${money(expected)}，账单实际 ${money(actual)}${tail}`
+  }
+  return `${prefix}：合同核验存在明确差异`
+}
+
+function describeFailedCheck(line: ContractBillLineCheck): string {
+  const prefix = linePrefix(line.game_name, line.settlement_cycle)
+  const amount = line.contract_amount
+  if (
+    amount?.status === 'fail' &&
+    finiteNumber(amount.expected_amount) !== null &&
+    finiteNumber(amount.actual_amount) !== null
+  ) {
+    const variance = finiteNumber(amount.variance_abs)
+    const tail = variance === null
+      ? ''
+      : `，${varianceLabel(amount.variance_direction)} ${money(Math.abs(variance))}`
+    return `${prefix}：合同应结 ${money(amount.expected_amount)}，账单实际 ${money(amount.actual_amount)}${tail}`
+  }
+
+  const failedChecks = (line.checks || [])
+    .filter((check) => check.status === 'fail')
+    .slice(0, 3)
+  if (failedChecks.length) {
+    const detail = failedChecks
+      .map((check) => `${check.label}：账单 ${plainValue(check.bill_value)} / 合同 ${plainValue(check.contract_value)}`)
+      .join('、')
+    return `${prefix}：${detail}`
+  }
+  return `${prefix}：${line.message || '合同核验存在明确差异'}`
+}
+
+/**
+ * Confirmation blocks are business validation results, not generic server errors.
+ * Always surface the exact game / period / amount (or failed contract field) that
+ * caused the block so finance can correct the row without opening another panel.
+ */
+export function buildContractDifferenceBlockedMessage(
+  failCount: number,
+  cases: ContractDifferenceCase[] = [],
+  preflight: ContractBillReconciliation | null = null
+): string {
+  const count = Math.max(1, Math.trunc(Number(failCount) || 0))
+  let details = cases
+    .filter((item) => item.status !== 'resolved')
+    .map(describeDifferenceCase)
+
+  if (!details.length) {
+    details = (preflight?.lines || [])
+      .filter((line) => line.status === 'fail' || line.contract_amount?.status === 'fail')
+      .map(describeFailedCheck)
+  }
+
+  const shown = details.slice(0, 3)
+  const remaining = Math.max(0, count - shown.length)
+  const detailText = shown.length
+    ? `具体问题：${shown.join('；')}。`
+    : '系统已判定存在明确合同差异，但当前响应没有返回可展示的差异字段。'
+  const remainingText = remaining > 0 ? `另有 ${remaining} 条差异未展开。` : ''
+
+  return `合同核对未通过：发现 ${count} 条明确差异。${detailText}${remainingText}请直接修改上述明细；如果这就是双方确认的特殊结算，再使用“特殊结算确认”留痕。`
+}
+
 export class ContractDifferenceBlockedError extends Error {
   contractDifferences: ContractDifferenceCase[]
   failCount: number
@@ -89,7 +198,7 @@ export async function transitionBillLifecycle(
   reason = ''
 ): Promise<BillLifecycle> {
   if (toStatus === 'confirmed') {
-    let preflight = null
+    let preflight: ContractBillReconciliation | null = null
     try {
       preflight = await getContractBillReconciliation(billType, billId)
     } catch (preflightError) {
@@ -109,7 +218,7 @@ export async function transitionBillLifecycle(
       if (!approval.approved) {
         const unresolved = approval.items.filter((item) => item.status !== 'resolved')
         throw new ContractDifferenceBlockedError(
-          `合同核验发现 ${failCount} 条明确差异，暂不能确认核对。可在当前页面“合同差异处理”中选择“特殊结算确认”并留痕，或前往“账单360 → 合同核验”修正合同匹配/账单数据。`,
+          buildContractDifferenceBlockedMessage(failCount, unresolved, preflight),
           unresolved.length ? unresolved : approval.items,
           failCount
         )
