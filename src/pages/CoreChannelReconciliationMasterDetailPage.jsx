@@ -2,6 +2,62 @@ import React, { useEffect } from 'react'
 import CoreChannelReconciliationGroupedPage from './CoreChannelReconciliationGroupedPage.jsx'
 import './ChannelMasterDetailLedger.css'
 
+function parseMoneyText(value) {
+  const parsed = Number(String(value || '').replace(/[^\d.-]/g, ''))
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+function moneySummary(card) {
+  const values = card.querySelectorAll('.channel-group-summary .channel-group-money')
+  return {
+    settlement: values[0]?.textContent?.trim() || '¥ 0.00',
+    received: values[1]?.textContent?.trim() || '¥ 0.00',
+    unpaid: values[2]?.textContent?.trim() || '¥ 0.00'
+  }
+}
+
+function ensureDetailToolbar(card, details) {
+  const channelName = card.querySelector('.channel-group-identity strong')?.textContent?.trim() || '当前渠道'
+  const partnerName = card.querySelector('.channel-group-identity small')?.textContent?.trim() || ''
+  const count = card.querySelector('.channel-group-count strong')?.textContent?.trim() || '0'
+  const summary = moneySummary(card)
+
+  let toolbar = details.querySelector(':scope > .channel-master-detail-toolbar')
+  if (!toolbar) {
+    toolbar = document.createElement('div')
+    toolbar.className = 'channel-master-detail-toolbar'
+    toolbar.innerHTML = `
+      <button type="button" class="channel-master-detail-back" aria-label="返回渠道总览">← 返回渠道总览</button>
+      <div class="channel-master-detail-heading">
+        <strong></strong>
+        <span></span>
+      </div>
+      <div class="channel-master-detail-metrics" aria-label="当前渠道账单汇总">
+        <span data-kind="settlement"></span>
+        <span data-kind="received"></span>
+        <span data-kind="unpaid"></span>
+      </div>
+    `
+    details.prepend(toolbar)
+  }
+
+  const heading = toolbar.querySelector('.channel-master-detail-heading strong')
+  const subheading = toolbar.querySelector('.channel-master-detail-heading span')
+  if (heading && heading.textContent !== channelName) heading.textContent = channelName
+  const subheadingText = `${partnerName ? `${partnerName} · ` : ''}${count} 张账单`
+  if (subheading && subheading.textContent !== subheadingText) subheading.textContent = subheadingText
+
+  const settlement = toolbar.querySelector('[data-kind="settlement"]')
+  const received = toolbar.querySelector('[data-kind="received"]')
+  const unpaid = toolbar.querySelector('[data-kind="unpaid"]')
+  if (settlement) settlement.innerHTML = `<small>渠道应收</small><strong>${summary.settlement}</strong>`
+  if (received) received.innerHTML = `<small>已收</small><strong>${summary.received}</strong>`
+  if (unpaid) {
+    unpaid.innerHTML = `<small>未收</small><strong>${summary.unpaid}</strong>`
+    unpaid.classList.toggle('is-zero', Math.abs(parseMoneyText(summary.unpaid)) <= 0.01)
+  }
+}
+
 function normalizeMasterDetailLedger(root) {
   const ledger = root?.querySelector('.channel-group-ledger')
   if (!ledger) return
@@ -22,20 +78,27 @@ function normalizeMasterDetailLedger(root) {
       if (latest && period.textContent !== latest) period.textContent = latest
     }
 
+    card.querySelectorAll('.channel-group-money').forEach((node) => {
+      node.classList.toggle('is-zero', Math.abs(parseMoneyText(node.textContent)) <= 0.01)
+    })
+
     const badge = card.querySelector('.channel-group-summary .core-channel-status-badge')
     if (badge) {
-      const raw = String(badge.textContent || '').trim()
+      const raw = String(badge.dataset.originalLabel || badge.textContent || '').trim()
+      if (!badge.dataset.originalLabel) badge.dataset.originalLabel = raw
       const completed = raw === '已结清' || raw === '已归档' || raw === '已作废'
       const next = completed ? raw : '待处理'
       if (badge.textContent !== next) badge.textContent = next
       badge.classList.toggle('is-master-pending', !completed)
+      if (!completed && raw) badge.title = raw
     }
 
     const details = card.querySelector('.channel-group-details')
-    if (details) {
-      const channelName = card.querySelector('.channel-group-identity strong')?.textContent?.trim() || '当前渠道'
-      if (details.dataset.channel !== channelName) details.dataset.channel = channelName
-    }
+    if (details) ensureDetailToolbar(card, details)
+  })
+
+  ledger.querySelectorAll('.channel-group-detail-table .core-recon-money').forEach((node) => {
+    node.classList.toggle('is-zero', Math.abs(parseMoneyText(node.textContent)) <= 0.01)
   })
 }
 
@@ -48,6 +111,15 @@ function CoreChannelReconciliationMasterDetailPage() {
     normalizeMasterDetailLedger(root)
 
     const onLedgerClickCapture = (event) => {
+      const back = event.target.closest('.channel-master-detail-back')
+      if (back && ledger.contains(back)) {
+        event.preventDefault()
+        event.stopPropagation()
+        const card = back.closest('.channel-group-card')
+        card?.querySelector('.channel-group-toggle')?.click()
+        return
+      }
+
       const toggle = event.target.closest('.channel-group-toggle')
       if (!toggle || !ledger.contains(toggle)) return
 
@@ -56,13 +128,22 @@ function CoreChannelReconciliationMasterDetailPage() {
       const isAlreadyOpen = card.classList.contains('is-expanded')
 
       if (!isAlreadyOpen) {
+        ledger.dataset.overviewScroll = String(ledger.scrollTop || 0)
         ledger.querySelectorAll('.channel-group-card.is-expanded').forEach((openCard) => {
           if (openCard === card) return
           openCard.querySelector('.channel-group-toggle')?.click()
         })
+        window.setTimeout(() => {
+          ledger.scrollTop = 0
+          normalizeMasterDetailLedger(root)
+        }, 0)
+      } else {
+        const previous = Number(ledger.dataset.overviewScroll || 0)
+        window.setTimeout(() => {
+          ledger.scrollTop = Number.isFinite(previous) ? previous : 0
+          normalizeMasterDetailLedger(root)
+        }, 0)
       }
-
-      window.setTimeout(() => normalizeMasterDetailLedger(root), 0)
     }
 
     ledger.addEventListener('click', onLedgerClickCapture, true)
