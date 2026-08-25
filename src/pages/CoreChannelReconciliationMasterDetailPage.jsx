@@ -16,26 +16,66 @@ function normalizeMasterDetailLedger(root) {
   ledger.querySelectorAll('.channel-group-card').forEach((card) => {
     const period = card.querySelector('.channel-group-period')
     if (period) {
-      const raw = String(period.textContent || '').trim()
-      const parts = raw.split('–')
-      const latest = parts.length > 1 ? parts[parts.length - 1].trim() : raw
+      const source = String(period.dataset.fullPeriod || period.textContent || '').trim()
+      if (!period.dataset.fullPeriod && source) period.dataset.fullPeriod = source
+      const parts = source.split('–')
+      const latest = parts.length > 1 ? parts[parts.length - 1].trim() : source
       if (latest && period.textContent !== latest) period.textContent = latest
+      period.dataset.detailLabel = '最近账期'
     }
+
+    const count = card.querySelector('.channel-group-count')
+    if (count) count.dataset.detailLabel = '账单'
+
+    const moneyCells = card.querySelectorAll('.channel-group-summary .channel-group-money')
+    const moneyLabels = ['渠道应收', '已收', '未收']
+    moneyCells.forEach((node, index) => {
+      if (moneyLabels[index]) node.dataset.detailLabel = moneyLabels[index]
+    })
 
     const badge = card.querySelector('.channel-group-summary .core-channel-status-badge')
     if (badge) {
-      const raw = String(badge.textContent || '').trim()
+      const raw = String(badge.dataset.originalLabel || badge.textContent || '').trim()
+      if (!badge.dataset.originalLabel) badge.dataset.originalLabel = raw
       const completed = raw === '已结清' || raw === '已归档' || raw === '已作废'
-      const next = completed ? raw : '待处理'
+      const countMatch = raw.match(/(\d+)\s*张?/)
+      const next = completed ? raw : `待处理${countMatch ? ` ${countMatch[1]}` : ''}`
       if (badge.textContent !== next) badge.textContent = next
       badge.classList.toggle('is-master-pending', !completed)
+      if (!completed && raw && badge.title !== raw) badge.title = raw
+    }
+
+    const toggle = card.querySelector('.channel-group-toggle')
+    if (toggle && !toggle.querySelector('.channel-master-inline-back')) {
+      const back = document.createElement('span')
+      back.className = 'channel-master-inline-back'
+      back.textContent = '返回总览'
+      back.setAttribute('aria-hidden', 'true')
+      toggle.append(back)
     }
 
     const details = card.querySelector('.channel-group-details')
-    if (details) {
-      const channelName = card.querySelector('.channel-group-identity strong')?.textContent?.trim() || '当前渠道'
-      if (details.dataset.channel !== channelName) details.dataset.channel = channelName
+    if (!details) return
+
+    const channelName = card.querySelector('.channel-group-identity strong')?.textContent?.trim() || '当前渠道'
+    if (details.dataset.channel !== channelName) details.dataset.channel = channelName
+
+    const detailHeaders = details.querySelectorAll('.channel-group-detail-table thead th')
+    if (detailHeaders[7] && detailHeaders[7].textContent !== '核对状态') {
+      detailHeaders[7].textContent = '核对状态'
     }
+
+    details.querySelectorAll('.channel-group-detail-table tbody tr').forEach((row) => {
+      const checkBadge = row.querySelector('.core-channel-status-badge')
+      if (!checkBadge) return
+
+      const isAnomaly = checkBadge.classList.contains('is-anomaly')
+      const isVoid = checkBadge.classList.contains('is-void')
+      const next = isVoid ? '已作废' : isAnomaly ? '数据差异' : '正常'
+      if (checkBadge.textContent !== next) checkBadge.textContent = next
+      checkBadge.classList.toggle('is-check-normal', !isAnomaly && !isVoid)
+      if (isAnomaly) checkBadge.title = '账单数据存在差异，请核对结算依据'
+    })
   })
 }
 
