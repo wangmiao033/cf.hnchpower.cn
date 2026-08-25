@@ -92,6 +92,11 @@ FINANCIAL_UPDATE_FIELDS = {
         "channel_fee_rate",
         "dev_share_rate",
         "profit_rate",
+        "settlement_adjustment_type",
+        "settlement_adjustment_source_month",
+        "settlement_adjustment_amount",
+        "settlement_adjustment_reason",
+        "settlement_final_override",
         "items",
     },
 }

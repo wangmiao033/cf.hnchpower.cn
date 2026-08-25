@@ -47,6 +47,33 @@ def _money(value: Decimal) -> Decimal:
     return value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
+def apply_bill_adjustment(
+    business_amount: Any,
+    adjustment_amount: Any = 0,
+    final_override: Any = None,
+) -> dict[str, Decimal | None]:
+    """Apply a documented bill-level adjustment without rewriting game lines.
+
+    ``adjustment_amount`` is signed: negative = deduction/carry-over, positive = top-up.
+    ``final_override`` is optional for a formally agreed final receivable.  Any
+    difference between arithmetic and that final amount is kept as an explicit tail.
+    """
+    business = _money(_d(business_amount))
+    adjustment = _money(_d(adjustment_amount))
+    calculated = _money(business + adjustment)
+    override = None if final_override in (None, "") else _money(_d(final_override))
+    final = override if override is not None else calculated
+    tail = _money(final - calculated)
+    return {
+        "business_amount": business,
+        "adjustment_amount": adjustment,
+        "calculated_amount": calculated,
+        "final_override": override,
+        "tail_amount": tail,
+        "final_amount": final,
+    }
+
+
 def _value(record: Any, field: str, fallback: Any = None) -> Any:
     value = getattr(record, field, None)
     if value not in (None, ""):

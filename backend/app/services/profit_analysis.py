@@ -112,10 +112,22 @@ def _add_rd_costs(
         game.rd_flow += _num(record.game_flow)
 
 
+def _channel_business_total(record) -> float:
+    """Business settlement before bill-level carry-over/top-up adjustments."""
+    items = list(getattr(record, "line_items", None) or [])
+    adjustment_active = (
+        abs(_num(getattr(record, "settlement_adjustment_amount", 0))) > 0.005
+        or getattr(record, "settlement_final_override", None) is not None
+    )
+    if adjustment_active and items:
+        return sum(abs(_num(getattr(line, "settlement_amount", 0))) for line in items)
+    return abs(_num(getattr(record, "settlement_amount", 0)))
+
+
 def _channel_line_allocations(record) -> list[tuple[str, float, float, float]]:
     """Return (game, normalized settlement, flow, allocated legacy server cost)."""
     items = list(getattr(record, "line_items", None) or [])
-    total_settlement = abs(_num(getattr(record, "settlement_amount", 0)))
+    total_settlement = _channel_business_total(record)
     server_cost = max(0.0, _num(getattr(record, "server_cost", 0)))
     if not items:
         return [
@@ -166,7 +178,7 @@ def _add_channel_income(
         month = month_key(record.settlement_month)
         if not month:
             continue
-        total = abs(_num(record.settlement_amount))
+        total = _channel_business_total(record)
         server = max(0.0, _num(record.server_cost))
         months[month].channel_settlement += total
         months[month].server_cost += server

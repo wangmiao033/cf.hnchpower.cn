@@ -168,14 +168,16 @@ def _add_channel_records(
                 game.channel_flow += _num(line.billing_flow)
 
             total_settlement = sum(month_settlements.values())
+            final_receivable = max(0.0, abs(_num(record.settlement_amount)))
             received = max(0.0, abs(_num(record.received_amount)))
+            final_outstanding = max(0.0, final_receivable - received)
             server_cost = max(0.0, _num(record.server_cost))
             for month, settlement in month_settlements.items():
                 ratio = settlement / total_settlement if total_settlement > 0.005 else 0.0
                 bucket = buckets[month]
                 bucket.channel_settlement += settlement
                 bucket.server_cost += server_cost * ratio
-                bucket.channel_outstanding += max(0.0, settlement - received * ratio)
+                bucket.channel_outstanding += final_outstanding * ratio
                 bucket.channel_bill_ids.add(str(record.id))
                 if _completed(record):
                     bucket.channel_completed_ids.add(str(record.id))

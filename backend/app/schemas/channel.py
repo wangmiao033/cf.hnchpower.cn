@@ -151,11 +151,21 @@ class ChannelRecordCreate(BaseModel):
     channel_fee_mode: str = "fixed"
     tax_mode: str = "share"
     validation_tolerance: float = Field(default=0.05, ge=0, le=1000)
+    settlement_adjustment_type: str | None = None
+    settlement_adjustment_source_month: str | None = None
+    settlement_adjustment_amount: float = 0
+    settlement_adjustment_reason: str | None = None
+    settlement_final_override: float | None = Field(default=None, ge=0)
     items: Annotated[list[ChannelLineItemCreate], Field(min_length=1)]
 
     @field_validator("settlement_month", mode="before")
     @classmethod
     def validate_settlement_month(cls, value: str | None) -> str | None:
+        return _normalize_safe_settlement_month(value)
+
+    @field_validator("settlement_adjustment_source_month", mode="before")
+    @classmethod
+    def validate_adjustment_source_month(cls, value: str | None) -> str | None:
         return _normalize_safe_settlement_month(value)
 
 
@@ -177,11 +187,21 @@ class ChannelRecordUpdate(BaseModel):
     channel_fee_mode: str | None = None
     tax_mode: str | None = None
     validation_tolerance: float | None = Field(default=None, ge=0, le=1000)
+    settlement_adjustment_type: str | None = None
+    settlement_adjustment_source_month: str | None = None
+    settlement_adjustment_amount: float | None = None
+    settlement_adjustment_reason: str | None = None
+    settlement_final_override: float | None = Field(default=None, ge=0)
     items: list[ChannelLineItemCreate] | None = None
 
     @field_validator("settlement_month", mode="before")
     @classmethod
     def validate_settlement_month(cls, value: str | None) -> str | None:
+        return _normalize_safe_settlement_month(value)
+
+    @field_validator("settlement_adjustment_source_month", mode="before")
+    @classmethod
+    def validate_adjustment_source_month(cls, value: str | None) -> str | None:
         return _normalize_safe_settlement_month(value)
 
 
@@ -208,6 +228,11 @@ class ChannelRecordRead(BaseModel):
     tax_rate: float
     gateway_cost: float
     settlement_amount: float
+    settlement_adjustment_type: str | None = None
+    settlement_adjustment_source_month: str | None = None
+    settlement_adjustment_amount: float = 0
+    settlement_adjustment_reason: str | None = None
+    settlement_final_override: float | None = None
     received_amount: float = 0
     receipt_status: str = "unpaid"
     status: str | None

@@ -30,10 +30,37 @@ from app.schemas.channel import (
 )
 from app.services.channel_cumulative_batch import refresh_batches_for_bill
 from app.services.channel_cumulative_invoice import assert_single_bill_collection_allowed
-from app.services.channel_settlement_engine import aggregate_validation, calculate_channel_line
+from app.services.channel_settlement_engine import apply_bill_adjustment, aggregate_validation, calculate_channel_line
 
 router = APIRouter()
 RECEIPT_EPS = 0.01
+SETTLEMENT_ADJUSTMENT_FIELDS = {
+    "settlement_adjustment_type",
+    "settlement_adjustment_source_month",
+    "settlement_adjustment_amount",
+    "settlement_adjustment_reason",
+    "settlement_final_override",
+}
+
+
+def _validate_settlement_adjustment_values(amount, final_override, reason) -> None:
+    active = abs(float(amount or 0)) > 0.005 or final_override not in (None, "")
+    if active and not str(reason or "").strip():
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": "settlement_adjustment_reason_required",
+                "message": "使用账单调整或最终确认金额时，必须填写调整原因以便审计。",
+            },
+        )
+
+
+def _validate_settlement_adjustment_row(row: ChannelRecord) -> None:
+    _validate_settlement_adjustment_values(
+        row.settlement_adjustment_amount,
+        row.settlement_final_override,
+        row.settlement_adjustment_reason,
+    )
 
 
 def _recompute_receipt_rollup(db: Session, row: ChannelRecord) -> None:
@@ -129,7 +156,12 @@ def _sync_denormalized_totals(row: ChannelRecord, db: Session) -> None:
     row.tax_rate = float(items[0].tax_rate or 0)
     row.share_rate = float(items[0].share_rate or 0)
     validation = aggregate_validation(items, row)
-    row.settlement_amount = float(validation["settlement_total"])
+    adjusted = apply_bill_adjustment(
+        validation["settlement_total"],
+        row.settlement_adjustment_amount,
+        row.settlement_final_override,
+    )
+    row.settlement_amount = float(adjusted["final_amount"])
     row.system_settlement_amount = float(validation["system_total"])
     row.platform_settlement_amount = float(validation["platform_total"]) if validation["platform_total"] is not None else None
     row.settlement_difference = float(validation["difference_total"]) if validation["difference_total"] is not None else None
@@ -333,6 +365,11 @@ def create_channel_receipt(record_id: str, payload: ChannelReceiptCreate, db: Se
 
 @router.post("", response_model=ChannelRecordRead, status_code=status.HTTP_201_CREATED)
 def create_channel_record(payload: ChannelRecordCreate, db: Session = Depends(get_db)) -> ChannelRecordRead:
+    _validate_settlement_adjustment_values(
+        payload.settlement_adjustment_amount,
+        payload.settlement_final_override,
+        payload.settlement_adjustment_reason,
+    )
     if not payload.items: raise HTTPException(status_code=422, detail={"error": "items_required", "message": "至少录入一行游戏明细"})
     row = ChannelRecord(id=str(uuid4()), **payload.model_dump(exclude={"items"}))
     db.add(row); db.flush(); _replace_line_items(db, row, payload.items); _sync_denormalized_totals(row, db); _recompute_receipt_rollup(db, row)
@@ -350,11 +387,15 @@ def update_channel_record(record_id: str, payload: ChannelRecordUpdate, db: Sess
     ).scalar_one_or_none()
     if row is None: raise HTTPException(status_code=404, detail={"error": "not_found", "id": record_id})
     data = payload.model_dump(exclude_unset=True); items_payload = data.pop("items", None)
+    adjustment_touched = bool(SETTLEMENT_ADJUSTMENT_FIELDS.intersection(data))
     for key, value in data.items(): setattr(row, key, value)
+    _validate_settlement_adjustment_row(row)
     row.updated_at = datetime.now(timezone.utc)
     if items_payload is not None:
         if not items_payload: raise HTTPException(status_code=422, detail={"error": "items_required", "message": "至少保留一行游戏明细"})
         _replace_line_items(db, row, [ChannelLineItemCreate(**x) for x in items_payload]); _sync_denormalized_totals(row, db)
+    elif adjustment_touched:
+        _sync_denormalized_totals(row, db)
     received = max(0.0, _receipt_total(db, record_id))
     projected_settlement = max(0.0, float(row.settlement_amount or 0))
     if received > projected_settlement + RECEIPT_EPS:

@@ -3,6 +3,7 @@ import unittest
 
 from app.services.channel_settlement_engine import (
     ANJIU_PRE_DISCOUNT_DEDUCTION_RULE,
+    apply_bill_adjustment,
     calculate_channel_line,
 )
 
@@ -124,6 +125,19 @@ class ChannelSettlementEngineTests(unittest.TestCase):
             system_total += float(result["system_settlement_amount"])
 
         self.assertAlmostEqual(system_total, 5113.88, places=2)
+
+    def test_bill_level_adjustment_preserves_reference_and_explicit_tail(self):
+        result = apply_bill_adjustment(874.60, -498.64, 376.00)
+        self.assertEqual(float(result["business_amount"]), 874.60)
+        self.assertEqual(float(result["adjustment_amount"]), -498.64)
+        self.assertEqual(float(result["calculated_amount"]), 375.96)
+        self.assertEqual(float(result["tail_amount"]), 0.04)
+        self.assertEqual(float(result["final_amount"]), 376.00)
+
+    def test_bill_level_adjustment_without_override_uses_signed_adjustment(self):
+        result = apply_bill_adjustment(1000, -100, None)
+        self.assertEqual(float(result["final_amount"]), 900.00)
+        self.assertEqual(float(result["tail_amount"]), 0.00)
 
 
 if __name__ == "__main__":

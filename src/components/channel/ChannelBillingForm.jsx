@@ -200,9 +200,15 @@ function ChannelBillingForm({
     system: Number(fullRecord.systemSettlementAmount || 0),
     platform: fullRecord.platformSettlementAmount,
     difference: fullRecord.settlementDifference,
+    businessSettlement: Number(fullRecord.businessSettlementAmount ?? previewSettlement),
+    adjustment: Number(fullRecord.settlementAdjustmentAmount || 0),
+    afterAdjustment: Number(fullRecord.settlementCalculatedAfterAdjustment ?? previewSettlement),
+    adjustmentTail: Number(fullRecord.settlementAdjustmentTail || 0),
     settlement: previewSettlement,
     validationStatus: fullRecord.validationStatus || 'unvalidated'
   }), [fullRecord, previewSettlement])
+
+  const adjustmentActive = Math.abs(Number(header.settlementAdjustmentAmount || 0)) > 0.0001 || String(header.settlementFinalOverride ?? '').trim() !== ''
 
   const selectedPartner = useMemo(() => {
     if (partnerId) {
@@ -558,6 +564,11 @@ function ChannelBillingForm({
       if (mode === 'add' && !targetedRuleLocked && String(row.taxRate ?? '').trim() === '') { const msg = `第 ${i + 1} 行：税率尚未由合同确定，请等待合同匹配或人工填写 0`; onError?.(msg) ?? window.alert(msg); return }
     }
 
+    if (adjustmentActive && !String(header.settlementAdjustmentReason || '').trim()) {
+      const msg = '使用结算调整时必须填写调整原因，避免账单金额被无依据修改。'
+      onError?.(msg) ?? window.alert(msg); return
+    }
+
     const nextMonths = recordMonths({ settlementMonth: fullRecord.settlementMonth, items: lines })
     if (mode === 'edit') {
       const originalMonths = recordMonths(sourceRecord)
@@ -738,7 +749,34 @@ function ChannelBillingForm({
           <div className="summary-item summary-item--accent"><div className="label">折算后总流水</div><div className="value">{formatMoney(totals.effectiveFlow)}</div></div>
           <div className="summary-item"><div className="label">总代金券</div><div className="value">{formatMoney(totals.voucher)}</div></div>
           <div className="summary-item"><div className="label">总退款</div><div className="value">{formatMoney(totals.refund)}</div></div>
-          <div className="summary-item summary-item--hero"><div className="label">实际结算金额</div><div className="value">{formatMoney(totals.settlement)}</div></div>
+          <div className="summary-item summary-item--hero"><div className="label">{adjustmentActive ? '最终应收' : '实际结算金额'}</div><div className="value">{formatMoney(totals.settlement)}</div></div>
+        </div>
+        <div style={{ marginTop: 10, border: '1px solid #dbe5f3', borderRadius: 10, padding: '10px 12px', background: '#f8fbff' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start', marginBottom: 8 }}>
+            <div style={{ display: 'grid', gap: 2 }}>
+              <strong style={{ fontSize: 13 }}>结算调整（通用）</strong>
+              <span style={{ color: '#667085', fontSize: 11 }}>所有渠道都可用；普通账单保持为空。跨月差额、补扣、补款时才填写，不会改写上面的游戏明细。</span>
+            </div>
+            {adjustmentActive ? <span style={{ fontSize: 11, color: '#9a6700', background: '#fff8c5', borderRadius: 999, padding: '3px 8px' }}>已启用调整</span> : <span style={{ fontSize: 11, color: '#667085' }}>未启用</span>}
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(130px, .8fr) minmax(125px, .7fr) minmax(140px, .8fr) minmax(150px, .8fr) minmax(220px, 1.6fr)', gap: 8 }}>
+            <label style={{ display: 'grid', gap: 4, fontSize: 11 }}><span>调整类型</span><select className="admin-input" value={header.settlementAdjustmentType || ''} onChange={(e) => handleHeaderChange('settlementAdjustmentType', e.target.value)}><option value="">不调整</option><option value="historical_carryover">历史差额结转</option><option value="business_makeup">商务补差</option><option value="offset">补扣 / 冲抵</option><option value="other">其他</option></select></label>
+            <label style={{ display: 'grid', gap: 4, fontSize: 11 }}><span>来源账期</span><input type="month" max={currentMonthKey} className="admin-input" value={normalizeChannelSettlementCycle(header.settlementAdjustmentSourceMonth)} onChange={(e) => handleHeaderChange('settlementAdjustmentSourceMonth', e.target.value)} /></label>
+            <label style={{ display: 'grid', gap: 4, fontSize: 11 }}><span>调整金额（可正负）</span><input type="number" step="0.01" className="admin-input" value={header.settlementAdjustmentAmount ?? ''} onChange={(e) => handleHeaderChange('settlementAdjustmentAmount', e.target.value)} placeholder="扣减如 -498.64" /></label>
+            <label style={{ display: 'grid', gap: 4, fontSize: 11 }}><span>最终确认金额（选填）</span><input type="number" step="0.01" min="0" className="admin-input" value={header.settlementFinalOverride ?? ''} onChange={(e) => handleHeaderChange('settlementFinalOverride', e.target.value)} placeholder="如双方确认 376.00" /></label>
+            <label style={{ display: 'grid', gap: 4, fontSize: 11 }}><span>调整原因 {adjustmentActive ? '*' : ''}</span><input type="text" className="admin-input" value={header.settlementAdjustmentReason || ''} onChange={(e) => handleHeaderChange('settlementAdjustmentReason', e.target.value)} placeholder="例如：10月差额于12月结转，双方确认最终金额" /></label>
+          </div>
+          {adjustmentActive ? (
+            <div style={{ marginTop: 9, display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', fontSize: 12 }}>
+              <span>本期业务结算 <strong>{formatMoney(totals.businessSettlement)}</strong></span>
+              <span>+</span>
+              <span>调整 <strong>{totals.adjustment >= 0 ? '+' : ''}{formatMoney(totals.adjustment)}</strong></span>
+              <span>=</span>
+              <span>计算后 <strong>{formatMoney(totals.afterAdjustment)}</strong></span>
+              {String(header.settlementFinalOverride ?? '').trim() !== '' ? <><span>→</span><span>最终确认 <strong>{formatMoney(totals.settlement)}</strong></span></> : null}
+              {Math.abs(totals.adjustmentTail) >= 0.005 ? <span style={{ color: '#9a6700' }}>尾差 {totals.adjustmentTail >= 0 ? '+' : ''}{formatMoney(totals.adjustmentTail)}</span> : null}
+            </div>
+          ) : null}
         </div>
         <div className="channel-rule-summary">
           <div><span>系统计算合计</span><strong>{formatMoney(totals.system)}</strong></div>

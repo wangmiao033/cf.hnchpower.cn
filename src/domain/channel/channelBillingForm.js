@@ -20,7 +20,8 @@ export const CHANNEL_RULE_PRESETS = {
 export const initialHeaderForm = {
   channelName: '', partnerName: '', settlementMonth: '', invoiceStatus: 'pending_invoice', startDate: '', endDate: '', remark: '', status: 'pending',
   serverCost: '', discountType: '', channelFeeRate: '', devShareRate: '', profitRate: '',
-  settlementRuleCode: 'legacy_fixed_fee_tax', channelFeeMode: 'fixed', taxMode: 'share', validationTolerance: '0.05'
+  settlementRuleCode: 'legacy_fixed_fee_tax', channelFeeMode: 'fixed', taxMode: 'share', validationTolerance: '0.05',
+  settlementAdjustmentType: '', settlementAdjustmentSourceMonth: '', settlementAdjustmentAmount: '', settlementAdjustmentReason: '', settlementFinalOverride: ''
 }
 
 export function initialLineItem() {
@@ -210,13 +211,20 @@ export function buildFullChannelRecord(headerForm, lineFormList) {
   const differenceTotal = platformTotal == null ? null : round2(systemTotal - platformTotal)
   const validationStatus = items.some((i) => i.validationStatus === 'fail') ? 'fail' : items.length && items.every((i) => i.validationStatus === 'pass') ? 'pass' : platformRows.length ? 'partial' : 'unvalidated'
   const settlementTotal = roundingTailApplied ? precisionSystemTotal : sum('settlementAmount')
+  const businessSettlementAmount = settlementTotal
+  const settlementAdjustmentAmount = round2(Number(effectiveHeader.settlementAdjustmentAmount || 0))
+  const settlementCalculatedAfterAdjustment = round2(businessSettlementAmount + settlementAdjustmentAmount)
+  const finalOverride = optionalNumber(effectiveHeader.settlementFinalOverride)
+  const finalSettlementAmount = finalOverride == null ? settlementCalculatedAfterAdjustment : round2(finalOverride)
+  const settlementAdjustmentTail = round2(finalSettlementAmount - settlementCalculatedAfterAdjustment)
   return {
     channelName: effectiveHeader.channelName, partnerName: effectiveHeader.partnerName || '', settlementMonth: period.settlementMonth || normalizeChannelSettlementCycle(effectiveHeader.settlementMonth), invoiceStatus: effectiveHeader.invoiceStatus || 'pending_invoice', invoice_status: effectiveHeader.invoiceStatus || 'pending_invoice',
     startDate: period.startDate || effectiveHeader.startDate || '', endDate: period.endDate || effectiveHeader.endDate || '', remark: effectiveHeader.remark || '', status: effectiveHeader.status || 'pending', serverCost: parseOptionalNum(effectiveHeader.serverCost), discountType: effectiveHeader.discountType || null,
+    settlementAdjustmentType: effectiveHeader.settlementAdjustmentType || '', settlementAdjustmentSourceMonth: normalizeChannelSettlementCycle(effectiveHeader.settlementAdjustmentSourceMonth), settlementAdjustmentAmount, settlementAdjustmentReason: effectiveHeader.settlementAdjustmentReason || '', settlementFinalOverride: finalOverride, businessSettlementAmount, settlementCalculatedAfterAdjustment, settlementAdjustmentTail,
     channelFeeRate: parseOptionalNum(effectiveHeader.channelFeeRate), devShareRate: parseOptionalNum(effectiveHeader.devShareRate), profitRate: parseOptionalNum(effectiveHeader.profitRate),
     settlementRuleCode: effectiveHeader.settlementRuleCode || 'legacy_fixed_fee_tax', channelFeeMode: effectiveHeader.channelFeeMode || 'fixed', taxMode: effectiveHeader.taxMode || 'share', validationTolerance: Math.max(0, Number(effectiveHeader.validationTolerance || 0.05)),
     items, gameName: items.map((i) => i.gameName).filter(Boolean).join('、'), rawFlowTotal: sum('flow'), flow: sum('effectiveFlow'), voucherCost: sum('voucherCost'), noWorryCost: sum('noWorryCost'), refundCost: sum('refundCost'), testCost: sum('testCost'), welfareCost: sum('welfareCost'), coinCost: sum('coinCost'), billingAmount: sum('billingAmount'), shareAmount: sum('shareAmount'),
-    taxRate: items[0]?.taxRate || 0, shareRate: items[0]?.shareRate || 0, gatewayCost: sum('gatewayCost'), systemSettlementAmount: systemTotal, platformSettlementAmount: platformTotal, settlementDifference: differenceTotal, validationStatus, settlementAmount: settlementTotal
+    taxRate: items[0]?.taxRate || 0, shareRate: items[0]?.shareRate || 0, gatewayCost: sum('gatewayCost'), systemSettlementAmount: systemTotal, platformSettlementAmount: platformTotal, settlementDifference: differenceTotal, validationStatus, settlementAmount: finalSettlementAmount
   }
 }
 
@@ -229,7 +237,7 @@ export function buildRecordFromForm(fd) { const line = buildLineRecordFromForm(f
 export function recordToHeaderForm(record) {
   const base = {
     channelName: record.channelName || '', partnerName: record.partnerName || '', settlementMonth: record.settlementMonth || '', invoiceStatus: record.invoiceStatus || record.invoice_status || 'pending_invoice', startDate: record.startDate || '', endDate: record.endDate || '', remark: record.remark || '', status: record.status || 'pending', serverCost: record.serverCost != null ? String(record.serverCost) : '', discountType: record.discountType || '', channelFeeRate: record.channelFeeRate != null ? String(record.channelFeeRate) : '', devShareRate: record.devShareRate != null ? String(record.devShareRate) : '', profitRate: record.profitRate != null ? String(record.profitRate) : '',
-    settlementRuleCode: record.settlementRuleCode || 'legacy_fixed_fee_tax', channelFeeMode: record.channelFeeMode || 'fixed', taxMode: record.taxMode || 'share', validationTolerance: record.validationTolerance != null ? String(record.validationTolerance) : '0.05'
+    settlementRuleCode: record.settlementRuleCode || 'legacy_fixed_fee_tax', channelFeeMode: record.channelFeeMode || 'fixed', taxMode: record.taxMode || 'share', validationTolerance: record.validationTolerance != null ? String(record.validationTolerance) : '0.05', settlementAdjustmentType: record.settlementAdjustmentType || '', settlementAdjustmentSourceMonth: normalizeChannelSettlementCycle(record.settlementAdjustmentSourceMonth), settlementAdjustmentAmount: record.settlementAdjustmentAmount != null && Number(record.settlementAdjustmentAmount) !== 0 ? String(record.settlementAdjustmentAmount) : '', settlementAdjustmentReason: record.settlementAdjustmentReason || '', settlementFinalOverride: record.settlementFinalOverride != null ? String(record.settlementFinalOverride) : ''
   }
   return applyTargetedChannelRule(base)
 }
