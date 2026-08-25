@@ -1,2 +1,2 @@
-// Production entry: grouped channel -> bill ledger.
-export { default } from './CoreChannelReconciliationGroupedPage.jsx'
+// Production entry: channel overview -> focused bill detail.
+export { default } from './CoreChannelReconciliationMasterDetailPage.jsx'
