@@ -1,6 +1,6 @@
 /* Channel ledger master/detail refinement.
    Default = channel overview. Clicking one channel enters a focused bill-detail view.
-   Click the selected channel row again to return to the overview. */
+   Keep the selected channel row as the only detail header instead of adding another toolbar. */
 
 .core-channel-recon-page .channel-group-expand-all {
   display: none !important;
@@ -32,8 +32,9 @@
   font-weight: 800;
 }
 
-/* Master view uses a single, neutral action indicator. Exact bill states stay in detail. */
+/* Master view uses a single, neutral task indicator. Exact reasons stay in the bill detail. */
 .core-channel-recon-page .core-channel-status-badge.is-master-pending {
+  min-width: 62px;
   border-color: #dbe3ef !important;
   background: #f8fafc !important;
   color: #475569 !important;
@@ -54,6 +55,7 @@
   background: #fff;
 }
 
+/* The selected channel row becomes a lightweight detail header. */
 .core-channel-recon-page .channel-group-card.is-expanded .channel-group-summary {
   position: sticky;
   top: 0;
@@ -61,12 +63,13 @@
   min-width: 980px;
   border-bottom: 1px solid #dce5f0;
   background: #fff;
-  box-shadow: 0 4px 12px rgb(15 23 42 / 6%);
+  box-shadow: 0 4px 12px rgb(15 23 42 / 5%);
 }
 
 .core-channel-recon-page .channel-group-card.is-expanded .channel-group-toggle {
   position: relative;
-  min-height: 56px;
+  min-height: 66px;
+  padding-right: 102px;
 }
 
 .core-channel-recon-page .channel-group-card.is-expanded .channel-group-chevron {
@@ -81,35 +84,95 @@
 
 .core-channel-recon-page .channel-group-card.is-expanded .channel-group-identity small {
   color: #64748b;
+  font-size: 10px;
 }
 
-.core-channel-recon-page .channel-group-card.is-expanded .channel-group-toggle::after {
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-count,
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-period,
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-money {
+  position: relative;
+  display: flex;
+  min-height: 38px;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 2px;
+  padding-top: 11px;
+  box-sizing: border-box;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-money {
+  align-items: flex-end;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-count::before,
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-period::before,
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-money::before {
   position: absolute;
-  right: 6px;
-  bottom: 2px;
+  top: 1px;
+  left: 0;
   color: #94a3b8;
   font-size: 9px;
-  font-weight: 500;
-  content: '再次点击返回渠道总览';
+  font-weight: 600;
+  line-height: 1;
+  content: attr(data-detail-label);
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-money::before {
+  right: 8px;
+  left: auto;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-count strong,
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-period,
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-money {
+  color: #263b56;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-money.has-unpaid {
+  color: #172033;
+  font-weight: 850;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-summary .core-channel-status-badge {
+  display: none;
+}
+
+.core-channel-recon-page .channel-master-inline-back {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid #dbe4ef;
+  border-radius: 7px;
+  background: #fff;
+  color: #52627a;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  transform: translateY(-50%);
   pointer-events: none;
 }
 
-/* Detail is now a dedicated lower workspace, not a mini-table inserted between channels. */
+.core-channel-recon-page .channel-group-toggle:hover .channel-master-inline-back {
+  border-color: #b9cce6;
+  color: var(--admin-primary);
+  background: #f8fbff;
+}
+
+/* Detail starts immediately below the selected channel header; remove the duplicate title. */
 .core-channel-recon-page .channel-group-card.is-expanded .channel-group-details {
-  padding: 0 12px 14px;
+  padding: 10px 12px 14px;
   overflow-x: auto;
   background: #f8fafc;
 }
 
 .core-channel-recon-page .channel-group-card.is-expanded .channel-group-details::before {
-  display: flex;
-  align-items: center;
-  min-height: 42px;
-  padding: 0 2px;
-  color: #243b5a;
-  font-size: 13px;
-  font-weight: 750;
-  content: attr(data-channel) ' · 账单明细';
+  display: none;
 }
 
 .core-channel-recon-page .channel-group-card.is-expanded .channel-group-detail-table {
@@ -121,20 +184,65 @@
 }
 
 .core-channel-recon-page .channel-group-card.is-expanded .channel-group-detail-table thead th {
-  height: 34px;
+  height: 32px;
   background: #f4f7fb;
   color: #64748b;
+  font-size: 10px;
 }
 
 .core-channel-recon-page .channel-group-card.is-expanded .channel-group-detail-table tbody td {
-  height: 44px;
+  height: 42px;
+  padding-top: 5px;
+  padding-bottom: 5px;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-detail-table tbody tr:nth-child(even) td {
+  background: #fcfdff;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-detail-table tbody tr:hover td {
+  background: #f6f9fd;
 }
 
 .core-channel-recon-page .channel-group-card.is-expanded .channel-group-detail-table .core-channel-status-badge {
-  min-width: 52px;
+  min-width: 50px;
   height: 20px;
   padding: 0 7px;
   font-size: 9px;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-detail-table .core-channel-status-badge.is-check-normal {
+  border-color: #dbe3ef;
+  background: #f8fafc;
+  color: #52627a;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-detail-table .core-recon-row-actions {
+  gap: 3px;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-detail-table .core-recon-row-actions button {
+  height: 24px;
+  min-height: 24px;
+  padding: 0 7px;
+  border-radius: 6px;
+  font-size: 9px;
+}
+
+/* Keep the global KPIs, but reduce their weight while working inside one channel. */
+.core-channel-recon-page:has(.channel-group-card.is-expanded) .core-recon-stats > div {
+  min-height: 50px;
+  padding-top: 7px;
+  padding-bottom: 7px;
+}
+
+.core-channel-recon-page:has(.channel-group-card.is-expanded) .core-recon-stats strong {
+  margin-top: 3px;
+  font-size: 16px;
+}
+
+.core-channel-recon-page:has(.channel-group-card.is-expanded) .core-recon-stats small {
+  margin-top: 2px;
 }
 
 @media (max-width: 900px) {
