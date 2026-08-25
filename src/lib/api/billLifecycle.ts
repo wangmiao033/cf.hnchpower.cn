@@ -4,6 +4,7 @@ import {
   getContractBillReconciliation
 } from '@/lib/api/contractTerms.ts'
 import { listContractDifferenceCases } from '@/lib/api/contractDifferences.ts'
+import type { ContractDifferenceCase } from '@/lib/api/contractDifferences.ts'
 import type { ChannelCumulativeBillCondition } from '@/lib/api/channelCumulativeSettlement.ts'
 
 export type BillTransitionOption = {
@@ -41,12 +42,29 @@ export function getBillLifecycle(
   return apiGet(`/api/bill-lifecycle/${encodeURIComponent(billType)}/${encodeURIComponent(billId)}`)
 }
 
-async function hasApprovedContractDifferenceOverride(
+type ContractDifferenceApproval = {
+  approved: boolean
+  items: ContractDifferenceCase[]
+}
+
+export class ContractDifferenceBlockedError extends Error {
+  contractDifferences: ContractDifferenceCase[]
+  failCount: number
+
+  constructor(message: string, contractDifferences: ContractDifferenceCase[] = [], failCount = 0) {
+    super(message)
+    this.name = 'ContractDifferenceBlockedError'
+    this.contractDifferences = contractDifferences
+    this.failCount = failCount
+  }
+}
+
+async function getContractDifferenceApproval(
   billType: 'rd' | 'channel',
   billId: string,
   failCount: number
-): Promise<boolean> {
-  if (failCount <= 0) return true
+): Promise<ContractDifferenceApproval> {
+  if (failCount <= 0) return { approved: true, items: [] }
   try {
     const result = await listContractDifferenceCases({ billType, billId, limit: 200 })
     const items = result.items || []
@@ -54,10 +72,13 @@ async function hasApprovedContractDifferenceOverride(
     const accepted = items.filter(
       (item) => item.status === 'resolved' && item.handling_type === 'accept_difference'
     )
-    return unresolved.length === 0 && accepted.length >= failCount
+    return {
+      approved: unresolved.length === 0 && accepted.length >= failCount,
+      items
+    }
   } catch (error) {
     console.warn('Contract difference approval lookup unavailable', error)
-    return false
+    return { approved: false, items: [] }
   }
 }
 
@@ -80,14 +101,17 @@ export async function transitionBillLifecycle(
 
     const failCount = Number(preflight?.summary?.fail_count || 0)
     if (failCount > 0) {
-      const approvedOverride = await hasApprovedContractDifferenceOverride(
+      const approval = await getContractDifferenceApproval(
         billType,
         billId,
         failCount
       )
-      if (!approvedOverride) {
-        throw new Error(
-          `合同核验发现 ${failCount} 条明确差异，暂不能确认核对。可在当前页面“合同差异处理”中选择“特殊结算确认”并留痕，或前往“账单360 → 合同核验”修正合同匹配/账单数据。`
+      if (!approval.approved) {
+        const unresolved = approval.items.filter((item) => item.status !== 'resolved')
+        throw new ContractDifferenceBlockedError(
+          `合同核验发现 ${failCount} 条明确差异，暂不能确认核对。可在当前页面“合同差异处理”中选择“特殊结算确认”并留痕，或前往“账单360 → 合同核验”修正合同匹配/账单数据。`,
+          unresolved.length ? unresolved : approval.items,
+          failCount
         )
       }
     }
