@@ -10,7 +10,7 @@ import {
 import {
   allocateBankTransaction,
   getBankBillAllocationSummary,
-  getBankMultiAllocationDashboard
+  getBankBillMatchSuggestions
 } from '@/lib/api/bankAutoReconciliation.ts'
 import {
   getChannelTotals,
@@ -123,12 +123,8 @@ function ChannelReceiptDrawer({
     setBankLoading(true)
     setBankError('')
 
-    Promise.all([
-      getBankMultiAllocationDashboard(500),
-      getBankBillAllocationSummary('channel', recordId),
-      listChannelReceipts(recordId)
-    ])
-      .then(([dashboard, billSummary, receiptResponse]) => {
+    getBankBillMatchSuggestions('channel', recordId, 8)
+      .then((dashboard) => {
         if (cancelled) return
         const matches = (dashboard?.suggestions || [])
           .filter((item) => item?.direction === 'collection' && numberValue(item?.remaining_amount) > 0.01)
@@ -139,32 +135,57 @@ function ChannelReceiptDrawer({
             return candidate ? { transaction: item, candidate } : null
           })
           .filter(Boolean)
-          .sort((a, b) => {
-            const scoreDiff = numberValue(b.candidate?.score) - numberValue(a.candidate?.score)
-            if (Math.abs(scoreDiff) > 0.001) return scoreDiff
-            return String(b.transaction?.trade_date || '').localeCompare(String(a.transaction?.trade_date || ''))
-          })
           .slice(0, 5)
-
         setBankMatches(matches)
-        setBankBillSummary(billSummary || null)
-        setReceiptFacts(Array.isArray(receiptResponse?.items) ? receiptResponse.items : [])
       })
       .catch((error) => {
         if (cancelled) return
+        console.error('[ChannelReceiptDrawer] bank match failed', error)
         setBankMatches([])
-        setBankBillSummary(null)
-        setReceiptFacts([])
         setBankError(error instanceof Error ? error.message : '银行流水匹配读取失败')
       })
       .finally(() => {
         if (!cancelled) setBankLoading(false)
       })
 
+    getBankBillAllocationSummary('channel', recordId)
+      .then((summary) => { if (!cancelled) setBankBillSummary(summary || null) })
+      .catch((error) => {
+        console.warn('[ChannelReceiptDrawer] allocation summary unavailable', error)
+        if (!cancelled) setBankBillSummary(null)
+      })
+
+    listChannelReceipts(recordId)
+      .then((response) => {
+        if (!cancelled) setReceiptFacts(Array.isArray(response?.items) ? response.items : [])
+      })
+      .catch((error) => {
+        console.warn('[ChannelReceiptDrawer] receipt facts unavailable', error)
+        if (!cancelled) setReceiptFacts([])
+      })
+
     return () => {
       cancelled = true
     }
   }, [open, recordId, channelApiEnabled, bankReloadKey])
+
+  useEffect(() => {
+    if (!open || typeof window === 'undefined' || typeof window.alert !== 'function') return undefined
+    const originalAlert = window.alert
+    const guardedAlert = (message) => {
+      const text = String(message || '')
+      if (/加载匹配候选失败|Bank reconciliation API unavailable|\/api\/bank-reconciliation\/receiver-suggest/i.test(text)) {
+        setBankLoading(false)
+        setBankError('检测到旧版银行匹配接口异常，已阻止弹窗。请点击“重新匹配”使用新版快速匹配。')
+        return
+      }
+      return originalAlert(message)
+    }
+    window.alert = guardedAlert
+    return () => {
+      if (window.alert === guardedAlert) window.alert = originalAlert
+    }
+  }, [open])
 
   useEffect(() => {
     if (!open) return undefined
@@ -437,6 +458,7 @@ function ChannelReceiptDrawer({
               <div className="channel-receipt-match-empty is-error">
                 <strong>银行匹配暂时读取失败</strong>
                 <span>{bankError}</span>
+                <small>不影响手工登记；也可以直接前往银行中心处理。</small>
                 <button type="button" onClick={() => setBankReloadKey((value) => value + 1)}>重试</button>
               </div>
             ) : null}

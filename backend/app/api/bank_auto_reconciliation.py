@@ -29,6 +29,7 @@ from app.services.bank_combination_match import enrich_auto_dashboard_with_p2
 from app.services.bank_cumulative_filter import filter_cumulative_bank_suggestions
 from app.services.bank_multi_allocation import (
     bill_summary,
+    build_bill_match_suggestions,
     build_p2_dashboard,
     transaction_summaries,
 )
@@ -153,6 +154,18 @@ def get_p2_transaction_summaries(
     _user: AuthUser = Depends(require_current_user),
 ) -> P2TransactionSummaryResponse:
     return P2TransactionSummaryResponse(items=transaction_summaries(db, payload.transaction_ids))
+
+
+@router.get("/p2/bills/{bill_type}/{bill_id}/suggestions", response_model=P2Dashboard)
+def get_p2_bill_suggestions(
+    bill_type: str,
+    bill_id: str,
+    limit: int = Query(8, ge=1, le=20),
+    db: Session = Depends(get_db),
+    _user: AuthUser = Depends(require_current_user),
+) -> P2Dashboard:
+    """Fast bill-scoped bank matching for receipt drawers."""
+    return P2Dashboard.model_validate(build_bill_match_suggestions(db, bill_type, bill_id, limit=limit))
 
 
 @router.get("/p2/bills/{bill_type}/{bill_id}", response_model=P2BillSummary)

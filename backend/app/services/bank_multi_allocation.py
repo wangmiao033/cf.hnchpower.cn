@@ -99,6 +99,159 @@ def _p2_candidate(row: BankTransaction, direction: str, remaining: float, candid
     }
 
 
+
+def build_bill_match_suggestions(
+    db: Session,
+    bill_type: str,
+    bill_id: str,
+    limit: int = 8,
+) -> dict:
+    """Return bank candidates for one bill without rebuilding the global P2 matrix."""
+    normalized_type = str(bill_type or "").strip().lower()
+    if normalized_type == "channel":
+        direction = "collection"
+    elif normalized_type == "rd":
+        direction = "payment"
+    else:
+        raise HTTPException(status_code=422, detail="账单类型必须为 channel 或 rd")
+
+    _bill_row, candidate = _specific_bill(db, direction, normalized_type, str(bill_id))
+    outstanding = max(0.0, _num(candidate.get("outstanding_amount")))
+    if outstanding <= EPS:
+        return {
+            "stats": {"pending_transactions": 0, "partial_transactions": 0, "remaining_amount": 0.0},
+            "suggestions": [],
+        }
+
+    allocated_subquery = (
+        select(
+            BankReconciliationMatch.bank_transaction_id.label("tx_id"),
+            func.coalesce(func.sum(BankReconciliationMatch.linked_amount), 0).label("allocated_amount"),
+        )
+        .where(BankReconciliationMatch.status == "confirmed")
+        .group_by(BankReconciliationMatch.bank_transaction_id)
+        .subquery()
+    )
+    same_bill_tx_ids = {
+        str(value)
+        for value in db.execute(
+            select(BankReconciliationMatch.bank_transaction_id).where(
+                BankReconciliationMatch.status == "confirmed",
+                BankReconciliationMatch.bill_type == normalized_type,
+                BankReconciliationMatch.bill_id == str(bill_id),
+            )
+        ).scalars().all()
+        if value
+    }
+
+    transaction_predicate = or_(
+        BankTransaction.type == "statement_import",
+        allocated_subquery.c.tx_id.is_not(None),
+    )
+    if direction == "collection":
+        transaction_predicate = (
+            transaction_predicate
+            & (func.coalesce(BankTransaction.income_amount, 0) > EPS)
+            & (func.coalesce(BankTransaction.expense_amount, 0) <= EPS)
+        )
+    else:
+        transaction_predicate = (
+            transaction_predicate
+            & (func.coalesce(BankTransaction.expense_amount, 0) > EPS)
+            & (func.coalesce(BankTransaction.income_amount, 0) <= EPS)
+        )
+
+    rows = db.execute(
+        select(
+            BankTransaction,
+            func.coalesce(allocated_subquery.c.allocated_amount, 0).label("allocated_amount"),
+        )
+        .outerjoin(allocated_subquery, allocated_subquery.c.tx_id == BankTransaction.id)
+        .where(transaction_predicate)
+        .order_by(BankTransaction.trade_date.desc(), BankTransaction.created_at.desc())
+    ).all()
+
+    funded_ids = bank_funding_transaction_ids(db)
+    scored_rows: list[tuple[dict, BankTransaction, float, float]] = []
+    for row, allocated_raw in rows:
+        transaction_id = str(row.id)
+        if transaction_id in funded_ids or transaction_id in same_bill_tx_ids:
+            continue
+        if row.currency and str(row.currency).strip().upper() not in {"CNY", "RMB"}:
+            continue
+        tx_direction, total, blocked = transaction_direction(row)
+        if blocked or tx_direction != direction or total <= EPS:
+            continue
+        remaining = max(0.0, round(total - max(0.0, _num(allocated_raw)), 2))
+        if remaining <= EPS:
+            continue
+        scored_candidate = _p2_candidate(row, direction, remaining, candidate)
+        if scored_candidate is None:
+            continue
+        scored_rows.append((scored_candidate, row, total, remaining))
+
+    scored_rows.sort(
+        key=lambda entry: (
+            float(entry[0].get("score") or 0),
+            -abs(float(entry[0].get("recommended_amount") or 0) - outstanding),
+            str(entry[1].trade_date or ""),
+        ),
+        reverse=True,
+    )
+    selected = scored_rows[: max(1, int(limit or 1))]
+    selected_ids = [str(entry[1].id) for entry in selected]
+    grouped: dict[str, list[BankReconciliationMatch]] = defaultdict(list)
+    if selected_ids:
+        match_rows = db.execute(
+            select(BankReconciliationMatch).where(
+                BankReconciliationMatch.status == "confirmed",
+                BankReconciliationMatch.bank_transaction_id.in_(selected_ids),
+            )
+        ).scalars().all()
+        for match in match_rows:
+            grouped[str(match.bank_transaction_id)].append(match)
+
+    suggestions: list[dict] = []
+    for scored_candidate, row, total, _remaining in selected:
+        matches = grouped.get(str(row.id), [])
+        summary = transaction_summary(row, matches)
+        clean_candidate = {key: value for key, value in scored_candidate.items() if key != "raw_bill_number"}
+        score = float(clean_candidate.get("score") or 0)
+        suggestions.append({
+            "transaction_id": str(row.id),
+            "trade_date": row.trade_date,
+            "transaction_no": row.transaction_no,
+            "direction": direction,
+            "direction_label": "回款" if direction == "collection" else "付款",
+            "amount": round(total, 2),
+            **summary,
+            "existing_allocations": [{
+                "match_id": str(item.id),
+                "bill_type": str(item.bill_type),
+                "bill_id": str(item.bill_id),
+                "bill_number": item.bill_number,
+                "linked_amount": round(_num(item.linked_amount), 2),
+            } for item in matches],
+            "currency": row.currency,
+            "counterparty_name": _transaction_counterparty(row, direction),
+            "summary": row.summary or row.purpose or row.remark,
+            "confidence_level": _raw_confidence(score),
+            "top_score": round(score, 2),
+            "ambiguity_margin": round(score, 2),
+            "candidates": [clean_candidate],
+            "blocked_reason": None,
+        })
+
+    return {
+        "stats": {
+            "pending_transactions": len(suggestions),
+            "partial_transactions": sum(1 for item in suggestions if item["allocated_amount"] > EPS),
+            "remaining_amount": round(sum(item["remaining_amount"] for item in suggestions), 2),
+        },
+        "suggestions": suggestions,
+    }
+
+
 def build_p2_dashboard(db: Session, limit: int = 500) -> dict:
     active_matches = db.execute(
         select(BankReconciliationMatch).where(BankReconciliationMatch.status == "confirmed")

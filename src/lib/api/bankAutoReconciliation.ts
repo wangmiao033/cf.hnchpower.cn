@@ -219,6 +219,21 @@ export function getBankTransactionAllocationSummaries(transactionIds: string[]) 
   })
 }
 
+export function getBankBillMatchSuggestions(
+  billType: 'rd' | 'channel',
+  billId: string,
+  limit = 8
+) {
+  const key = `bill-suggestions:${billType}:${billId}:${limit}`
+  return loadDashboard(
+    key,
+    () => apiGet<BankMultiAllocationDashboard>(
+      `${PATH}/p2/bills/${encodeURIComponent(billType)}/${encodeURIComponent(billId)}/suggestions?limit=${limit}`,
+      { timeoutMs: 8_000 }
+    )
+  )
+}
+
 export function getBankBillAllocationSummary(billType: 'rd' | 'channel', billId: string) {
   return apiGet<BankBillAllocationSummary>(
     `${PATH}/p2/bills/${encodeURIComponent(billType)}/${encodeURIComponent(billId)}`
