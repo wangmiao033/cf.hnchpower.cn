@@ -80,6 +80,14 @@ function channelGames(record) {
   return names
 }
 
+function compactGameLabel(games, visibleCount = 2) {
+  const names = Array.isArray(games) ? games.filter(Boolean) : []
+  if (!names.length) return '-'
+  const visible = names.slice(0, visibleCount).join('、')
+  const hiddenCount = Math.max(0, names.length - visibleCount)
+  return hiddenCount > 0 ? `${visible} +${hiddenCount}` : visible
+}
+
 function channelPaymentAmounts(row) {
   const totals = getChannelTotals(row)
   const received = Math.max(0, getChannelReceivedAmount(row))
@@ -104,6 +112,14 @@ function channelHasDataDifference(row) {
 function isCancelledRow(row) {
   const current = String(row?.status || '').trim().toLowerCase()
   return current === 'cancelled' || current === 'canceled'
+}
+
+function channelPaymentStatus(row, { received, settled, cancelled }) {
+  if (cancelled) return { tone: 'void', label: '已作废' }
+  if (channelHasDataDifference(row)) return { tone: 'anomaly', label: '异常' }
+  if (settled) return { tone: 'settled', label: '已结清' }
+  if (Number(received || 0) > 0.01) return { tone: 'partial', label: '部分收款' }
+  return { tone: 'unpaid', label: '未收款' }
 }
 
 function CoreChannelReconciliationPage() {
@@ -583,7 +599,9 @@ function CoreChannelReconciliationPage() {
                   lifecycleStatus: row.status,
                   archived
                 })
+                const paymentStatus = channelPaymentStatus(row, { received, settled, cancelled })
                 const gameText = games.join('、')
+                const gameDisplay = compactGameLabel(games)
                 const periodText = channelPeriodLabel(row)
                 return (
                   <tr key={row.id} className={selectedIds.includes(String(row.id)) ? 'is-selected' : ''}>
@@ -594,12 +612,12 @@ function CoreChannelReconciliationPage() {
                     <td className="core-recon-number">{getChannelBillNumber(row)}</td>
                     <td><strong className="core-recon-partner-short-name" title={text(row.channelName)}>{text(row.channelName)}</strong></td>
                     <td><span className="core-recon-game-text" title={text(row.partnerName)}>{text(row.partnerName)}</span></td>
-                    <td><span className="core-recon-game-text" title={gameText || '-'}>{games.length > 1 ? `${games.length}个 · ${gameText}` : text(gameText)}</span></td>
+                    <td><span className="core-recon-game-text" title={gameText || '-'}>{gameDisplay}</span></td>
                     <td className="core-recon-money">{money(totals.flow)}</td>
                     <td className="core-recon-money">{money(sumChannelNumericLines(row, 'shareAmount'))}</td>
                     <td className="core-recon-money core-recon-money--settlement">{money(totals.settlementAmount)}</td>
                     <td className="core-recon-money core-recon-money--received"><strong style={{ display: 'block', fontWeight: 700 }}>{money(received)}</strong><small style={{ display: 'block', marginTop: 2, color: '#8a98aa', fontSize: 10 }}>未收 {money(unpaid)}</small></td>
-                    <td><span className={`v4-list-closure is-${closure.tone}`}><strong>{closure.label}</strong><small>{closure.detail} · {STATUS_LABELS[row.status] || row.status || '待处理'}</small></span></td>
+                    <td><span className={`v4-list-closure core-channel-payment-status is-${paymentStatus.tone}`}><strong>{paymentStatus.label}</strong><small>{closure.detail} · {STATUS_LABELS[row.status] || row.status || '待处理'}</small></span></td>
                     <td><div className="core-recon-row-actions">
                       <button type="button" onMouseEnter={() => prefetchBill360?.('channel', String(row.id))} onFocus={() => prefetchBill360?.('channel', String(row.id))} onClick={() => openBill360('channel', String(row.id), row)}>360°</button>
                       {cancelled ? (
