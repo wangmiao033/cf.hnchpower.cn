@@ -415,3 +415,135 @@
     opacity: 0.55;
   }
 }
+
+
+/* Channel bill inline diagnostics */
+.core-bill-inline-issue {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 13px 15px;
+  border: 1px solid #fecaca;
+  border-left: 4px solid #dc2626;
+  border-radius: 8px;
+  background: #fff7f7;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
+}
+
+.core-bill-inline-issue.is-saved {
+  border-color: #fde68a;
+  border-left-color: #d97706;
+  background: #fffbeb;
+}
+
+.core-bill-inline-issue__body {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.core-bill-inline-issue__body > span {
+  width: fit-content;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(220, 38, 38, 0.09);
+  color: #b91c1c;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.core-bill-inline-issue.is-saved .core-bill-inline-issue__body > span {
+  background: rgba(217, 119, 6, 0.11);
+  color: #92400e;
+}
+
+.core-bill-inline-issue__body > strong {
+  color: var(--admin-text-main);
+  font-size: 14px;
+}
+
+.core-bill-inline-issue__body p,
+.core-bill-inline-issue__body small {
+  margin: 0;
+  line-height: 1.55;
+}
+
+.core-bill-inline-issue__body p {
+  color: #7f1d1d;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.core-bill-inline-issue.is-saved .core-bill-inline-issue__body p {
+  color: #78350f;
+}
+
+.core-bill-inline-issue__body small {
+  color: var(--admin-text-sub);
+  font-size: 11px;
+}
+
+.core-bill-inline-issue__actions {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.core-bill-inline-issue__actions button {
+  min-height: 31px;
+  padding: 0 10px;
+  border: 1px solid var(--admin-border);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--admin-text-main);
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.core-bill-inline-issue__actions button.is-primary {
+  border-color: #2563eb;
+  background: #2563eb;
+  color: #fff;
+}
+
+.core-bill-inline-issue__actions button.is-quiet {
+  color: var(--admin-text-sub);
+}
+
+.core-bill-inline-issue__actions button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.core-bill-contract-difference-workbench {
+  scroll-margin-top: 110px;
+}
+
+.core-bill-problem-target {
+  position: relative;
+  z-index: 1;
+  scroll-margin-top: 120px;
+  outline: 3px solid rgba(220, 38, 38, 0.24);
+  outline-offset: 3px;
+  animation: core-bill-problem-pulse 0.9s ease-in-out 2;
+}
+
+@keyframes core-bill-problem-pulse {
+  0%, 100% { outline-color: rgba(220, 38, 38, 0.18); }
+  50% { outline-color: rgba(220, 38, 38, 0.55); }
+}
+
+@media (max-width: 900px) {
+  .core-bill-inline-issue {
+    flex-direction: column;
+  }
+
+  .core-bill-inline-issue__actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+}
