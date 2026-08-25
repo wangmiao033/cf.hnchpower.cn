@@ -67,7 +67,40 @@ def _sorted_members(items: list[dict]) -> list[dict]:
     )
 
 
+def _exact_pair_combinations(candidates: list[dict], target_cents: int) -> list[list[dict]]:
+    """Find exact 2-bill sums across the complete partner pool.
+
+    Two-bill settlements are common in bank receipts and can legitimately point
+    to older bills that are not among the P2 dashboard's visible top candidates.
+    Pair lookup is O(n²) and therefore safe to run before the bounded DFS used for
+    3-6 bill combinations. This also keeps confirmation-time recomputation stable.
+    """
+    prepared = [
+        (candidate, _cents(candidate.get("outstanding_amount")))
+        for candidate in candidates
+        if _cents(candidate.get("outstanding_amount")) > 0
+        and _cents(candidate.get("outstanding_amount")) <= target_cents + EPS_CENTS
+    ]
+    found: list[list[dict]] = []
+    for left_index in range(len(prepared)):
+        left, left_cents = prepared[left_index]
+        for right_index in range(left_index + 1, len(prepared)):
+            right, right_cents = prepared[right_index]
+            if abs(left_cents + right_cents - target_cents) <= EPS_CENTS:
+                found.append([left, right])
+                if len(found) >= MAX_EXACT_COMBINATIONS:
+                    return found
+    return found
+
+
 def _exact_combinations(candidates: list[dict], target_cents: int) -> list[list[dict]]:
+    # Always search exact pairs across the full same-partner pool first. The old
+    # implementation truncated to the top 18 before searching, so historical
+    # bills could disappear even when two balances added to the receipt exactly.
+    pair_matches = _exact_pair_combinations(candidates, target_cents)
+    if pair_matches:
+        return pair_matches
+
     prepared = [
         (candidate, _cents(candidate.get("outstanding_amount")))
         for candidate in candidates
@@ -257,8 +290,18 @@ def _synthetic_candidate(plan: dict) -> dict:
     }
 
 
-def enrich_auto_dashboard_with_p2(auto_result: dict, p2_result: dict) -> dict:
-    """把 P2 的精确组合候选注入旧主表响应，保持现有页面/权限/确认按钮兼容。"""
+def enrich_auto_dashboard_with_p2(
+    auto_result: dict,
+    p2_result: dict,
+    full_pool: dict[str, list[dict]] | None = None,
+) -> dict:
+    """把 P2 的精确组合候选注入旧主表响应，保持现有页面/权限/确认按钮兼容。
+
+    ``full_pool`` is used only for exact combination discovery. The visible P2
+    candidate list intentionally stays short for UI usability, but an older bill
+    must not disappear from combination matching merely because it ranks outside
+    that visible list.
+    """
     p2_map = {
         str(item.get("transaction_id") or ""): item
         for item in p2_result.get("suggestions") or []
@@ -273,7 +316,15 @@ def enrich_auto_dashboard_with_p2(auto_result: dict, p2_result: dict) -> dict:
         p2_item = p2_map.get(str(item.get("transaction_id") or ""))
         if not p2_item:
             continue
-        plan = build_exact_combination(p2_item)
+
+        combination_item = p2_item
+        if full_pool is not None:
+            direction = str(p2_item.get("direction") or item.get("direction") or "")
+            pool_candidates = list(full_pool.get(direction, []) or [])
+            if pool_candidates:
+                combination_item = {**p2_item, "candidates": pool_candidates}
+
+        plan = build_exact_combination(combination_item)
         if not plan:
             continue
         current_top = _num(item.get("top_score"))
