@@ -295,12 +295,14 @@ def enrich_auto_dashboard_with_p2(
     p2_result: dict,
     full_pool: dict[str, list[dict]] | None = None,
 ) -> dict:
-    """把 P2 的精确组合候选注入旧主表响应，保持现有页面/权限/确认按钮兼容。
+    """把精确多账单组合候选注入旧主表响应，保持现有页面/权限/确认按钮兼容。
 
     ``full_pool`` is used only for exact combination discovery. The visible P2
     candidate list intentionally stays short for UI usability, but an older bill
     must not disappear from combination matching merely because it ranks outside
-    that visible list.
+    that visible list. Likewise, a filtered historical bank transaction may not
+    be present in the bounded P2 dashboard at all; in that case the main-table
+    transaction itself is sufficient to run exact-combination discovery.
     """
     p2_map = {
         str(item.get("transaction_id") or ""): item
@@ -313,16 +315,18 @@ def enrich_auto_dashboard_with_p2(
         # 已经存在明确的一对一高置信证据时，一对一优先，避免组合抢占更直接的匹配。
         if item.get("auto_ready") and item.get("candidates"):
             continue
-        p2_item = p2_map.get(str(item.get("transaction_id") or ""))
-        if not p2_item:
-            continue
 
-        combination_item = p2_item
+        p2_item = p2_map.get(str(item.get("transaction_id") or ""))
+        combination_item = p2_item or {
+            **item,
+            "remaining_amount": item.get("remaining_amount", item.get("amount")),
+        }
+
         if full_pool is not None:
-            direction = str(p2_item.get("direction") or item.get("direction") or "")
+            direction = str(combination_item.get("direction") or item.get("direction") or "")
             pool_candidates = list(full_pool.get(direction, []) or [])
             if pool_candidates:
-                combination_item = {**p2_item, "candidates": pool_candidates}
+                combination_item = {**combination_item, "candidates": pool_candidates}
 
         plan = build_exact_combination(combination_item)
         if not plan:
