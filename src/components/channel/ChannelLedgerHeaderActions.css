@@ -1,0 +1,98 @@
+.channel-ledger-header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 8px;
+  padding-left: 12px;
+  border-left: 1px solid var(--admin-border-soft);
+}
+
+.channel-ledger-header-actions button {
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--admin-border);
+  border-radius: 7px;
+  background: #ffffff;
+  color: var(--admin-text-main);
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.channel-ledger-header-actions button:hover {
+  border-color: var(--admin-primary);
+  color: var(--admin-primary);
+}
+
+.channel-ledger-header-actions button.primary {
+  border-color: var(--admin-primary);
+  background: var(--admin-primary);
+  color: #ffffff;
+}
+
+.channel-ledger-header-actions button.primary:hover {
+  color: #ffffff;
+}
+
+/* 渠道账单页签做轻：保留切换能力，但不再占一整条厚导航。 */
+body:has(.core-channel-recon-page) .app-top-subnav {
+  box-shadow: none;
+  background: rgba(255, 255, 255, 0.96);
+}
+
+body:has(.core-channel-recon-page) .app-top-subnav__inner {
+  min-height: 34px;
+  padding: 0 18px;
+}
+
+body:has(.core-channel-recon-page) .app-top-subnav__tab {
+  min-width: 106px;
+  background: transparent;
+}
+
+body:has(.core-channel-recon-page) .app-top-subnav__tab:hover {
+  background: #f8fafc;
+}
+
+body:has(.core-channel-recon-page) .app-top-subnav__tab.active {
+  background: transparent;
+}
+
+body:has(.core-channel-recon-page) .app-top-subnav__tab.active::after {
+  left: 14px;
+  right: 14px;
+  height: 2px;
+}
+
+body:has(.core-channel-recon-page) .app-top-subnav__tab-main {
+  min-height: 34px;
+  padding: 0 6px 0 12px;
+  font-size: 12px;
+}
+
+body:has(.core-channel-recon-page) .app-top-subnav__icon {
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  font-size: 10px;
+}
+
+body:has(.core-channel-recon-page) .app-top-subnav__close {
+  width: 20px;
+  height: 20px;
+  margin-right: 6px;
+  font-size: 16px;
+}
+
+@media (max-width: 1180px) {
+  .channel-ledger-header-actions {
+    gap: 4px;
+    margin-left: 4px;
+    padding-left: 8px;
+  }
+
+  .channel-ledger-header-actions button {
+    padding: 0 8px;
+  }
+}
