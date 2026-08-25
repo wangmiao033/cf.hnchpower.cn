@@ -1,2 +1,2 @@
-// Production entry: channel overview -> focused bill detail (master/detail).
+// Production entry: channel overview -> focused bill detail (master/detail, clarity refinements).
 export { default } from './CoreChannelReconciliationMasterDetailPage.jsx'
