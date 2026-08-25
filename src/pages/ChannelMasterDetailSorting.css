@@ -1,0 +1,104 @@
+/* Sortable channel overview + pending-only drilldown. */
+
+.core-channel-recon-page .channel-group-ledger {
+  display: flex;
+  flex-direction: column;
+}
+
+.core-channel-recon-page .channel-group-summary-head {
+  flex: 0 0 auto;
+}
+
+.core-channel-recon-page .channel-group-card {
+  flex: 0 0 auto;
+}
+
+.core-channel-recon-page .channel-sort-head {
+  position: relative;
+  padding-right: 16px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.core-channel-recon-page .channel-sort-head::after {
+  position: absolute;
+  top: 50%;
+  right: 3px;
+  color: #a3afbe;
+  font-size: 9px;
+  line-height: 1;
+  content: '↕';
+  transform: translateY(-50%);
+}
+
+.core-channel-recon-page .channel-sort-head[data-sort-active='true'] {
+  color: #244a7c;
+  font-weight: 750;
+}
+
+.core-channel-recon-page .channel-sort-head[data-sort-active='true'][data-sort-direction='desc']::after {
+  color: #4f78ad;
+  content: '↓';
+}
+
+.core-channel-recon-page .channel-sort-head[data-sort-active='true'][data-sort-direction='asc']::after {
+  color: #4f78ad;
+  content: '↑';
+}
+
+.core-channel-recon-page .channel-sort-head:focus-visible {
+  outline: 2px solid #bfdbfe;
+  outline-offset: -2px;
+  border-radius: 4px;
+}
+
+.core-channel-recon-page .core-channel-status-badge.is-master-pending {
+  cursor: pointer !important;
+  pointer-events: auto;
+  transition: border-color 120ms ease, background 120ms ease, color 120ms ease;
+}
+
+.core-channel-recon-page .core-channel-status-badge.is-master-pending:hover,
+.core-channel-recon-page .core-channel-status-badge.is-master-pending:focus-visible {
+  border-color: #b9cbe4 !important;
+  background: #f2f6fb !important;
+  color: #244a7c !important;
+}
+
+.core-channel-recon-page .channel-pending-filter-note {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 34px;
+  margin-bottom: 8px;
+  padding: 0 10px;
+  border: 1px solid #dfe7f1;
+  border-radius: 7px;
+  background: #fff;
+  color: #52627a;
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.core-channel-recon-page .channel-pending-show-all {
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid #d7e1ed;
+  border-radius: 6px;
+  background: #fff;
+  color: #52627a;
+  font-size: 9px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.core-channel-recon-page .channel-pending-show-all:hover {
+  border-color: #b9cbe4;
+  color: #244a7c;
+  background: #f8fbff;
+}
+
+.core-channel-recon-page .channel-group-detail-table tbody tr[hidden] {
+  display: none !important;
+}
