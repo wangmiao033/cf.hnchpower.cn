@@ -1,0 +1,223 @@
+from pathlib import Path
+
+
+def replace_once(path: Path, old: str, new: str) -> None:
+    text = path.read_text(encoding="utf-8")
+    if old not in text:
+        raise SystemExit(f"anchor not found: {path}: {old[:120]!r}")
+    path.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+
+service = Path("backend/app/services/bank_multi_allocation.py")
+service_text = service.read_text(encoding="utf-8")
+service_anchor = "\n\ndef build_p2_dashboard(db: Session, limit: int = 500) -> dict:\n"
+targeted_fn = r'''
+
+
+def build_bill_match_suggestions(
+    db: Session,
+    bill_type: str,
+    bill_id: str,
+    limit: int = 8,
+) -> dict:
+    """Return bank candidates for one bill without rebuilding the global P2 matrix."""
+    normalized_type = str(bill_type or "").strip().lower()
+    if normalized_type == "channel":
+        direction = "collection"
+    elif normalized_type == "rd":
+        direction = "payment"
+    else:
+        raise HTTPException(status_code=422, detail="账单类型必须为 channel 或 rd")
+
+    _bill_row, candidate = _specific_bill(db, direction, normalized_type, str(bill_id))
+    outstanding = max(0.0, _num(candidate.get("outstanding_amount")))
+    if outstanding <= EPS:
+        return {
+            "stats": {"pending_transactions": 0, "partial_transactions": 0, "remaining_amount": 0.0},
+            "suggestions": [],
+        }
+
+    allocated_subquery = (
+        select(
+            BankReconciliationMatch.bank_transaction_id.label("tx_id"),
+            func.coalesce(func.sum(BankReconciliationMatch.linked_amount), 0).label("allocated_amount"),
+        )
+        .where(BankReconciliationMatch.status == "confirmed")
+        .group_by(BankReconciliationMatch.bank_transaction_id)
+        .subquery()
+    )
+    same_bill_tx_ids = {
+        str(value)
+        for value in db.execute(
+            select(BankReconciliationMatch.bank_transaction_id).where(
+                BankReconciliationMatch.status == "confirmed",
+                BankReconciliationMatch.bill_type == normalized_type,
+                BankReconciliationMatch.bill_id == str(bill_id),
+            )
+        ).scalars().all()
+        if value
+    }
+
+    transaction_predicate = or_(
+        BankTransaction.type == "statement_import",
+        allocated_subquery.c.tx_id.is_not(None),
+    )
+    if direction == "collection":
+        transaction_predicate = (
+            transaction_predicate
+            & (func.coalesce(BankTransaction.income_amount, 0) > EPS)
+            & (func.coalesce(BankTransaction.expense_amount, 0) <= EPS)
+        )
+    else:
+        transaction_predicate = (
+            transaction_predicate
+            & (func.coalesce(BankTransaction.expense_amount, 0) > EPS)
+            & (func.coalesce(BankTransaction.income_amount, 0) <= EPS)
+        )
+
+    rows = db.execute(
+        select(
+            BankTransaction,
+            func.coalesce(allocated_subquery.c.allocated_amount, 0).label("allocated_amount"),
+        )
+        .outerjoin(allocated_subquery, allocated_subquery.c.tx_id == BankTransaction.id)
+        .where(transaction_predicate)
+        .order_by(BankTransaction.trade_date.desc(), BankTransaction.created_at.desc())
+    ).all()
+
+    funded_ids = bank_funding_transaction_ids(db)
+    scored_rows: list[tuple[dict, BankTransaction, float, float]] = []
+    for row, allocated_raw in rows:
+        transaction_id = str(row.id)
+        if transaction_id in funded_ids or transaction_id in same_bill_tx_ids:
+            continue
+        if row.currency and str(row.currency).strip().upper() not in {"CNY", "RMB"}:
+            continue
+        tx_direction, total, blocked = transaction_direction(row)
+        if blocked or tx_direction != direction or total <= EPS:
+            continue
+        remaining = max(0.0, round(total - max(0.0, _num(allocated_raw)), 2))
+        if remaining <= EPS:
+            continue
+        scored_candidate = _p2_candidate(row, direction, remaining, candidate)
+        if scored_candidate is None:
+            continue
+        scored_rows.append((scored_candidate, row, total, remaining))
+
+    scored_rows.sort(
+        key=lambda entry: (
+            float(entry[0].get("score") or 0),
+            -abs(float(entry[0].get("recommended_amount") or 0) - outstanding),
+            str(entry[1].trade_date or ""),
+        ),
+        reverse=True,
+    )
+    selected = scored_rows[: max(1, int(limit or 1))]
+    selected_ids = [str(entry[1].id) for entry in selected]
+    grouped: dict[str, list[BankReconciliationMatch]] = defaultdict(list)
+    if selected_ids:
+        match_rows = db.execute(
+            select(BankReconciliationMatch).where(
+                BankReconciliationMatch.status == "confirmed",
+                BankReconciliationMatch.bank_transaction_id.in_(selected_ids),
+            )
+        ).scalars().all()
+        for match in match_rows:
+            grouped[str(match.bank_transaction_id)].append(match)
+
+    suggestions: list[dict] = []
+    for scored_candidate, row, total, _remaining in selected:
+        matches = grouped.get(str(row.id), [])
+        summary = transaction_summary(row, matches)
+        clean_candidate = {key: value for key, value in scored_candidate.items() if key != "raw_bill_number"}
+        score = float(clean_candidate.get("score") or 0)
+        suggestions.append({
+            "transaction_id": str(row.id),
+            "trade_date": row.trade_date,
+            "transaction_no": row.transaction_no,
+            "direction": direction,
+            "direction_label": "回款" if direction == "collection" else "付款",
+            "amount": round(total, 2),
+            **summary,
+            "existing_allocations": [{
+                "match_id": str(item.id),
+                "bill_type": str(item.bill_type),
+                "bill_id": str(item.bill_id),
+                "bill_number": item.bill_number,
+                "linked_amount": round(_num(item.linked_amount), 2),
+            } for item in matches],
+            "currency": row.currency,
+            "counterparty_name": _transaction_counterparty(row, direction),
+            "summary": row.summary or row.purpose or row.remark,
+            "confidence_level": _raw_confidence(score),
+            "top_score": round(score, 2),
+            "ambiguity_margin": round(score, 2),
+            "candidates": [clean_candidate],
+            "blocked_reason": None,
+        })
+
+    return {
+        "stats": {
+            "pending_transactions": len(suggestions),
+            "partial_transactions": sum(1 for item in suggestions if item["allocated_amount"] > EPS),
+            "remaining_amount": round(sum(item["remaining_amount"] for item in suggestions), 2),
+        },
+        "suggestions": suggestions,
+    }
+'''
+if "def build_bill_match_suggestions(" not in service_text:
+    if service_anchor not in service_text:
+        raise SystemExit("bank_multi_allocation insert anchor missing")
+    service.write_text(service_text.replace(service_anchor, targeted_fn + service_anchor, 1), encoding="utf-8")
+
+api = Path("backend/app/api/bank_auto_reconciliation.py")
+replace_once(
+    api,
+    "from app.services.bank_multi_allocation import (\n    bill_summary,\n    build_p2_dashboard,\n    transaction_summaries,\n)",
+    "from app.services.bank_multi_allocation import (\n    bill_summary,\n    build_bill_match_suggestions,\n    build_p2_dashboard,\n    transaction_summaries,\n)",
+)
+api_text = api.read_text(encoding="utf-8")
+route_anchor = '@router.get("/p2/bills/{bill_type}/{bill_id}", response_model=P2BillSummary)\n'
+new_route = '''@router.get("/p2/bills/{bill_type}/{bill_id}/suggestions", response_model=P2Dashboard)\ndef get_p2_bill_suggestions(\n    bill_type: str,\n    bill_id: str,\n    limit: int = Query(8, ge=1, le=20),\n    db: Session = Depends(get_db),\n    _user: AuthUser = Depends(require_current_user),\n) -> P2Dashboard:\n    """Fast bill-scoped bank matching for receipt drawers."""\n    return P2Dashboard.model_validate(build_bill_match_suggestions(db, bill_type, bill_id, limit=limit))\n\n\n'''
+if "def get_p2_bill_suggestions(" not in api_text:
+    if route_anchor not in api_text:
+        raise SystemExit("bank api route anchor missing")
+    api.write_text(api_text.replace(route_anchor, new_route + route_anchor, 1), encoding="utf-8")
+
+frontend_api = Path("src/lib/api/bankAutoReconciliation.ts")
+frontend_text = frontend_api.read_text(encoding="utf-8")
+frontend_anchor = "export function getBankBillAllocationSummary(billType: 'rd' | 'channel', billId: string) {\n"
+frontend_fn = '''export function getBankBillMatchSuggestions(\n  billType: 'rd' | 'channel',\n  billId: string,\n  limit = 8\n) {\n  const key = `bill-suggestions:${billType}:${billId}:${limit}`\n  return loadDashboard(\n    key,\n    () => apiGet<BankMultiAllocationDashboard>(\n      `${PATH}/p2/bills/${encodeURIComponent(billType)}/${encodeURIComponent(billId)}/suggestions?limit=${limit}`,\n      { timeoutMs: 8_000 }\n    )\n  )\n}\n\n'''
+if "export function getBankBillMatchSuggestions(" not in frontend_text:
+    if frontend_anchor not in frontend_text:
+        raise SystemExit("frontend api anchor missing")
+    frontend_api.write_text(frontend_text.replace(frontend_anchor, frontend_fn + frontend_anchor, 1), encoding="utf-8")
+
+drawer = Path("src/components/channel/ChannelReceiptDrawer.jsx")
+replace_once(
+    drawer,
+    "  allocateBankTransaction,\n  getBankBillAllocationSummary,\n  getBankMultiAllocationDashboard\n",
+    "  allocateBankTransaction,\n  getBankBillAllocationSummary,\n  getBankBillMatchSuggestions\n",
+)
+drawer_text = drawer.read_text(encoding="utf-8")
+old_effect = '''  useEffect(() => {\n    if (!open || !recordId || !channelApiEnabled) return undefined\n    let cancelled = false\n    setBankLoading(true)\n    setBankError('')\n\n    Promise.all([\n      getBankMultiAllocationDashboard(500),\n      getBankBillAllocationSummary('channel', recordId),\n      listChannelReceipts(recordId)\n    ])\n      .then(([dashboard, billSummary, receiptResponse]) => {\n        if (cancelled) return\n        const matches = (dashboard?.suggestions || [])\n          .filter((item) => item?.direction === 'collection' && numberValue(item?.remaining_amount) > 0.01)\n          .map((item) => {\n            const candidate = (item?.candidates || []).find(\n              (row) => row?.bill_type === 'channel' && String(row?.bill_id || '') === String(recordId)\n            )\n            return candidate ? { transaction: item, candidate } : null\n          })\n          .filter(Boolean)\n          .sort((a, b) => {\n            const scoreDiff = numberValue(b.candidate?.score) - numberValue(a.candidate?.score)\n            if (Math.abs(scoreDiff) > 0.001) return scoreDiff\n            return String(b.transaction?.trade_date || '').localeCompare(String(a.transaction?.trade_date || ''))\n          })\n          .slice(0, 5)\n\n        setBankMatches(matches)\n        setBankBillSummary(billSummary || null)\n        setReceiptFacts(Array.isArray(receiptResponse?.items) ? receiptResponse.items : [])\n      })\n      .catch((error) => {\n        if (cancelled) return\n        setBankMatches([])\n        setBankBillSummary(null)\n        setReceiptFacts([])\n        setBankError(error instanceof Error ? error.message : '银行流水匹配读取失败')\n      })\n      .finally(() => {\n        if (!cancelled) setBankLoading(false)\n      })\n\n    return () => {\n      cancelled = true\n    }\n  }, [open, recordId, channelApiEnabled, bankReloadKey])\n'''
+new_effect = '''  useEffect(() => {\n    if (!open || !recordId || !channelApiEnabled) return undefined\n    let cancelled = false\n    setBankLoading(true)\n    setBankError('')\n\n    getBankBillMatchSuggestions('channel', recordId, 8)\n      .then((dashboard) => {\n        if (cancelled) return\n        const matches = (dashboard?.suggestions || [])\n          .filter((item) => item?.direction === 'collection' && numberValue(item?.remaining_amount) > 0.01)\n          .map((item) => {\n            const candidate = (item?.candidates || []).find(\n              (row) => row?.bill_type === 'channel' && String(row?.bill_id || '') === String(recordId)\n            )\n            return candidate ? { transaction: item, candidate } : null\n          })\n          .filter(Boolean)\n          .slice(0, 5)\n        setBankMatches(matches)\n      })\n      .catch((error) => {\n        if (cancelled) return\n        console.error('[ChannelReceiptDrawer] bank match failed', error)\n        setBankMatches([])\n        setBankError(error instanceof Error ? error.message : '银行流水匹配读取失败')\n      })\n      .finally(() => {\n        if (!cancelled) setBankLoading(false)\n      })\n\n    getBankBillAllocationSummary('channel', recordId)\n      .then((summary) => { if (!cancelled) setBankBillSummary(summary || null) })\n      .catch((error) => {\n        console.warn('[ChannelReceiptDrawer] allocation summary unavailable', error)\n        if (!cancelled) setBankBillSummary(null)\n      })\n\n    listChannelReceipts(recordId)\n      .then((response) => {\n        if (!cancelled) setReceiptFacts(Array.isArray(response?.items) ? response.items : [])\n      })\n      .catch((error) => {\n        console.warn('[ChannelReceiptDrawer] receipt facts unavailable', error)\n        if (!cancelled) setReceiptFacts([])\n      })\n\n    return () => {\n      cancelled = true\n    }\n  }, [open, recordId, channelApiEnabled, bankReloadKey])\n'''
+if old_effect not in drawer_text:
+    raise SystemExit("drawer bank effect anchor missing")
+drawer_text = drawer_text.replace(old_effect, new_effect, 1)
+
+body_lock_anchor = '''  useEffect(() => {\n    if (!open) return undefined\n    const prev = document.body.style.overflow\n'''
+legacy_guard = '''  useEffect(() => {\n    if (!open || typeof window === 'undefined' || typeof window.alert !== 'function') return undefined\n    const originalAlert = window.alert\n    const guardedAlert = (message) => {\n      const text = String(message || '')\n      if (/加载匹配候选失败|Bank reconciliation API unavailable|\\/api\\/bank-reconciliation\\/receiver-suggest/i.test(text)) {\n        setBankLoading(false)\n        setBankError('检测到旧版银行匹配接口异常，已阻止弹窗。请点击“重新匹配”使用新版快速匹配。')\n        return\n      }\n      return originalAlert(message)\n    }\n    window.alert = guardedAlert\n    return () => {\n      if (window.alert === guardedAlert) window.alert = originalAlert\n    }\n  }, [open])\n\n'''
+if "Bank reconciliation API unavailable" not in drawer_text:
+    if body_lock_anchor not in drawer_text:
+        raise SystemExit("drawer legacy guard anchor missing")
+    drawer_text = drawer_text.replace(body_lock_anchor, legacy_guard + body_lock_anchor, 1)
+
+error_old = '''              <div className="channel-receipt-match-empty is-error">\n                <strong>银行匹配暂时读取失败</strong>\n                <span>{bankError}</span>\n                <button type="button" onClick={() => setBankReloadKey((value) => value + 1)}>重试</button>\n              </div>\n'''
+error_new = '''              <div className="channel-receipt-match-empty is-error">\n                <strong>银行匹配暂时读取失败</strong>\n                <span>{bankError}</span>\n                <small>不影响手工登记；也可以直接前往银行中心处理。</small>\n                <button type="button" onClick={() => setBankReloadKey((value) => value + 1)}>重试</button>\n              </div>\n'''
+if error_old in drawer_text:
+    drawer_text = drawer_text.replace(error_old, error_new, 1)
+drawer.write_text(drawer_text, encoding="utf-8")
+
+test_path = Path("src/lib/api/bankBillMatchSuggestions.test.js")
+test_path.write_text('''import { beforeEach, describe, expect, it, vi } from 'vitest'\n\nvi.mock('@/lib/api/client.ts', () => ({ apiGet: vi.fn(), apiPost: vi.fn() }))\n\nimport { apiGet } from '@/lib/api/client.ts'\nimport { clearBankDashboardCache, getBankBillMatchSuggestions } from './bankAutoReconciliation.ts'\n\ndescribe('bill-scoped bank matching', () => {\n  beforeEach(() => {\n    vi.clearAllMocks()\n    clearBankDashboardCache()\n  })\n\n  it('uses the targeted bill endpoint with a short timeout', async () => {\n    apiGet.mockResolvedValue({ stats: {}, suggestions: [] })\n    await getBankBillMatchSuggestions('channel', 'bill 1', 8)\n    expect(apiGet).toHaveBeenCalledWith(\n      '/api/bank-auto-reconciliation/p2/bills/channel/bill%201/suggestions?limit=8',\n      { timeoutMs: 8000 }\n    )\n  })\n\n  it('deduplicates immediate reads for the same bill', async () => {\n    apiGet.mockResolvedValue({ stats: {}, suggestions: [] })\n    await Promise.all([\n      getBankBillMatchSuggestions('channel', 'bill-1', 8),\n      getBankBillMatchSuggestions('channel', 'bill-1', 8)\n    ])\n    expect(apiGet).toHaveBeenCalledTimes(1)\n  })\n})\n''', encoding="utf-8")
