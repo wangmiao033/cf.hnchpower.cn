@@ -1,5 +1,6 @@
 /* Channel ledger master/detail refinement.
-   Default = channel overview. Selecting one channel enters a dedicated detail workspace. */
+   Default = channel overview. Clicking one channel enters a focused bill-detail view.
+   Click the selected channel row again to return to the overview. */
 
 .core-channel-recon-page .channel-group-expand-all {
   display: none !important;
@@ -9,9 +10,8 @@
   background: #fff;
 }
 
-/* Overview: calm one-row-per-channel navigation. */
+/* Channel overview stays calm and strictly one row per channel. */
 .core-channel-recon-page .channel-group-summary {
-  min-height: 48px;
   border-bottom: 1px solid #e7edf5;
 }
 
@@ -19,14 +19,8 @@
   border-bottom: 0;
 }
 
-.core-channel-recon-page .channel-group-toggle,
-.core-channel-recon-page .channel-group-select {
-  min-height: 48px;
-}
-
 .core-channel-recon-page .channel-group-period {
-  color: #475569;
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .core-channel-recon-page .channel-group-money {
@@ -34,33 +28,18 @@
 }
 
 .core-channel-recon-page .channel-group-money.has-unpaid {
-  color: #172033;
+  color: #1f2937;
   font-weight: 800;
 }
 
-.core-channel-recon-page .channel-group-money.is-zero,
-.core-channel-recon-page .channel-group-detail-table .core-recon-money.is-zero {
-  color: #a0acba !important;
-  font-weight: 500 !important;
-}
-
-/* Master view uses a single neutral task indicator. Exact bill states remain in detail. */
+/* Master view uses a single, neutral action indicator. Exact bill states stay in detail. */
 .core-channel-recon-page .core-channel-status-badge.is-master-pending {
-  min-width: 58px;
   border-color: #dbe3ef !important;
   background: #f8fafc !important;
   color: #475569 !important;
 }
 
-.core-channel-recon-page .channel-group-summary .core-channel-status-badge {
-  cursor: default;
-}
-
-/* Focused detail mode: hide the other channel rows and turn this into a separate workspace. */
-.core-channel-recon-page .channel-group-ledger:has(.channel-group-card.is-expanded) {
-  background: #f7f9fc;
-}
-
+/* Once a channel is selected, switch from accordion behavior to a focused detail workspace. */
 .core-channel-recon-page .channel-group-ledger:has(.channel-group-card.is-expanded) .channel-group-summary-head {
   display: none;
 }
@@ -71,223 +50,99 @@
 
 .core-channel-recon-page .channel-group-card.is-expanded {
   min-width: 0;
-  border: 0;
-  background: #f7f9fc;
+  border-bottom: 0;
+  background: #fff;
 }
 
-/* The old accordion summary row is replaced by the focused detail toolbar below. */
-.core-channel-recon-page .channel-group-card.is-expanded > .channel-group-summary {
-  display: none !important;
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-summary {
+  position: sticky;
+  top: 0;
+  z-index: 8;
+  min-width: 980px;
+  border-bottom: 1px solid #dce5f0;
+  background: #fff;
+  box-shadow: 0 4px 12px rgb(15 23 42 / 6%);
 }
 
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-toggle {
+  position: relative;
+  min-height: 56px;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-chevron {
+  color: var(--admin-primary);
+  transform: rotate(180deg);
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-identity strong {
+  color: #0f2f5b;
+  font-size: 14px;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-identity small {
+  color: #64748b;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-toggle::after {
+  position: absolute;
+  right: 6px;
+  bottom: 2px;
+  color: #94a3b8;
+  font-size: 9px;
+  font-weight: 500;
+  content: '再次点击返回渠道总览';
+  pointer-events: none;
+}
+
+/* Detail is now a dedicated lower workspace, not a mini-table inserted between channels. */
 .core-channel-recon-page .channel-group-card.is-expanded .channel-group-details {
   padding: 0 12px 14px;
-  overflow: visible;
-  background: #f7f9fc;
+  overflow-x: auto;
+  background: #f8fafc;
 }
 
 .core-channel-recon-page .channel-group-card.is-expanded .channel-group-details::before {
-  display: none;
-}
-
-/* Focused channel header. */
-.core-channel-recon-page .channel-master-detail-toolbar {
-  position: sticky;
-  top: 0;
-  z-index: 9;
-  display: grid;
-  grid-template-columns: auto minmax(220px, 1fr) auto;
-  align-items: center;
-  gap: 14px;
-  min-height: 58px;
-  margin: 0 -12px 10px;
-  padding: 7px 12px;
-  border-bottom: 1px solid #dce5ef;
-  background: rgba(255, 255, 255, 0.98);
-  box-shadow: 0 4px 12px rgb(15 23 42 / 5%);
-  box-sizing: border-box;
-}
-
-.core-channel-recon-page .channel-master-detail-back {
-  height: 30px;
-  padding: 0 10px;
-  border: 1px solid #d7e1ed;
-  border-radius: 7px;
-  background: #fff;
-  color: #475569;
-  font-size: 11px;
-  font-weight: 700;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.core-channel-recon-page .channel-master-detail-back:hover {
-  border-color: var(--admin-primary);
-  color: var(--admin-primary);
-  background: #f8fbff;
-}
-
-.core-channel-recon-page .channel-master-detail-heading {
-  min-width: 0;
-}
-
-.core-channel-recon-page .channel-master-detail-heading strong {
-  display: block;
-  overflow: hidden;
-  color: #12335d;
-  font-size: 14px;
-  line-height: 1.25;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.core-channel-recon-page .channel-master-detail-heading span {
-  display: block;
-  margin-top: 3px;
-  overflow: hidden;
-  color: #7b8a9d;
-  font-size: 10px;
-  line-height: 1.2;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.core-channel-recon-page .channel-master-detail-metrics {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: 0;
-}
-
-.core-channel-recon-page .channel-master-detail-metrics > span {
-  min-width: 112px;
-  padding: 0 13px;
-  border-left: 1px solid #e7edf5;
-  text-align: right;
-}
-
-.core-channel-recon-page .channel-master-detail-metrics small,
-.core-channel-recon-page .channel-master-detail-metrics strong {
-  display: block;
-  white-space: nowrap;
-}
-
-.core-channel-recon-page .channel-master-detail-metrics small {
-  color: #8a98aa;
-  font-size: 9px;
-  font-weight: 600;
-}
-
-.core-channel-recon-page .channel-master-detail-metrics strong {
-  margin-top: 2px;
-  color: #263b56;
-  font-size: 12px;
+  min-height: 42px;
+  padding: 0 2px;
+  color: #243b5a;
+  font-size: 13px;
   font-weight: 750;
-  font-variant-numeric: tabular-nums;
+  content: attr(data-channel) ' · 账单明细';
 }
 
-.core-channel-recon-page .channel-master-detail-metrics [data-kind='unpaid'] strong {
-  color: #172033;
-  font-weight: 850;
-}
-
-.core-channel-recon-page .channel-master-detail-metrics [data-kind='unpaid'].is-zero strong {
-  color: #9aa6b5;
-  font-weight: 600;
-}
-
-/* Dedicated bill table. */
 .core-channel-recon-page .channel-group-card.is-expanded .channel-group-detail-table {
   width: 100%;
   min-width: 1040px;
-  overflow: visible;
-  border: 1px solid #dce5ef;
+  border-color: #dce5ef;
   border-radius: 8px;
   background: #fff;
-  box-shadow: 0 1px 3px rgb(15 23 42 / 3%);
 }
 
 .core-channel-recon-page .channel-group-card.is-expanded .channel-group-detail-table thead th {
-  position: sticky;
-  top: 58px;
-  z-index: 5;
-  height: 32px;
+  height: 34px;
   background: #f4f7fb;
   color: #64748b;
-  border-bottom-color: #dce5ef;
-  font-size: 10px;
 }
 
 .core-channel-recon-page .channel-group-card.is-expanded .channel-group-detail-table tbody td {
-  height: 42px;
-  padding-top: 5px;
-  padding-bottom: 5px;
-}
-
-.core-channel-recon-page .channel-group-card.is-expanded .channel-group-detail-table tbody tr:nth-child(even) td {
-  background: #fcfdff;
-}
-
-.core-channel-recon-page .channel-group-card.is-expanded .channel-group-detail-table tbody tr:hover td {
-  background: #f6f9fd;
-}
-
-.core-channel-recon-page .channel-group-card.is-expanded .channel-group-detail-table tbody tr.is-selected td {
-  background: #f0f6ff;
+  height: 44px;
 }
 
 .core-channel-recon-page .channel-group-card.is-expanded .channel-group-detail-table .core-channel-status-badge {
-  min-width: 50px;
+  min-width: 52px;
   height: 20px;
   padding: 0 7px;
   font-size: 9px;
 }
 
-.core-channel-recon-page .channel-group-card.is-expanded .channel-group-detail-table .core-recon-row-actions {
-  gap: 3px;
-}
-
-.core-channel-recon-page .channel-group-card.is-expanded .channel-group-detail-table .core-recon-row-actions button {
-  height: 24px;
-  min-height: 24px;
-  padding: 0 7px;
-  border-radius: 6px;
-  font-size: 9px;
-}
-
-@media (max-width: 1100px) {
-  .core-channel-recon-page .channel-master-detail-toolbar {
-    grid-template-columns: auto minmax(180px, 1fr);
-  }
-
-  .core-channel-recon-page .channel-master-detail-metrics {
-    grid-column: 1 / -1;
-    justify-content: flex-start;
-    padding-left: 2px;
-  }
-
-  .core-channel-recon-page .channel-master-detail-metrics > span {
-    min-width: 128px;
-    padding-left: 0;
-    padding-right: 18px;
-    border-left: 0;
-    text-align: left;
-  }
-
-  .core-channel-recon-page .channel-group-card.is-expanded .channel-group-detail-table thead th {
-    top: 92px;
-  }
-}
-
 @media (max-width: 900px) {
-  .core-channel-recon-page .channel-group-card.is-expanded .channel-group-details {
-    padding-left: 10px;
-    padding-right: 10px;
+  .core-channel-recon-page .channel-group-card.is-expanded .channel-group-summary {
+    min-width: 980px;
   }
 
-  .core-channel-recon-page .channel-master-detail-toolbar {
-    margin-left: -10px;
-    margin-right: -10px;
+  .core-channel-recon-page .channel-group-card.is-expanded .channel-group-details {
     padding-left: 10px;
     padding-right: 10px;
   }
