@@ -2,7 +2,7 @@ import React, { useEffect } from 'react'
 import { getRecentApiErrorMessage } from '@/lib/api/client.ts'
 import './Toast.css'
 
-const GENERIC_SERVER_ERROR_RE = /(更新|保存|同步|删除).*(服务器).*失败|服务器.*失败/i
+const GENERIC_SERVER_ERROR_RE = /(更新|保存|同步|删除).*(服务器).*失败|服务器.*(?:失败|没有接受|未接受)|账单未保存|保存\s*\/\s*核对未完成/i
 
 function Toast({ message, type = 'success', isVisible, onClose }) {
   useEffect(() => {
@@ -33,4 +33,3 @@ function Toast({ message, type = 'success', isVisible, onClose }) {
 }
 
 export default Toast
-
