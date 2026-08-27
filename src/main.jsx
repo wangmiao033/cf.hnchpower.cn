@@ -10,6 +10,7 @@ import './index.css'
 import './styles/V4SystemPolish.css'
 import './styles/SystemDetailPolishV42.css'
 import './styles/RdLedgerWidthFix.css'
+import './styles/RdLedgerActionPolish.css'
 
 const PRELOAD_RECOVERY_KEY = 'cf-preload-recovery'
 
