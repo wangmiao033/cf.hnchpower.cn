@@ -1,31 +1,31 @@
 /*
- * R&D ledger focus polish.
- * Visual-only: no settlement, payment, contract, archive or lifecycle logic lives here.
- * Scoped with :has(.core-rd-recon-table) so other ledgers keep their own layouts.
+ * R&D ledger V3 refinement.
+ * Visual hierarchy only: no settlement, payment, contract, archive or lifecycle logic lives here.
+ * Scoped with :has(.core-rd-recon-table) so the channel ledger and other tables are untouched.
  */
 
 .core-recon-page:has(.core-rd-recon-table) .page-container-body {
-  gap: 8px;
+  gap: 9px;
 }
 
-/* ---------- Compact command bar ---------- */
+/* ---------- Command bar ---------- */
 .core-recon-page:has(.core-rd-recon-table) .core-recon-workbar {
   display: grid;
   grid-template-columns: minmax(0, 1fr) max-content;
   align-items: center;
-  min-height: 48px;
+  min-height: 54px;
   overflow: visible;
-  border: 1px solid #dbe3ef;
+  border: 1px solid #dbe3ed;
   border-radius: 10px;
   background: #fff;
-  box-shadow: 0 1px 4px rgb(15 23 42 / 4%);
+  box-shadow: 0 1px 3px rgb(15 23 42 / 4%);
 }
 
 .core-recon-page:has(.core-rd-recon-table) .core-recon-workbar > .core-recon-head {
   display: contents;
 }
 
-/* The shell already owns the page title. */
+/* The shell already shows “研发账单”; do not repeat it inside the workbar. */
 .core-recon-page:has(.core-rd-recon-table) .core-recon-workbar .core-recon-title {
   display: none;
 }
@@ -33,10 +33,10 @@
 .core-recon-page:has(.core-rd-recon-table) .core-recon-workbar .core-recon-filters {
   grid-column: 1;
   grid-row: 1;
-  min-height: 48px;
+  min-height: 54px;
   flex-wrap: nowrap;
-  gap: 5px;
-  padding: 6px 7px;
+  gap: 7px;
+  padding: 8px 9px;
   overflow: hidden;
   border-top: 0;
   background: #fff;
@@ -47,103 +47,111 @@
   grid-row: 1;
   align-self: stretch;
   flex-wrap: nowrap;
-  gap: 5px;
-  padding: 6px 7px;
-  border-left: 1px solid #edf2f7;
+  gap: 6px;
+  padding: 8px 9px;
+  border-left: 1px solid #edf1f6;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-recon-filter-control {
+  height: 36px;
+  min-width: 0;
+  border: 1px solid #dce4ee;
+  border-radius: 8px;
+  background: #fbfcfe;
+  transition: border-color .14s ease, box-shadow .14s ease, background .14s ease;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-recon-filter-control:focus-within {
+  border-color: #86abe4;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgb(37 99 235 / 7%);
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-recon-filter-control > span {
+  padding-left: 10px;
+  color: #728197;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-recon-filters input,
+.core-recon-page:has(.core-rd-recon-table) .core-recon-filters select {
+  height: 34px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-recon-filters > .core-recon-filter-control:nth-child(1) {
+  flex: 0 0 145px;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-recon-partner-filter {
+  flex: 0 1 270px;
+  min-width: 220px;
+  max-width: 300px;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-recon-filters > .core-recon-filter-control:nth-child(3) {
+  flex: 0 0 145px;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-recon-filter-search {
+  flex: 1 1 320px;
+  min-width: 230px;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-recon-filters .core-recon-partner-submit {
+  height: 27px;
+  margin-right: 3px;
+  padding: 0 9px;
+  font-size: 11px;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-recon-filters .core-recon-reset {
+  height: 36px;
+  min-width: 56px;
+  padding: 0 10px;
+  border-color: #dce4ee;
+  border-radius: 8px;
+  color: #65748a;
+  font-size: 11px;
+  background: #fff;
 }
 
 .core-recon-page:has(.core-rd-recon-table) .core-recon-workbar .core-recon-actions button {
-  height: 32px;
-  min-height: 32px;
-  padding: 0 10px;
-  border-color: #dbe4ef;
-  border-radius: 7px;
-  color: #52627a;
+  height: 34px;
+  min-height: 34px;
+  padding: 0 11px;
+  border-color: #dce4ee;
+  border-radius: 8px;
+  background: #fff;
+  color: #58687d;
   font-size: 11px;
+  font-weight: 650;
   box-shadow: none;
 }
 
 .core-recon-page:has(.core-rd-recon-table) .core-recon-workbar .core-recon-actions button:hover {
-  border-color: #b9cff0;
+  border-color: #b9cdeb;
   background: #f8fbff;
-  color: #2563eb;
+  color: #245ea8;
 }
 
 .core-recon-page:has(.core-rd-recon-table) .core-recon-workbar .core-recon-actions .primary {
   border-color: #2563eb;
   background: #2563eb;
   color: #fff;
-  box-shadow: 0 3px 8px rgb(37 99 235 / 14%);
-}
-
-.core-recon-page:has(.core-rd-recon-table) .core-recon-filter-control {
-  height: 34px;
-  min-width: 0;
-  border-color: #dbe4ef;
-  border-radius: 8px;
-  background: #f9fbfd;
-}
-
-.core-recon-page:has(.core-rd-recon-table) .core-recon-filter-control:focus-within {
-  border-color: #8eb3ec;
-  background: #fff;
-  box-shadow: 0 0 0 3px rgb(37 99 235 / 7%);
-}
-
-.core-recon-page:has(.core-rd-recon-table) .core-recon-filter-control > span {
-  padding-left: 9px;
-  color: #77869a;
-  font-size: 10px;
-}
-
-.core-recon-page:has(.core-rd-recon-table) .core-recon-filters input,
-.core-recon-page:has(.core-rd-recon-table) .core-recon-filters select {
-  height: 32px;
-  padding: 0 7px;
-  font-size: 11px;
-}
-
-.core-recon-page:has(.core-rd-recon-table) .core-recon-filters > .core-recon-filter-control:nth-child(1) {
-  flex: 0 0 135px;
-}
-
-.core-recon-page:has(.core-rd-recon-table) .core-recon-partner-filter {
-  flex: 0 1 250px;
-  min-width: 205px;
-  max-width: 280px;
-}
-
-.core-recon-page:has(.core-rd-recon-table) .core-recon-filters > .core-recon-filter-control:nth-child(3) {
-  flex: 0 0 138px;
-}
-
-.core-recon-page:has(.core-rd-recon-table) .core-recon-filter-search {
-  flex: 1 1 300px;
-  min-width: 220px;
-}
-
-.core-recon-page:has(.core-rd-recon-table) .core-recon-filters .core-recon-partner-submit {
-  height: 25px;
-  padding: 0 8px;
-  font-size: 10px;
-}
-
-.core-recon-page:has(.core-rd-recon-table) .core-recon-filters .core-recon-reset {
-  height: 34px;
-  min-width: 52px;
-  padding: 0 9px;
-  border-color: #dbe4ef;
-  color: #6d7c90;
-  font-size: 11px;
+  box-shadow: 0 3px 9px rgb(37 99 235 / 16%);
 }
 
 /* ---------- Quick status navigation ---------- */
 .core-recon-page:has(.core-rd-recon-table) .bill-quick-filters {
-  min-height: 36px;
+  min-height: 40px;
   gap: 0;
-  padding: 3px 5px;
-  border-color: #e1e8f1;
+  padding: 4px 6px;
+  border-color: #e0e7ef;
   border-radius: 9px;
+  background: #fff;
   box-shadow: none;
 }
 
@@ -153,16 +161,16 @@
 
 .core-recon-page:has(.core-rd-recon-table) .bill-quick-filters__items {
   width: 100%;
-  gap: 2px;
+  gap: 3px;
 }
 
 .core-recon-page:has(.core-rd-recon-table) .bill-quick-filters__items button {
-  min-height: 28px;
+  min-height: 30px;
   gap: 5px;
-  padding: 0 9px;
-  border-radius: 6px;
+  padding: 0 10px;
+  border-radius: 7px;
   background: transparent;
-  color: #64748b;
+  color: #617086;
   font-size: 11px;
   font-weight: 650;
 }
@@ -170,31 +178,31 @@
 .core-recon-page:has(.core-rd-recon-table) .bill-quick-filters__items button:hover {
   border-color: transparent;
   background: #f5f8fc;
-  color: #315f9f;
+  color: #245ea8;
 }
 
 .core-recon-page:has(.core-rd-recon-table) .bill-quick-filters__items button.is-active {
-  border-color: #d8e5f7;
+  border-color: #cfdef3;
   background: #edf4ff;
   color: #245ea8;
   box-shadow: inset 0 0 0 1px rgb(37 99 235 / 3%);
 }
 
 .core-recon-page:has(.core-rd-recon-table) .bill-quick-filters__items em {
-  min-width: 17px;
-  height: 17px;
-  padding: 0 4px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
   background: #fff;
   font-size: 9px;
 }
 
-/* ---------- Focused summary strip ---------- */
+/* ---------- Summary: counts stay quiet; money gets the focus ---------- */
 .core-recon-page:has(.core-rd-recon-table) .core-recon-stats {
   display: grid;
-  grid-template-columns: .66fr .66fr 1.18fr 1.18fr;
+  grid-template-columns: .72fr .72fr 1.28fr 1.28fr;
   gap: 0;
   overflow: hidden;
-  border: 1px solid #dbe3ef;
+  border: 1px solid #dbe3ed;
   border-radius: 10px;
   background: #fff;
   box-shadow: 0 1px 3px rgb(15 23 42 / 3%);
@@ -202,11 +210,11 @@
 
 .core-recon-page:has(.core-rd-recon-table) .core-recon-stats > div {
   position: relative;
-  min-height: 60px;
+  min-height: 68px;
   justify-content: center;
-  padding: 8px 13px;
+  padding: 10px 14px;
   border: 0;
-  border-right: 1px solid #e8edf4;
+  border-right: 1px solid #e8edf3;
   border-radius: 0;
   background: #fff;
 }
@@ -215,131 +223,150 @@
   border-right: 0;
 }
 
-/* Neutral for counts, blue for payable, amber for outstanding. */
+.core-recon-page:has(.core-rd-recon-table) .core-recon-stats > div:nth-child(3) {
+  background: linear-gradient(90deg, #fbfdff 0%, #f6faff 100%);
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-recon-stats > div:nth-child(4) {
+  background: linear-gradient(90deg, #fffdf9 0%, #fffaf1 100%);
+}
+
 .core-recon-page:has(.core-rd-recon-table) .core-recon-stats > div::before {
   position: absolute;
   top: 0;
-  right: 13px;
-  left: 13px;
+  right: 14px;
+  left: 14px;
   height: 2px;
   border-radius: 0 0 2px 2px;
-  background: #d5dde8;
+  background: #d6dde6;
   content: '';
 }
 
 .core-recon-page:has(.core-rd-recon-table) .core-recon-stats > div:nth-child(3)::before {
-  background: #4f8ddd;
+  background: #4c8bd8;
 }
 
 .core-recon-page:has(.core-rd-recon-table) .core-recon-stats > div:nth-child(4)::before {
-  background: #e2a23a;
+  background: #dfa13b;
 }
 
 .core-recon-page:has(.core-rd-recon-table) .core-recon-stats span {
-  color: #7a8798;
+  color: #76859a;
   font-size: 10px;
+  font-weight: 650;
 }
 
 .core-recon-page:has(.core-rd-recon-table) .core-recon-stats strong {
-  margin-top: 3px;
+  margin-top: 4px;
   color: #173250;
-  font-size: 17px;
+  font-size: 18px;
   line-height: 1.15;
   letter-spacing: -.01em;
 }
 
 .core-recon-page:has(.core-rd-recon-table) .core-recon-stats > div:nth-child(3) strong {
-  color: #245ea8;
-  font-size: 18px;
+  color: #1f5fae;
+  font-size: 20px;
 }
 
 .core-recon-page:has(.core-rd-recon-table) .core-recon-stats > div:nth-child(4) strong {
-  color: #8a5a0a;
-  font-size: 18px;
+  color: #8b5a08;
+  font-size: 20px;
 }
 
 .core-recon-page:has(.core-rd-recon-table) .core-recon-stats small {
-  margin-top: 3px;
-  color: #8a97a8;
+  margin-top: 4px;
+  color: #8794a5;
   font-size: 9px;
 }
 
-/* ---------- Ledger card ---------- */
+/* ---------- Ledger surface ---------- */
 .core-recon-page:has(.core-rd-recon-table) .core-recon-panel {
   overflow: hidden;
-  border-color: #dbe3ef;
+  border-color: #dbe3ed;
   border-radius: 10px;
+  background: #fff;
   box-shadow: 0 1px 3px rgb(15 23 42 / 3%);
 }
 
 .core-recon-page:has(.core-rd-recon-table) .core-recon-panel-head {
-  min-height: 40px;
-  padding: 0 11px;
-  border-bottom-color: #e4eaf2;
+  min-height: 44px;
+  padding: 0 12px;
+  border-bottom: 1px solid #e3e9f1;
+  background: #fff;
 }
 
 .core-recon-page:has(.core-rd-recon-table) .core-recon-panel-head h2 {
-  font-size: 14px;
+  font-size: 15px;
+  color: #182d48;
 }
 
 .core-recon-page:has(.core-rd-recon-table) .core-recon-panel-head > span {
-  padding: 2px 7px;
-  border: 1px solid #e4eaf2;
+  padding: 3px 8px;
+  border: 1px solid #e2e8f0;
   border-radius: 999px;
   background: #f7f9fc;
-  color: #6f7e91;
+  color: #69788c;
   font-size: 10px;
 }
 
 .core-recon-page:has(.core-rd-recon-table) .core-recon-table-wrap {
-  max-height: calc(100vh - 325px);
+  max-height: calc(100vh - 348px);
   overflow: auto;
   scrollbar-gutter: auto;
 }
 
 .core-recon-page:has(.core-rd-recon-table) .core-rd-recon-table {
   width: 100%;
-  min-width: 1060px;
+  min-width: 1210px;
   table-layout: fixed;
 }
 
-/* Hide the dedicated prepayment column on the overview; actual payable already reflects it. */
+/* The dedicated prepayment column is redundant on the overview because actual payable already reflects it.
+   Collapse the col itself too, otherwise table-layout leaves a blank rail on the right. */
+.core-recon-page:has(.core-rd-recon-table) .core-rd-recon-table col:nth-child(8) {
+  width: 0 !important;
+  visibility: collapse;
+}
+
 .core-recon-page:has(.core-rd-recon-table) .core-rd-recon-table th:nth-child(8),
 .core-recon-page:has(.core-rd-recon-table) .core-rd-recon-table td:nth-child(8) {
   display: none;
 }
 
-.core-recon-page:has(.core-rd-recon-table) .core-rd-col-month { width: 105px; }
-.core-recon-page:has(.core-rd-recon-table) .core-rd-col-number { width: 124px; }
+.core-recon-page:has(.core-rd-recon-table) .core-rd-col-month { width: 104px; }
+.core-recon-page:has(.core-rd-recon-table) .core-rd-col-number { width: 122px; }
 .core-recon-page:has(.core-rd-recon-table) .core-rd-col-partner { width: 112px; }
-.core-recon-page:has(.core-rd-recon-table) .core-rd-col-game { width: 238px; }
-.core-recon-page:has(.core-rd-recon-table) .core-rd-col-flow { width: 108px; }
-.core-recon-page:has(.core-rd-recon-table) .core-rd-col-share { width: 74px; }
-.core-recon-page:has(.core-rd-recon-table) .core-rd-col-settlement { width: 104px; }
-.core-recon-page:has(.core-rd-recon-table) .core-rd-col-payable { width: 104px; }
-.core-recon-page:has(.core-rd-recon-table) .core-rd-col-received { width: 112px; }
-.core-recon-page:has(.core-rd-recon-table) .core-rd-col-status { width: 112px; }
-.core-recon-page:has(.core-rd-recon-table) .core-rd-col-actions { width: 126px; }
+.core-recon-page:has(.core-rd-recon-table) .core-rd-col-game { width: 220px; }
+.core-recon-page:has(.core-rd-recon-table) .core-rd-col-flow { width: 104px; }
+.core-recon-page:has(.core-rd-recon-table) .core-rd-col-share { width: 68px; }
+.core-recon-page:has(.core-rd-recon-table) .core-rd-col-settlement { width: 102px; }
+.core-recon-page:has(.core-rd-recon-table) .core-rd-col-prepayment { width: 0; }
+.core-recon-page:has(.core-rd-recon-table) .core-rd-col-payable { width: 102px; }
+.core-recon-page:has(.core-rd-recon-table) .core-rd-col-received { width: 118px; }
+.core-recon-page:has(.core-rd-recon-table) .core-rd-col-status { width: 104px; }
+.core-recon-page:has(.core-rd-recon-table) .core-rd-col-actions { width: 114px; }
 
 .core-recon-page:has(.core-rd-recon-table) .core-recon-table thead th {
   position: sticky;
   top: 0;
   z-index: 4;
-  height: 36px;
+  height: 38px;
   padding: 0 8px;
-  border-bottom: 1px solid #dfe7f1;
-  background: #f7f9fc;
-  color: #657488;
+  border-bottom: 1px solid #dfe6ef;
+  background: #f6f8fb;
+  color: #596a80;
   font-size: 10px;
-  font-weight: 650;
+  font-weight: 700;
 }
 
 .core-recon-page:has(.core-rd-recon-table) .core-recon-table tbody td {
-  height: 46px;
-  padding: 5px 8px;
-  border-bottom-color: #e8edf4;
-  color: #2b3f58;
+  height: 48px;
+  padding: 6px 8px;
+  border-bottom: 1px solid #e8edf3;
+  color: #293d55;
   font-size: 11px;
+  vertical-align: middle;
 }
 
 .core-recon-page:has(.core-rd-recon-table) .core-recon-table tbody tr:nth-child(even) td {
@@ -347,7 +374,11 @@
 }
 
 .core-recon-page:has(.core-rd-recon-table) .core-recon-table tbody tr:hover td {
-  background: #f5f8fc;
+  background: #f4f8fd;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-recon-table tbody tr:hover td:first-child {
+  box-shadow: inset 3px 0 #7aa7e8;
 }
 
 .core-recon-page:has(.core-rd-recon-table) .core-recon-table tbody tr.is-selected td {
@@ -365,27 +396,40 @@
 
 .core-recon-page:has(.core-rd-recon-table) .core-rd-month-cell {
   gap: 6px;
+  color: #344b66;
+  font-weight: 650;
 }
 
 .core-recon-page:has(.core-rd-recon-table) .core-rd-period-badge {
   padding: 1px 5px;
-  font-size: 9px;
-}
-
-.core-recon-page:has(.core-rd-recon-table) .core-recon-partner-short-name {
-  color: #183755;
-  font-size: 11px;
+  border-radius: 999px;
+  background: #eef4ff;
+  color: #3567a9;
+  font-size: 8px;
+  font-style: normal;
   font-weight: 700;
 }
 
+.core-recon-page:has(.core-rd-recon-table) .core-recon-table td:nth-child(2) {
+  color: #45617f;
+  font-variant-numeric: tabular-nums;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-recon-partner-short-name {
+  color: #173653;
+  font-size: 11px;
+  font-weight: 750;
+}
+
 .core-recon-page:has(.core-rd-recon-table) .core-recon-game-text {
-  color: #4b5c72;
+  color: #44566d;
   font-size: 11px;
 }
 
 .core-recon-page:has(.core-rd-recon-table) .core-recon-money,
 .core-recon-page:has(.core-rd-recon-table) .core-recon-rate {
   font-size: 11px;
+  font-variant-numeric: tabular-nums;
 }
 
 .core-recon-page:has(.core-rd-recon-table) .core-recon-money--settlement {
@@ -393,28 +437,39 @@
   font-weight: 750;
 }
 
-/* Payment cell: current paid is supporting data; unpaid is the action signal. */
+/* Actual payable gets a distinct treatment so it no longer visually duplicates “研发应结”. */
+.core-recon-page:has(.core-rd-recon-table) .core-rd-recon-table td:nth-child(9) {
+  color: #183f66 !important;
+  font-weight: 750;
+  background-image: linear-gradient(90deg, rgb(235 244 255 / 32%), transparent 70%);
+}
+
+/* Payment progress: paid is context, unpaid is the signal. */
+.core-recon-page:has(.core-rd-recon-table) .core-recon-money--received {
+  line-height: 1.22;
+}
+
 .core-recon-page:has(.core-rd-recon-table) .core-recon-money--received strong {
-  color: #607089;
-  font-size: 10px;
+  color: #607088;
+  font-size: 9px;
   font-weight: 650 !important;
 }
 
 .core-recon-page:has(.core-rd-recon-table) .core-recon-money--received small {
-  margin-top: 1px !important;
-  color: #9a6817 !important;
+  margin-top: 2px !important;
+  color: #9a6412 !important;
   font-size: 9px !important;
-  font-weight: 650;
+  font-weight: 750;
 }
 
-/* Keep the status column to one concise signal on the overview. */
+/* One concise closure signal; diagnostic text belongs in the detail view. */
 .core-recon-page:has(.core-rd-recon-table) .v4-list-closure {
   position: static;
   display: inline-flex;
   min-width: 0;
   max-width: 100%;
   align-items: center;
-  padding: 3px 7px;
+  padding: 4px 7px;
   border-radius: 6px;
 }
 
@@ -430,29 +485,31 @@
   display: none;
 }
 
-/* ---------- Row actions: detail + edit stay visible; destructive action waits for intent ---------- */
+/* ---------- Row actions ---------- */
 .core-recon-page:has(.core-rd-recon-table) .core-recon-row-actions {
   display: flex;
   flex-wrap: nowrap;
   justify-content: flex-end;
-  gap: 4px;
+  gap: 5px;
   white-space: nowrap;
 }
 
 .core-recon-page:has(.core-rd-recon-table) .core-recon-row-actions button {
-  height: 27px;
-  min-height: 27px;
-  padding: 0 7px;
-  border-color: #dce5ef;
-  border-radius: 6px;
+  height: 28px;
+  min-height: 28px;
+  padding: 0 8px;
+  border-color: #dbe4ee;
+  border-radius: 7px;
   background: #fff;
-  color: #52627a;
+  color: #53647a;
   font-size: 10px;
+  font-weight: 650;
 }
 
 .core-recon-page:has(.core-rd-recon-table) .core-recon-row-actions button:first-child {
   font-size: 0;
-  color: #315f9f;
+  border-color: #cdddf2;
+  color: #245ea8;
 }
 
 .core-recon-page:has(.core-rd-recon-table) .core-recon-row-actions button:first-child::after {
@@ -460,6 +517,13 @@
   font-size: 10px;
 }
 
+.core-recon-page:has(.core-rd-recon-table) .core-recon-row-actions button:hover {
+  border-color: #9fbce5;
+  background: #f7fbff;
+  color: #245ea8;
+}
+
+/* Destructive action stays out of the visual field until the row is intentionally hovered. */
 .core-recon-page:has(.core-rd-recon-table) .core-recon-row-actions .danger {
   max-width: 0;
   padding-right: 0;
@@ -480,24 +544,24 @@
   pointer-events: auto;
 }
 
-/* Sticky action rail keeps the primary actions reachable on narrow screens. */
+/* Sticky action rail keeps the primary actions reachable if horizontal scroll is needed. */
 .core-recon-page:has(.core-rd-recon-table) .core-recon-table th:last-child,
 .core-recon-page:has(.core-rd-recon-table) .core-recon-table td:last-child {
   position: sticky;
   right: 0;
   z-index: 3;
-  border-left: 1px solid #e8edf4;
+  border-left: 1px solid #e7edf4;
   background: #fff;
   box-shadow: -10px 0 14px -14px rgb(15 23 42 / 28%);
 }
 
 .core-recon-page:has(.core-rd-recon-table) .core-recon-table th:last-child {
   z-index: 5;
-  background: #f7f9fc;
+  background: #f6f8fb;
 }
 
 .core-recon-page:has(.core-rd-recon-table) .core-recon-table tbody tr:nth-child(even) td:last-child { background: #fcfdff; }
-.core-recon-page:has(.core-rd-recon-table) .core-recon-table tbody tr:hover td:last-child { background: #f5f8fc; }
+.core-recon-page:has(.core-rd-recon-table) .core-recon-table tbody tr:hover td:last-child { background: #f4f8fd; }
 .core-recon-page:has(.core-rd-recon-table) .core-recon-table tbody tr.is-selected td:last-child { background: #edf4ff; }
 
 @media (max-width: 1180px) {
@@ -515,7 +579,7 @@
     grid-column: 1;
     grid-row: 2;
     justify-content: flex-end;
-    border-top: 1px solid #edf2f7;
+    border-top: 1px solid #edf1f6;
     border-left: 0;
   }
 }
@@ -538,7 +602,7 @@
   }
 
   .core-recon-page:has(.core-rd-recon-table) .core-recon-stats > div:nth-child(-n + 2) {
-    border-bottom: 1px solid #e8edf4;
+    border-bottom: 1px solid #e8edf3;
   }
 }
 
