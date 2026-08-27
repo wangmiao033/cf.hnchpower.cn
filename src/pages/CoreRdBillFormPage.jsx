@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useAppState } from '@/app/AppStateContext.jsx'
 import PageContainer from '@/components/layout/PageContainer.jsx'
 import BillScanAttachments from '@/components/billing/BillScanAttachments.jsx'
@@ -224,16 +224,27 @@ function CoreRdBillFormPage({ mode }) {
     }
   }
 
-  const applyContractSmartRecord = (nextRecord, message = '', tone = 'success') => {
+  const applyContractSmartRecord = useCallback((nextRecord, message = '', tone = 'success') => {
     setContractSmartRecord(nextRecord)
     setContractSourceRevision((value) => value + 1)
     if (message) showToast(message, tone)
-  }
+  }, [showToast])
 
-  const handleRdFormStateChange = (record) => {
+  // ReconciliationLineItemsForm emits its current form state from an effect that depends on
+  // this callback identity. Keep it stable so harmless parent renders do not retrigger that
+  // effect, recreate formState, and continuously cancel the 320ms contract-match debounce.
+  const handleRdFormStateChange = useCallback((record) => {
     safety.onFormStateChange(record)
-    if (contractSmartRecord) setContractSmartRecord(null)
-  }
+    setContractSmartRecord((current) => (current ? null : current))
+  }, [safety.onFormStateChange])
+
+  const handleContractNotice = useCallback((message, tone = 'info') => {
+    showToast(message, tone)
+  }, [showToast])
+
+  const handleContractSourceChanged = useCallback(() => {
+    setContractSourceRevision((value) => value + 1)
+  }, [])
 
   if (isEdit && !reconEditRecordId) {
     return <EmptyState title="请选择研发账单" onBack={goList} />
@@ -291,8 +302,8 @@ function CoreRdBillFormPage({ mode }) {
         record={currentRdRecord}
         partners={settings.partners || []}
         onApply={applyContractSmartRecord}
-        onNotice={(message, tone = 'info') => showToast(message, tone)}
-        onSourceChanged={() => setContractSourceRevision((value) => value + 1)}
+        onNotice={handleContractNotice}
+        onSourceChanged={handleContractSourceChanged}
       />
 
       <section className="core-bill-card core-bill-card--embedded">
