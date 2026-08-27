@@ -1,0 +1,80 @@
+/* R&D ledger direct-delete action override.
+ * UI only: the existing soft-delete lifecycle remains unchanged and recoverable.
+ */
+
+/* Remove the hover-only “More” affordance. */
+.core-recon-page:has(.core-rd-recon-table) .core-recon-row-actions:has(> .danger)::after {
+  display: none !important;
+  content: none !important;
+}
+
+/* Keep the row focused on View / Edit / Delete. Manual archive remains handled
+   by the existing archive workflow/automatic archive rules instead of occupying
+   another row-level button. */
+.core-recon-page:has(.core-rd-recon-table) .core-recon-row-actions:has(> button:nth-child(4)) > button:nth-child(2) {
+  display: none !important;
+}
+
+/* The existing danger handler is a recoverable soft delete. Present it directly
+   as “删除” instead of exposing the internal “作废” terminology. */
+.core-recon-page:has(.core-rd-recon-table) .core-recon-row-actions > .danger {
+  position: static !important;
+  width: auto !important;
+  max-width: none !important;
+  height: 26px !important;
+  min-height: 26px !important;
+  min-width: 42px !important;
+  padding: 0 8px !important;
+  border: 1px solid #efcaca !important;
+  border-radius: 7px !important;
+  background: #fff !important;
+  color: #b42318 !important;
+  font-size: 0 !important;
+  line-height: 1 !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-recon-row-actions > .danger::after {
+  content: '删除';
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-recon-row-actions > .danger:hover {
+  border-color: #e59a9a !important;
+  background: #fff5f5 !important;
+  color: #a31414 !important;
+}
+
+/* Three stable actions fit comfortably; give product space back. */
+.core-recon-page:has(.core-rd-recon-table) .core-rd-col-game {
+  width: 26% !important;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-rd-col-actions {
+  width: 9% !important;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-recon-row-actions {
+  gap: 5px;
+  overflow: hidden;
+}
+
+/* Archived/deleted rows retain their existing recovery controls. */
+.core-recon-page:has(.core-rd-recon-table) .core-recon-row-actions:not(:has(> .danger)) {
+  overflow: visible;
+}
+
+@media (max-width: 1280px) {
+  .core-recon-page:has(.core-rd-recon-table) .core-rd-col-game {
+    width: 24% !important;
+  }
+
+  .core-recon-page:has(.core-rd-recon-table) .core-rd-col-actions {
+    width: 11% !important;
+  }
+}
