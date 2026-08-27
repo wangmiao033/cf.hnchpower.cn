@@ -1,0 +1,669 @@
+/* R&D bill editor visual refresh. Layout only: no settlement/calculation rules live here. */
+.core-bill-form-page--rd .page-container-body {
+  gap: 8px;
+}
+
+/* ---- Compact page header ---- */
+.core-bill-form-page--rd .core-bill-form-head {
+  align-items: center;
+  padding: 10px 14px;
+  border-radius: 10px;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, .035);
+}
+
+.core-bill-form-page--rd .core-bill-form-head__context {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: grid;
+  gap: 3px;
+}
+
+.core-bill-form-page--rd .core-bill-form-title-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.core-bill-form-page--rd .core-bill-form-title-row > * {
+  margin-top: 0;
+}
+
+.core-bill-form-page--rd .core-bill-form-head h1 {
+  font-size: 17px;
+  line-height: 1.25;
+}
+
+.core-bill-form-page--rd .core-bill-form-kind,
+.core-bill-form-page--rd .core-bill-state-tag {
+  display: inline-flex;
+  align-items: center;
+  min-height: 23px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.core-bill-form-page--rd .core-bill-form-tip {
+  margin-top: 0;
+  max-width: 980px;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.core-bill-form-page--rd .core-bill-review-hint {
+  margin-top: 0;
+  min-height: 20px;
+  font-size: 10px;
+}
+
+.core-bill-form-page--rd .core-bill-review-hint::before {
+  width: 15px;
+  height: 15px;
+}
+
+.core-bill-form-page--rd .core-bill-draft-state {
+  width: fit-content;
+  min-height: 20px;
+  margin-top: 0;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
+.core-bill-form-page--rd .core-bill-draft-state > span {
+  width: 6px;
+  height: 6px;
+  margin: 0;
+  border-radius: 50%;
+}
+
+.core-bill-form-page--rd .core-bill-draft-state strong,
+.core-bill-form-page--rd .core-bill-draft-state small {
+  margin: 0;
+  font-size: 10px;
+  line-height: 1.25;
+}
+
+.core-bill-form-page--rd .core-bill-form-total {
+  min-width: 168px;
+  min-height: 52px;
+  padding: 8px 12px;
+  border-radius: 9px;
+  background: linear-gradient(180deg, #f8fbff 0%, #f3f7fc 100%);
+}
+
+.core-bill-form-page--rd .core-bill-form-total span {
+  margin-top: 0;
+  font-size: 10px;
+}
+
+.core-bill-form-page--rd .core-bill-form-total strong {
+  margin-top: 2px;
+  font-size: 20px;
+  color: #145fc4;
+}
+
+/* ---- Contract-first source card ---- */
+.core-bill-form-page--rd .rd-contract-smart-entry {
+  margin: 0;
+  border-color: #d9e5f3;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, .035);
+}
+
+.core-bill-form-page--rd .rd-contract-smart-entry__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px 8px;
+  border-bottom: 1px solid #e8eef6;
+}
+
+.core-bill-form-page--rd .rd-contract-smart-entry__head-main {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 5px 9px;
+}
+
+.core-bill-form-page--rd .rd-contract-smart-entry__head-main > span {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .06em;
+  color: #5074a8;
+}
+
+.core-bill-form-page--rd .rd-contract-smart-entry__head-main > strong {
+  font-size: 14px;
+  color: #17243a;
+}
+
+.core-bill-form-page--rd .rd-contract-smart-entry__head-main > small {
+  flex-basis: 100%;
+  color: #78869a;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.core-bill-form-page--rd .rd-contract-smart-entry__badge {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 9px;
+  border-radius: 999px;
+  background: #eaf7ef;
+  color: #237a49;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.core-bill-form-page--rd .rd-contract-smart-entry__overview {
+  display: grid;
+  grid-template-columns: minmax(120px, .7fr) minmax(260px, 1.6fr) minmax(220px, 1.2fr) auto;
+  gap: 8px;
+  align-items: stretch;
+  padding: 9px 14px 10px;
+}
+
+.core-bill-form-page--rd .rd-contract-smart-entry__meta {
+  min-width: 0;
+  display: grid;
+  align-content: center;
+  gap: 2px;
+  min-height: 48px;
+  padding: 7px 10px;
+  border: 1px solid #e5ebf3;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.core-bill-form-page--rd .rd-contract-smart-entry__meta > span {
+  font-size: 9px;
+  color: #8490a1;
+}
+
+.core-bill-form-page--rd .rd-contract-smart-entry__meta > strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: #23334a;
+}
+
+.core-bill-form-page--rd .rd-contract-smart-entry__meta > small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 9px;
+  color: #7b8798;
+}
+
+.core-bill-form-page--rd .rd-contract-smart-entry__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.core-bill-form-page--rd .rd-contract-smart-entry__actions button,
+.core-bill-form-page--rd .rd-contract-smart-entry__actions select {
+  min-height: 32px;
+  border: 1px solid #d2dce8;
+  border-radius: 7px;
+  background: #fff;
+  color: #344258;
+  padding: 5px 9px;
+  font-size: 10px;
+}
+
+.core-bill-form-page--rd .rd-contract-smart-entry__actions button.is-primary {
+  border-color: #2f66b3;
+  background: #2f66b3;
+  color: #fff;
+  font-weight: 700;
+}
+
+.core-bill-form-page--rd .rd-contract-smart-entry__status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 14px 10px;
+  min-height: 34px;
+  padding: 6px 10px;
+  border: 1px solid #d8e9df;
+  border-radius: 8px;
+  background: #f5fbf7;
+}
+
+.core-bill-form-page--rd .rd-contract-smart-entry__status > div {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.core-bill-form-page--rd .rd-contract-smart-entry__status strong {
+  font-size: 11px;
+  color: #246947;
+  white-space: nowrap;
+}
+
+.core-bill-form-page--rd .rd-contract-smart-entry__status span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+  color: #667789;
+}
+
+.core-bill-form-page--rd .rd-contract-smart-entry__status em {
+  flex: 0 0 auto;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #e4f5eb;
+  color: #28724d;
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+/* Re-use the channel dialog/issue primitives, but tighten them on the R&D page. */
+.core-bill-form-page--rd .rd-contract-smart-entry .channel-smart-entry__notice,
+.core-bill-form-page--rd .rd-contract-smart-entry .channel-smart-entry__missing {
+  margin: 0 14px 10px;
+}
+
+.core-bill-form-page--rd .rd-contract-smart-entry .channel-smart-entry__missing {
+  padding: 8px 10px;
+}
+
+/* ---- Contract rule verification: remove the second oversized intro block ---- */
+.core-bill-form-page--rd .core-bill-card--embedded {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  overflow: visible;
+}
+
+.core-bill-form-page--rd .rd-contract-entry-v31 {
+  gap: 8px;
+}
+
+.core-bill-form-page--rd .rd-contract-entry-panel {
+  padding: 9px 12px;
+  border-radius: 10px;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, .03);
+}
+
+.core-bill-form-page--rd .rd-contract-entry-panel__head {
+  align-items: center;
+  gap: 12px;
+}
+
+.core-bill-form-page--rd .rd-contract-entry-panel__head > div:first-child > span,
+.core-bill-form-page--rd .rd-contract-entry-panel__head p {
+  display: none;
+}
+
+.core-bill-form-page--rd .rd-contract-entry-panel__head h2 {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.3;
+}
+
+.core-bill-form-page--rd .rd-contract-entry-panel__head h2::before {
+  content: '合同规则 · ';
+  color: #5d75a0;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.core-bill-form-page--rd .rd-contract-entry-panel__status {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  text-align: right;
+}
+
+.core-bill-form-page--rd .rd-contract-entry-panel__status strong {
+  font-size: 10px;
+}
+
+.core-bill-form-page--rd .rd-contract-entry-panel__status small {
+  margin: 0;
+  font-size: 9px;
+}
+
+.core-bill-form-page--rd .rd-contract-entry-alert {
+  margin-top: 7px;
+  padding: 6px 8px;
+}
+
+.core-bill-form-page--rd .rd-contract-entry-lines {
+  margin-top: 8px;
+  gap: 7px;
+}
+
+.core-bill-form-page--rd .rd-contract-entry-line {
+  padding: 8px 10px;
+  border-radius: 8px;
+}
+
+.core-bill-form-page--rd .rd-contract-entry-contract {
+  margin-top: 6px;
+  padding: 6px 8px;
+}
+
+.core-bill-form-page--rd .rd-contract-entry-rule-grid {
+  gap: 5px;
+  margin-top: 6px;
+}
+
+.core-bill-form-page--rd .rd-contract-entry-rule-grid > div {
+  padding: 6px 7px;
+}
+
+.core-bill-form-page--rd .rd-contract-entry-discount-note,
+.core-bill-form-page--rd .rd-contract-entry-warnings {
+  margin-top: 5px;
+}
+
+.core-bill-form-page--rd .rd-contract-entry-summary {
+  margin-top: 8px;
+  padding-top: 8px;
+  gap: 6px;
+}
+
+.core-bill-form-page--rd .rd-contract-entry-summary > div {
+  padding: 6px 8px;
+}
+
+/* ---- Form cards ---- */
+.core-bill-form-page--rd .channel-form {
+  gap: 8px;
+}
+
+.core-bill-form-page--rd .channel-form-section {
+  padding: 10px 12px;
+  border-radius: 10px;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, .025);
+}
+
+.core-bill-form-page--rd .form-section-title {
+  margin: 0 0 8px;
+  padding: 0 0 7px;
+  font-size: 11px;
+  font-weight: 750;
+  color: #29394f;
+}
+
+.core-bill-form-page--rd .channel-form-section:first-of-type .form-row:first-of-type {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 8px;
+}
+
+.core-bill-form-page--rd .channel-form-section:first-of-type .form-row + .form-row {
+  margin-top: 7px;
+}
+
+.core-bill-form-page--rd .form-group {
+  gap: 4px;
+}
+
+.core-bill-form-page--rd .form-group label {
+  font-size: 10px;
+}
+
+.core-bill-form-page--rd .form-group input,
+.core-bill-form-page--rd .form-group select,
+.core-bill-form-page--rd .rd-partner-picker__control input {
+  min-height: 32px;
+  padding: 6px 9px;
+  border-radius: 7px;
+  font-size: 11px;
+}
+
+.core-bill-form-page--rd .rd-partner-picker__link-state {
+  margin-top: 2px;
+  font-size: 9px;
+}
+
+.core-bill-form-page--rd .rd-recon-defaults-panel {
+  margin-top: 7px;
+}
+
+.core-bill-form-page--rd .rd-recon-defaults-panel__summary {
+  min-height: 34px;
+  padding: 7px 10px;
+}
+
+.core-bill-form-page--rd .rd-recon-defaults-panel__title,
+.core-bill-form-page--rd .rd-recon-defaults-panel__meta,
+.core-bill-form-page--rd .rd-recon-defaults-panel__summary::after {
+  font-size: 9px;
+}
+
+.core-bill-form-page--rd .rd-recon-defaults-panel__body {
+  padding: 8px 10px 10px;
+}
+
+/* The preset button no longer gets its own tall empty row. */
+.core-bill-form-page--rd .rd-recon-meta-header {
+  min-height: 28px;
+  margin: -1px 0 -2px;
+  padding: 0 2px;
+}
+
+.core-bill-form-page--rd .rd-recon-meta-header button {
+  min-height: 28px;
+  padding: 4px 9px;
+  font-size: 10px;
+}
+
+/* ---- Dense line-item table ---- */
+.core-bill-form-page--rd .rd-line-items-grid {
+  font-size: 10px;
+}
+
+.core-bill-form-page--rd .rd-line-items-grid-head {
+  min-height: 30px;
+  background: #f4f7fb;
+  border-color: #e3e9f1;
+}
+
+.core-bill-form-page--rd .rd-line-items-grid-head .channel-cell {
+  font-size: 9px;
+  font-weight: 700;
+  color: #68768a;
+}
+
+.core-bill-form-page--rd .rd-line-items-grid-row {
+  min-height: 36px;
+}
+
+.core-bill-form-page--rd .rd-line-items-grid-row .admin-input {
+  min-height: 30px;
+  height: 30px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  font-size: 10px;
+}
+
+.core-bill-form-page--rd .rd-line-items-grid-row .rec-btn {
+  width: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  height: 28px;
+  padding: 0;
+}
+
+.core-bill-form-page--rd .rd-game-source-field__status {
+  font-size: 8px;
+}
+
+/* ---- Summary as clear KPI strip ---- */
+.core-bill-form-page--rd .rd-form-period-summary {
+  min-height: 32px;
+  padding: 6px 9px;
+  margin-bottom: 7px;
+  border-radius: 7px;
+}
+
+.core-bill-form-page--rd .rd-form-period-summary span,
+.core-bill-form-page--rd .rd-form-period-summary em {
+  font-size: 9px;
+}
+
+.core-bill-form-page--rd .rd-form-period-summary strong {
+  font-size: 11px;
+}
+
+.core-bill-form-page--rd .channel-line-items-summary--rd {
+  gap: 6px;
+}
+
+.core-bill-form-page--rd .channel-line-items-summary--rd .summary-item {
+  min-height: 54px;
+  padding: 8px 10px;
+  border-radius: 8px;
+}
+
+.core-bill-form-page--rd .channel-line-items-summary--rd .label {
+  font-size: 9px;
+}
+
+.core-bill-form-page--rd .channel-line-items-summary--rd .value {
+  margin-top: 3px;
+  font-size: 14px;
+}
+
+.core-bill-form-page--rd .channel-line-items-summary--rd .summary-item--hero {
+  background: linear-gradient(180deg, #eefaf3 0%, #e8f7ef 100%);
+  border-color: #cbe8d7;
+}
+
+/* ---- Attachments ---- */
+.core-bill-form-page--rd .bill-scan-attachments {
+  border-radius: 10px;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, .025);
+}
+
+.core-bill-form-page--rd .bill-scan-attachments__head {
+  min-height: 50px;
+  padding: 8px 12px;
+}
+
+.core-bill-form-page--rd .bill-scan-attachments__heading p,
+.core-bill-form-page--rd .bill-scan-attachments__types {
+  display: none;
+}
+
+.core-bill-form-page--rd .bill-scan-attachments__title-row h3 {
+  font-size: 12px;
+}
+
+.core-bill-form-page--rd .bill-scan-attachments__empty {
+  min-height: 36px;
+  padding: 8px 12px;
+  font-size: 10px;
+}
+
+.core-bill-form-page--rd .bill-scan-attachments__upload {
+  min-height: 30px;
+  padding: 5px 10px;
+  font-size: 10px;
+}
+
+/* ---- Sticky action bar ---- */
+.core-bill-form-page--rd .core-bill-footer {
+  position: sticky;
+  bottom: 8px;
+  z-index: 35;
+  min-height: 50px;
+  padding: 6px 10px 6px 12px;
+  justify-content: space-between;
+  border-radius: 10px;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, .14);
+  backdrop-filter: blur(10px);
+}
+
+.core-bill-form-page--rd .core-bill-footer-summary {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.core-bill-form-page--rd .core-bill-footer-summary span {
+  font-size: 10px;
+  color: #7a8798;
+}
+
+.core-bill-form-page--rd .core-bill-footer-summary strong {
+  color: #166534;
+  font-size: 17px;
+}
+
+.core-bill-form-page--rd .core-bill-footer-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.core-bill-form-page--rd .core-bill-footer button {
+  height: 32px;
+  padding: 0 11px;
+  font-size: 11px;
+}
+
+@media (max-width: 1180px) {
+  .core-bill-form-page--rd .rd-contract-smart-entry__overview {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .core-bill-form-page--rd .rd-contract-smart-entry__actions {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 760px) {
+  .core-bill-form-page--rd .core-bill-form-head {
+    display: grid;
+  }
+
+  .core-bill-form-page--rd .core-bill-form-total {
+    min-width: 0;
+  }
+
+  .core-bill-form-page--rd .rd-contract-smart-entry__overview {
+    grid-template-columns: 1fr;
+  }
+
+  .core-bill-form-page--rd .rd-contract-smart-entry__status,
+  .core-bill-form-page--rd .rd-contract-smart-entry__status > div {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .core-bill-form-page--rd .core-bill-footer {
+    position: static;
+    display: grid;
+  }
+
+  .core-bill-form-page--rd .core-bill-footer-actions {
+    flex-wrap: wrap;
+  }
+}
