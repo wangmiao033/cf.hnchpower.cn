@@ -1,3 +1,5 @@
+@import '../pages/CoreRdBillModern.css';
+
 .core-bill-form-page .channel-form-section:has(select[aria-label="记录状态"]) {
   display: none;
 }
