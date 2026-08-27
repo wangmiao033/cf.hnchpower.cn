@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 from fastapi import HTTPException, status
-from sqlalchemy import delete, select, text
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.models.channel import ChannelRecord
@@ -47,6 +47,21 @@ def _is_archived(db: Session, bill_type: str, bill_id: str) -> bool:
         {"bill_type": bill_type, "bill_id": bill_id},
     ).scalar_one_or_none()
     return value is not None
+
+
+def _manual_unarchive_blocks_auto(db: Session, bill_type: str, bill_id: str) -> bool:
+    """手工取消归档后，尊重用户选择，不再立刻被自动归档规则拉回去。"""
+    latest_action = db.execute(
+        select(OperationLog.action)
+        .where(
+            OperationLog.entity_type == bill_type,
+            OperationLog.entity_id == str(bill_id),
+            OperationLog.action.in_(("archive", "unarchive")),
+        )
+        .order_by(OperationLog.created_at.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+    return str(latest_action or "").strip().lower() == "unarchive"
 
 
 def _last_activity_at(db: Session, bill_type: str, bill) -> datetime:
@@ -122,6 +137,7 @@ def _write_archive_log(
                     else AUTO_ARCHIVE_DAYS if source == "auto"
                     else None
                 ),
+                "auto_archive_suppressed": action == "unarchive" and source == "manual",
             },
         )
     )
@@ -177,6 +193,8 @@ def auto_archive_bill_if_ready(db: Session, bill_type: str, bill_id: str) -> boo
     """Immediately archive a single RD bill once invoice and payment are both complete."""
     if bill_type != "rd" or _is_archived(db, bill_type, bill_id):
         return False
+    if _manual_unarchive_blocks_auto(db, bill_type, bill_id):
+        return False
     bill = _load_bill(db, bill_type, bill_id)
     eligible, _, _ = archive_eligibility(db, bill_type, bill)
     if not eligible:
@@ -203,7 +221,13 @@ def unarchive_bill(db: Session, bill_type: str, bill_id: str, *, user: AuthUser)
     )
     _write_archive_log(db, bill_type, bill, action="unarchive", source="manual", user=user)
     db.commit()
-    return {"bill_type": bill_type, "bill_id": bill_id, "archived": False, "already_unarchived": False}
+    return {
+        "bill_type": bill_type,
+        "bill_id": bill_id,
+        "archived": False,
+        "already_unarchived": False,
+        "auto_archive_suppressed": True,
+    }
 
 
 def auto_archive_settled_bills(db: Session, bill_type: str) -> int:
@@ -222,6 +246,8 @@ def auto_archive_settled_bills(db: Session, bill_type: str) -> int:
     for bill in bills:
         bill_id = str(bill.id)
         if bill_id in archived_ids:
+            continue
+        if _manual_unarchive_blocks_auto(db, bill_type, bill_id):
             continue
         eligible, _, closure_at = archive_eligibility(db, bill_type, bill)
         if not eligible:
@@ -273,8 +299,8 @@ def archive_snapshot(db: Session, bill_type: str, *, run_auto: bool = True) -> d
         if bill_id in archived_ids:
             continue
         eligible, _, _ = archive_eligibility(db, bill_type, bill)
-        # 研发账单不再暴露“可手工归档”状态：满足条件时由自动扫描直接处理。
-        if eligible and bill_type != "rd":
+        # 手工取消归档的研发账单继续留在默认列表，并允许用户之后手工归档回来。
+        if eligible:
             eligible_ids.append(bill_id)
 
     items = [
