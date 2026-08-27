@@ -1,0 +1,109 @@
+/* R&D ledger full-width table refinement.
+ * Presentation only: keep all reconciliation/payment/archive data logic unchanged.
+ */
+
+.core-recon-page:has(.core-rd-recon-table) .core-recon-panel,
+.core-recon-page:has(.core-rd-recon-table) .core-recon-table-wrap {
+  width: 100%;
+  min-width: 0;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-rd-recon-table {
+  display: table;
+  width: 100% !important;
+  min-width: 1180px !important;
+  max-width: none !important;
+  table-layout: fixed !important;
+}
+
+/* Keep overview-only fields out of the list, but collapse them completely so
+   they cannot reserve an invisible rail. */
+.core-recon-page:has(.core-rd-recon-table) .core-rd-recon-table col:nth-child(8),
+.core-recon-page:has(.core-rd-recon-table) .core-rd-recon-table col:nth-child(9) {
+  display: none !important;
+  width: 0 !important;
+  visibility: collapse !important;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-rd-recon-table th:nth-child(8),
+.core-recon-page:has(.core-rd-recon-table) .core-rd-recon-table td:nth-child(8),
+.core-recon-page:has(.core-rd-recon-table) .core-rd-recon-table th:nth-child(9),
+.core-recon-page:has(.core-rd-recon-table) .core-rd-recon-table td:nth-child(9) {
+  display: none !important;
+}
+
+/* Explicitly retain the useful payment/status/action columns in the space that
+   used to be blank on wide screens. */
+.core-recon-page:has(.core-rd-recon-table) .core-rd-recon-table col:nth-child(10),
+.core-recon-page:has(.core-rd-recon-table) .core-rd-recon-table col:nth-child(11),
+.core-recon-page:has(.core-rd-recon-table) .core-rd-recon-table col:nth-child(12) {
+  display: table-column !important;
+  visibility: visible !important;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-rd-recon-table th:nth-child(10),
+.core-recon-page:has(.core-rd-recon-table) .core-rd-recon-table td:nth-child(10),
+.core-recon-page:has(.core-rd-recon-table) .core-rd-recon-table th:nth-child(11),
+.core-recon-page:has(.core-rd-recon-table) .core-rd-recon-table td:nth-child(11),
+.core-recon-page:has(.core-rd-recon-table) .core-rd-recon-table th:nth-child(12),
+.core-recon-page:has(.core-rd-recon-table) .core-rd-recon-table td:nth-child(12) {
+  display: table-cell !important;
+  visibility: visible !important;
+}
+
+/* Ten visible columns = 100%. The product column gets the spare width instead
+   of leaving an empty strip on the right. */
+.core-recon-page:has(.core-rd-recon-table) .core-rd-col-month { width: 8% !important; }
+.core-recon-page:has(.core-rd-recon-table) .core-rd-col-number { width: 9% !important; }
+.core-recon-page:has(.core-rd-recon-table) .core-rd-col-partner { width: 8.5% !important; }
+.core-recon-page:has(.core-rd-recon-table) .core-rd-col-game { width: 28% !important; }
+.core-recon-page:has(.core-rd-recon-table) .core-rd-col-flow { width: 10% !important; }
+.core-recon-page:has(.core-rd-recon-table) .core-rd-col-share { width: 5.5% !important; }
+.core-recon-page:has(.core-rd-recon-table) .core-rd-col-settlement { width: 9.5% !important; }
+.core-recon-page:has(.core-rd-recon-table) .core-rd-col-prepayment,
+.core-recon-page:has(.core-rd-recon-table) .core-rd-col-payable { width: 0 !important; }
+.core-recon-page:has(.core-rd-recon-table) .core-rd-col-received { width: 8.5% !important; }
+.core-recon-page:has(.core-rd-recon-table) .core-rd-col-status { width: 6% !important; }
+.core-recon-page:has(.core-rd-recon-table) .core-rd-col-actions { width: 7% !important; }
+
+.core-recon-page:has(.core-rd-recon-table) .core-rd-recon-table th:nth-child(10),
+.core-recon-page:has(.core-rd-recon-table) .core-rd-recon-table td:nth-child(10) {
+  text-align: right;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-recon-money--received strong {
+  color: #52657c;
+  font-size: 9px;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-recon-money--received small {
+  color: #a16207 !important;
+  font-size: 9px !important;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .v4-list-closure {
+  padding: 3px 6px;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-recon-row-actions {
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-recon-row-actions button {
+  min-width: 0;
+  padding-right: 6px;
+  padding-left: 6px;
+}
+
+/* The action rail belongs at the actual right edge of the table. */
+.core-recon-page:has(.core-rd-recon-table) .core-rd-recon-table th:last-child,
+.core-recon-page:has(.core-rd-recon-table) .core-rd-recon-table td:last-child {
+  right: 0;
+}
+
+@media (max-width: 1280px) {
+  .core-recon-page:has(.core-rd-recon-table) .core-rd-recon-table {
+    min-width: 1100px !important;
+  }
+}
