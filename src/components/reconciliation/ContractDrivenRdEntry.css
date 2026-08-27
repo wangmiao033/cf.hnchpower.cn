@@ -125,3 +125,96 @@
     grid-template-columns:1fr;
   }
 }
+
+/* Clean auto-match state: keep only the decision signal; hide diagnostic detail until it is actually needed. */
+.rd-contract-entry-panel.is-pass:has(.rd-contract-entry-line.is-pass):not(:has(.rd-contract-entry-line.is-warning)):not(:has(.rd-contract-entry-line.is-fail)):not(:has(.rd-contract-entry-line.is-none)):not(:has(.rd-contract-entry-override)):not(:has(.rd-contract-entry-warnings)):not(:has(.rd-contract-entry-summary .is-diff)){
+  padding:8px 11px;
+  border-color:#c8e5d6;
+  border-radius:9px;
+  background:#f8fcfa;
+  box-shadow:none;
+}
+
+.rd-contract-entry-panel.is-pass:has(.rd-contract-entry-line.is-pass):not(:has(.rd-contract-entry-line.is-warning)):not(:has(.rd-contract-entry-line.is-fail)):not(:has(.rd-contract-entry-line.is-none)):not(:has(.rd-contract-entry-override)):not(:has(.rd-contract-entry-warnings)):not(:has(.rd-contract-entry-summary .is-diff)) .rd-contract-entry-panel__head{
+  min-height:28px;
+  align-items:center;
+  gap:10px;
+}
+
+.rd-contract-entry-panel.is-pass:has(.rd-contract-entry-line.is-pass):not(:has(.rd-contract-entry-line.is-warning)):not(:has(.rd-contract-entry-line.is-fail)):not(:has(.rd-contract-entry-line.is-none)):not(:has(.rd-contract-entry-override)):not(:has(.rd-contract-entry-warnings)):not(:has(.rd-contract-entry-summary .is-diff)) .rd-contract-entry-panel__head>div:first-child>span,
+.rd-contract-entry-panel.is-pass:has(.rd-contract-entry-line.is-pass):not(:has(.rd-contract-entry-line.is-warning)):not(:has(.rd-contract-entry-line.is-fail)):not(:has(.rd-contract-entry-line.is-none)):not(:has(.rd-contract-entry-override)):not(:has(.rd-contract-entry-warnings)):not(:has(.rd-contract-entry-summary .is-diff)) .rd-contract-entry-panel__head p{
+  display:none;
+}
+
+.rd-contract-entry-panel.is-pass:has(.rd-contract-entry-line.is-pass):not(:has(.rd-contract-entry-line.is-warning)):not(:has(.rd-contract-entry-line.is-fail)):not(:has(.rd-contract-entry-line.is-none)):not(:has(.rd-contract-entry-override)):not(:has(.rd-contract-entry-warnings)):not(:has(.rd-contract-entry-summary .is-diff)) .rd-contract-entry-panel__head h2{
+  margin:0;
+  font-size:12px;
+  line-height:1.3;
+}
+
+.rd-contract-entry-panel.is-pass:has(.rd-contract-entry-line.is-pass):not(:has(.rd-contract-entry-line.is-warning)):not(:has(.rd-contract-entry-line.is-fail)):not(:has(.rd-contract-entry-line.is-none)):not(:has(.rd-contract-entry-override)):not(:has(.rd-contract-entry-warnings)):not(:has(.rd-contract-entry-summary .is-diff)) .rd-contract-entry-panel__status{
+  min-width:0;
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:8px;
+}
+
+.rd-contract-entry-panel.is-pass:has(.rd-contract-entry-line.is-pass):not(:has(.rd-contract-entry-line.is-warning)):not(:has(.rd-contract-entry-line.is-fail)):not(:has(.rd-contract-entry-line.is-none)):not(:has(.rd-contract-entry-override)):not(:has(.rd-contract-entry-warnings)):not(:has(.rd-contract-entry-summary .is-diff)) .rd-contract-entry-panel__status strong{
+  display:inline-flex;
+  align-items:center;
+  min-height:22px;
+  padding:0 7px;
+  border-radius:999px;
+  background:#e9f7ef;
+  color:#23764e;
+  font-size:9px;
+  font-weight:800;
+  white-space:nowrap;
+}
+
+.rd-contract-entry-panel.is-pass:has(.rd-contract-entry-line.is-pass):not(:has(.rd-contract-entry-line.is-warning)):not(:has(.rd-contract-entry-line.is-fail)):not(:has(.rd-contract-entry-line.is-none)):not(:has(.rd-contract-entry-override)):not(:has(.rd-contract-entry-warnings)):not(:has(.rd-contract-entry-summary .is-diff)) .rd-contract-entry-panel__status small{
+  margin:0;
+  font-size:9px;
+}
+
+.rd-contract-entry-panel.is-pass:has(.rd-contract-entry-line.is-pass):not(:has(.rd-contract-entry-line.is-warning)):not(:has(.rd-contract-entry-line.is-fail)):not(:has(.rd-contract-entry-line.is-none)):not(:has(.rd-contract-entry-override)):not(:has(.rd-contract-entry-warnings)):not(:has(.rd-contract-entry-summary .is-diff)) .rd-contract-entry-lines{
+  gap:4px;
+  margin-top:5px;
+}
+
+.rd-contract-entry-panel.is-pass:has(.rd-contract-entry-line.is-pass):not(:has(.rd-contract-entry-line.is-warning)):not(:has(.rd-contract-entry-line.is-fail)):not(:has(.rd-contract-entry-line.is-none)):not(:has(.rd-contract-entry-override)):not(:has(.rd-contract-entry-warnings)):not(:has(.rd-contract-entry-summary .is-diff)) .rd-contract-entry-line{
+  padding:5px 8px;
+  border-left-width:2px;
+  border-radius:7px;
+  background:#fff;
+}
+
+.rd-contract-entry-panel.is-pass:has(.rd-contract-entry-line.is-pass):not(:has(.rd-contract-entry-line.is-warning)):not(:has(.rd-contract-entry-line.is-fail)):not(:has(.rd-contract-entry-line.is-none)):not(:has(.rd-contract-entry-override)):not(:has(.rd-contract-entry-warnings)):not(:has(.rd-contract-entry-summary .is-diff)) .rd-contract-entry-line__title strong{
+  font-size:11px;
+}
+
+.rd-contract-entry-panel.is-pass:has(.rd-contract-entry-line.is-pass):not(:has(.rd-contract-entry-line.is-warning)):not(:has(.rd-contract-entry-line.is-fail)):not(:has(.rd-contract-entry-line.is-none)):not(:has(.rd-contract-entry-override)):not(:has(.rd-contract-entry-warnings)):not(:has(.rd-contract-entry-summary .is-diff)) .rd-contract-entry-line__title span,
+.rd-contract-entry-panel.is-pass:has(.rd-contract-entry-line.is-pass):not(:has(.rd-contract-entry-line.is-warning)):not(:has(.rd-contract-entry-line.is-fail)):not(:has(.rd-contract-entry-line.is-none)):not(:has(.rd-contract-entry-override)):not(:has(.rd-contract-entry-warnings)):not(:has(.rd-contract-entry-summary .is-diff)) .rd-contract-entry-line__title em{
+  font-size:9px;
+}
+
+.rd-contract-entry-panel.is-pass:has(.rd-contract-entry-line.is-pass):not(:has(.rd-contract-entry-line.is-warning)):not(:has(.rd-contract-entry-line.is-fail)):not(:has(.rd-contract-entry-line.is-none)):not(:has(.rd-contract-entry-override)):not(:has(.rd-contract-entry-warnings)):not(:has(.rd-contract-entry-summary .is-diff)) .rd-contract-entry-line__title em{
+  padding:2px 6px;
+}
+
+.rd-contract-entry-panel.is-pass:has(.rd-contract-entry-line.is-pass):not(:has(.rd-contract-entry-line.is-warning)):not(:has(.rd-contract-entry-line.is-fail)):not(:has(.rd-contract-entry-line.is-none)):not(:has(.rd-contract-entry-override)):not(:has(.rd-contract-entry-warnings)):not(:has(.rd-contract-entry-summary .is-diff)) .rd-contract-entry-contract,
+.rd-contract-entry-panel.is-pass:has(.rd-contract-entry-line.is-pass):not(:has(.rd-contract-entry-line.is-warning)):not(:has(.rd-contract-entry-line.is-fail)):not(:has(.rd-contract-entry-line.is-none)):not(:has(.rd-contract-entry-override)):not(:has(.rd-contract-entry-warnings)):not(:has(.rd-contract-entry-summary .is-diff)) .rd-contract-entry-rule-grid,
+.rd-contract-entry-panel.is-pass:has(.rd-contract-entry-line.is-pass):not(:has(.rd-contract-entry-line.is-warning)):not(:has(.rd-contract-entry-line.is-fail)):not(:has(.rd-contract-entry-line.is-none)):not(:has(.rd-contract-entry-override)):not(:has(.rd-contract-entry-warnings)):not(:has(.rd-contract-entry-summary .is-diff)) .rd-contract-entry-discount-note,
+.rd-contract-entry-panel.is-pass:has(.rd-contract-entry-line.is-pass):not(:has(.rd-contract-entry-line.is-warning)):not(:has(.rd-contract-entry-line.is-fail)):not(:has(.rd-contract-entry-line.is-none)):not(:has(.rd-contract-entry-override)):not(:has(.rd-contract-entry-warnings)):not(:has(.rd-contract-entry-summary .is-diff)) .rd-contract-entry-summary{
+  display:none;
+}
+
+@media(max-width:720px){
+  .rd-contract-entry-panel.is-pass:has(.rd-contract-entry-line.is-pass):not(:has(.rd-contract-entry-line.is-warning)):not(:has(.rd-contract-entry-line.is-fail)):not(:has(.rd-contract-entry-entry-line.is-none)) .rd-contract-entry-panel__head{
+    display:grid;
+  }
+  .rd-contract-entry-panel.is-pass:has(.rd-contract-entry-line.is-pass):not(:has(.rd-contract-entry-line.is-warning)):not(:has(.rd-contract-entry-line.is-fail)):not(:has(.rd-contract-entry-line.is-none)) .rd-contract-entry-panel__status{
+    justify-content:flex-start;
+  }
+}
