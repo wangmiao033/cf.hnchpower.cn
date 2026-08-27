@@ -1,0 +1,171 @@
+/* R&D ledger row-action refinement.
+ * Presentation only. Preserve existing React handlers and business rules.
+ * Normal rows show only the high-frequency actions; low-frequency archive/void
+ * actions stay available in a compact hover menu. Archived/cancelled rows keep
+ * their dedicated recovery action visible.
+ */
+
+/* Give the action rail enough room for two primary buttons + the More trigger,
+   while returning the rest of the width to the product column. */
+.core-recon-page:has(.core-rd-recon-table) .core-rd-col-game {
+  width: 25% !important;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-rd-col-actions {
+  width: 10% !important;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-recon-row-actions {
+  position: relative;
+  display: flex;
+  min-height: 28px;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+  overflow: visible;
+}
+
+/* High-frequency actions: View + Edit (or View + Restore/Unarchive on special rows). */
+.core-recon-page:has(.core-rd-recon-table) .core-recon-row-actions > button {
+  height: 26px;
+  min-height: 26px;
+  min-width: 42px;
+  padding: 0 8px;
+  border: 1px solid #dbe4ee;
+  border-radius: 7px;
+  background: #fff;
+  color: #53647a;
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 1;
+  box-shadow: none;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-recon-row-actions > button:first-child {
+  min-width: 42px;
+  border-color: #cdddf2;
+  color: #245ea8;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-recon-row-actions > button:hover {
+  border-color: #9fbce5;
+  background: #f7fbff;
+  color: #245ea8;
+}
+
+/* A normal bill always carries the destructive .danger action. Turn that into
+   the signal that this row needs a More menu. */
+.core-recon-page:has(.core-rd-recon-table) .core-recon-row-actions:has(> .danger)::after {
+  content: '更多';
+  display: inline-flex;
+  width: 38px;
+  height: 26px;
+  flex: 0 0 38px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #e0e7ef;
+  border-radius: 7px;
+  background: #f8fafc;
+  color: #708096;
+  font-size: 9px;
+  font-weight: 650;
+  cursor: default;
+  transition: border-color .14s ease, background .14s ease, color .14s ease;
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-recon-row-actions:has(> .danger):hover::after {
+  border-color: #bfd0e7;
+  background: #f1f6fc;
+  color: #365f91;
+}
+
+/* Low-frequency actions are removed from the row flow. The existing click
+   handlers remain untouched and become available when the action area is hovered. */
+.core-recon-page:has(.core-rd-recon-table) .core-recon-row-actions > .danger,
+.core-recon-page:has(.core-rd-recon-table) .core-recon-row-actions:has(> button:nth-child(4)) > button:nth-child(2) {
+  position: absolute !important;
+  right: 0;
+  z-index: 30;
+  width: 82px;
+  max-width: none !important;
+  padding: 0 10px !important;
+  border-width: 1px !important;
+  visibility: hidden;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  transform: translateY(-2px);
+  transition: opacity .12s ease, transform .12s ease, visibility .12s ease;
+}
+
+/* When a row has both Archive and Void, Archive is child #2 and Edit is child #3. */
+.core-recon-page:has(.core-rd-recon-table) .core-recon-row-actions:has(> button:nth-child(4)) > button:nth-child(2) {
+  top: 31px;
+  border-color: #dbe4ee;
+  background: #fff;
+  color: #53647a;
+  box-shadow: 0 6px 16px rgb(15 23 42 / 10%);
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-recon-row-actions > .danger {
+  top: 31px;
+  border-color: #f0c9c9 !important;
+  background: #fffafa !important;
+  color: #b33a3a !important;
+  box-shadow: 0 6px 16px rgb(15 23 42 / 10%);
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-recon-row-actions:has(> button:nth-child(4)) > .danger {
+  top: 59px;
+  box-shadow: 0 8px 18px rgb(15 23 42 / 12%);
+}
+
+.core-recon-page:has(.core-rd-recon-table) .core-recon-row-actions:has(> .danger):hover > .danger,
+.core-recon-page:has(.core-rd-recon-table) .core-recon-row-actions:has(> .danger):focus-within > .danger,
+.core-recon-page:has(.core-rd-recon-table) .core-recon-row-actions:has(> button:nth-child(4)):hover > button:nth-child(2),
+.core-recon-page:has(.core-rd-recon-table) .core-recon-row-actions:has(> button:nth-child(4)):focus-within > button:nth-child(2) {
+  visibility: visible;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+  transform: translateY(0);
+}
+
+/* Keep the hovered row's sticky action cell above adjacent rows so the compact
+   menu is not covered by the next sticky cell. */
+.core-recon-page:has(.core-rd-recon-table) .core-rd-recon-table td:last-child:has(.core-recon-row-actions:hover),
+.core-recon-page:has(.core-rd-recon-table) .core-rd-recon-table td:last-child:has(.core-recon-row-actions:focus-within) {
+  z-index: 24;
+  overflow: visible;
+}
+
+/* Special states have exactly two useful actions; keep both plainly visible. */
+.core-recon-page:has(.core-rd-recon-table) .core-recon-row-actions:not(:has(> .danger)) > button:last-child {
+  min-width: 58px;
+}
+
+@media (max-width: 1280px) {
+  .core-recon-page:has(.core-rd-recon-table) .core-rd-col-game {
+    width: 23% !important;
+  }
+
+  .core-recon-page:has(.core-rd-recon-table) .core-rd-col-actions {
+    width: 12% !important;
+  }
+}
+
+@media (hover: none) {
+  /* Touch screens have no hover state. Keep the low-frequency actions visible
+     there so no functionality is hidden. */
+  .core-recon-page:has(.core-rd-recon-table) .core-recon-row-actions:has(> .danger)::after {
+    display: none;
+  }
+
+  .core-recon-page:has(.core-rd-recon-table) .core-recon-row-actions > .danger,
+  .core-recon-page:has(.core-rd-recon-table) .core-recon-row-actions:has(> button:nth-child(4)) > button:nth-child(2) {
+    position: static !important;
+    width: auto;
+    visibility: visible;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    transform: none;
+  }
+}
