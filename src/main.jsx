@@ -9,6 +9,7 @@ import { AuthProvider } from '@/features/auth/AuthContext.jsx'
 import './index.css'
 import './styles/V4SystemPolish.css'
 import './styles/SystemDetailPolishV42.css'
+import './styles/RdLedgerWidthFix.css'
 
 const PRELOAD_RECOVERY_KEY = 'cf-preload-recovery'
 
