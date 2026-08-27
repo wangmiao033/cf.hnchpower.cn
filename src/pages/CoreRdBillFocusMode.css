@@ -1,0 +1,274 @@
+/* R&D bill editor focus mode.
+   Visual hierarchy only: no settlement, contract-match, tax, fee or formula logic lives here. */
+
+/* 1) The shell already owns the page title. Keep the in-form header as a compact status strip. */
+.core-bill-form-page--rd .core-bill-form-head {
+  min-height: 48px;
+  padding: 7px 11px;
+}
+
+.core-bill-form-page--rd .core-bill-form-head__context {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+
+.core-bill-form-page--rd .core-bill-form-title-row {
+  flex: 0 0 auto;
+  gap: 6px;
+}
+
+.core-bill-form-page--rd .core-bill-form-title-row .core-bill-form-kind,
+.core-bill-form-page--rd .core-bill-form-title-row h1,
+.core-bill-form-page--rd .core-bill-form-tip,
+.core-bill-form-page--rd .core-bill-review-hint,
+.core-bill-form-page--rd .core-bill-draft-state small {
+  display: none;
+}
+
+.core-bill-form-page--rd .core-bill-state-tag {
+  min-height: 22px;
+  padding: 0 8px;
+  font-size: 10px;
+}
+
+.core-bill-form-page--rd .core-bill-draft-state {
+  min-height: 22px;
+  margin: 0;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #68768a;
+}
+
+.core-bill-form-page--rd .core-bill-draft-state strong {
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.core-bill-form-page--rd .core-bill-form-total {
+  min-width: 150px;
+  min-height: 42px;
+  padding: 6px 10px;
+}
+
+.core-bill-form-page--rd .core-bill-form-total span {
+  font-size: 9px;
+}
+
+.core-bill-form-page--rd .core-bill-form-total strong {
+  font-size: 18px;
+}
+
+/* 2) When the contract source is healthy and every bill game is located, collapse the explainer card into one toolbar row. */
+.core-bill-form-page--rd .channel-smart-entry:has(.channel-smart-entry__inline-tools):not(:has(.channel-smart-entry__missing)):not(:has(.channel-smart-entry__notice)) {
+  border-color: #d8e8df;
+  border-radius: 9px;
+  box-shadow: none;
+}
+
+.core-bill-form-page--rd .channel-smart-entry:has(.channel-smart-entry__inline-tools):not(:has(.channel-smart-entry__missing)):not(:has(.channel-smart-entry__notice)) .channel-smart-entry__head,
+.core-bill-form-page--rd .channel-smart-entry:has(.channel-smart-entry__inline-tools):not(:has(.channel-smart-entry__missing)):not(:has(.channel-smart-entry__notice)) .channel-smart-entry__inline-tools {
+  display: none;
+}
+
+.core-bill-form-page--rd .channel-smart-entry:has(.channel-smart-entry__inline-tools):not(:has(.channel-smart-entry__missing)):not(:has(.channel-smart-entry__notice)) .channel-smart-entry__controls {
+  grid-template-columns: 150px minmax(260px, 1fr) auto;
+  grid-template-areas: 'month source actions';
+  gap: 7px;
+  align-items: center;
+  padding: 7px 9px;
+}
+
+.core-bill-form-page--rd .channel-smart-entry:has(.channel-smart-entry__inline-tools):not(:has(.channel-smart-entry__missing)):not(:has(.channel-smart-entry__notice)) .channel-smart-entry__controls > label,
+.core-bill-form-page--rd .channel-smart-entry:has(.channel-smart-entry__inline-tools):not(:has(.channel-smart-entry__missing)):not(:has(.channel-smart-entry__notice)) .channel-smart-entry__source {
+  min-height: 32px;
+  padding: 4px 8px;
+  border: 1px solid #e3e9f0;
+  border-radius: 7px;
+  background: #fff;
+}
+
+.core-bill-form-page--rd .channel-smart-entry:has(.channel-smart-entry__inline-tools):not(:has(.channel-smart-entry__missing)):not(:has(.channel-smart-entry__notice)) .channel-smart-entry__controls > label > span,
+.core-bill-form-page--rd .channel-smart-entry:has(.channel-smart-entry__inline-tools):not(:has(.channel-smart-entry__missing)):not(:has(.channel-smart-entry__notice)) .channel-smart-entry__source > span {
+  display: none;
+}
+
+.core-bill-form-page--rd .channel-smart-entry:has(.channel-smart-entry__inline-tools):not(:has(.channel-smart-entry__missing)):not(:has(.channel-smart-entry__notice)) .channel-smart-entry__controls > label input {
+  height: 22px;
+  min-height: 22px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-size: 11px;
+  font-weight: 750;
+  box-shadow: none;
+}
+
+.core-bill-form-page--rd .channel-smart-entry:has(.channel-smart-entry__inline-tools):not(:has(.channel-smart-entry__missing)):not(:has(.channel-smart-entry__notice)) .channel-smart-entry__source {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.core-bill-form-page--rd .channel-smart-entry:has(.channel-smart-entry__inline-tools):not(:has(.channel-smart-entry__missing)):not(:has(.channel-smart-entry__notice)) .channel-smart-entry__source strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+}
+
+.core-bill-form-page--rd .channel-smart-entry:has(.channel-smart-entry__inline-tools):not(:has(.channel-smart-entry__missing)):not(:has(.channel-smart-entry__notice)) .channel-smart-entry__source::after {
+  content: '合同已定位';
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: #eaf7ef;
+  color: #1e754a;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.core-bill-form-page--rd .channel-smart-entry:has(.channel-smart-entry__inline-tools):not(:has(.channel-smart-entry__missing)):not(:has(.channel-smart-entry__notice)) .channel-smart-entry__actions {
+  min-height: 30px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.core-bill-form-page--rd .channel-smart-entry:has(.channel-smart-entry__inline-tools):not(:has(.channel-smart-entry__missing)):not(:has(.channel-smart-entry__notice)) .channel-smart-entry__actions button {
+  min-height: 28px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 9px;
+}
+
+/* 3) A clean, fully-auto-applied contract recommendation should read like a status row, not a diagnostic report. */
+.core-bill-form-page--rd .rd-contract-entry-panel.is-pass:has(.rd-contract-entry-line.is-pass):not(:has(.rd-contract-entry-line.is-warning)):not(:has(.rd-contract-entry-line.is-fail)):not(:has(.rd-contract-entry-line.is-none)):not(:has(.rd-contract-entry-override)):not(:has(.rd-contract-entry-summary .is-diff)):not(:has(.rd-contract-entry-rule-grid > div:nth-child(7))) {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  padding: 7px 9px;
+  border-color: #cce5d7;
+  border-radius: 9px;
+  background: #f8fcfa;
+  box-shadow: none;
+}
+
+.core-bill-form-page--rd .rd-contract-entry-panel.is-pass:has(.rd-contract-entry-line.is-pass):not(:has(.rd-contract-entry-line.is-warning)):not(:has(.rd-contract-entry-line.is-fail)):not(:has(.rd-contract-entry-line.is-none)):not(:has(.rd-contract-entry-override)):not(:has(.rd-contract-entry-summary .is-diff)):not(:has(.rd-contract-entry-rule-grid > div:nth-child(7))) .rd-contract-entry-panel__head {
+  display: block;
+  min-height: 0;
+  margin: 0;
+}
+
+.core-bill-form-page--rd .rd-contract-entry-panel.is-pass:has(.rd-contract-entry-line.is-pass):not(:has(.rd-contract-entry-line.is-warning)):not(:has(.rd-contract-entry-line.is-fail)):not(:has(.rd-contract-entry-line.is-none)):not(:has(.rd-contract-entry-override)):not(:has(.rd-contract-entry-summary .is-diff)):not(:has(.rd-contract-entry-rule-grid > div:nth-child(7))) .rd-contract-entry-panel__head > div:first-child,
+.core-bill-form-page--rd .rd-contract-entry-panel.is-pass:has(.rd-contract-entry-line.is-pass):not(:has(.rd-contract-entry-line.is-warning)):not(:has(.rd-contract-entry-line.is-fail)):not(:has(.rd-contract-entry-line.is-none)):not(:has(.rd-contract-entry-override)):not(:has(.rd-contract-entry-summary .is-diff)):not(:has(.rd-contract-entry-rule-grid > div:nth-child(7))) .rd-contract-entry-panel__status small,
+.core-bill-form-page--rd .rd-contract-entry-panel.is-pass:has(.rd-contract-entry-line.is-pass):not(:has(.rd-contract-entry-line.is-warning)):not(:has(.rd-contract-entry-line.is-fail)):not(:has(.rd-contract-entry-line.is-none)):not(:has(.rd-contract-entry-override)):not(:has(.rd-contract-entry-summary .is-diff)):not(:has(.rd-contract-entry-rule-grid > div:nth-child(7))) .rd-contract-entry-contract,
+.core-bill-form-page--rd .rd-contract-entry-panel.is-pass:has(.rd-contract-entry-line.is-pass):not(:has(.rd-contract-entry-line.is-warning)):not(:has(.rd-contract-entry-line.is-fail)):not(:has(.rd-contract-entry-line.is-none)):not(:has(.rd-contract-entry-override)):not(:has(.rd-contract-entry-summary .is-diff)):not(:has(.rd-contract-entry-rule-grid > div:nth-child(7))) .rd-contract-entry-rule-grid,
+.core-bill-form-page--rd .rd-contract-entry-panel.is-pass:has(.rd-contract-entry-line.is-pass):not(:has(.rd-contract-entry-line.is-warning)):not(:has(.rd-contract-entry-line.is-fail)):not(:has(.rd-contract-entry-line.is-none)):not(:has(.rd-contract-entry-override)):not(:has(.rd-contract-entry-summary .is-diff)):not(:has(.rd-contract-entry-rule-grid > div:nth-child(7))) .rd-contract-entry-discount-note,
+.core-bill-form-page--rd .rd-contract-entry-panel.is-pass:has(.rd-contract-entry-line.is-pass):not(:has(.rd-contract-entry-line.is-warning)):not(:has(.rd-contract-entry-line.is-fail)):not(:has(.rd-contract-entry-line.is-none)):not(:has(.rd-contract-entry-override)):not(:has(.rd-contract-entry-summary .is-diff)):not(:has(.rd-contract-entry-rule-grid > div:nth-child(7))) .rd-contract-entry-summary {
+  display: none;
+}
+
+.core-bill-form-page--rd .rd-contract-entry-panel.is-pass:has(.rd-contract-entry-line.is-pass):not(:has(.rd-contract-entry-line.is-warning)):not(:has(.rd-contract-entry-line.is-fail)):not(:has(.rd-contract-entry-line.is-none)):not(:has(.rd-contract-entry-override)):not(:has(.rd-contract-entry-summary .is-diff)):not(:has(.rd-contract-entry-rule-grid > div:nth-child(7))) .rd-contract-entry-panel__status {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.core-bill-form-page--rd .rd-contract-entry-panel.is-pass:has(.rd-contract-entry-line.is-pass):not(:has(.rd-contract-entry-line.is-warning)):not(:has(.rd-contract-entry-line.is-fail)):not(:has(.rd-contract-entry-line.is-none)):not(:has(.rd-contract-entry-override)):not(:has(.rd-contract-entry-summary .is-diff)):not(:has(.rd-contract-entry-rule-grid > div:nth-child(7))) .rd-contract-entry-panel__status strong {
+  min-height: 22px;
+  padding: 0 7px;
+  font-size: 0;
+  white-space: nowrap;
+}
+
+.core-bill-form-page--rd .rd-contract-entry-panel.is-pass:has(.rd-contract-entry-line.is-pass):not(:has(.rd-contract-entry-line.is-warning)):not(:has(.rd-contract-entry-line.is-fail)):not(:has(.rd-contract-entry-line.is-none)):not(:has(.rd-contract-entry-override)):not(:has(.rd-contract-entry-summary .is-diff)):not(:has(.rd-contract-entry-rule-grid > div:nth-child(7))) .rd-contract-entry-panel__status strong::after {
+  content: '规则已匹配';
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.core-bill-form-page--rd .rd-contract-entry-panel.is-pass:has(.rd-contract-entry-line.is-pass):not(:has(.rd-contract-entry-line.is-warning)):not(:has(.rd-contract-entry-line.is-fail)):not(:has(.rd-contract-entry-line.is-none)):not(:has(.rd-contract-entry-override)):not(:has(.rd-contract-entry-summary .is-diff)):not(:has(.rd-contract-entry-rule-grid > div:nth-child(7))) .rd-contract-entry-lines {
+  min-width: 0;
+  margin: 0;
+}
+
+.core-bill-form-page--rd .rd-contract-entry-panel.is-pass:has(.rd-contract-entry-line.is-pass):not(:has(.rd-contract-entry-line.is-warning)):not(:has(.rd-contract-entry-line.is-fail)):not(:has(.rd-contract-entry-line.is-none)):not(:has(.rd-contract-entry-override)):not(:has(.rd-contract-entry-summary .is-diff)):not(:has(.rd-contract-entry-rule-grid > div:nth-child(7))) .rd-contract-entry-line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.core-bill-form-page--rd .rd-contract-entry-panel.is-pass:has(.rd-contract-entry-line.is-pass):not(:has(.rd-contract-entry-line.is-warning)):not(:has(.rd-contract-entry-line.is-fail)):not(:has(.rd-contract-entry-line.is-none)):not(:has(.rd-contract-entry-override)):not(:has(.rd-contract-entry-summary .is-diff)):not(:has(.rd-contract-entry-rule-grid > div:nth-child(7))) .rd-contract-entry-line__title {
+  min-width: 0;
+  justify-content: flex-start;
+  gap: 7px;
+}
+
+.core-bill-form-page--rd .rd-contract-entry-panel.is-pass:has(.rd-contract-entry-line.is-pass):not(:has(.rd-contract-entry-line.is-warning)):not(:has(.rd-contract-entry-line.is-fail)):not(:has(.rd-contract-entry-line.is-none)):not(:has(.rd-contract-entry-override)):not(:has(.rd-contract-entry-summary .is-diff)):not(:has(.rd-contract-entry-rule-grid > div:nth-child(7))) .rd-contract-entry-line__title div {
+  min-width: 0;
+  gap: 6px;
+}
+
+.core-bill-form-page--rd .rd-contract-entry-panel.is-pass:has(.rd-contract-entry-line.is-pass):not(:has(.rd-contract-entry-line.is-warning)):not(:has(.rd-contract-entry-line.is-fail)):not(:has(.rd-contract-entry-line.is-none)):not(:has(.rd-contract-entry-override)):not(:has(.rd-contract-entry-summary .is-diff)):not(:has(.rd-contract-entry-rule-grid > div:nth-child(7))) .rd-contract-entry-line__title strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+}
+
+.core-bill-form-page--rd .rd-contract-entry-panel.is-pass:has(.rd-contract-entry-line.is-pass):not(:has(.rd-contract-entry-line.is-warning)):not(:has(.rd-contract-entry-line.is-fail)):not(:has(.rd-contract-entry-line.is-none)):not(:has(.rd-contract-entry-override)):not(:has(.rd-contract-entry-summary .is-diff)):not(:has(.rd-contract-entry-rule-grid > div:nth-child(7))) .rd-contract-entry-line__title span,
+.core-bill-form-page--rd .rd-contract-entry-panel.is-pass:has(.rd-contract-entry-line.is-pass):not(:has(.rd-contract-entry-line.is-warning)):not(:has(.rd-contract-entry-line.is-fail)):not(:has(.rd-contract-entry-line.is-none)):not(:has(.rd-contract-entry-override)):not(:has(.rd-contract-entry-summary .is-diff)):not(:has(.rd-contract-entry-rule-grid > div:nth-child(7))) .rd-contract-entry-line__title em {
+  font-size: 9px;
+}
+
+.core-bill-form-page--rd .rd-contract-entry-panel.is-pass:has(.rd-contract-entry-line.is-pass):not(:has(.rd-contract-entry-line.is-warning)):not(:has(.rd-contract-entry-line.is-fail)):not(:has(.rd-contract-entry-line.is-none)):not(:has(.rd-contract-entry-override)):not(:has(.rd-contract-entry-summary .is-diff)):not(:has(.rd-contract-entry-rule-grid > div:nth-child(7))) .rd-contract-entry-line__title em {
+  flex: 0 0 auto;
+  padding: 2px 6px;
+}
+
+.core-bill-form-page--rd .rd-contract-entry-panel.is-pass:has(.rd-contract-entry-line.is-pass):not(:has(.rd-contract-entry-line.is-warning)):not(:has(.rd-contract-entry-line.is-fail)):not(:has(.rd-contract-entry-line.is-none)):not(:has(.rd-contract-entry-override)):not(:has(.rd-contract-entry-summary .is-diff)):not(:has(.rd-contract-entry-rule-grid > div:nth-child(7))) .rd-contract-entry-warnings {
+  margin: 0;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: #fff5d8;
+  color: #815f13;
+  font-size: 0;
+  line-height: 20px;
+  white-space: nowrap;
+}
+
+.core-bill-form-page--rd .rd-contract-entry-panel.is-pass:has(.rd-contract-entry-line.is-pass):not(:has(.rd-contract-entry-line.is-warning)):not(:has(.rd-contract-entry-line.is-fail)):not(:has(.rd-contract-entry-line.is-none)):not(:has(.rd-contract-entry-override)):not(:has(.rd-contract-entry-summary .is-diff)):not(:has(.rd-contract-entry-rule-grid > div:nth-child(7))) .rd-contract-entry-warnings::after {
+  content: '合同字段待补全';
+  font-size: 9px;
+  font-weight: 750;
+}
+
+@media (max-width: 900px) {
+  .core-bill-form-page--rd .core-bill-form-head__context {
+    flex-wrap: wrap;
+  }
+
+  .core-bill-form-page--rd .channel-smart-entry:has(.channel-smart-entry__inline-tools):not(:has(.channel-smart-entry__missing)):not(:has(.channel-smart-entry__notice)) .channel-smart-entry__controls {
+    grid-template-columns: 1fr;
+    grid-template-areas: 'month' 'source' 'actions';
+  }
+
+  .core-bill-form-page--rd .rd-contract-entry-panel.is-pass:has(.rd-contract-entry-line.is-pass):not(:has(.rd-contract-entry-line.is-warning)):not(:has(.rd-contract-entry-line.is-fail)):not(:has(.rd-contract-entry-line.is-none)):not(:has(.rd-contract-entry-override)):not(:has(.rd-contract-entry-summary .is-diff)):not(:has(.rd-contract-entry-rule-grid > div:nth-child(7))) {
+    grid-template-columns: 1fr;
+  }
+}
