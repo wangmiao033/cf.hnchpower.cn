@@ -3,6 +3,7 @@ import { useAppState } from '@/app/AppStateContext.jsx'
 import PageContainer from '@/components/layout/PageContainer.jsx'
 import BillScanAttachments from '@/components/billing/BillScanAttachments.jsx'
 import ContractDrivenRdEntry from '@/components/reconciliation/ContractDrivenRdEntry.jsx'
+import RdContractSmartEntry from '@/components/reconciliation/RdContractSmartEntry.jsx'
 import ContractDifferenceActionPanel from '@/components/reconciliation/ContractDifferenceActionPanel.jsx'
 import { CoreBillLoadingState } from '@/pages/CoreBillLoadingState.jsx'
 import { VIEWS } from '@/app/routes.js'
@@ -64,6 +65,8 @@ function CoreRdBillFormPage({ mode }) {
   const [loadAttempt, setLoadAttempt] = useState(0)
   const [reviewing, setReviewing] = useState(false)
   const [differenceRefreshVersion, setDifferenceRefreshVersion] = useState(0)
+  const [contractSmartRecord, setContractSmartRecord] = useState(null)
+  const [contractSourceRevision, setContractSourceRevision] = useState(0)
 
   useEffect(() => {
     if (!isEdit) return
@@ -112,6 +115,11 @@ function CoreRdBillFormPage({ mode }) {
       cancelled = true
     }
   }, [isEdit, reconEditRecordId, loadAttempt, showToast])
+
+  useEffect(() => {
+    setContractSmartRecord(null)
+    setContractSourceRevision(0)
+  }, [isEdit, reconEditRecordId])
 
   const editRecord = remoteRecord
   const stableEditRecord =
@@ -162,6 +170,7 @@ function CoreRdBillFormPage({ mode }) {
     const shouldConfirm = isEdit && submitIntentRef.current === 'confirm'
     submitIntentRef.current = 'back'
     safety.clearAfterSubmit()
+    setContractSmartRecord(null)
     if (isEdit && reconEditRecordId) {
       invalidateEditRecord('rd', String(reconEditRecordId))
     }
@@ -191,14 +200,14 @@ function CoreRdBillFormPage({ mode }) {
 
   const confirmReview = () => {
     if (!isEdit || !reconEditRecordId || reviewing) return
-    const candidate = safety.currentRecord || safety.draftRecord || stableEditRecord
+    const candidate = safety.currentRecord || contractSmartRecord || safety.draftRecord || stableEditRecord
     const validationMessage = reviewValidation(candidate)
     if (validationMessage) {
       showToast(validationMessage, 'error')
       return
     }
     const confirmed = window.confirm(
-      `确认核对这张研发账单吗？\n\n结算金额：${money(candidate?.settlementAmount || previewAmount)}\n\n系统会先按 V3.1 合同驱动规则保存并固化合同快照，再执行确认核对。`
+      `确认核对这张研发账单吗？\n\n结算金额：${money(candidate?.settlementAmount || previewAmount)}\n\n系统会先按研发合同优先规则保存并固化合同快照，再执行确认核对。`
     )
     if (!confirmed) return
 
@@ -209,7 +218,21 @@ function CoreRdBillFormPage({ mode }) {
 
   const discardDraft = () => {
     const confirmed = window.confirm('确定清除当前本机草稿并恢复为空白/服务器版本吗？')
-    if (confirmed) safety.discardDraft()
+    if (confirmed) {
+      setContractSmartRecord(null)
+      safety.discardDraft()
+    }
+  }
+
+  const applyContractSmartRecord = (nextRecord, message = '', tone = 'success') => {
+    setContractSmartRecord(nextRecord)
+    setContractSourceRevision((value) => value + 1)
+    if (message) showToast(message, tone)
+  }
+
+  const handleRdFormStateChange = (record) => {
+    safety.onFormStateChange(record)
+    if (contractSmartRecord) setContractSmartRecord(null)
   }
 
   if (isEdit && !reconEditRecordId) {
@@ -232,6 +255,8 @@ function CoreRdBillFormPage({ mode }) {
     return <EmptyState title="未找到研发账单" onBack={goList} />
   }
 
+  const currentRdRecord = contractSmartRecord || safety.currentRecord || safety.draftRecord || stableEditRecord || {}
+
   return (
     <PageContainer
       hideHeader
@@ -242,10 +267,12 @@ function CoreRdBillFormPage({ mode }) {
           <div className="core-bill-form-title-row">
             <span className="core-bill-form-kind">研发账单</span>
             <h1>{isEdit ? '编辑研发账单' : '新增研发账单'}</h1>
-            <span className={`core-bill-state-tag ${isEdit ? 'is-pending' : ''}`}>{isEdit ? '待核对' : '合同驱动录入'}</span>
+            <span className={`core-bill-state-tag ${isEdit ? 'is-pending' : ''}`}>{isEdit ? '待核对' : '合同优先录入'}</span>
           </div>
           <span className="core-bill-form-tip">
-            {isEdit ? '历史账单默认不自动改写合同字段；如需调整，可先对照合同后保存并确认核对。' : '先选择合作方、游戏和账期，系统自动匹配合同并带入结算规则，再录入/核对流水。'}
+            {isEdit
+              ? '合同优先：先按合作方和账期读取研发合同，再定位游戏合作清单；合同规则确认后再核对当前账单金额。'
+              : '先选择研发合作方和账期，系统读取研发合同及合作游戏，再带入结算规则；后台流水仍由你填写。'}
           </span>
           {isEdit ? <span className="core-bill-review-hint">合同字段发生人工偏离时，保存前必须填写调整原因</span> : null}
           <div className={`core-bill-draft-state ${safety.dirty ? 'is-dirty' : 'is-clean'}`}>
@@ -260,18 +287,26 @@ function CoreRdBillFormPage({ mode }) {
         </div>
       </section>
 
+      <RdContractSmartEntry
+        record={currentRdRecord}
+        partners={settings.partners || []}
+        onApply={applyContractSmartRecord}
+        onNotice={(message, tone = 'info') => showToast(message, tone)}
+        onSourceChanged={() => setContractSourceRevision((value) => value + 1)}
+      />
+
       <section className="core-bill-card core-bill-card--embedded">
         <ContractDrivenRdEntry
-          key={`${mode}-${reconEditRecordId || 'new'}-${safety.resetVersion}`}
+          key={`${mode}-${reconEditRecordId || 'new'}-${safety.resetVersion}-${contractSourceRevision}`}
           formId={FORM_ID}
           layout="createPage"
           mode={isEdit ? 'edit' : 'add'}
           editRecord={stableEditRecord}
-          draftRecord={isEdit || !recon.quickFillData ? safety.draftRecord : null}
+          draftRecord={contractSmartRecord || (isEdit || !recon.quickFillData ? safety.draftRecord : null)}
           showSubmitButton={false}
           submitIntentRef={submitIntentRef}
           onPreviewChange={setPreviewAmount}
-          onFormStateChange={safety.onFormStateChange}
+          onFormStateChange={handleRdFormStateChange}
           onSubmitted={handleSubmitted}
           onAddRecord={recon.addRecord}
           onUpdateRecord={recon.updateRecord}
