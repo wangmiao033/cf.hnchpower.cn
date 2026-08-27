@@ -92,7 +92,7 @@ jobs:
             expect(smartEntrySource).toContain('只有真正的新游戏才需要补清单')
           })
 
-"""
+          """
           if block not in test_source:
             if marker not in test_source:
               raise SystemExit('test insertion marker not found')
