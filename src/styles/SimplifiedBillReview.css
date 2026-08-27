@@ -1,6 +1,7 @@
 @import '../pages/CoreRdBillModern.css';
 @import '../pages/CoreRdBillSmartCompat.css';
 @import '../pages/CoreRdBillMatchedCompact.css';
+@import '../pages/CoreRdBillFocusMode.css';
 
 .core-bill-form-page .channel-form-section:has(select[aria-label="记录状态"]) {
   display: none;
