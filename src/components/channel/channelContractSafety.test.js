@@ -49,6 +49,13 @@ describe('channel contract safety guards', () => {
     expect(settlementRuleCss).toContain('pointer-events:none')
   })
 
+  it('treats previous-month games as recognized instead of forcing a contract supplement', () => {
+    expect(smartEntrySource).toContain('const historicalGameKeys = useMemo')
+    expect(smartEntrySource).toContain('!contractGameKeys.has(key) && !historicalGameKeys.has(key)')
+    expect(smartEntrySource).toContain('const historicalMatchedLineCount = namedLines(record).filter')
+    expect(smartEntrySource).toContain('个按上月历史识别')
+    expect(smartEntrySource).toContain('只有真正的新游戏才需要补清单')
+  })
   it('labels technical errors separately from business rule gaps', () => {
     expect(billingSource).toContain('技术异常 · 合同规则读取失败')
     expect(billingSource).toContain('待补规则：未找到该合作方合同清单')
