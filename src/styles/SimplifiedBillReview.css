@@ -41,3 +41,183 @@
   opacity: .58;
   cursor: wait;
 }
+
+/* R&D V2 visual polish only. No settlement formula or rule authority lives here. */
+
+/* Make system-calculated values visually distinct from editable fields. */
+.core-bill-form-page--rd .rd-line-items-grid-row .readonly-input {
+  border-color: #d9e4ef !important;
+  background: #f3f7fb !important;
+  color: #38516f !important;
+  font-weight: 700;
+  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, .03);
+}
+
+.core-bill-form-page--rd .rd-line-items-grid-row input:not(.readonly-input):not(:disabled) {
+  background: #fff;
+}
+
+.core-bill-form-page--rd .rd-line-items-grid-row input[aria-label$="研发应结"].readonly-input,
+.core-bill-form-page--rd .rd-line-items-grid-row input[aria-label$="实际应付"].readonly-input {
+  border-color: #cce5d7 !important;
+  background: #eef8f2 !important;
+  color: #147347 !important;
+}
+
+/* Contract verification gets an explicit traffic-light state without changing its text/logic. */
+.core-bill-form-page--rd .rd-contract-entry-panel__status strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 22px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #f4f6f9;
+}
+
+.core-bill-form-page--rd .rd-contract-entry-panel__status strong::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+  border-radius: 50%;
+  background: #94a3b8;
+}
+
+.core-bill-form-page--rd .rd-contract-entry-panel.is-pass .rd-contract-entry-panel__status strong {
+  background: #eaf7ef;
+  color: #176b44;
+}
+
+.core-bill-form-page--rd .rd-contract-entry-panel.is-pass .rd-contract-entry-panel__status strong::before {
+  background: #22a06b;
+}
+
+.core-bill-form-page--rd .rd-contract-entry-panel.is-warning .rd-contract-entry-panel__status strong {
+  background: #fff7e6;
+  color: #8a5a0a;
+}
+
+.core-bill-form-page--rd .rd-contract-entry-panel.is-warning .rd-contract-entry-panel__status strong::before {
+  background: #d89a23;
+}
+
+.core-bill-form-page--rd .rd-contract-entry-panel.is-error .rd-contract-entry-panel__status strong {
+  background: #fff0f0;
+  color: #b42318;
+}
+
+.core-bill-form-page--rd .rd-contract-entry-panel.is-error .rd-contract-entry-panel__status strong::before {
+  background: #d92d20;
+}
+
+.core-bill-form-page--rd .rd-contract-entry-panel.is-loading .rd-contract-entry-panel__status strong {
+  background: #edf5ff;
+  color: #245ea8;
+}
+
+.core-bill-form-page--rd .rd-contract-entry-panel.is-loading .rd-contract-entry-panel__status strong::before {
+  background: #3b82f6;
+  animation: rd-contract-status-pulse 1s ease-in-out infinite;
+}
+
+@keyframes rd-contract-status-pulse {
+  0%, 100% { opacity: .45; }
+  50% { opacity: 1; }
+}
+
+/* Keep source-card statuses equally clear. */
+.core-bill-form-page--rd .channel-smart-entry__inline-tools {
+  box-shadow: inset 3px 0 0 #35a66f;
+}
+
+.core-bill-form-page--rd .channel-smart-entry__missing,
+.core-bill-form-page--rd .channel-smart-entry__notice.is-warning {
+  box-shadow: inset 3px 0 0 #d9a441;
+}
+
+/* Strengthen the final amount while keeping the supporting totals quieter. */
+.core-bill-form-page--rd .channel-line-items-summary--rd .summary-item:not(.summary-item--hero) {
+  background: #f8fafc;
+  border-color: #e4eaf2;
+}
+
+.core-bill-form-page--rd .channel-line-items-summary--rd .summary-item:not(.summary-item--hero) .label {
+  color: #7c8999;
+}
+
+.core-bill-form-page--rd .channel-line-items-summary--rd .summary-item:not(.summary-item--hero) .value {
+  color: #31445d;
+  font-weight: 650;
+}
+
+.core-bill-form-page--rd .channel-line-items-summary--rd .summary-item--hero {
+  border-color: #bfe1cd;
+  background: linear-gradient(180deg, #f1faf5 0%, #eaf7f0 100%);
+  box-shadow: inset 0 0 0 1px rgba(31, 122, 86, .04);
+}
+
+.core-bill-form-page--rd .channel-line-items-summary--rd .summary-item--hero .label {
+  color: #4c7562;
+  font-weight: 700;
+}
+
+.core-bill-form-page--rd .channel-line-items-summary--rd .summary-item--hero .value {
+  color: #0e7446;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+/* Empty attachment state collapses to a compact single-row module. */
+.core-bill-form-page--rd .bill-scan-attachments:not(:has(.bill-scan-attachments__list)) {
+  min-height: 0;
+}
+
+.core-bill-form-page--rd .bill-scan-attachments:not(:has(.bill-scan-attachments__list)) .bill-scan-attachments__head {
+  min-height: 42px;
+  padding-top: 7px;
+  padding-bottom: 7px;
+  align-items: center;
+}
+
+.core-bill-form-page--rd .bill-scan-attachments:not(:has(.bill-scan-attachments__list)) .bill-scan-attachments__heading p,
+.core-bill-form-page--rd .bill-scan-attachments:not(:has(.bill-scan-attachments__list)) .bill-scan-attachments__types {
+  display: none;
+}
+
+.core-bill-form-page--rd .bill-scan-attachments:not(:has(.bill-scan-attachments__list)) .bill-scan-attachments__empty {
+  min-height: 0;
+  margin: 0 10px 7px;
+  padding: 4px 8px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  font-size: 9px;
+  color: #8591a2;
+}
+
+.core-bill-form-page--rd .bill-scan-attachments__count {
+  min-width: 20px;
+  text-align: center;
+}
+
+/* The preset control stays available but should read as a toolbar, not a floating content block. */
+.core-bill-form-page--rd .rd-recon-meta-header {
+  min-height: 22px;
+  margin: -2px 2px -3px;
+  padding: 0;
+  opacity: .94;
+}
+
+.core-bill-form-page--rd .rd-recon-meta-header button {
+  min-height: 24px;
+  padding: 2px 7px;
+  border-radius: 6px;
+  font-size: 9px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .core-bill-form-page--rd .rd-contract-entry-panel.is-loading .rd-contract-entry-panel__status strong::before {
+    animation: none;
+  }
+}
