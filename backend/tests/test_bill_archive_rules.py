@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from app.services.bill_archive import AUTO_ARCHIVE_DAYS, archive_eligibility
+from app.services.bill_archive import AUTO_ARCHIVE_DAYS, archive_eligibility, auto_archive_bill_if_ready
 
 
 class BillArchiveRulesTest(unittest.TestCase):
@@ -92,6 +92,21 @@ class BillArchiveRulesTest(unittest.TestCase):
         eligible, reason, _ = archive_eligibility(object(), "rd", self.make_bill(amount=0))
         self.assertFalse(eligible)
         self.assertIn("零结算", reason)
+
+    @patch("app.services.bill_archive._load_bill")
+    @patch("app.services.bill_archive._manual_unarchive_blocks_auto", return_value=True)
+    @patch("app.services.bill_archive._is_archived", return_value=False)
+    def test_manual_unarchive_prevents_immediate_rd_auto_rearchive(
+        self,
+        _is_archived,
+        manual_unarchive_blocks_auto,
+        load_bill,
+    ):
+        result = auto_archive_bill_if_ready(object(), "rd", "bill-1")
+
+        self.assertFalse(result)
+        manual_unarchive_blocks_auto.assert_called_once()
+        load_bill.assert_not_called()
 
 
 if __name__ == "__main__":
