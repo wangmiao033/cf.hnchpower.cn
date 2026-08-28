@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "prebuild": "node scripts/patch-rd-game-flow-race.mjs",
+    "prebuild": "node scripts/patch-rd-game-flow-race.mjs && node scripts/patch-rd-game-alias.mjs",
     "build": "vite build",
     "vercel-build": "bash scripts/vercel-production-build-v2.sh",
     "preview": "vite preview",
