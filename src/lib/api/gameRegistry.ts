@@ -1,6 +1,7 @@
 import { apiGet, apiPost } from '@/lib/api/client.ts'
 
 const PATH = '/api/game-registry'
+// Shared by the R&D bill editor so aliases persist without rewriting bill display names.
 
 export type GameRegistryPreviewSummary = {
   source_line_count: number
