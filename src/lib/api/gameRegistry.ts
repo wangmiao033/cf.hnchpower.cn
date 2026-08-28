@@ -1,4 +1,4 @@
-import { apiGet } from '@/lib/api/client.ts'
+import { apiGet, apiPost } from '@/lib/api/client.ts'
 
 const PATH = '/api/game-registry'
 
@@ -75,6 +75,28 @@ export type GameRegistryHistoryPreview = {
   }
 }
 
+export type GameIdentity = {
+  input_name: string
+  normalized_name: string
+  game_id: string | null
+  canonical_name: string | null
+  source: 'canonical' | 'alias' | 'unmapped' | string
+}
+
+export type GameIdentityResolveResponse = {
+  items: GameIdentity[]
+  total: number
+}
+
+export type GameAliasMapResponse = {
+  ok: boolean
+  alias_name: string
+  normalized_alias: string
+  game_id: string
+  canonical_name: string
+  already_mapped: boolean
+}
+
 function queryString(params: Record<string, unknown> = {}) {
   const query = new URLSearchParams()
   Object.entries(params).forEach(([key, raw]) => {
@@ -93,4 +115,17 @@ export function getGameRegistryHistoryPreview(params: {
   return apiGet<GameRegistryHistoryPreview>(`${PATH}/history-preview${queryString(params)}`, {
     timeoutMs: 60_000
   })
+}
+
+export function resolveGameIdentities(names: string[]): Promise<GameIdentityResolveResponse> {
+  return apiPost<GameIdentityResolveResponse>(`${PATH}/resolve`, { names })
+}
+
+export function mapGameAlias(payload: {
+  alias_name: string
+  target_name: string
+  target_game_id?: string
+  access_item_id?: string
+}): Promise<GameAliasMapResponse> {
+  return apiPost<GameAliasMapResponse>(`${PATH}/aliases/map`, payload)
 }
