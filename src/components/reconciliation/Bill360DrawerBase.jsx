@@ -15,6 +15,10 @@ import {
   listChannelReceipts
 } from '@/lib/api/channel.ts'
 import {
+  getBankBillAllocationSummary,
+  reverseBankAutoReconciliation
+} from '@/lib/api/bankAutoReconciliation.ts'
+import {
   clearBillInvoiceSummaryCache,
   getBillInvoiceSummary
 } from '@/lib/api/billInvoiceAllocations.ts'
@@ -64,6 +68,18 @@ const STATUS_TEXT = {
   settled: '已结算',
   reconciled: '已核销',
   cancelled: '已作废'
+}
+
+const UNLINK_BUTTON_STYLE = {
+  border: '1px solid #e4b8b8',
+  background: '#fff7f7',
+  color: '#b13e3e',
+  borderRadius: 8,
+  padding: '6px 10px',
+  fontSize: 11,
+  fontWeight: 800,
+  whiteSpace: 'nowrap',
+  cursor: 'pointer'
 }
 
 function money(value) {
@@ -120,6 +136,7 @@ function Bill360Drawer({ target, onClose }) {
   const canManageInvoice = can('invoices.manage')
   const canManageAttachment = can('reconciliation.manage')
   const canViewFunds = can('funds.view')
+  const canManageFunds = can('funds.manage')
   const canViewContracts = can('contracts.view')
   const canEditBill = can('reconciliation.manage')
   const [activeTab, setActiveTab] = useState('overview')
@@ -138,6 +155,7 @@ function Bill360Drawer({ target, onClose }) {
   const [quickSdkLoaded, setQuickSdkLoaded] = useState(false)
   const [paymentsLoading, setPaymentsLoading] = useState(false)
   const [paymentsLoaded, setPaymentsLoaded] = useState(false)
+  const [unlinkBusyId, setUnlinkBusyId] = useState('')
   const [attachmentsLoading, setAttachmentsLoading] = useState(false)
   const [attachmentsLoaded, setAttachmentsLoaded] = useState(false)
   const [error, setError] = useState('')
@@ -158,6 +176,7 @@ function Bill360Drawer({ target, onClose }) {
     setPayments([])
     setBankInstruction(null)
     setPaymentsLoaded(false)
+    setUnlinkBusyId('')
     setAttachments([])
     setBankAttachments([])
     setAttachmentsLoaded(false)
@@ -335,11 +354,23 @@ function Bill360Drawer({ target, onClose }) {
     const key = `payments:${billType}:${billId}`
     const loader = async () => {
       if (billType === 'rd') {
-        const [linked, instruction] = await Promise.all([
+        const [linked, instruction, allocationSummary] = await Promise.all([
           listReconciliationLinkedBankPayments(billId).catch(() => ({ items: [] })),
-          getReconciliationBankPayment(billId).catch(() => null)
+          getReconciliationBankPayment(billId).catch(() => null),
+          getBankBillAllocationSummary('rd', billId).catch(() => null)
         ])
-        return { items: linked?.items || [], instruction }
+        const allocationByTransaction = new Map(
+          (allocationSummary?.allocations || []).map((item) => [String(item.bank_transaction_id), item])
+        )
+        const items = (linked?.items || []).map((item) => {
+          const allocation = allocationByTransaction.get(String(item.id))
+          return {
+            ...item,
+            match_id: allocation?.match_id || null,
+            linked_amount: allocation?.linked_amount ?? item.linked_amount
+          }
+        })
+        return { items, instruction }
       }
       const result = await listChannelReceipts(billId).catch(() => ({ items: [] }))
       return { items: result?.items || [], instruction: null }
@@ -408,6 +439,38 @@ function Bill360Drawer({ target, onClose }) {
     clearBill360ResourceCache(`attachments:${billType}:${billId}`)
     setAttachmentsLoaded(false)
   }, [billId, billType])
+
+  const unlinkBankMatch = useCallback(async (payment) => {
+    const matchId = String(payment?.match_id || '').trim()
+    if (!matchId || !canManageFunds) return
+
+    const amount = payment?.linked_amount ?? payment?.expense_amount ?? payment?.amount
+    const reason = window.prompt('解除这笔银行流水与当前账单的匹配，请填写原因：', '匹配错误，重新关联') || ''
+    if (!reason.trim()) return
+    if (!window.confirm(`确定解除 ${money(amount)} 的匹配吗？解除后原银行流水将恢复为待处理。`)) return
+
+    setUnlinkBusyId(matchId)
+    try {
+      await reverseBankAutoReconciliation(matchId, reason.trim())
+      clearBill360ResourceCache(`payments:${billType}:${billId}`)
+      setPaymentsLoaded(false)
+
+      if (billType === 'rd') {
+        const fresh = apiRowToFrontend(await getReconciliationRecord(billId))
+        setRecord(fresh)
+        await recon?.refetchReconciliationFromApi?.()
+      } else {
+        const fresh = apiChannelRowToFrontend(await getChannelRecord(billId))
+        setRecord(fresh)
+        await recon?.refetchChannelFromApi?.()
+      }
+      showToast?.('匹配已解除，原银行流水已恢复为待处理', 'success')
+    } catch (unlinkError) {
+      showToast?.(unlinkError instanceof Error ? unlinkError.message : '解除匹配失败', 'error')
+    } finally {
+      setUnlinkBusyId('')
+    }
+  }, [billId, billType, canManageFunds, recon, showToast])
 
   const lines = useMemo(() => bill360Lines(billType, record || {}), [billType, record])
   const summary = useMemo(
@@ -715,8 +778,8 @@ function Bill360Drawer({ target, onClose }) {
                         <div className="bill360-bank-instruction"><div><span>付款指令</span><strong>{bankInstruction.transaction_serial || '未填写流水号'}</strong></div><div><span>指令金额</span><strong>{money(bankInstruction.remittance_amount)}</strong></div><div><span>付款日期</span><strong>{bankInstruction.payment_date || '-'}</strong></div><div><span>状态</span><strong>{bankInstruction.transfer_status || '-'}</strong></div></div>
                       ) : null}
                       <div className="bill360-table-wrap">
-                        <table><thead><tr><th>日期</th><th>{summary.cashDirection === 'payable' ? '付款方 / 收款方' : '银行账户 / 往来方'}</th><th>流水号 / 备注</th><th className="is-right">金额</th><th>状态</th></tr></thead><tbody>
-                          {payments.length === 0 ? <tr><td colSpan={5} className="bill360-empty-cell">暂无{summary.paidLabel}记录</td></tr> : payments.map((payment) => billType === 'rd' ? <tr key={payment.id}><td>{payment.trade_date || '-'}</td><td>{[payment.payer_name, payment.payee_name].filter(Boolean).join(' → ') || '-'}</td><td>{payment.transaction_no || payment.summary || payment.remark || '-'}</td><td className="is-right is-strong">{money(payment.linked_amount ?? payment.expense_amount ?? payment.amount)}</td><td>{payment.status || '-'}</td></tr> : <tr key={payment.id}><td>{payment.receipt_date || '-'}</td><td>{payment.bank_account || '-'}</td><td>{payment.remark || '-'}</td><td className="is-right is-strong">{money(payment.amount)}</td><td>已登记</td></tr>)}
+                        <table><thead><tr><th>日期</th><th>{summary.cashDirection === 'payable' ? '付款方 / 收款方' : '银行账户 / 往来方'}</th><th>流水号 / 备注</th><th className="is-right">金额</th><th>状态</th><th>操作</th></tr></thead><tbody>
+                          {payments.length === 0 ? <tr><td colSpan={6} className="bill360-empty-cell">暂无{summary.paidLabel}记录</td></tr> : payments.map((payment) => billType === 'rd' ? <tr key={payment.id}><td>{payment.trade_date || '-'}</td><td>{[payment.payer_name, payment.payee_name].filter(Boolean).join(' → ') || '-'}</td><td>{payment.transaction_no || payment.summary || payment.remark || '-'}</td><td className="is-right is-strong">{money(payment.linked_amount ?? payment.expense_amount ?? payment.amount)}</td><td>{payment.status || '-'}</td><td>{canManageFunds && payment.match_id ? <button type="button" style={{ ...UNLINK_BUTTON_STYLE, opacity: unlinkBusyId === payment.match_id ? 0.55 : 1, cursor: unlinkBusyId === payment.match_id ? 'wait' : 'pointer' }} disabled={unlinkBusyId === payment.match_id} onClick={() => unlinkBankMatch(payment)}>{unlinkBusyId === payment.match_id ? '解除中…' : '解除匹配'}</button> : '-'}</td></tr> : <tr key={payment.id}><td>{payment.receipt_date || '-'}</td><td>{payment.bank_account || '-'}</td><td>{payment.remark || '-'}</td><td className="is-right is-strong">{money(payment.amount)}</td><td>已登记</td><td>-</td></tr>)}
                         </tbody></table>
                       </div>
                     </>
