@@ -18,8 +18,8 @@ export default function ContractRuleReadinessNotice({ form, contract }) {
           <strong>{readiness.label}</strong>
           <small>
             {readiness.ready
-              ? '这条合作清单已经具备自动合同匹配与结算规则带入的关键条件。'
-              : '可以先保存合同，但账单自动对账前需要补齐关键规则。'}
+              ? '这条合作清单已经具备渠道账单自动匹配与结算规则带入的关键条件。'
+              : '自动匹配必填：已关联客户、合作游戏、合作渠道、版本、完整授权期、结算规则/分成。'}
           </small>
         </div>
         <em>{readiness.missingCount ? `${readiness.missingCount} 项待完善` : '规则完整'}</em>
@@ -33,7 +33,7 @@ export default function ContractRuleReadinessNotice({ form, contract }) {
       ) : null}
 
       {!readiness.ready ? (
-        <p>红色项会影响自动对账；其他建议项不阻止保存，可后续按实际合同补充。</p>
+        <p>红色项会直接影响渠道账单自动匹配；版本不区分时请选择“全版本”，通道费没有时填 0。</p>
       ) : readiness.warnings.length ? (
         <p>当前已经可用于自动对账；建议项补齐后，后续发票、账期和收付款判断会更准确。</p>
       ) : null}
