@@ -3,6 +3,8 @@ import { getContractRuleReadiness, summarizeContractReadiness } from './contract
 
 const base = {
   product_name: '圣树唤歌（0.1折）',
+  channel_name: '3011',
+  platform: '全版本',
   authorization_start: '2026-01-01',
   authorization_end: '2026-12-31',
   share_rate: 30,
@@ -26,6 +28,13 @@ describe('contract rule readiness', () => {
     const result = getContractRuleReadiness({ ...base, share_rate: '' }, { partnerLinked: true })
     expect(result.ready).toBe(false)
     expect(result.issues).toContain('缺分成比例')
+  })
+
+  it('requires channel and version for stable channel-bill matching', () => {
+    const result = getContractRuleReadiness({ ...base, channel_name: '', platform: '' }, { partnerLinked: true })
+    expect(result.ready).toBe(false)
+    expect(result.issues).toContain('缺合作渠道')
+    expect(result.issues).toContain('缺版本（可选“全版本”）')
   })
 
   it('does not require share rate for fixed unit-price settlement', () => {
