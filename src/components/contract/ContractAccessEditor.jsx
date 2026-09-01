@@ -18,7 +18,7 @@ const EMPTY_FORM = {
   platform_record_id: '',
   product_name: '',
   app_id: '',
-  platform: '',
+  platform: '全版本',
   language: '',
   category: '',
   rights_source: '授权获得',
@@ -27,17 +27,17 @@ const EMPTY_FORM = {
   authorization_start: '',
   authorization_end: '',
   share_rate: '',
-  channel_fee_rate: '',
+  channel_fee_rate: '0',
   software_copyright_no: '',
   isbn: '',
   territory: '中国大陆（不含港澳台）',
   status: '生效',
   remarks: '',
-  settlement_mode: '',
-  settlement_basis: '',
+  settlement_mode: '分成',
+  settlement_basis: '后台流水',
   unit_price: '',
   currency: 'CNY',
-  settlement_cycle: '',
+  settlement_cycle: '自然月',
   payment_terms: '',
   invoice_tax_rate: '',
   invoice_type: '',
@@ -50,9 +50,9 @@ const EMPTY_FORM = {
 }
 
 const FORM_KEYS = Object.keys(EMPTY_FORM)
-const PLATFORM_OPTIONS = ['', 'Android', 'iOS', 'Android / iOS', 'H5', '小游戏', 'PC', '其他']
+const PLATFORM_OPTIONS = ['全版本', 'Android', 'iOS', 'Android / iOS', 'H5', '小游戏', 'PC', '其他']
 const PLATFORM_LABELS = {
-  '': '未设置',
+  全版本: '全版本',
   Android: '安卓',
   iOS: 'iOS',
   'Android / iOS': '安卓 / iOS',
@@ -93,20 +93,20 @@ function newFormForContract(contract, template = null, existingItems = []) {
     ...EMPTY_FORM,
     channel_name: inherited('channel_name'),
     agreement_type: inherited('agreement_type', '联合运营'),
-    platform: inherited('platform'),
+    platform: inherited('platform', '全版本'),
     authorization_start: inherited('authorization_start') || contract?.effective_date || '',
     authorization_end: inherited('authorization_end') || contract?.end_date || '',
     share_rate: inherited('share_rate'),
-    channel_fee_rate: inherited('channel_fee_rate'),
+    channel_fee_rate: inherited('channel_fee_rate', '0'),
     rights_source: inherited('rights_source', '授权获得'),
     territory: inherited('territory', '中国大陆（不含港澳台）'),
     status: inherited('status', '生效'),
     agreement_status: inherited('agreement_status', '已签约'),
-    settlement_mode: inherited('settlement_mode'),
-    settlement_basis: inherited('settlement_basis'),
+    settlement_mode: inherited('settlement_mode', '分成'),
+    settlement_basis: inherited('settlement_basis', '后台流水'),
     unit_price: inherited('unit_price'),
     currency: inherited('currency', 'CNY'),
-    settlement_cycle: inherited('settlement_cycle'),
+    settlement_cycle: inherited('settlement_cycle', '自然月'),
     payment_terms: inherited('payment_terms'),
     invoice_tax_rate: inherited('invoice_tax_rate'),
     invoice_type: inherited('invoice_type'),
@@ -123,10 +123,11 @@ function itemToForm(item, contract, termsById = {}) {
   if (!item) return newFormForContract(contract)
   const merged = mergeEntryTerms(item, termsById)
   return Object.fromEntries(
-    FORM_KEYS.map((key) => [
-      key,
-      merged[key] === null || merged[key] === undefined ? EMPTY_FORM[key] : String(merged[key])
-    ])
+    FORM_KEYS.map((key) => {
+      const value = merged[key]
+      const empty = value === null || value === undefined || String(value).trim() === '' || /^(null|undefined)$/i.test(String(value).trim())
+      return [key, empty ? EMPTY_FORM[key] : String(value)]
+    })
   )
 }
 
@@ -196,6 +197,11 @@ function buildTermsPayload(form, contractId) {
 function validateForm(form) {
   const errors = {}
   if (!String(form.product_name || '').trim()) errors.product_name = '请填写合作游戏名称'
+  if (!String(form.channel_name || '').trim()) errors.channel_name = '请填写合作渠道，渠道账单会用它参与匹配'
+  if (!String(form.platform || '').trim()) errors.platform = '请选择版本；不区分版本时选“全版本”'
+  if (!String(form.authorization_start || '').trim()) errors.authorization_start = '请选择授权开始日期'
+  if (!String(form.authorization_end || '').trim()) errors.authorization_end = '请选择授权结束日期'
+  if (!String(form.share_rate ?? '').trim()) errors.share_rate = '请填写我方分成比例'
 
   if (form.authorization_start && form.authorization_end && form.authorization_start > form.authorization_end) {
     errors.authorization_end = '授权结束日期不能早于开始日期'
@@ -246,7 +252,7 @@ function counterpartyRate(value) {
 }
 
 function platformLabel(value) {
-  return PLATFORM_LABELS[value] || value || '未设置版本'
+  return PLATFORM_LABELS[value] || value || '全版本'
 }
 
 function ContractAccessEditor({ contract, item, onClose, onSaved, onToast }) {
@@ -354,7 +360,7 @@ function ContractAccessEditor({ contract, item, onClose, onSaved, onToast }) {
     const nextErrors = validateForm(form)
     setErrors(nextErrors)
     if (Object.keys(nextErrors).length) {
-      onToast?.('请先检查必填项和数字格式', 'error')
+      onToast?.('请先补齐自动匹配必填项，再保存合作清单', 'error')
       return
     }
 
@@ -541,9 +547,9 @@ function ContractAccessEditor({ contract, item, onClose, onSaved, onToast }) {
                 <div className="contract-access-simple-card__head">
                   <div>
                     <span>{isEditing ? '编辑合作游戏' : '新增合作游戏'}</span>
-                    <h4>{isEditing ? selectedItem.product_name || '未命名游戏' : '只填合同里真正关键的信息'}</h4>
+                    <h4>{isEditing ? selectedItem.product_name || '未命名游戏' : '先把自动匹配关键字段填完整'}</h4>
                   </div>
-                  <small>游戏名称必填，其余可按合同实际情况填写</small>
+                  <small>＊为渠道账单自动匹配必填；通道费默认 0，版本不区分时选“全版本”</small>
                 </div>
 
                 <ContractRuleReadinessNotice form={form} contract={contract} />
@@ -557,29 +563,36 @@ function ContractAccessEditor({ contract, item, onClose, onSaved, onToast }) {
                     value={form.product_name}
                     error={errors.product_name}
                     onChange={(value) => setValue('product_name', value)}
-                    placeholder="例如：仙帝神兵"
+                    placeholder="例如：一起来修仙005折"
                   />
                   <Field
                     label="合作渠道"
+                    required
                     value={form.channel_name}
+                    error={errors.channel_name}
                     onChange={(value) => setValue('channel_name', value)}
-                    placeholder="没有可留空"
+                    placeholder="例如：3011 / 朋克 / 九一玩"
                   />
                   <SelectField
                     label="版本"
+                    required
                     value={form.platform}
+                    error={errors.platform}
                     onChange={(value) => setValue('platform', value)}
                     options={PLATFORM_OPTIONS}
                     optionLabels={PLATFORM_LABELS}
                   />
                   <Field
                     label="授权开始"
+                    required
                     type="date"
                     value={form.authorization_start}
+                    error={errors.authorization_start}
                     onChange={(value) => setValue('authorization_start', value)}
                   />
                   <Field
                     label="授权结束"
+                    required
                     type="date"
                     value={form.authorization_end}
                     error={errors.authorization_end}
@@ -591,15 +604,16 @@ function ContractAccessEditor({ contract, item, onClose, onSaved, onToast }) {
                     value={form.channel_fee_rate}
                     error={errors.channel_fee_rate}
                     onChange={(value) => setValue('channel_fee_rate', value)}
-                    placeholder="例如：5"
+                    placeholder="没有通道费填 0"
                   />
                   <Field
                     label="我方分成（%）"
+                    required
                     inputMode="decimal"
                     value={form.share_rate}
                     error={errors.share_rate}
                     onChange={(value) => setValue('share_rate', value)}
-                    placeholder="例如：83"
+                    placeholder="例如：77"
                   />
                   <Field
                     label="对方分成（自动）"
@@ -627,7 +641,7 @@ function ContractAccessEditor({ contract, item, onClose, onSaved, onToast }) {
                 <summary>
                   <span>
                     <strong>更多结算条款（可选）</strong>
-                    <small>CPA、账期、发票、测试费、预付款等需要时再展开</small>
+                    <small>默认按“分成 + 后台流水 + 自然月”处理；CPA、账期、发票等需要时再展开</small>
                   </span>
                   <em>展开</em>
                 </summary>
@@ -729,15 +743,16 @@ function TextareaField({ label, wide, value, onChange, placeholder }) {
   )
 }
 
-function SelectField({ label, options, value, onChange, optionLabels }) {
+function SelectField({ label, options, value, onChange, optionLabels, required, error }) {
   return (
-    <label className="contract-access-field">
-      <span>{label}</span>
-      <select value={value} onChange={(event) => onChange?.(event.target.value)}>
+    <label className={`contract-access-field ${error ? 'has-error' : ''}`}>
+      <span>{label}{required ? ' *' : ''}</span>
+      <select required={required} value={value} onChange={(event) => onChange?.(event.target.value)}>
         {options.map((option) => (
           <option key={option || 'empty'} value={option}>{optionLabels?.[option] || option || '未设置'}</option>
         ))}
       </select>
+      {error ? <small>{error}</small> : null}
     </label>
   )
 }
