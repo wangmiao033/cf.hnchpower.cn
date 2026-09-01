@@ -35,6 +35,8 @@ export function getContractRuleReadiness(entry, options = {}) {
 
   if (!partnerLinked) issues.push('未关联客户')
   if (!text(entry?.product_name || entry?.productName)) issues.push('缺游戏/项目名称')
+  if (!text(entry?.channel_name || entry?.channelName)) issues.push('缺合作渠道')
+  if (!text(entry?.platform || entry?.version)) issues.push('缺版本（可选“全版本”）')
 
   const start = text(entry?.authorization_start || entry?.authorizationStart)
   const end = text(entry?.authorization_end || entry?.authorizationEnd)
