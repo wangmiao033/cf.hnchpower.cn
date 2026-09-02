@@ -30,47 +30,44 @@ def _log_contract_match_probe() -> None:
                       access.share_rate,
                       access.channel_fee_rate,
                       access.status AS access_status,
-                      contract.id AS contract_id,
-                      contract.contract_no,
                       contract.contract_name,
                       contract.counterparty,
-                      contract.effective_date,
-                      contract.end_date,
                       contract.performance_status,
-                      partner.id AS partner_id,
                       partner.name AS partner_name,
                       partner.short_name AS partner_short_name,
-                      terms.invoice_tax_rate,
-                      access.updated_at AS access_updated_at,
-                      contract.updated_at AS contract_updated_at
+                      terms.invoice_tax_rate
                     FROM cf_contract_access_items AS access
                     JOIN cf_contract_records AS contract ON contract.id = access.contract_id
                     LEFT JOIN cf_partner_records AS partner ON partner.id = contract.partner_id
                     LEFT JOIN cf_contract_access_terms AS terms ON terms.access_item_id = access.id
                     WHERE access.product_name ILIKE :product
-                       OR partner.name ILIKE :partner
-                       OR partner.short_name ILIKE :short_name
-                       OR contract.counterparty ILIKE :partner
                     ORDER BY contract.updated_at DESC, access.updated_at DESC
-                    LIMIT 100
+                    LIMIT 50
                     """
                 ),
-                {
-                    "product": "%一起来修仙%",
-                    "partner": "%爱趣%",
-                    "short_name": "%爱趣%",
-                },
+                {"product": "%一起来修仙%"},
             ).mappings().all()
-        safe_rows = [
-            {
-                key: (value.isoformat() if hasattr(value, "isoformat") else value)
-                for key, value in dict(row).items()
-            }
-            for row in rows
-        ]
-        logger.warning("CONTRACT_PROBE_AIQU_XIUXIAN rows=%s", safe_rows)
+        compact_rows = []
+        for row in rows:
+            item = dict(row)
+            compact_rows.append({
+                "id": item.get("access_item_id"),
+                "game": item.get("product_name"),
+                "channel": item.get("channel_name"),
+                "auth": f"{item.get('authorization_start')}~{item.get('authorization_end')}",
+                "share": str(item.get("share_rate")),
+                "fee": str(item.get("channel_fee_rate")),
+                "tax": str(item.get("invoice_tax_rate")),
+                "access_status": item.get("access_status"),
+                "contract": item.get("contract_name"),
+                "contract_status": item.get("performance_status"),
+                "counterparty": item.get("counterparty"),
+                "partner": item.get("partner_name"),
+                "short": item.get("partner_short_name"),
+            })
+        logger.warning("CONTRACT_PROBE_XIUXIAN count=%s rows=%s", len(compact_rows), compact_rows)
     except Exception:
-        logger.exception("CONTRACT_PROBE_AIQU_XIUXIAN failed")
+        logger.exception("CONTRACT_PROBE_XIUXIAN failed")
 
 
 @router.get("/health")
