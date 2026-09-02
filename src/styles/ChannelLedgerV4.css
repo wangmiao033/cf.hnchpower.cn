@@ -1,0 +1,503 @@
+/* Channel ledger V4 — UI cleanup only.
+   No business logic, data flow or interactions are changed here.
+   This layer is intentionally scoped to the channel reconciliation page. */
+
+.core-channel-recon-page {
+  --clv4-text: #15263b;
+  --clv4-text-2: #34475f;
+  --clv4-muted: #8290a2;
+  --clv4-border: #e3e9f0;
+  --clv4-border-strong: #d7e0ea;
+  --clv4-soft: #f7f9fc;
+  --clv4-blue: #2f6fe4;
+  --clv4-blue-soft: #eef4ff;
+  --clv4-amber: #8a4b10;
+  --clv4-amber-soft: #fffaf2;
+}
+
+/* Page rhythm */
+.core-channel-recon-page .page-container-body {
+  gap: 8px !important;
+  padding-bottom: 22px !important;
+}
+
+/* Header: reduce dead space and keep one clear primary action */
+.core-channel-recon-page .core-recon-head {
+  min-height: 48px !important;
+  padding: 4px 2px 5px !important;
+}
+
+.core-channel-recon-page .core-recon-head h1 {
+  font-size: 19px !important;
+  font-weight: 820 !important;
+  color: var(--clv4-text) !important;
+}
+
+.core-channel-recon-page .core-recon-title > div > span {
+  color: #95a0ae !important;
+  font-size: 10px !important;
+  font-weight: 600 !important;
+}
+
+.core-channel-recon-page .core-recon-actions {
+  gap: 6px !important;
+}
+
+.core-channel-recon-page .core-recon-actions button {
+  height: 32px !important;
+  padding: 0 11px !important;
+  border-radius: 7px !important;
+  border-color: #dbe3ec !important;
+  background: #fff !important;
+  color: #4a5d74 !important;
+  font-size: 11px !important;
+  box-shadow: none !important;
+}
+
+.core-channel-recon-page .core-recon-actions .primary {
+  border-color: var(--clv4-blue) !important;
+  background: var(--clv4-blue) !important;
+  color: #fff !important;
+  box-shadow: 0 2px 7px rgb(47 111 228 / 16%) !important;
+}
+
+/* Filter bar: one compact command surface */
+.core-channel-recon-page .core-recon-filters {
+  min-height: 48px !important;
+  gap: 6px !important;
+  padding: 6px !important;
+  border-radius: 10px !important;
+  border-color: var(--clv4-border) !important;
+  box-shadow: 0 1px 4px rgb(15 23 42 / 3%) !important;
+}
+
+.core-channel-recon-page .core-recon-filter-control {
+  height: 36px !important;
+  min-width: 156px !important;
+  border: 1px solid transparent !important;
+  border-radius: 7px !important;
+  background: #f7f9fb !important;
+}
+
+.core-channel-recon-page .core-recon-filter-control:hover {
+  border-color: #e1e7ee !important;
+  background: #f5f7fa !important;
+}
+
+.core-channel-recon-page .core-recon-filter-control:focus-within {
+  border-color: #aec5e6 !important;
+  background: #fff !important;
+  box-shadow: 0 0 0 2px rgb(47 111 228 / 7%) !important;
+}
+
+.core-channel-recon-page .core-recon-filter-control > span {
+  padding-left: 9px !important;
+  color: #8d99a8 !important;
+  font-size: 10px !important;
+  font-weight: 720 !important;
+}
+
+.core-channel-recon-page .core-recon-filters input,
+.core-channel-recon-page .core-recon-filters select {
+  height: 34px !important;
+  padding: 0 8px !important;
+  color: #304258 !important;
+  font-size: 11px !important;
+  font-weight: 650 !important;
+}
+
+.core-channel-recon-page .core-recon-partner-filter {
+  min-width: 282px !important;
+}
+
+.core-channel-recon-page .core-recon-filter-search {
+  min-width: 260px !important;
+}
+
+.core-channel-recon-page .core-recon-filters .core-recon-reset {
+  height: 36px !important;
+  padding: 0 11px !important;
+  border-radius: 7px !important;
+  border-color: transparent !important;
+  background: #f7f9fb !important;
+  color: #7e8b9c !important;
+  font-size: 10px !important;
+}
+
+/* Quick filters: use a calm tab line instead of another row of pills */
+.core-channel-recon-page .bill-quick-filters {
+  min-height: 34px !important;
+  padding: 0 1px !important;
+}
+
+.core-channel-recon-page .bill-quick-filters__items {
+  gap: 1px !important;
+  overflow: visible !important;
+}
+
+.core-channel-recon-page .bill-quick-filters__items button {
+  position: relative !important;
+  min-height: 31px !important;
+  padding: 0 9px !important;
+  border-radius: 5px !important;
+  background: transparent !important;
+  color: #7b899a !important;
+  font-size: 10px !important;
+  font-weight: 700 !important;
+  box-shadow: none !important;
+}
+
+.core-channel-recon-page .bill-quick-filters__items button:hover {
+  background: #f2f5f8 !important;
+  color: #3f536b !important;
+}
+
+.core-channel-recon-page .bill-quick-filters__items button.is-active {
+  background: transparent !important;
+  color: #245cb4 !important;
+  box-shadow: none !important;
+}
+
+.core-channel-recon-page .bill-quick-filters__items button.is-active::after {
+  position: absolute;
+  right: 8px;
+  bottom: -1px;
+  left: 8px;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--clv4-blue);
+  content: '';
+}
+
+.core-channel-recon-page .bill-quick-filters__items em {
+  min-width: 17px !important;
+  height: 17px !important;
+  padding: 0 4px !important;
+  border: 0 !important;
+  background: #eef2f6 !important;
+  color: #7b899a !important;
+  font-size: 8px !important;
+}
+
+.core-channel-recon-page .bill-quick-filters__items button.is-active em {
+  background: #e8f0ff !important;
+  color: #3565ad !important;
+}
+
+/* Financial summary: flatter and more editorial, less dashboard-like */
+.core-channel-recon-page .core-recon-stats {
+  border-radius: 10px !important;
+  border-color: var(--clv4-border) !important;
+  box-shadow: 0 1px 4px rgb(15 23 42 / 2.5%) !important;
+}
+
+.core-channel-recon-page .core-recon-stats > div {
+  min-height: 66px !important;
+  padding: 10px 14px !important;
+  border-right-color: #eef2f5 !important;
+  background: #fff !important;
+}
+
+.core-channel-recon-page .core-recon-stats > div:last-child {
+  background: #fffdf9 !important;
+}
+
+.core-channel-recon-page .core-recon-stats span {
+  color: #8c98a7 !important;
+  font-size: 9px !important;
+  font-weight: 720 !important;
+}
+
+.core-channel-recon-page .core-recon-stats strong {
+  margin-top: 4px !important;
+  color: #1d2f45 !important;
+  font-size: 18px !important;
+  font-weight: 820 !important;
+}
+
+.core-channel-recon-page .core-recon-stats small {
+  margin-top: 2px !important;
+  color: #9aa4b1 !important;
+  font-size: 8px !important;
+}
+
+.core-channel-recon-page .core-recon-stats > div:last-child strong {
+  color: var(--clv4-amber) !important;
+}
+
+/* Main ledger container */
+.core-channel-recon-page .core-recon-panel.channel-group-panel {
+  border-radius: 11px !important;
+  border-color: var(--clv4-border-strong) !important;
+  box-shadow: 0 4px 15px rgb(15 23 42 / 3.5%) !important;
+}
+
+.core-channel-recon-page .core-recon-panel-head {
+  min-height: 48px !important;
+  padding: 0 13px !important;
+  border-bottom-color: #e9eef3 !important;
+}
+
+.core-channel-recon-page .channel-group-panel-title h2 {
+  color: #1a2b40 !important;
+  font-size: 14px !important;
+  font-weight: 820 !important;
+}
+
+.core-channel-recon-page .channel-group-panel-title > span {
+  height: 20px !important;
+  padding: 0 7px !important;
+  background: #f3f5f8 !important;
+  color: #8a96a5 !important;
+  font-size: 9px !important;
+}
+
+.core-channel-recon-page .channel-group-ledger {
+  max-height: calc(100vh - 312px) !important;
+}
+
+/* Fix the floating “返回总览” artifact in collapsed channel rows. */
+.core-channel-recon-page .channel-group-card:not(.is-expanded) .channel-master-inline-back {
+  display: none !important;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-master-inline-back {
+  display: inline-flex !important;
+  height: 28px !important;
+  padding: 0 10px !important;
+  border-color: #d7e1ec !important;
+  border-radius: 7px !important;
+  color: #5f7187 !important;
+  background: #fff !important;
+  font-size: 9px !important;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 4%) !important;
+}
+
+/* Master table: clearer column separation */
+.core-channel-recon-page .channel-group-summary-head {
+  grid-template-columns: 40px minmax(320px, 2.45fr) 70px 112px 132px 118px 132px 112px !important;
+  column-gap: 3px !important;
+  height: 42px !important;
+  padding: 0 13px !important;
+  border-bottom-color: #e0e7ef !important;
+  background: #f8fafc !important;
+  color: #7f8c9d !important;
+  font-size: 9px !important;
+  font-weight: 760 !important;
+}
+
+.core-channel-recon-page .channel-group-summary-head > span:last-child {
+  text-align: center !important;
+}
+
+.core-channel-recon-page .channel-group-card {
+  border-bottom-color: #edf1f5 !important;
+}
+
+.core-channel-recon-page .channel-group-summary,
+.core-channel-recon-page .channel-group-card:nth-child(odd) .channel-group-summary,
+.core-channel-recon-page .channel-group-card:nth-child(even) .channel-group-summary {
+  padding: 0 13px !important;
+  background: #fff !important;
+}
+
+.core-channel-recon-page .channel-group-summary:hover,
+.core-channel-recon-page .channel-group-card:nth-child(odd) .channel-group-summary:hover,
+.core-channel-recon-page .channel-group-card:nth-child(even) .channel-group-summary:hover {
+  background: #f8fbff !important;
+  box-shadow: inset 2px 0 0 #94b7e9 !important;
+}
+
+.core-channel-recon-page .channel-group-select {
+  min-height: 62px !important;
+}
+
+.core-channel-recon-page .channel-group-toggle {
+  min-height: 62px !important;
+  grid-template-columns: minmax(320px, 2.45fr) 70px 112px 132px 118px 132px 112px !important;
+  column-gap: 3px !important;
+}
+
+.core-channel-recon-page .channel-group-identity {
+  gap: 9px !important;
+  padding-right: 20px !important;
+}
+
+.core-channel-recon-page .channel-group-chevron {
+  width: 20px !important;
+  height: 20px !important;
+  flex-basis: 20px !important;
+  color: #9aa7b6 !important;
+  font-size: 21px !important;
+}
+
+.core-channel-recon-page .channel-group-identity strong {
+  color: #19314d !important;
+  font-size: 14px !important;
+  font-weight: 820 !important;
+}
+
+.core-channel-recon-page .channel-group-identity small {
+  margin-top: 3px !important;
+  color: #8c98a8 !important;
+  font-size: 9px !important;
+  font-weight: 600 !important;
+}
+
+.core-channel-recon-page .channel-group-count strong {
+  color: #34475e !important;
+  font-size: 12px !important;
+}
+
+.core-channel-recon-page .channel-group-count small,
+.core-channel-recon-page .channel-group-period {
+  color: #8a97a8 !important;
+  font-size: 9px !important;
+}
+
+.core-channel-recon-page .channel-group-money {
+  color: #2b3d53 !important;
+  font-size: 11px !important;
+  font-weight: 730 !important;
+  letter-spacing: 0 !important;
+}
+
+/* Keep unpaid important, but stop turning the whole table orange. */
+.core-channel-recon-page .channel-group-money.has-unpaid {
+  color: #7d4b1d !important;
+  font-weight: 820 !important;
+}
+
+.core-channel-recon-page .core-channel-status-badge.is-master-pending {
+  justify-self: center !important;
+  min-width: 58px !important;
+  height: 21px !important;
+  padding: 0 7px !important;
+  border-color: #eadfcf !important;
+  background: #fffaf2 !important;
+  color: #7b5a2c !important;
+  font-size: 9px !important;
+  font-weight: 760 !important;
+}
+
+.core-channel-recon-page .core-channel-status-badge.is-settled {
+  border-color: #dce7df !important;
+  background: #f5faf7 !important;
+  color: #4f765e !important;
+}
+
+.core-channel-recon-page .core-channel-status-badge.is-anomaly,
+.core-channel-recon-page .core-channel-status-badge.is-void {
+  border-color: #efd9d7 !important;
+  background: #fff6f5 !important;
+  color: #a33d34 !important;
+}
+
+/* Expanded detail: clearly a child workspace, not a second dashboard */
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-summary {
+  min-width: 1080px !important;
+  background: #fbfdff !important;
+  border-bottom-color: #dbe4ee !important;
+  box-shadow: inset 3px 0 0 #7da8e6, 0 3px 10px rgb(15 23 42 / 4%) !important;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-details {
+  padding: 10px 12px 13px !important;
+  background: #f6f8fb !important;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-detail-table {
+  border-color: #dfe6ee !important;
+  border-radius: 8px !important;
+  box-shadow: 0 1px 3px rgb(15 23 42 / 3%) !important;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-detail-table thead th {
+  height: 36px !important;
+  background: #f7f9fb !important;
+  color: #788699 !important;
+  font-size: 9px !important;
+  font-weight: 760 !important;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-detail-table tbody td {
+  height: 48px !important;
+  padding-top: 6px !important;
+  padding-bottom: 6px !important;
+  color: #34475e !important;
+  font-size: 10px !important;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-detail-table tbody tr:nth-child(even) td {
+  background: #fcfdff !important;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-detail-table tbody tr:hover td {
+  background: #f6f9fd !important;
+}
+
+.core-channel-recon-page .channel-group-detail-table .core-recon-money--settlement {
+  color: #26394f !important;
+  font-weight: 820 !important;
+}
+
+.core-channel-recon-page .channel-group-detail-table .core-recon-money--received strong {
+  color: #31465f !important;
+  font-size: 10px !important;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-detail-table .core-channel-status-badge {
+  min-width: 48px !important;
+  height: 20px !important;
+  padding: 0 6px !important;
+  font-size: 8px !important;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-detail-table .core-recon-row-actions {
+  gap: 4px !important;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-detail-table .core-recon-row-actions button {
+  height: 25px !important;
+  min-height: 25px !important;
+  padding: 0 8px !important;
+  border-radius: 6px !important;
+  border-color: #dce4ed !important;
+  background: #fff !important;
+  color: #52657c !important;
+  font-size: 9px !important;
+  box-shadow: none !important;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-detail-table .core-recon-row-actions button:hover {
+  border-color: #b8c8db !important;
+  background: #f8fafc !important;
+  color: #2f527e !important;
+}
+
+/* When drilling into one channel, keep the workspace compact. */
+.core-channel-recon-page:has(.channel-group-card.is-expanded) .core-recon-head,
+.core-channel-recon-page:has(.channel-group-card.is-expanded) .core-recon-filters,
+.core-channel-recon-page:has(.channel-group-card.is-expanded) .bill-quick-filters,
+.core-channel-recon-page:has(.channel-group-card.is-expanded) .core-recon-stats {
+  display: none !important;
+}
+
+.core-channel-recon-page:has(.channel-group-card.is-expanded) .channel-group-ledger {
+  max-height: calc(100vh - 190px) !important;
+}
+
+@media (max-width: 1180px) {
+  .core-channel-recon-page .core-recon-filters {
+    flex-wrap: wrap !important;
+  }
+
+  .core-channel-recon-page .core-recon-filter-search {
+    flex: 1 1 260px !important;
+  }
+
+  .core-channel-recon-page .channel-group-summary-head,
+  .core-channel-recon-page .channel-group-toggle {
+    grid-template-columns: 40px minmax(280px, 2.25fr) 68px 108px 126px 112px 126px 106px !important;
+  }
+}
