@@ -31,7 +31,7 @@ _VARIANT_RE = re.compile(r"(?<!\d)(\d+(?:\.\d+)?)\s*折", re.IGNORECASE)
 
 
 def canonical_commercial_game_variant(value: Any) -> str:
-    """Return one canonical discount token for decimal and compact spellings.
+    """Return one canonical commercial discount token.
 
     Examples used by historical channel statements:
     - 005折  -> 0.05折
@@ -40,22 +40,30 @@ def canonical_commercial_game_variant(value: Any) -> str:
     - 0.05折 -> 0.05折
 
     A non-leading-zero integer keeps its literal meaning, so ``5折`` stays
-    ``5折`` and ``10折`` stays ``10折``.
+    ``5折`` and ``10折`` stays ``10折``. Existing named variants such as
+    ``折扣版`` are preserved for backward compatibility.
     """
     text = unicodedata.normalize("NFKC", str(value or "")).strip().lower()
     match = _VARIANT_RE.search(text)
-    if not match:
-        return ""
+    if match:
+        token = match.group(1)
+        if "." not in token and len(token) > 1 and token.startswith("0"):
+            token = f"0.{token[1:]}"
 
-    token = match.group(1)
-    if "." not in token and len(token) > 1 and token.startswith("0"):
-        token = f"0.{token[1:]}"
+        try:
+            number = float(token)
+        except (TypeError, ValueError):
+            return ""
+        return f"{number:g}折"
 
-    try:
-        number = float(token)
-    except (TypeError, ValueError):
-        return ""
-    return f"{number:g}折"
+    compact = text.replace(" ", "")
+    if "折扣版" in compact:
+        return "折扣版"
+    if "折服" in compact:
+        return "折服"
+    if "折版" in compact:
+        return "折版"
+    return ""
 
 
 # score_candidate() resolves ``commercial_game_variant`` through matcher module
