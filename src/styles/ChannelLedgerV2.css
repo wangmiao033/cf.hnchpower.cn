@@ -1,0 +1,765 @@
+/* Channel ledger V2 — structural visual redesign.
+   Goal: fewer boxes, stronger financial hierarchy, cleaner master/detail workflow.
+   Scoped to the channel reconciliation page only. */
+
+.core-channel-recon-page {
+  --clv2-text: #172033;
+  --clv2-sub: #52637a;
+  --clv2-muted: #8391a5;
+  --clv2-border: #dfe6ee;
+  --clv2-border-strong: #cfd9e5;
+  --clv2-surface: #ffffff;
+  --clv2-soft: #f6f8fb;
+  --clv2-blue: #2563eb;
+  --clv2-blue-soft: #eef4ff;
+  --clv2-amber: #b45309;
+  --clv2-amber-soft: #fff7ed;
+  --clv2-green: #15803d;
+  --clv2-green-soft: #f0fdf4;
+  --clv2-red: #b91c1c;
+  --clv2-red-soft: #fef2f2;
+}
+
+/* ---------- Page rhythm: stop stacking card after card ---------- */
+.core-channel-recon-page .page-container-body {
+  gap: 9px !important;
+  padding-bottom: 28px;
+}
+
+.core-channel-recon-page .core-recon-workbar {
+  overflow: visible !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.core-channel-recon-page .core-recon-head {
+  min-height: 56px !important;
+  padding: 7px 2px 8px !important;
+  background: transparent !important;
+}
+
+.core-channel-recon-page .core-recon-title {
+  gap: 0 !important;
+}
+
+.core-channel-recon-page .core-recon-title-mark {
+  display: none !important;
+}
+
+.core-channel-recon-page .core-recon-title > div {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+}
+
+.core-channel-recon-page .core-recon-head h1 {
+  color: var(--clv2-text) !important;
+  font-size: 21px !important;
+  font-weight: 800 !important;
+  letter-spacing: -0.25px;
+}
+
+.core-channel-recon-page .core-recon-title > div > span {
+  margin: 0 !important;
+  color: var(--clv2-muted) !important;
+  font-size: 11px !important;
+  font-weight: 650 !important;
+}
+
+.core-channel-recon-page .core-recon-actions {
+  gap: 7px !important;
+}
+
+.core-channel-recon-page .core-recon-actions button {
+  height: 34px !important;
+  padding: 0 12px !important;
+  border: 1px solid var(--clv2-border-strong) !important;
+  border-radius: 7px !important;
+  background: #fff !important;
+  color: #34445a !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  box-shadow: none !important;
+}
+
+.core-channel-recon-page .core-recon-actions button:hover {
+  border-color: #aabbd0 !important;
+  background: #f8fafc !important;
+  color: #1f3b63 !important;
+}
+
+.core-channel-recon-page .core-recon-actions .primary {
+  border-color: var(--clv2-blue) !important;
+  background: var(--clv2-blue) !important;
+  color: #fff !important;
+  box-shadow: 0 2px 7px rgb(37 99 235 / 16%) !important;
+}
+
+.core-channel-recon-page .core-recon-actions .primary:hover {
+  background: #1d4ed8 !important;
+  color: #fff !important;
+}
+
+/* ---------- Filters: one clean command bar ---------- */
+.core-channel-recon-page .core-recon-filters {
+  min-height: 50px !important;
+  gap: 7px !important;
+  padding: 7px !important;
+  border: 1px solid var(--clv2-border) !important;
+  border-radius: 10px !important;
+  background: #fff !important;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 3%) !important;
+}
+
+.core-channel-recon-page .core-recon-filter-control {
+  min-width: 164px !important;
+  height: 36px !important;
+  border: 1px solid transparent !important;
+  border-radius: 7px !important;
+  background: #f5f7fa !important;
+  box-shadow: none !important;
+}
+
+.core-channel-recon-page .core-recon-filter-control:hover {
+  background: #f1f4f8 !important;
+}
+
+.core-channel-recon-page .core-recon-filter-control:focus-within {
+  border-color: #a8c3eb !important;
+  background: #fff !important;
+  box-shadow: 0 0 0 3px rgb(37 99 235 / 7%) !important;
+}
+
+.core-channel-recon-page .core-recon-filter-control > span {
+  padding-left: 10px !important;
+  color: #748399 !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+}
+
+.core-channel-recon-page .core-recon-filters input,
+.core-channel-recon-page .core-recon-filters select {
+  height: 34px !important;
+  padding: 0 8px !important;
+  color: #26364b !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+}
+
+.core-channel-recon-page .core-recon-partner-filter {
+  min-width: 285px !important;
+}
+
+.core-channel-recon-page .core-recon-filter-search {
+  min-width: 260px !important;
+}
+
+.core-channel-recon-page .core-recon-filters .core-recon-partner-submit {
+  height: 28px !important;
+  margin-right: 3px !important;
+  padding: 0 9px !important;
+  border: 0 !important;
+  border-left: 1px solid #dde4ec !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  color: #245db8 !important;
+  font-size: 11px !important;
+  font-weight: 750 !important;
+}
+
+.core-channel-recon-page .core-recon-filters .core-recon-reset {
+  height: 36px !important;
+  padding: 0 11px !important;
+  border: 1px solid transparent !important;
+  border-radius: 7px !important;
+  background: #f5f7fa !important;
+  color: #6b7b90 !important;
+  font-size: 11px !important;
+}
+
+.core-channel-recon-page .core-recon-filters .core-recon-reset:hover {
+  background: #eef2f6 !important;
+  color: #34445a !important;
+}
+
+/* ---------- Quick filters: tabs, not another card ---------- */
+.core-channel-recon-page .bill-quick-filters {
+  min-height: 36px !important;
+  gap: 0 !important;
+  padding: 0 2px !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.core-channel-recon-page .bill-quick-filters__label {
+  display: none !important;
+}
+
+.core-channel-recon-page .bill-quick-filters__items {
+  gap: 3px !important;
+  padding: 0 !important;
+}
+
+.core-channel-recon-page .bill-quick-filters__items button {
+  min-height: 30px !important;
+  padding: 0 10px !important;
+  border: 0 !important;
+  border-radius: 6px !important;
+  background: transparent !important;
+  color: #68788d !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+}
+
+.core-channel-recon-page .bill-quick-filters__items button:hover {
+  background: #eef2f7 !important;
+  color: #31445d !important;
+}
+
+.core-channel-recon-page .bill-quick-filters__items button.is-active {
+  background: #e9f1ff !important;
+  color: #1d56b3 !important;
+  box-shadow: inset 0 0 0 1px #c9dcf8 !important;
+}
+
+.core-channel-recon-page .bill-quick-filters__items em {
+  min-width: 18px !important;
+  height: 18px !important;
+  padding: 0 5px !important;
+  background: rgb(255 255 255 / 70%) !important;
+  font-size: 9px !important;
+  font-weight: 800 !important;
+}
+
+/* ---------- KPI: one financial summary strip instead of four cards ---------- */
+.core-channel-recon-page .core-recon-stats {
+  display: grid !important;
+  grid-template-columns: .82fr 1fr 1.25fr 1.25fr !important;
+  gap: 0 !important;
+  overflow: hidden;
+  border: 1px solid var(--clv2-border) !important;
+  border-radius: 10px !important;
+  background: #fff !important;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 3%) !important;
+}
+
+.core-channel-recon-page .core-recon-stats > div {
+  position: relative;
+  min-height: 70px !important;
+  padding: 11px 14px !important;
+  border: 0 !important;
+  border-right: 1px solid #edf1f5 !important;
+  border-radius: 0 !important;
+  background: #fff !important;
+  box-shadow: none !important;
+}
+
+.core-channel-recon-page .core-recon-stats > div:last-child {
+  border-right: 0 !important;
+  background: linear-gradient(90deg, #fff 0%, #fff9f2 100%) !important;
+}
+
+.core-channel-recon-page .core-recon-stats span {
+  color: #7a8799 !important;
+  font-size: 10px !important;
+  font-weight: 700 !important;
+}
+
+.core-channel-recon-page .core-recon-stats strong {
+  margin-top: 5px !important;
+  color: #1e2d41 !important;
+  font-size: 18px !important;
+  font-weight: 800 !important;
+  letter-spacing: -.1px;
+  font-variant-numeric: tabular-nums;
+}
+
+.core-channel-recon-page .core-recon-stats small {
+  margin-top: 3px !important;
+  color: #8a97a8 !important;
+  font-size: 9px !important;
+  font-weight: 600 !important;
+}
+
+.core-channel-recon-page .core-recon-stats > div:last-child strong {
+  color: var(--clv2-amber) !important;
+}
+
+/* ---------- Main ledger: this is the primary object on the page ---------- */
+.core-channel-recon-page .core-recon-panel.channel-group-panel {
+  overflow: hidden !important;
+  border: 1px solid var(--clv2-border) !important;
+  border-radius: 12px !important;
+  background: #fff !important;
+  box-shadow: 0 5px 16px rgb(15 23 42 / 4%) !important;
+}
+
+.core-channel-recon-page .core-recon-panel-head {
+  min-height: 52px !important;
+  padding: 0 13px !important;
+  border-bottom: 1px solid #e8edf3 !important;
+  background: #fff !important;
+}
+
+.core-channel-recon-page .channel-group-panel-title {
+  gap: 8px !important;
+}
+
+.core-channel-recon-page .channel-group-panel-title h2 {
+  color: #17263a !important;
+  font-size: 15px !important;
+  font-weight: 800 !important;
+}
+
+.core-channel-recon-page .channel-group-panel-title > span {
+  height: 22px !important;
+  padding: 0 8px !important;
+  border: 0 !important;
+  border-radius: 6px !important;
+  background: #f1f4f8 !important;
+  color: #7a8799 !important;
+  font-size: 10px !important;
+  font-weight: 700 !important;
+}
+
+.core-channel-recon-page .core-recon-panel-tools > span {
+  color: #8a96a6 !important;
+  font-size: 10px !important;
+}
+
+.core-channel-recon-page .channel-group-ledger {
+  max-height: calc(100vh - 335px) !important;
+  background: #fff !important;
+}
+
+.core-channel-recon-page .channel-group-summary-head {
+  height: 42px !important;
+  grid-template-columns: 40px minmax(260px, 2fr) 72px 112px 126px 116px 126px 92px !important;
+  padding: 0 12px !important;
+  border-bottom: 1px solid #dfe6ee !important;
+  background: #f7f9fb !important;
+  color: #758397 !important;
+  font-size: 10px !important;
+  font-weight: 750 !important;
+  letter-spacing: .05px;
+}
+
+.core-channel-recon-page .channel-group-head-check input,
+.core-channel-recon-page .channel-group-select input,
+.core-channel-recon-page .channel-group-detail-table input[type='checkbox'] {
+  width: 15px !important;
+  height: 15px !important;
+}
+
+.core-channel-recon-page .channel-group-card {
+  border: 0 !important;
+  border-bottom: 1px solid #edf1f5 !important;
+  background: #fff !important;
+}
+
+.core-channel-recon-page .channel-group-card:last-child {
+  border-bottom: 0 !important;
+}
+
+.core-channel-recon-page .channel-group-summary,
+.core-channel-recon-page .channel-group-card:nth-child(odd) .channel-group-summary {
+  padding: 0 12px !important;
+  border: 0 !important;
+  background: #fff !important;
+  box-shadow: none !important;
+}
+
+.core-channel-recon-page .channel-group-summary:hover,
+.core-channel-recon-page .channel-group-card:nth-child(odd) .channel-group-summary:hover {
+  background: #fbfcfe !important;
+}
+
+.core-channel-recon-page .channel-group-select {
+  min-height: 64px !important;
+}
+
+.core-channel-recon-page .channel-group-toggle {
+  min-height: 64px !important;
+  grid-template-columns: minmax(260px, 2fr) 72px 112px 126px 116px 126px 92px !important;
+}
+
+.core-channel-recon-page .channel-group-identity {
+  gap: 9px !important;
+  padding-right: 16px !important;
+}
+
+.core-channel-recon-page .channel-group-chevron {
+  width: 20px !important;
+  height: 20px !important;
+  flex-basis: 20px !important;
+  color: #8a98aa !important;
+  font-size: 22px !important;
+}
+
+.core-channel-recon-page .channel-group-identity strong {
+  color: #17304f !important;
+  font-size: 14px !important;
+  font-weight: 800 !important;
+  line-height: 1.25 !important;
+}
+
+.core-channel-recon-page .channel-group-identity small {
+  margin-top: 4px !important;
+  color: #7b899c !important;
+  font-size: 10px !important;
+  font-weight: 600 !important;
+}
+
+.core-channel-recon-page .channel-group-count {
+  color: #718096 !important;
+}
+
+.core-channel-recon-page .channel-group-count strong {
+  color: #2a3a50 !important;
+  font-size: 13px !important;
+  font-weight: 800 !important;
+}
+
+.core-channel-recon-page .channel-group-count small {
+  color: #8f9bad !important;
+  font-size: 9px !important;
+}
+
+.core-channel-recon-page .channel-group-period {
+  color: #41536b !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+}
+
+.core-channel-recon-page .channel-group-money {
+  padding-right: 8px !important;
+  color: #2a394e !important;
+  font-size: 12.5px !important;
+  font-weight: 750 !important;
+  font-variant-numeric: tabular-nums;
+}
+
+.core-channel-recon-page .channel-group-money.has-unpaid {
+  color: var(--clv2-amber) !important;
+  font-size: 13px !important;
+  font-weight: 850 !important;
+}
+
+.core-channel-recon-page .core-channel-status-badge {
+  min-width: 64px !important;
+  height: 24px !important;
+  padding: 0 8px !important;
+  border-radius: 6px !important;
+  font-size: 10px !important;
+  font-weight: 800 !important;
+}
+
+.core-channel-recon-page .core-channel-status-badge.is-master-pending,
+.core-channel-recon-page .core-channel-status-badge.is-unpaid {
+  border-color: #fed7aa !important;
+  background: var(--clv2-amber-soft) !important;
+  color: var(--clv2-amber) !important;
+}
+
+.core-channel-recon-page .core-channel-status-badge.is-partial {
+  border-color: #bfdbfe !important;
+  background: #eff6ff !important;
+  color: #1d4ed8 !important;
+}
+
+.core-channel-recon-page .core-channel-status-badge.is-settled,
+.core-channel-recon-page .core-channel-status-badge.is-check-normal {
+  border-color: #bbf7d0 !important;
+  background: var(--clv2-green-soft) !important;
+  color: var(--clv2-green) !important;
+}
+
+.core-channel-recon-page .core-channel-status-badge.is-anomaly,
+.core-channel-recon-page .core-channel-status-badge.is-void {
+  border-color: #fecaca !important;
+  background: var(--clv2-red-soft) !important;
+  color: var(--clv2-red) !important;
+}
+
+/* ---------- Detail mode: turn it into a focused workspace ---------- */
+.core-channel-recon-page:has(.channel-group-card.is-expanded) .core-recon-filters,
+.core-channel-recon-page:has(.channel-group-card.is-expanded) .bill-quick-filters,
+.core-channel-recon-page:has(.channel-group-card.is-expanded) .core-recon-stats {
+  display: none !important;
+}
+
+.core-channel-recon-page:has(.channel-group-card.is-expanded) .page-container-body {
+  gap: 8px !important;
+}
+
+.core-channel-recon-page:has(.channel-group-card.is-expanded) .channel-group-ledger {
+  max-height: calc(100vh - 205px) !important;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded {
+  min-width: 0 !important;
+  background: #fff !important;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-summary {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 8 !important;
+  min-width: 980px !important;
+  padding: 0 14px !important;
+  border-bottom: 1px solid #cfdceb !important;
+  background: linear-gradient(180deg, #f9fbff 0%, #f3f7fd 100%) !important;
+  box-shadow: inset 4px 0 0 var(--clv2-blue), 0 5px 14px rgb(30 64 175 / 5%) !important;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-select {
+  min-height: 78px !important;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-toggle {
+  min-height: 78px !important;
+  padding-right: 110px !important;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-chevron {
+  color: var(--clv2-blue) !important;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-identity strong {
+  color: #17365f !important;
+  font-size: 15px !important;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-identity small {
+  color: #718198 !important;
+  font-size: 10px !important;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-count,
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-period,
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-money {
+  min-height: 48px !important;
+  gap: 3px !important;
+  padding-top: 14px !important;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-count::before,
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-period::before,
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-money::before {
+  top: 2px !important;
+  color: #8b99aa !important;
+  font-size: 9px !important;
+  font-weight: 700 !important;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-count strong,
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-period,
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-money {
+  color: #26384f !important;
+  font-size: 13px !important;
+  font-weight: 800 !important;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-money.has-unpaid {
+  color: var(--clv2-amber) !important;
+  font-size: 14px !important;
+  font-weight: 900 !important;
+}
+
+.core-channel-recon-page .channel-master-inline-back {
+  right: 14px !important;
+  height: 32px !important;
+  padding: 0 11px !important;
+  border: 1px solid #cbd8e8 !important;
+  border-radius: 7px !important;
+  background: #fff !important;
+  color: #45617f !important;
+  font-size: 10px !important;
+  font-weight: 800 !important;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 4%) !important;
+}
+
+.core-channel-recon-page .channel-group-toggle:hover .channel-master-inline-back {
+  border-color: #9eb9dd !important;
+  background: #f8fbff !important;
+  color: #245db8 !important;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-details {
+  padding: 12px !important;
+  background: #f4f6f9 !important;
+}
+
+.core-channel-recon-page .channel-pending-filter-note {
+  min-height: 38px !important;
+  margin-bottom: 9px !important;
+  padding: 0 11px !important;
+  border: 1px solid #d8e2ed !important;
+  border-radius: 8px !important;
+  background: #fff !important;
+  color: #52657c !important;
+  font-size: 10px !important;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-detail-table {
+  width: 100% !important;
+  min-width: 1080px !important;
+  overflow: hidden !important;
+  border: 1px solid #d7e0ea !important;
+  border-radius: 10px !important;
+  background: #fff !important;
+  box-shadow: 0 2px 8px rgb(15 23 42 / 3%) !important;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-detail-table thead th {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 2 !important;
+  height: 38px !important;
+  padding: 0 9px !important;
+  border-bottom: 1px solid #dbe3ec !important;
+  background: #eef2f6 !important;
+  color: #69798d !important;
+  font-size: 10px !important;
+  font-weight: 800 !important;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-detail-table tbody td {
+  height: 50px !important;
+  padding: 7px 9px !important;
+  border-bottom-color: #edf1f5 !important;
+  background: #fff !important;
+  color: #26374d !important;
+  font-size: 11.5px !important;
+  font-weight: 550 !important;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-detail-table tbody tr:nth-child(even) td {
+  background: #fbfcfd !important;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-detail-table tbody tr:hover td {
+  background: #f5f8fc !important;
+}
+
+.core-channel-recon-page .channel-group-detail-table .core-recon-number {
+  color: #4b5d74 !important;
+  font-size: 10.5px !important;
+  font-weight: 650 !important;
+}
+
+.core-channel-recon-page .channel-group-detail-table .core-recon-game-text {
+  color: #1d3658 !important;
+  font-size: 11.5px !important;
+  font-weight: 750 !important;
+}
+
+.core-channel-recon-page .channel-group-detail-table .core-recon-money {
+  color: #33465e !important;
+  font-size: 11.5px !important;
+  font-weight: 700 !important;
+  font-variant-numeric: tabular-nums;
+}
+
+.core-channel-recon-page .channel-group-detail-table .core-recon-money--settlement {
+  color: #172b49 !important;
+  font-size: 12px !important;
+  font-weight: 850 !important;
+}
+
+.core-channel-recon-page .channel-group-detail-table .core-recon-money--received strong {
+  color: #33465e !important;
+  font-size: 11px !important;
+  font-weight: 800 !important;
+}
+
+.core-channel-recon-page .channel-group-detail-table .core-recon-money--received small {
+  margin-top: 3px !important;
+  color: #8a98aa !important;
+  font-size: 9px !important;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-detail-table .core-channel-status-badge {
+  min-width: 54px !important;
+  height: 23px !important;
+  padding: 0 7px !important;
+  border-radius: 6px !important;
+  font-size: 9.5px !important;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-detail-table .core-recon-row-actions {
+  gap: 4px !important;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-detail-table .core-recon-row-actions button {
+  height: 27px !important;
+  min-height: 27px !important;
+  padding: 0 8px !important;
+  border: 1px solid #d7e0ea !important;
+  border-radius: 6px !important;
+  background: #fff !important;
+  color: #40536b !important;
+  font-size: 10px !important;
+  font-weight: 750 !important;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-detail-table .core-recon-row-actions button:hover {
+  border-color: #a9bedb !important;
+  background: #f8fbff !important;
+  color: #245db8 !important;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-detail-table .core-recon-row-actions button.danger,
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-detail-table .core-recon-row-actions button:last-child {
+  color: #b42318 !important;
+}
+
+/* ---------- Responsive safeguards ---------- */
+@media (max-width: 1200px) {
+  .core-channel-recon-page .core-recon-filters {
+    flex-wrap: wrap !important;
+  }
+
+  .core-channel-recon-page .core-recon-filter-search {
+    flex: 1 1 320px !important;
+  }
+
+  .core-channel-recon-page .channel-group-summary-head {
+    grid-template-columns: 40px minmax(235px, 2fr) 66px 104px 116px 106px 116px 86px !important;
+  }
+
+  .core-channel-recon-page .channel-group-toggle {
+    grid-template-columns: minmax(235px, 2fr) 66px 104px 116px 106px 116px 86px !important;
+  }
+}
+
+@media (max-width: 900px) {
+  .core-channel-recon-page .core-recon-head {
+    align-items: flex-start !important;
+    flex-direction: column !important;
+    gap: 8px !important;
+  }
+
+  .core-channel-recon-page .core-recon-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .core-channel-recon-page .core-recon-stats > div:nth-child(2) {
+    border-right: 0 !important;
+  }
+
+  .core-channel-recon-page .core-recon-stats > div:nth-child(-n + 2) {
+    border-bottom: 1px solid #edf1f5 !important;
+  }
+
+  .core-channel-recon-page .core-recon-filter-control,
+  .core-channel-recon-page .core-recon-partner-filter,
+  .core-channel-recon-page .core-recon-filter-search {
+    flex: 1 1 100% !important;
+    min-width: 0 !important;
+  }
+}
