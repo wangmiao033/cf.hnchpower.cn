@@ -102,3 +102,680 @@
 .core-channel-recon-page .channel-group-detail-table tbody tr[hidden] {
   display: none !important;
 }
+
+/* --------------------------------------------------------------------------
+   2026-09 clarity pass
+   The channel ledger is used for daily reconciliation, so readability wins
+   over maximum density. These overrides are deliberately scoped to this page.
+   -------------------------------------------------------------------------- */
+
+.core-channel-recon-page {
+  --channel-ui-border: #d8e2ee;
+  --channel-ui-border-strong: #c6d4e4;
+  --channel-ui-text: #18283d;
+  --channel-ui-sub: #52657e;
+  --channel-ui-muted: #7a8aa0;
+  --channel-ui-surface-soft: #f6f8fb;
+  --channel-ui-blue-soft: #eef5ff;
+}
+
+.core-channel-recon-page .page-container-body {
+  gap: 14px;
+  padding-bottom: 24px;
+}
+
+/* Top title + action bar */
+.core-channel-recon-page .core-recon-workbar {
+  overflow: visible;
+  border-color: var(--channel-ui-border);
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 4%), 0 8px 24px rgb(15 23 42 / 3%);
+}
+
+.core-channel-recon-page .core-recon-head {
+  min-height: 76px;
+  padding: 14px 18px;
+}
+
+.core-channel-recon-page .core-recon-title {
+  gap: 12px;
+}
+
+.core-channel-recon-page .core-recon-title-mark {
+  width: 40px;
+  height: 40px;
+  border: 1px solid #cfe0ff;
+  border-radius: 10px;
+  background: #edf4ff;
+  color: #1d5fd1 !important;
+  font-size: 16px !important;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 55%);
+}
+
+.core-channel-recon-page .core-recon-head h1 {
+  color: #13233a;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.2px;
+}
+
+.core-channel-recon-page .core-recon-title > div > span {
+  margin-top: 4px;
+  color: #718198;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.core-channel-recon-page .core-recon-actions {
+  gap: 9px;
+}
+
+.core-channel-recon-page .core-recon-actions button {
+  height: 38px;
+  padding: 0 14px;
+  border-color: #cfdae8;
+  border-radius: 9px;
+  color: #334861;
+  font-size: 13px;
+  box-shadow: 0 1px 1px rgb(15 23 42 / 3%);
+}
+
+.core-channel-recon-page .core-recon-actions button:hover {
+  border-color: #9fbce7;
+  background: #f8fbff;
+}
+
+.core-channel-recon-page .core-recon-actions .primary {
+  border-color: #2563eb;
+  background: #2563eb;
+  box-shadow: 0 4px 12px rgb(37 99 235 / 18%);
+}
+
+/* Filters: make labels and controls readable at a glance. */
+.core-channel-recon-page .core-recon-filters {
+  min-height: 62px;
+  gap: 10px;
+  padding: 10px 14px;
+  border-top-color: #e1e8f1;
+  background: #f7f9fc;
+}
+
+.core-channel-recon-page .core-recon-filter-control {
+  min-width: 176px;
+  height: 40px;
+  border-color: #d2dce9;
+  border-radius: 9px;
+  box-shadow: inset 0 1px 0 rgb(15 23 42 / 1%);
+}
+
+.core-channel-recon-page .core-recon-filter-control:focus-within {
+  border-color: #8fb2e8;
+  box-shadow: 0 0 0 3px rgb(37 99 235 / 8%);
+}
+
+.core-channel-recon-page .core-recon-filter-control > span {
+  padding-left: 12px;
+  color: #60728a;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.core-channel-recon-page .core-recon-filters input,
+.core-channel-recon-page .core-recon-filters select {
+  height: 38px;
+  color: #1e3048;
+  padding: 0 10px;
+  font-size: 13px;
+  font-weight: 550;
+}
+
+.core-channel-recon-page .core-recon-partner-filter {
+  min-width: 350px;
+}
+
+.core-channel-recon-page .core-recon-filter-search {
+  min-width: 300px;
+}
+
+.core-channel-recon-page .core-recon-filters .core-recon-partner-submit {
+  height: 30px;
+  margin-right: 4px;
+  padding: 0 11px;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.core-channel-recon-page .core-recon-filters .core-recon-reset {
+  height: 40px;
+  padding: 0 14px;
+  border-color: #d2dce9;
+  border-radius: 9px;
+  color: #52657e;
+}
+
+/* Quick filters */
+.core-channel-recon-page .bill-quick-filters {
+  min-height: 50px;
+  gap: 12px;
+  padding: 8px 12px;
+  border-color: var(--channel-ui-border);
+  border-radius: 10px;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 3%);
+}
+
+.core-channel-recon-page .bill-quick-filters__label {
+  color: #52657e;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.core-channel-recon-page .bill-quick-filters__items {
+  gap: 7px;
+}
+
+.core-channel-recon-page .bill-quick-filters__items button {
+  min-height: 32px;
+  padding: 0 12px;
+  border-color: #e1e7ef;
+  background: #f7f9fc;
+  color: #50627a;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.core-channel-recon-page .bill-quick-filters__items button:hover {
+  border-color: #b8ccec;
+  background: #f4f8ff;
+  color: #1f5fbd;
+}
+
+.core-channel-recon-page .bill-quick-filters__items button.is-active {
+  border-color: #aac5ee;
+  background: #eaf3ff;
+  color: #1555b5;
+  box-shadow: inset 0 0 0 1px rgb(37 99 235 / 4%);
+}
+
+.core-channel-recon-page .bill-quick-filters__items em {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+/* KPI strip */
+.core-channel-recon-page .core-recon-stats {
+  gap: 12px;
+}
+
+.core-channel-recon-page .core-recon-stats > div {
+  min-height: 84px;
+  padding: 13px 16px;
+  border-color: var(--channel-ui-border);
+  border-top-width: 4px;
+  border-radius: 10px;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 3%);
+}
+
+.core-channel-recon-page .core-recon-stats > div:nth-child(1) { border-top-color: #3b82f6; }
+.core-channel-recon-page .core-recon-stats > div:nth-child(2) { border-top-color: #6366f1; }
+.core-channel-recon-page .core-recon-stats > div:nth-child(3) { border-top-color: #8b5cf6; }
+.core-channel-recon-page .core-recon-stats > div:nth-child(4) { border-top-color: #f59e0b; }
+
+.core-channel-recon-page .core-recon-stats span {
+  color: #667890;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.core-channel-recon-page .core-recon-stats strong {
+  margin-top: 6px;
+  color: #17283f;
+  font-size: 21px;
+  font-weight: 800;
+  letter-spacing: -0.15px;
+  font-variant-numeric: tabular-nums;
+}
+
+.core-channel-recon-page .core-recon-stats > div:nth-child(4) strong {
+  color: #a6530a;
+}
+
+.core-channel-recon-page .core-recon-stats small {
+  margin-top: 4px;
+  color: #7c8da3;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* Main channel ledger */
+.core-channel-recon-page .core-recon-panel.channel-group-panel {
+  overflow: hidden;
+  border-color: var(--channel-ui-border);
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 3%), 0 8px 20px rgb(15 23 42 / 2%);
+}
+
+.core-channel-recon-page .core-recon-panel-head {
+  min-height: 54px;
+  padding: 0 14px;
+  border-bottom: 1px solid #dce5ef;
+  background: #fff;
+}
+
+.core-channel-recon-page .channel-group-panel-title {
+  gap: 10px;
+}
+
+.core-channel-recon-page .channel-group-panel-title h2 {
+  color: #17283f;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.core-channel-recon-page .channel-group-panel-title > span {
+  height: 24px;
+  padding: 0 9px;
+  border-color: #dbe3ed;
+  background: #f7f9fc;
+  color: #667890;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.core-channel-recon-page .core-recon-panel-tools > span {
+  color: #718198;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.core-channel-recon-page .channel-group-ledger {
+  max-height: calc(100vh - 374px);
+  background: #fff;
+  scrollbar-color: #c4d0df transparent;
+}
+
+.core-channel-recon-page .channel-group-summary-head {
+  grid-template-columns: 38px minmax(260px, 2fr) 76px 122px 122px 116px 116px 112px;
+  height: 42px;
+  padding: 0 12px;
+  border-bottom-color: #d7e1ec;
+  background: #f3f6fa;
+  color: #5f7188;
+  font-size: 12px;
+  font-weight: 750;
+  letter-spacing: 0.05px;
+}
+
+.core-channel-recon-page .channel-sort-head {
+  padding-right: 19px;
+}
+
+.core-channel-recon-page .channel-sort-head::after {
+  right: 4px;
+  color: #8da0b8;
+  font-size: 11px;
+}
+
+.core-channel-recon-page .channel-sort-head[data-sort-active='true'] {
+  color: #154f9f;
+  font-weight: 850;
+}
+
+.core-channel-recon-page .channel-group-card {
+  border-bottom-color: #e1e8f0;
+}
+
+.core-channel-recon-page .channel-group-summary {
+  grid-template-columns: 38px minmax(0, 1fr);
+  padding: 0 12px;
+  border-bottom-color: #e1e8f0;
+}
+
+.core-channel-recon-page .channel-group-card:nth-child(odd) .channel-group-summary {
+  background: #fcfdff;
+}
+
+.core-channel-recon-page .channel-group-summary:hover,
+.core-channel-recon-page .channel-group-card:nth-child(odd) .channel-group-summary:hover {
+  background: #f3f7fc;
+}
+
+.core-channel-recon-page .channel-group-select {
+  min-height: 58px;
+}
+
+.core-channel-recon-page .channel-group-toggle {
+  grid-template-columns: minmax(260px, 2fr) 76px 122px 122px 116px 116px 112px;
+  min-height: 58px;
+  color: var(--channel-ui-text);
+}
+
+.core-channel-recon-page .channel-group-identity {
+  gap: 10px;
+}
+
+.core-channel-recon-page .channel-group-chevron {
+  width: 20px;
+  height: 20px;
+  flex-basis: 20px;
+  color: #58708e;
+  font-size: 22px;
+}
+
+.core-channel-recon-page .channel-group-identity strong {
+  color: #173961;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.3;
+}
+
+.core-channel-recon-page .channel-group-identity small {
+  margin-top: 4px;
+  color: #7a8aa0;
+  font-size: 11px;
+  font-weight: 550;
+}
+
+.core-channel-recon-page .channel-group-count {
+  color: #60728a;
+  font-size: 12px;
+}
+
+.core-channel-recon-page .channel-group-count strong {
+  color: #243a55;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.core-channel-recon-page .channel-group-count small {
+  font-size: 10px;
+}
+
+.core-channel-recon-page .channel-group-period {
+  color: #465d78;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.core-channel-recon-page .channel-group-money {
+  color: #263b56;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.core-channel-recon-page .channel-group-money.has-unpaid {
+  color: #a6530a;
+  font-weight: 850;
+}
+
+.core-channel-recon-page .core-channel-status-badge {
+  min-width: 62px;
+  height: 24px;
+  padding: 0 9px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.core-channel-recon-page .core-channel-status-badge.is-master-pending {
+  min-width: 72px;
+  border-color: #f2c98f !important;
+  background: #fff8eb !important;
+  color: #9a4d08 !important;
+  box-shadow: inset 0 0 0 1px rgb(245 158 11 / 3%);
+}
+
+.core-channel-recon-page .core-channel-status-badge.is-master-pending:hover,
+.core-channel-recon-page .core-channel-status-badge.is-master-pending:focus-visible {
+  border-color: #e8b669 !important;
+  background: #fff3d8 !important;
+  color: #813b04 !important;
+}
+
+/* Selected channel header / detail workspace */
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-summary {
+  min-width: 1040px;
+  border-bottom-color: #cddbea;
+  background: #f8fbff;
+  box-shadow: inset 4px 0 0 #3b82f6, 0 4px 16px rgb(15 23 42 / 6%);
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-select {
+  min-height: 74px;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-toggle {
+  min-height: 74px;
+  padding-right: 118px;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-identity strong {
+  color: #123d72;
+  font-size: 15px;
+  font-weight: 850;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-identity small {
+  color: #6d7f96;
+  font-size: 11px;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-count,
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-period,
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-money {
+  min-height: 44px;
+  gap: 4px;
+  padding-top: 15px;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-count::before,
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-period::before,
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-money::before {
+  top: 1px;
+  color: #8090a5;
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-count strong,
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-period,
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-money {
+  color: #203b5e;
+  font-size: 13px;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-money.has-unpaid {
+  color: #a6530a;
+}
+
+.core-channel-recon-page .channel-master-inline-back {
+  right: 14px;
+  height: 32px;
+  padding: 0 12px;
+  border-color: #cbd8e8;
+  border-radius: 8px;
+  color: #405a78;
+  font-size: 11px;
+  font-weight: 800;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 3%);
+}
+
+.core-channel-recon-page .channel-group-toggle:hover .channel-master-inline-back {
+  border-color: #9ebbe3;
+  background: #eef5ff;
+  color: #1859ad;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-details {
+  padding: 14px 14px 16px;
+  background: #f3f6fa;
+}
+
+.core-channel-recon-page .channel-pending-filter-note {
+  min-height: 40px;
+  margin-bottom: 10px;
+  padding: 0 12px;
+  border-color: #d5e0ec;
+  border-radius: 8px;
+  color: #52657e;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.core-channel-recon-page .channel-pending-show-all {
+  height: 28px;
+  padding: 0 10px;
+  border-color: #cbd8e8;
+  border-radius: 7px;
+  color: #385775;
+  font-size: 10px;
+}
+
+/* Bill detail table */
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-detail-table {
+  min-width: 1080px;
+  border-color: #ccd9e7;
+  border-radius: 10px;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 3%);
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-detail-table thead th {
+  height: 40px;
+  padding: 0 10px;
+  border-bottom-color: #d6e0eb;
+  background: #edf2f7;
+  color: #53677f;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-detail-table tbody td {
+  height: 52px;
+  padding: 7px 10px;
+  border-bottom-color: #e5ebf2;
+  color: #263d59;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-detail-table tbody tr:nth-child(even) td {
+  background: #fafcff;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-detail-table tbody tr:hover td {
+  background: #eef5ff;
+}
+
+.core-channel-recon-page .channel-group-detail-table .core-recon-number,
+.core-channel-recon-page .channel-group-detail-table .core-recon-game-text {
+  color: #2b4666;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.core-channel-recon-page .channel-group-detail-table .core-recon-money {
+  color: #2a415d !important;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.core-channel-recon-page .channel-group-detail-table .core-recon-money--settlement {
+  color: #1d3552 !important;
+  font-weight: 850;
+}
+
+.core-channel-recon-page .channel-group-detail-table .core-recon-money--received strong {
+  color: #2a415d;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.core-channel-recon-page .channel-group-detail-table .core-recon-money--received small {
+  margin-top: 3px;
+  color: #8191a6;
+  font-size: 10px;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-detail-table .core-channel-status-badge {
+  min-width: 56px;
+  height: 23px;
+  padding: 0 8px;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-detail-table .core-channel-status-badge.is-check-normal {
+  border-color: #bbdfc8;
+  background: #f0faf4;
+  color: #287244;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-detail-table .core-recon-row-actions {
+  gap: 5px;
+  flex-wrap: nowrap;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-detail-table .core-recon-row-actions button {
+  height: 28px;
+  min-height: 28px;
+  padding: 0 8px;
+  border-color: #d2dce8;
+  border-radius: 7px;
+  font-size: 10px;
+  font-weight: 750;
+  background: #fff;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-detail-table .core-recon-row-actions button:hover {
+  border-color: #9ebbe3;
+  background: #f4f8ff;
+}
+
+/* Checkbox visibility */
+.core-channel-recon-page .channel-group-head-check input,
+.core-channel-recon-page .channel-group-select input,
+.core-channel-recon-page .channel-group-detail-table input[type='checkbox'] {
+  width: 15px;
+  height: 15px;
+}
+
+@media (max-width: 1380px) {
+  .core-channel-recon-page .core-recon-filters {
+    flex-wrap: wrap;
+  }
+
+  .core-channel-recon-page .core-recon-filter-search {
+    flex: 1 1 300px;
+  }
+
+  .core-channel-recon-page .channel-group-summary-head {
+    grid-template-columns: 38px minmax(235px, 2fr) 70px 112px 112px 108px 108px 106px;
+  }
+
+  .core-channel-recon-page .channel-group-toggle {
+    grid-template-columns: minmax(235px, 2fr) 70px 112px 112px 108px 108px 106px;
+  }
+}
+
+@media (max-width: 980px) {
+  .core-channel-recon-page .core-recon-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .core-channel-recon-page .core-recon-actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .core-channel-recon-page .core-recon-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .core-channel-recon-page .core-recon-partner-filter,
+  .core-channel-recon-page .core-recon-filter-search {
+    min-width: 280px;
+    flex: 1 1 280px;
+  }
+}
