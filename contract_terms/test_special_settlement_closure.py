@@ -40,14 +40,14 @@ class SpecialSettlementClosureTests(unittest.TestCase):
     def test_special_reason_is_valid_difference_reason(self):
         self.assertIn(v11_main.SPECIAL_SETTLEMENT_REASON, v11_main._v4.REASON_TYPES)
 
-    def test_production_uses_v20_entrypoint_with_v11_business_rules(self):
+    def test_production_uses_v21_entrypoint_with_v11_business_rules(self):
         root = Path(__file__).resolve().parents[1]
         config = (root / "vercel.json").read_text(encoding="utf-8")
-        self.assertIn('"entrypoint": "v20_main:app"', config)
+        self.assertIn('"entrypoint": "v21_main:app"', config)
 
-        import v20_main
+        import v21_main
 
-        self.assertIs(v20_main.app, v11_main.app)
+        self.assertIs(v21_main.app, v11_main.app)
         self.assertIn(v11_main.SPECIAL_SETTLEMENT_REASON, v11_main._v4.REASON_TYPES)
 
 
