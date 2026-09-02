@@ -13,8 +13,9 @@ import './styles/RdLedgerWidthFix.css'
 import './styles/RdLedgerActionPolish.css'
 import './styles/RdLedgerDeleteAction.css'
 import './styles/ChannelLedgerV2.css'
+import './styles/ChannelLedgerV3.css'
 
-// Keep the page-specific channel-ledger redesign last in the global style cascade.
+// Keep the page-specific channel-ledger visual polish last in the global style cascade.
 const PRELOAD_RECOVERY_KEY = 'cf-preload-recovery'
 
 window.addEventListener('vite:preloadError', (event) => {
