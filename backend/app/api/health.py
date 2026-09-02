@@ -41,11 +41,16 @@ def _log_contract_match_probe() -> None:
                     LEFT JOIN cf_partner_records AS partner ON partner.id = contract.partner_id
                     LEFT JOIN cf_contract_access_terms AS terms ON terms.access_item_id = access.id
                     WHERE access.product_name ILIKE :product
+                      AND (
+                        partner.name ILIKE :partner
+                        OR partner.short_name ILIKE :partner
+                        OR contract.counterparty ILIKE :partner
+                      )
                     ORDER BY contract.updated_at DESC, access.updated_at DESC
                     LIMIT 50
                     """
                 ),
-                {"product": "%一起来修仙%"},
+                {"product": "%一起来修仙%", "partner": "%爱趣%"},
             ).mappings().all()
         compact_rows = []
         for row in rows:
@@ -65,9 +70,9 @@ def _log_contract_match_probe() -> None:
                 "partner": item.get("partner_name"),
                 "short": item.get("partner_short_name"),
             })
-        logger.warning("CONTRACT_PROBE_XIUXIAN count=%s rows=%s", len(compact_rows), compact_rows)
+        logger.warning("CONTRACT_PROBE_AIQU_ONLY count=%s rows=%s", len(compact_rows), compact_rows)
     except Exception:
-        logger.exception("CONTRACT_PROBE_XIUXIAN failed")
+        logger.exception("CONTRACT_PROBE_AIQU_ONLY failed")
 
 
 @router.get("/health")
