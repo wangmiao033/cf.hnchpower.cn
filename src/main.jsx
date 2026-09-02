@@ -15,6 +15,7 @@ import './styles/RdLedgerDeleteAction.css'
 import './styles/ChannelLedgerV2.css'
 import './styles/ChannelLedgerV3.css'
 import './styles/ChannelLedgerV4.css'
+import './styles/ChannelLedgerV5.css'
 
 // Keep the page-specific channel-ledger visual polish last in the global style cascade.
 const PRELOAD_RECOVERY_KEY = 'cf-preload-recovery'
