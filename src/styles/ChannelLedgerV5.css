@@ -1,0 +1,117 @@
+/* Channel ledger V5 — single-line bill detail rows.
+   Visual-only override; no business logic or interaction behavior is changed. */
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-details {
+  padding: 7px 10px 10px !important;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-detail-table {
+  table-layout: fixed !important;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-detail-table thead th {
+  height: 32px !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  vertical-align: middle !important;
+}
+
+.core-channel-recon-page .channel-group-card.is-expanded .channel-group-detail-table tbody td {
+  height: 38px !important;
+  padding-top: 2px !important;
+  padding-bottom: 2px !important;
+  vertical-align: middle !important;
+  line-height: 1.2 !important;
+}
+
+/* Keep the period cell as a native table cell. The global flex rule was
+   making the month and following cells appear like a two-line record. */
+.core-channel-recon-page .channel-group-detail-table td.core-rd-month-cell {
+  display: table-cell !important;
+  white-space: nowrap !important;
+}
+
+.core-channel-recon-page .channel-group-detail-table td.core-rd-month-cell input[type='checkbox'] {
+  margin: 0 7px 0 0 !important;
+  vertical-align: middle !important;
+}
+
+.core-channel-recon-page .channel-group-detail-table td.core-rd-month-cell > span {
+  display: inline !important;
+  vertical-align: middle !important;
+  white-space: nowrap !important;
+}
+
+.core-channel-recon-page .channel-group-detail-table td.core-recon-number {
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+.core-channel-recon-page .channel-group-detail-table .core-recon-game-text {
+  display: block !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+/* Received amount and its lifecycle note stay on one horizontal line. */
+.core-channel-recon-page .channel-group-detail-table .core-recon-money--received {
+  white-space: nowrap !important;
+}
+
+.core-channel-recon-page .channel-group-detail-table .core-recon-money--received strong,
+.core-channel-recon-page .channel-group-detail-table .core-recon-money--received small {
+  display: inline !important;
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+  white-space: nowrap !important;
+  line-height: 1 !important;
+}
+
+.core-channel-recon-page .channel-group-detail-table .core-recon-money--received small {
+  margin-left: 6px !important;
+  color: #98a4b3 !important;
+  font-size: 8px !important;
+}
+
+/* Status and row actions must never create a second visual row. */
+.core-channel-recon-page .channel-group-detail-table .core-channel-status-badge {
+  white-space: nowrap !important;
+}
+
+.core-channel-recon-page .channel-group-detail-table .core-recon-row-actions {
+  display: flex !important;
+  align-items: center !important;
+  flex-wrap: nowrap !important;
+  gap: 4px !important;
+  white-space: nowrap !important;
+}
+
+.core-channel-recon-page .channel-group-detail-table .core-recon-row-actions button {
+  height: 23px !important;
+  min-height: 23px !important;
+  padding: 0 6px !important;
+  font-size: 9px !important;
+}
+
+/* Give descriptive columns enough room while keeping the row compact. */
+.core-channel-recon-page .channel-group-detail-table .channel-detail-col-period {
+  width: 120px !important;
+}
+
+.core-channel-recon-page .channel-group-detail-table .channel-detail-col-number {
+  width: 150px !important;
+}
+
+.core-channel-recon-page .channel-group-detail-table .channel-detail-col-game {
+  width: 230px !important;
+}
+
+.core-channel-recon-page .channel-group-detail-table .channel-detail-col-received {
+  width: 150px !important;
+}
+
+.core-channel-recon-page .channel-group-detail-table .channel-detail-col-actions {
+  width: 165px !important;
+}
