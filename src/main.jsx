@@ -12,6 +12,7 @@ import './styles/SystemDetailPolishV42.css'
 import './styles/RdLedgerWidthFix.css'
 import './styles/RdLedgerActionPolish.css'
 import './styles/RdLedgerDeleteAction.css'
+import './styles/ChannelLedgerV2.css'
 
 const PRELOAD_RECOVERY_KEY = 'cf-preload-recovery'
 
