@@ -108,9 +108,7 @@ function CoreReconciliationPage() {
     settings,
     showToast,
     setActiveView,
-    openReconciliationEdit,
-    openBill360,
-    prefetchBill360
+    openReconciliationEdit
   } = useAppState()
   const fileRef = useRef(null)
   const [month, setMonth] = useState('')
@@ -608,32 +606,22 @@ function CoreReconciliationPage() {
           <span>{selectedRows.length > 0 ? `已选 ${selectedRows.length} 条` : `${rows.length} 条`}</span>
         </div>
         <div className="core-recon-table-wrap">
-          <table className="core-recon-table core-rd-recon-table">
+          <table className="rd-finance-table" aria-label="研发账单">
             <colgroup>
-              <col className="core-rd-col-month" />
-              <col className="core-rd-col-number" />
-              <col className="core-rd-col-partner" />
-              <col className="core-rd-col-game" />
-              <col className="core-rd-col-flow" />
-              <col className="core-rd-col-share" />
-              <col className="core-rd-col-settlement" />
-              <col className="core-rd-col-prepayment" />
-              <col className="core-rd-col-payable" />
-              <col className="core-rd-col-received" />
-              <col className="core-rd-col-status" />
-              <col className="core-rd-col-actions" />
+              <col className="rd-finance-col-info" />
+              <col className="rd-finance-col-flow" />
+              <col className="rd-finance-col-share" />
+              <col className="rd-finance-col-settlement" />
+              <col className="rd-finance-col-payment" />
+              <col className="rd-finance-col-status" />
+              <col className="rd-finance-col-actions" />
             </colgroup>
             <thead>
               <tr>
-                <th>账单月份</th>
-                <th>编号</th>
-                <th>客户简称</th>
-                <th>产品</th>
+                <th scope="col">账单信息</th>
                 <th className="core-recon-align-right">流水</th>
                 <th className="core-recon-align-right">分成比例</th>
                 <th className="core-recon-align-right">研发应结</th>
-                <th className="core-recon-align-right">预付款抵扣</th>
-                <th className="core-recon-align-right">实际应付</th>
                 <th className="core-recon-align-right">已付 / 未付</th>
                 <th>闭环状态</th>
                 <th>操作</th>
@@ -642,7 +630,7 @@ function CoreReconciliationPage() {
             <tbody>
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="core-recon-empty">
+                  <td colSpan={7} className="core-recon-empty">
                     {quickFilter === 'data-diff' && dataDiffLoading
                       ? '正在批量核对 QuickSDK 数据差异…'
                       : quickFilter === 'trash'
@@ -671,7 +659,8 @@ function CoreReconciliationPage() {
                       key={row.id}
                       className={selectedIds.includes(String(row.id)) ? 'is-selected' : ''}
                     >
-                      <td className="core-rd-month-cell" title={periodLabel}>
+                      <td>
+                        <div className="rd-finance-info">
                         <input
                           type="checkbox"
                           aria-label={`选择账单 ${text(row.settlementNumber)}`}
@@ -679,22 +668,23 @@ function CoreReconciliationPage() {
                           disabled={archived || isCancelled}
                           onChange={() => toggleSelected(row.id)}
                         />
-                        <span>{periodLabel}</span>
-                        {periodCount > 1 ? <em className="core-rd-period-badge">多周期</em> : null}
-                      </td>
-                      <td>{text(row.settlementNumber)}</td>
-                      <td>
+                        <div className="rd-finance-identity">
                         <strong
-                          className="core-recon-partner-short-name"
+                          className="rd-finance-customer"
                           title={text(row.partner || row.partyBName)}
                         >
                           {text(row.partnerShortName || row.partner || row.partyBName)}
                         </strong>
-                      </td>
-                      <td>
-                        <span className="core-recon-game-text" title={text(gameText(row))}>
+                        <span className="rd-finance-product" title={text(gameText(row))}>
                           {text(gameText(row))}
                         </span>
+                        <div className="rd-finance-meta">
+                          <span title={periodLabel}>{periodLabel}</span>
+                          {periodCount > 1 ? <em>多周期</em> : null}
+                          <span title={text(row.settlementNumber)}>{text(row.settlementNumber)}</span>
+                        </div>
+                        </div>
+                        </div>
                       </td>
                       <td className="core-recon-money">
                         {money(row.gameFlow || sumItems(row, 'revenue'))}
@@ -705,30 +695,20 @@ function CoreReconciliationPage() {
                       <td className="core-recon-money core-recon-money--settlement">
                         {money(recordSettlementAmount(row))}
                       </td>
-                      <td className="core-recon-money">
-                        {recordPrepaymentDeduction(row) > 0.01 ? `-${money(recordPrepaymentDeduction(row))}` : '—'}
-                      </td>
-                      <td className="core-recon-money core-recon-money--settlement">
-                        {money(recordActualPayable(row))}
-                      </td>
                       <td
-                        className="core-recon-money core-recon-money--received"
+                        className="core-recon-money rd-finance-payment"
                         title={row.paymentStatus || '未付款'}
                       >
-                        <strong style={{ display: 'block', fontWeight: 700 }}>{money(paid)}</strong>
-                        <small style={{ display: 'block', marginTop: 2, color: '#8a98aa', fontSize: 10 }}>未付 {money(unpaid)}</small>
+                        <span className="rd-finance-paid">已付 {money(paid)}</span>
+                        <strong className={unpaid > 0.01 ? 'rd-finance-unpaid' : 'rd-finance-cleared'}>未付 {money(unpaid)}</strong>
                       </td>
                       <td>
-                        <span className={`v4-list-closure is-${closure.tone}`}>
+                        <span className={`rd-finance-status is-${closure.tone}`} title={`${closure.detail} · ${STATUS_LABELS[row.status] || row.status || '待处理'}`}>
                           <strong>{closure.label}</strong>
-                          <small>{closure.detail} · {STATUS_LABELS[row.status] || row.status || '待处理'}</small>
                         </span>
                       </td>
                       <td>
-                        <div className="core-recon-row-actions">
-                          <button type="button" onMouseEnter={() => prefetchBill360?.('rd', String(row.id))} onFocus={() => prefetchBill360?.('rd', String(row.id))} onClick={() => openBill360('rd', String(row.id), row)}>
-                            360°
-                          </button>
+                        <div className="rd-finance-actions">
                           {isCancelled ? (
                             <button type="button" disabled={voidingId === String(row.id)} onClick={() => void handleRestoreCancelled(row)}>
                               {voidingId === String(row.id) ? '处理中…' : '恢复账单'}
