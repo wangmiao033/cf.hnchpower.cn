@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
+from app.api.operating_deposit import router as operating_deposit_router
 from app.api.server_cost import router as server_cost_router
 from app.core.deps import get_db
 from app.models.operating_expense import OperatingExpense
@@ -22,6 +23,7 @@ from app.services.monthly_business_dashboard import month_key
 
 router = APIRouter()
 router.include_router(server_cost_router, prefix="/server-costs", tags=["server-costs"])
+router.include_router(operating_deposit_router, prefix="/deposits", tags=["operating-deposits"])
 
 OPERATING_EXPENSE_CATEGORIES = frozenset(
     {
@@ -34,6 +36,8 @@ OPERATING_EXPENSE_CATEGORIES = frozenset(
         "other",
     }
 )
+PAYMENT_STATUSES = frozenset({"paid", "unpaid"})
+INVOICE_STATUSES = frozenset({"unknown", "none", "pending", "received"})
 
 
 def _normalize_text(value: str | None) -> str | None:
@@ -61,12 +65,47 @@ def _validate_category(raw: str | None) -> str:
     return category
 
 
-def _apply_filters(stmt, *, month: str | None, category: str | None, game_name: str | None, q: str | None):
+def _validate_payment_status(raw: str | None) -> str:
+    value = str(raw or "").strip().lower()
+    if value not in PAYMENT_STATUSES:
+        raise HTTPException(
+            status_code=422,
+            detail={"error": "invalid_payment_status", "allowed": sorted(PAYMENT_STATUSES)},
+        )
+    return value
+
+
+def _validate_invoice_status(raw: str | None) -> str:
+    value = str(raw or "").strip().lower()
+    if value not in INVOICE_STATUSES:
+        raise HTTPException(
+            status_code=422,
+            detail={"error": "invalid_invoice_status", "allowed": sorted(INVOICE_STATUSES)},
+        )
+    return value
+
+
+def _normalize_expense_kind(raw: str | None) -> str:
+    value = str(raw or "general").strip().lower()
+    return value or "general"
+
+
+def _apply_filters(
+    stmt,
+    *,
+    month: str | None,
+    category: str | None,
+    expense_kind: str | None,
+    game_name: str | None,
+    q: str | None,
+):
     if month and month.strip():
         normalized_month = _validate_month(month)
         stmt = stmt.where(OperatingExpense.expense_month == normalized_month)
     if category and category.strip():
         stmt = stmt.where(OperatingExpense.category == _validate_category(category))
+    if expense_kind and expense_kind.strip():
+        stmt = stmt.where(OperatingExpense.expense_kind == _normalize_expense_kind(expense_kind))
     if game_name and game_name.strip():
         stmt = stmt.where(OperatingExpense.game_name.ilike(f"%{game_name.strip()}%"))
     if q and q.strip():
@@ -77,6 +116,9 @@ def _apply_filters(stmt, *, month: str | None, category: str | None, game_name: 
                 OperatingExpense.vendor_name.ilike(term),
                 OperatingExpense.remark.ilike(term),
                 OperatingExpense.category.ilike(term),
+                OperatingExpense.expense_kind.ilike(term),
+                OperatingExpense.invoice_number.ilike(term),
+                OperatingExpense.voucher_note.ilike(term),
             )
         )
     return stmt
@@ -87,6 +129,7 @@ def list_operating_expenses(
     db: Session = Depends(get_db),
     month: str | None = Query(None),
     category: str | None = Query(None),
+    expense_kind: str | None = Query(None),
     game_name: str | None = Query(None),
     q: str | None = Query(None),
     limit: int = Query(100, ge=1, le=500),
@@ -96,6 +139,7 @@ def list_operating_expenses(
         select(OperatingExpense),
         month=month,
         category=category,
+        expense_kind=expense_kind,
         game_name=game_name,
         q=q,
     )
@@ -129,10 +173,20 @@ def create_operating_expense(
     data = payload.model_dump()
     data["expense_month"] = _validate_month(data.get("expense_month"))
     data["category"] = _validate_category(data.get("category"))
-    data["game_name"] = _normalize_text(data.get("game_name"))
-    data["vendor_name"] = _normalize_text(data.get("vendor_name"))
-    data["remark"] = _normalize_text(data.get("remark"))
-    data["expense_date"] = _normalize_text(data.get("expense_date"))
+    data["expense_kind"] = _normalize_expense_kind(data.get("expense_kind"))
+    data["payment_status"] = _validate_payment_status(data.get("payment_status"))
+    data["invoice_status"] = _validate_invoice_status(data.get("invoice_status"))
+    for field in (
+        "game_name",
+        "vendor_name",
+        "remark",
+        "expense_date",
+        "due_date",
+        "payment_date",
+        "invoice_number",
+        "voucher_note",
+    ):
+        data[field] = _normalize_text(data.get(field))
     data["source"] = str(data.get("source") or "manual").strip() or "manual"
     row = OperatingExpense(id=str(uuid4()), **data)
     db.add(row)
@@ -155,6 +209,12 @@ def update_operating_expense(
         data["expense_month"] = _validate_month(data.get("expense_month"))
     if "category" in data:
         data["category"] = _validate_category(data.get("category"))
+    if "expense_kind" in data:
+        data["expense_kind"] = _normalize_expense_kind(data.get("expense_kind"))
+    if "payment_status" in data:
+        data["payment_status"] = _validate_payment_status(data.get("payment_status"))
+    if "invoice_status" in data:
+        data["invoice_status"] = _validate_invoice_status(data.get("invoice_status"))
     if "amount" in data and data.get("amount") is None:
         raise HTTPException(status_code=422, detail="费用金额不能为空")
     if "source" in data:
@@ -162,7 +222,16 @@ def update_operating_expense(
         if not source:
             raise HTTPException(status_code=422, detail="费用来源不能为空")
         data["source"] = source
-    for field in ("game_name", "vendor_name", "remark", "expense_date"):
+    for field in (
+        "game_name",
+        "vendor_name",
+        "remark",
+        "expense_date",
+        "due_date",
+        "payment_date",
+        "invoice_number",
+        "voucher_note",
+    ):
         if field in data:
             data[field] = _normalize_text(data.get(field))
     for key, value in data.items():
