@@ -136,6 +136,12 @@
   display: none !important;
 }
 
+.core-recon-page .core-rd-recon-table .core-rd-col-prepayment,
+.core-recon-page .core-rd-recon-table .core-rd-col-payable {
+  width: 0 !important;
+  visibility: collapse;
+}
+
 .core-recon-page .core-rd-recon-table {
   width: 100%;
   min-width: 1188px;
