@@ -1,0 +1,341 @@
+/*
+ * 研发账单列表专用优化层。
+ * 目标：减少横向空白、突出金额与未付状态、提高高频扫表效率。
+ * 仅调整展示，不改变任何结算、付款、归档或导入导出逻辑。
+ */
+
+/* 1. 页面节奏：把筛选、快捷状态和汇总压紧，让表格尽快进入视野。 */
+.core-recon-page .page-container-body {
+  gap: 8px;
+}
+
+.core-recon-page .core-recon-workbar,
+.core-recon-page .bill-quick-filters,
+.core-recon-page .core-recon-panel {
+  border-radius: 10px;
+}
+
+.core-recon-page .core-recon-filters {
+  min-height: 48px;
+  padding: 6px 8px;
+  gap: 6px;
+}
+
+.core-recon-page .core-recon-filter-control {
+  min-width: 146px;
+  height: 34px;
+  border-radius: 7px;
+}
+
+.core-recon-page .core-recon-partner-filter {
+  min-width: 250px;
+}
+
+.core-recon-page .core-recon-filter-search {
+  min-width: 260px;
+}
+
+.core-recon-page .core-recon-filters input,
+.core-recon-page .core-recon-filters select {
+  height: 32px;
+  font-size: 12px;
+}
+
+.core-recon-page .core-recon-filters .core-recon-reset {
+  height: 34px;
+}
+
+/* 快捷筛选不再额外占一个“标题位”，直接让状态成为主角。 */
+.core-recon-page + .bill-quick-filters,
+.core-recon-page .bill-quick-filters {
+  min-height: 36px;
+  padding: 4px 7px;
+  gap: 4px;
+}
+
+.core-recon-page + .bill-quick-filters .bill-quick-filters__label,
+.core-recon-page .bill-quick-filters .bill-quick-filters__label {
+  display: none;
+}
+
+.core-recon-page + .bill-quick-filters .bill-quick-filters__items,
+.core-recon-page .bill-quick-filters .bill-quick-filters__items {
+  gap: 3px;
+}
+
+.core-recon-page + .bill-quick-filters .bill-quick-filters__items button,
+.core-recon-page .bill-quick-filters .bill-quick-filters__items button {
+  min-height: 26px;
+  padding: 0 8px;
+  border-radius: 6px;
+  background: transparent;
+  font-size: 11px;
+}
+
+.core-recon-page + .bill-quick-filters .bill-quick-filters__items button.is-active,
+.core-recon-page .bill-quick-filters .bill-quick-filters__items button.is-active {
+  border-color: #c7d8f6;
+  background: #edf4ff;
+  color: #2456c8;
+}
+
+/* 2. 汇总改成一条紧凑数据带，避免四张“大卡片”抢占空间。 */
+.core-recon-page .core-recon-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid #dfe6ef;
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.core-recon-page .core-recon-stats > div {
+  min-height: 56px;
+  padding: 8px 12px;
+  border: 0;
+  border-right: 1px solid #e8edf3;
+  border-radius: 0;
+  background: transparent;
+}
+
+.core-recon-page .core-recon-stats > div:last-child {
+  border-right: 0;
+}
+
+.core-recon-page .core-recon-stats span {
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.core-recon-page .core-recon-stats strong {
+  margin-top: 3px;
+  font-size: 17px;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+
+.core-recon-page .core-recon-stats small {
+  margin-top: 2px;
+  font-size: 9.5px;
+}
+
+.core-recon-page .core-recon-stats > div:nth-child(3) strong {
+  color: #2456c8;
+}
+
+.core-recon-page .core-recon-stats > div:nth-child(4) strong {
+  color: #b45309;
+}
+
+/* 3. 表格主体：隐藏低频财务拆分列，把空间还给产品、金额和状态。 */
+.core-recon-page .core-rd-recon-table th:nth-child(8),
+.core-recon-page .core-rd-recon-table td:nth-child(8),
+.core-recon-page .core-rd-recon-table th:nth-child(9),
+.core-recon-page .core-rd-recon-table td:nth-child(9) {
+  display: none !important;
+}
+
+.core-recon-page .core-rd-recon-table {
+  width: 100%;
+  min-width: 1188px;
+  table-layout: fixed;
+  font-size: 12px;
+}
+
+.core-recon-page .core-rd-recon-table .core-rd-col-month { width: 110px; }
+.core-recon-page .core-rd-recon-table .core-rd-col-number { width: 132px; }
+.core-recon-page .core-rd-recon-table .core-rd-col-partner { width: 110px; }
+.core-recon-page .core-rd-recon-table .core-rd-col-game { width: 190px; }
+.core-recon-page .core-rd-recon-table .core-rd-col-flow { width: 118px; }
+.core-recon-page .core-rd-recon-table .core-rd-col-share { width: 70px; }
+.core-recon-page .core-rd-recon-table .core-rd-col-settlement { width: 108px; }
+.core-recon-page .core-rd-recon-table .core-rd-col-received { width: 118px; }
+.core-recon-page .core-rd-recon-table .core-rd-col-status { width: 94px; }
+.core-recon-page .core-rd-recon-table .core-rd-col-actions { width: 138px; }
+
+.core-recon-page .core-recon-table-wrap {
+  max-height: calc(100vh - 390px);
+  border-top: 0;
+}
+
+.core-recon-page .core-recon-panel-head {
+  min-height: 40px;
+  padding: 0 10px 0 12px;
+}
+
+.core-recon-page .core-recon-panel-head h2 {
+  font-size: 13px;
+}
+
+.core-recon-page .core-rd-recon-table th,
+.core-recon-page .core-rd-recon-table td {
+  height: 40px;
+  padding-right: 8px;
+  padding-left: 8px;
+}
+
+.core-recon-page .core-rd-recon-table thead th {
+  height: 36px;
+  color: #6c7a8d !important;
+  background: #f7f9fc !important;
+  font-size: 10.5px !important;
+  font-weight: 750 !important;
+}
+
+.core-recon-page .core-rd-recon-table tbody tr:nth-child(even) {
+  background: #fbfcfe;
+}
+
+.core-recon-page .core-rd-recon-table tbody tr:hover {
+  background: #f3f7fd !important;
+}
+
+/* 产品保持单行，缩短固定宽度后通过原生 title 查看全称。 */
+.core-recon-page .core-recon-game-text {
+  max-width: 100%;
+  color: #2f3d52;
+  font-size: 11.5px;
+  font-weight: 500;
+}
+
+.core-recon-page .core-recon-partner-short-name {
+  font-size: 11.5px;
+  font-weight: 750;
+}
+
+.core-recon-page .core-rd-month-cell {
+  gap: 5px;
+}
+
+.core-recon-page .core-rd-period-badge {
+  padding: 1px 4px;
+  border-radius: 5px;
+  font-size: 9px;
+}
+
+/* 4. 财务数字层级：流水次要、应结蓝色、未付橙色。 */
+.core-recon-page .core-recon-money,
+.core-recon-page .core-recon-rate {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.core-recon-page .core-recon-money--settlement {
+  color: #2456c8 !important;
+  font-weight: 750;
+}
+
+.core-recon-page .core-recon-money--received > strong {
+  color: #566579;
+  font-size: 10.5px;
+  font-weight: 600 !important;
+}
+
+.core-recon-page .core-recon-money--received > small {
+  margin-top: 1px !important;
+  color: #b45309 !important;
+  font-size: 9.5px !important;
+  font-weight: 700;
+}
+
+/* 列表只保留闭环结论，详细说明留在编辑页，减少视觉噪音。 */
+.core-recon-page .core-rd-recon-table .v4-list-closure {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 7px;
+  border-radius: 6px;
+}
+
+.core-recon-page .core-rd-recon-table .v4-list-closure strong {
+  font-size: 9.5px;
+  white-space: nowrap;
+}
+
+.core-recon-page .core-rd-recon-table .v4-list-closure small {
+  display: none;
+}
+
+/* 5. 操作列固定在最右侧；滚动查看长产品时仍可直接编辑。 */
+.core-recon-page .core-rd-recon-table th:last-child,
+.core-recon-page .core-rd-recon-table td:last-child {
+  position: sticky;
+  right: 0;
+  z-index: 3;
+  background: #ffffff;
+  box-shadow: -8px 0 14px -14px rgba(30, 48, 75, .45);
+}
+
+.core-recon-page .core-rd-recon-table thead th:last-child {
+  z-index: 5;
+  background: #f7f9fc !important;
+}
+
+.core-recon-page .core-rd-recon-table tbody tr:nth-child(even) td:last-child {
+  background: #fbfcfe;
+}
+
+.core-recon-page .core-rd-recon-table tbody tr:hover td:last-child,
+.core-recon-page .core-rd-recon-table tbody tr.is-selected td:last-child {
+  background: #f3f7fd;
+}
+
+.core-recon-page .core-recon-row-actions {
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.core-recon-page .core-recon-row-actions button {
+  height: 25px;
+  padding: 0 7px;
+  border-radius: 6px;
+  font-size: 10px;
+}
+
+.core-recon-page .core-recon-row-actions button:not(.danger) {
+  color: #315f9f;
+}
+
+.core-recon-page .core-recon-row-actions button.danger {
+  border-color: #f1d5d8;
+  background: #fffafa;
+  color: #b42318;
+}
+
+@media (max-width: 1180px) {
+  .core-recon-page .core-recon-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .core-recon-page .core-recon-stats > div:nth-child(2) {
+    border-right: 0;
+  }
+
+  .core-recon-page .core-recon-stats > div:nth-child(-n + 2) {
+    border-bottom: 1px solid #e8edf3;
+  }
+}
+
+@media (max-width: 760px) {
+  .core-recon-page .core-recon-partner-filter,
+  .core-recon-page .core-recon-filter-search,
+  .core-recon-page .core-recon-filter-control {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .core-recon-page .core-recon-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .core-recon-page .core-recon-stats > div {
+    border-right: 0;
+    border-bottom: 1px solid #e8edf3;
+  }
+
+  .core-recon-page .core-recon-stats > div:last-child {
+    border-bottom: 0;
+  }
+}
