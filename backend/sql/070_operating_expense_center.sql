@@ -1,7 +1,7 @@
 -- 运营费用中心：丰富费用字段，并新增不影响利润的押金/保证金独立台账。
 
 ALTER TABLE operating_expenses
-  ADD COLUMN IF NOT EXISTS expense_kind VARCHAR(32) NOT NULL DEFAULT 'general';
+  ADD COLUMN IF NOT EXISTS expense_kind VARCHAR(32) NOT NULL DEFAULT 'other';
 ALTER TABLE operating_expenses
   ADD COLUMN IF NOT EXISTS due_date VARCHAR(32);
 ALTER TABLE operating_expenses
