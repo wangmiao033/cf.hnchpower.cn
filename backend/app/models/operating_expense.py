@@ -17,7 +17,7 @@ class OperatingExpense(Base):
     expense_month: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
     expense_date: Mapped[str | None] = mapped_column(String(32), nullable=True)
     category: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
-    expense_kind: Mapped[str] = mapped_column(String(32), nullable=False, default="general", index=True)
+    expense_kind: Mapped[str] = mapped_column(String(32), nullable=False, default="other", index=True)
     amount: Mapped[float] = mapped_column(Numeric(18, 2), nullable=False, default=0)
     game_name: Mapped[str | None] = mapped_column(Text, nullable=True, index=True)
     vendor_name: Mapped[str | None] = mapped_column(Text, nullable=True)
