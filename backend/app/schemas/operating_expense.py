@@ -11,7 +11,7 @@ class OperatingExpenseBase(BaseModel):
     expense_month: str = Field(min_length=4, max_length=16)
     expense_date: str | None = Field(default=None, max_length=32)
     category: str = Field(min_length=1, max_length=32)
-    expense_kind: str = Field(default="general", min_length=1, max_length=32)
+    expense_kind: str = Field(default="other", min_length=1, max_length=32)
     amount: float = Field(gt=0, le=999999999999)
     game_name: str | None = Field(default=None, max_length=500)
     vendor_name: str | None = Field(default=None, max_length=500)
