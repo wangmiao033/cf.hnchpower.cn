@@ -726,6 +726,7 @@ function CoreReconciliationPage() {
                                 </button>
                               ) : null}
                               <button type="button" onClick={() => openReconciliationEdit(String(row.id))}>
+                                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="m12 4 4 4M4 16l4-1L17 6a2.1 2.1 0 0 0-3-3l-9 9-1 4Z" /></svg>
                                 编辑
                               </button>
                               <button
@@ -735,6 +736,7 @@ function CoreReconciliationPage() {
                                 title="删除需两次确认；删除后移入垃圾桶，历史、关联关系和操作日志保留，可恢复"
                                 onClick={() => void voidBill(row)}
                               >
+                                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="M3 5h14M7 5V3h6v2M5 5l1 12h8l1-12M8 8v6m4-6v6" /></svg>
                                 {voidingId === String(row.id) ? '删除中…' : '删除'}
                               </button>
                             </>
