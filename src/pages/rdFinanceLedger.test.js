@@ -21,6 +21,8 @@ describe('研发账单七列展示', () => {
     expect(table).toContain('账单信息')
     expect(table).not.toContain('core-rd-recon-table')
     expect(table).not.toContain('360°')
+    expect(table).toContain('删除</button>')
+    expect(table).not.toContain('作废</button>')
     const firstCell = table.match(/<tbody><tr[^>]*><td>([\s\S]*?)<\/td>/)[1]
     for (const value of ['龙魂', 'JS-20260908-001', '2026', '一起来修仙']) expect(firstCell).toContain(value)
     expect(firstCell).toContain(`title="${state.recon.records[0].game}"`)

@@ -18,6 +18,7 @@ import {
 import { getBill360QuickSdkSummary } from '@/lib/api/bill360Performance.ts'
 import { transitionBillLifecycle } from '@/lib/api/billLifecycle.ts'
 import { listFundingClosureStatus } from '@/domain/reconciliation/closureStatus.js'
+import { confirmRdBillDeletion } from '@/domain/reconciliation/confirmRdBillDeletion.js'
 import { archiveBill, getBillArchiveSnapshot, unarchiveBill } from '@/lib/api/billArchive.ts'
 import './CoreReconciliationPages.css'
 import '@/components/reconciliation/reconciliation-admin.css'
@@ -395,12 +396,12 @@ function CoreReconciliationPage() {
 
   const voidBill = async (row) => {
     if (isCancelledRow(row) || voidingId) return
-    const reason = window.prompt(`请输入作废账单“${text(row.settlementNumber)}”的原因：`, '')
+    const reason = confirmRdBillDeletion(text(row.settlementNumber), {
+      prompt: (message, value) => window.prompt(message, value),
+      confirm: (message) => window.confirm(message),
+      showError: (message) => showToast(message, 'error')
+    })
     if (reason === null) return
-    if (!reason.trim()) {
-      showToast('作废账单必须填写原因', 'error')
-      return
-    }
     setVoidingId(String(row.id))
     try {
       await transitionBillLifecycle('rd', String(row.id), 'cancelled', reason.trim())
@@ -409,7 +410,7 @@ function CoreReconciliationPage() {
       showToast('研发账单已移入垃圾桶，主列表不再显示', 'success')
     } catch (error) {
       console.error(error)
-      showToast(error instanceof Error ? error.message : '账单作废失败', 'error')
+      showToast(error instanceof Error ? error.message : '账单删除失败', 'error')
     } finally {
       setVoidingId('')
     }
@@ -731,10 +732,10 @@ function CoreReconciliationPage() {
                                 type="button"
                                 className="danger"
                                 disabled={Boolean(voidingId)}
-                                title="作废后账单会移入垃圾桶，历史、关联关系和操作日志仍保留"
+                                title="删除需两次确认；删除后移入垃圾桶，历史、关联关系和操作日志保留，可恢复"
                                 onClick={() => void voidBill(row)}
                               >
-                                {voidingId === String(row.id) ? '作废中…' : '作废'}
+                                {voidingId === String(row.id) ? '删除中…' : '删除'}
                               </button>
                             </>
                           )}
