@@ -1,0 +1,69 @@
+.rd-contract-review { margin-bottom: 12px; padding: 14px; background: #fff; border: 1px solid #dce5f0; border-radius: 10px; color: #334155; font-size: 12px; }
+.rd-review-head, .rd-review-head > div, .rd-review-line-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.rd-review-head { justify-content: space-between; margin-bottom: 10px; }
+.rd-review-head h2 { margin: 0; color: #16345d; font-size: 15px; }
+.rd-review-head p { margin: 0; color: #718096; }
+.rd-review-pass, .rd-review-pending { padding: 3px 7px; border-radius: 5px; font-size: 11px; line-height: 18px; font-weight: 600; }
+.rd-review-pass { color: #18704a; background: #edf8f2; }
+.rd-review-pending { color: #986013; background: #fff5e7; }
+.rd-review-lines { display: grid; gap: 8px; }
+.rd-review-line { padding: 10px 12px; border: 1px solid #e3eaf2; border-radius: 7px; background: #fbfcfe; min-width: 0; }
+.rd-review-line-head > strong { max-width: 65%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; color: #1d3558; }
+.rd-review-line-head > span { color: #718096; }
+.rd-review-line-head > b { margin-left: auto; }
+.rd-review-contract-name { margin: 6px 0; color: #556881; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rd-review-notice { margin: 6px 0; line-height: 1.6; color: #956111; }
+.rd-review-differences { display: flex; flex-wrap: wrap; gap: 5px 14px; margin: 6px 0; color: #925714; }
+.rd-review-evidence > summary, .rd-focused-formula > summary { cursor: pointer; color: #2563a6; padding: 5px 0; font-size: 12px; width: fit-content; }
+.rd-review-evidence[open] > summary { margin-bottom: 8px; }
+.rd-review-evidence dl { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 0; padding: 12px; border-radius: 6px; background: #f1f5fa; }
+.rd-review-evidence dt { color: #718096; font-size: 11px; }
+.rd-review-evidence dd { margin: 4px 0 0; color: #2a4364; overflow-wrap: anywhere; }
+.rd-review-evidence h3 { font-size: 12px; margin: 12px 0 6px; }
+.rd-review-evidence p { line-height: 1.6; }
+.rd-review-summary { display: flex; align-items: center; flex-wrap: wrap; gap: 12px 24px; padding-top: 12px; }
+.rd-review-summary > div { min-width: 120px; }
+.rd-review-summary span { display: block; font-size: 11px; color: #718096; }
+.rd-review-summary strong { display: block; margin-top: 4px; font-size: 14px; font-variant-numeric: tabular-nums; }
+.rd-review-summary > div:first-child strong { color: #175cd3; font-size: 17px; }
+.rd-review-summary button { margin-left: auto; padding: 7px 10px; border: 1px solid #d8e3ef; border-radius: 6px; color: #175cd3; background: #fff; cursor: pointer; }
+.rd-review-summary button:disabled { color: #8795a8; cursor: not-allowed; background: #f8fafc; }
+.rd-review-summary > small { flex-basis: 100%; color: #8290a3; font-size: 10px; }
+.rd-review-override { display: grid; gap: 6px; margin-top: 10px; color: #8d570c; }
+.rd-review-override input { padding: 7px 9px; border: 1px solid #edc98d; border-radius: 5px; color: #334155; background: #fff; }
+.rd-calculation-steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; padding: 10px; background: #f4f8fc; border-radius: 6px; font-size: 12px; }
+.rd-calculation-steps > div { min-width: 0; padding-right: 8px; }
+.rd-calculation-steps span { color: #4b6483; font-weight: 600; }
+.rd-calculation-steps p { margin: 6px 0 0; line-height: 1.65; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.rd-calculation-steps small { grid-column: 1 / -1; color: #718096; font-size: 10px; }
+.rd-focused-grid { min-width: 960px; font-size: 12px; }
+.rd-focused-grid-head, .rd-focused-grid-row { display: grid; grid-template-columns: 122px minmax(180px, 1fr) 120px 80px 108px 70px 122px 72px; gap: 8px; align-items: center; padding: 9px 10px; }
+.rd-focused-grid--prepayment { min-width: 1180px; }
+.rd-focused-grid--prepayment .rd-focused-grid-head, .rd-focused-grid--prepayment .rd-focused-grid-row { grid-template-columns: 122px minmax(180px, 1fr) 120px 80px 108px 70px 122px 104px 112px 72px; }
+.rd-focused-grid-head { color: #59708c; background: #eff4fa; font-size: 11px; border-bottom: 1px solid #e1e9f2; }
+.rd-focused-grid-row .channel-cell, .rd-focused-grid-head .channel-cell { min-width: 0; }
+.rd-focused-grid-row .channel-cell--num, .rd-focused-grid-head .channel-cell--num { text-align: right; }
+.rd-focused-grid .admin-input { width: 100%; min-width: 0; box-sizing: border-box; height: 32px; font-size: 12px; border-radius: 5px; }
+.rd-focused-grid .channel-input-num { text-align: right; font-variant-numeric: tabular-nums; }
+.rd-focused-grid .readonly-input { color: #137151; background: #eff9f4; font-weight: 600; }
+.rd-focused-grid .channel-cell--actions { display: flex; gap: 4px; justify-content: flex-end; }
+.rd-focused-grid .channel-cell--actions button { min-width: 27px; width: 27px; height: 28px; padding: 0; }
+.rd-focused-item { background: #fff; border-bottom: 1px solid #e1e9f2; }
+.rd-focused-item:nth-child(odd) { background: #fcfdff; }
+.rd-focused-extra-bar { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 0 10px 7px; font-size: 11px; color: #718096; }
+.rd-focused-extra-bar button { background: transparent; border: 0; color: #2563a6; font-size: 11px; padding: 3px 0; cursor: pointer; }
+.rd-focused-fees { display: grid; grid-template-columns: repeat(4, minmax(120px, 1fr)); gap: 12px; padding: 10px; margin: 0 10px 8px; background: #f5f8fc; border: 1px solid #e1e9f2; border-radius: 6px; }
+.rd-focused-fees[hidden] { display: none; }
+.rd-focused-fees label { display: grid; gap: 6px; font-size: 11px; color: #59708c; }
+.rd-focused-formula { padding: 0 10px 7px; }
+.rd-focused-formula > summary { font-size: 11px; padding: 0; }
+.rd-focused-formula[open] > summary { margin-bottom: 8px; }
+.rd-contract-review :focus-visible, .rd-focused-grid :focus-visible { outline: 2px solid #2563a6; outline-offset: 2px; }
+@media (max-width: 1100px) {
+  .rd-review-evidence dl, .rd-calculation-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  .rd-review-evidence dl, .rd-calculation-steps { grid-template-columns: minmax(0, 1fr); }
+  .rd-review-summary { gap: 12px; }
+  .rd-review-summary button { margin-left: 0; }
+}

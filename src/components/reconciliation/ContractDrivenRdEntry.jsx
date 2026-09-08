@@ -9,6 +9,7 @@ import {
   recommendRdContractRules
 } from '@/lib/api/rdContractEntry.ts'
 import './ContractDrivenRdEntry.css'
+import RdContractReview from './RdContractReview.jsx'
 
 const EPS = 0.0001
 
@@ -21,25 +22,6 @@ function num(value, fallback = 0) {
 function sameNumber(left, right, tolerance = EPS) {
   if (left === null || left === undefined || right === null || right === undefined) return true
   return Math.abs(num(left) - num(right)) <= tolerance
-}
-
-function money(value) {
-  const parsed = Number(value)
-  if (!Number.isFinite(parsed)) return '-'
-  return `¥${parsed.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-}
-
-function basisLabel(value) {
-  if (value === 'actual_paid') return '按实付 / 实收'
-  if (value === 'discounted_flow') return '按折后流水'
-  return '结算基数待确认'
-}
-
-function matchTone(line) {
-  if (!line?.match) return 'none'
-  if (line.auto_apply) return 'pass'
-  if (line.match.authorization_status === 'out_of_range') return 'fail'
-  return 'warning'
 }
 
 function lineIdentity(partner, line, index) {
@@ -296,17 +278,7 @@ export default function ContractDrivenRdEntry(props) {
     forceApplyRecommendation()
   }, [forceApplyRecommendation, formState, mode, recommendation])
 
-  const contractExpected = useMemo(() => {
-    const amounts = (recommendation?.lines || [])
-      .map((item) => Number(item?.contract_amount?.expected_amount))
-      .filter((value) => Number.isFinite(value))
-    return amounts.length ? amounts.reduce((sum, value) => sum + value, 0) : null
-  }, [recommendation])
-
   const recommendationCurrent = recommendationMatchesRecord(formState, recommendation)
-  const currentFinal = num(formState?.settlementAmount, 0)
-  const adjustment = contractExpected == null ? null : currentFinal - contractExpected
-  const activeRows = Array.isArray(formState?.items) ? formState.items : []
   const deviationMap = useMemo(() => {
     const out = {}
     for (const item of recommendation?.lines || []) {
@@ -332,13 +304,6 @@ export default function ContractDrivenRdEntry(props) {
       })
     )
   }, [recommendation, recommendationCurrent])
-  const hasPrepayment = Object.values(prepaymentByLine).some((item) => item?.enabled)
-  const prepaymentDeductionTotal = Object.values(prepaymentByLine).reduce(
-    (sum, item) => sum + num(item?.deduction),
-    0
-  )
-  const actualPayableTotal = Math.max(0, currentFinal - prepaymentDeductionTotal)
-
   const buildAuditMetadata = useCallback((record) => {
     const rows = Array.isArray(record?.items) ? record.items : []
     return rows.map((line, index) => {
@@ -474,102 +439,19 @@ export default function ContractDrivenRdEntry(props) {
 
   return (
     <div className="rd-contract-entry-v31">
-      <section className={`rd-contract-entry-panel is-${recommendationError ? 'error' : recommendationLoading ? 'loading' : recommendation?.auto_apply ? 'pass' : recommendation ? 'warning' : 'idle'}`}>
-        <div className="rd-contract-entry-panel__head">
-          <div>
-            <span>V3.1 · CONTRACT-DRIVEN ENTRY</span>
-            <h2>研发账单按合同录入</h2>
-            <p>合作方 + 游戏 + 账期确定后，自动匹配合同合作清单并带入分成、税率、测试费和结算基数；历史账单不会因打开编辑页被自动改写。</p>
-          </div>
-          <div className="rd-contract-entry-panel__status">
-            <strong>{recommendationLoading ? '正在匹配合同…' : recommendationError ? '合同服务暂不可用' : recommendation && !recommendationCurrent ? '匹配结果待刷新' : recommendation?.message || '等待合作方和游戏'}</strong>
-            {snapshotInfo?.created_at ? <small>最近录入快照：{String(snapshotInfo.created_at).replace('T', ' ').slice(0, 19)}</small> : null}
-          </div>
-        </div>
-
-        {recommendation && !recommendationCurrent && !recommendationLoading ? <div className="rd-contract-entry-alert is-warning">合作方、游戏或账期已变化，旧合同推荐不会用于保存，系统正在重新匹配。</div> : null}
-        {recommendationError ? <div className="rd-contract-entry-alert is-error">{recommendationError}。本次仍可保存为待核对账单，确认核对前会再次走合同核验。</div> : null}
-        {recommendation?.header_recommendation?.message ? (
-          <div className={`rd-contract-entry-alert ${recommendation.header_recommendation.compatible === false ? 'is-error' : 'is-warning'}`}>
-            {recommendation.header_recommendation.message}
-          </div>
-        ) : null}
-
-        {recommendation?.lines?.length ? (
-          <div className="rd-contract-entry-lines">
-            {recommendation.lines.map((item) => {
-              const currentLine = activeRows[item.line_index]
-              const rec = item.recommended
-              const deviations = deviationMap[item.line_index] || []
-              const productRef = productDiscountRefs.current[lineIdentity(formState?.partner, currentLine, item.line_index)] ?? rec?.product_discount_reference
-              return (
-                <article key={`${item.line_index}-${item.match?.access_item_id || item.game_name}`} className={`rd-contract-entry-line is-${matchTone(item)}`}>
-                  <div className="rd-contract-entry-line__title">
-                    <div>
-                      <strong>{item.game_name || `第 ${item.line_index + 1} 行`}</strong>
-                      <span>{item.settlement_cycle || '未填写账期'}</span>
-                    </div>
-                    <em>{item.auto_apply ? '合同已自动带入' : item.match ? '需人工复核' : '未匹配合同'}</em>
-                  </div>
-                  {item.match ? (
-                    <>
-                      <div className="rd-contract-entry-contract">
-                        <strong>{item.match.contract_name || '未命名合同'}</strong>
-                        <span>{item.match.contract_no || '无合同编号'} · {item.match.product_name || item.game_name}</span>
-                        <small>匹配 {item.score} 分 · {item.match.authorization_status === 'covered' ? '授权期内' : item.match.authorization_status === 'out_of_range' ? '授权期外' : '授权期待确认'}</small>
-                      </div>
-                      <div className="rd-contract-entry-rule-grid">
-                        <div><span>结算基数</span><strong>{basisLabel(rec?.basis_mode)}</strong></div>
-                        <div><span>合同分成</span><strong>{rec?.share_ratio == null ? '合同缺字段' : `${rec.share_ratio}%`}</strong></div>
-                        <div><span>合同税率</span><strong>{rec?.tax_rate == null ? '保留当前值' : `${rec.tax_rate}%`}</strong></div>
-                        <div><span>合同通道费</span><strong>{rec?.channel_fee_rate == null ? '保留当前值' : `${rec.channel_fee_rate}%`}</strong></div>
-                        <div><span>合同测试费</span><strong>{rec?.test_fee == null ? '保留当前值' : money(rec.test_fee)}</strong></div>
-                        <div><span>合同应结</span><strong>{money(item.contract_amount?.expected_amount)}</strong></div>
-                        {rec?.prepayment_enabled ? <div><span>预付款抵扣</span><strong>-{money(rec.prepayment_deduction)}</strong></div> : null}
-                        {rec?.prepayment_enabled ? <div><span>本期实际应付</span><strong>{money(rec.actual_payable)}</strong></div> : null}
-                      </div>
-                      <div className="rd-contract-entry-discount-note">
-                        <span>产品折扣系数：<b>{productRef ?? '-'}</b></span>
-                        <span>结算系数：<b>{rec?.basis_mode === 'ambiguous' ? '待人工确认' : rec?.settlement_discount_rate ?? '-'}</b></span>
-                        {rec?.discount_policy === 'reference_only' ? <em>按实付结算：产品折扣只作业务参考，不参与财务乘法</em> : null}
-                      </div>
-                      {(rec?.warnings || []).length ? (
-                        <div className="rd-contract-entry-warnings">{rec.warnings.join('；')}</div>
-                      ) : null}
-                      {deviations.length ? (
-                        <div className="rd-contract-entry-override">
-                          <div><strong>已人工偏离合同</strong><span>{deviations.join('、')}</span></div>
-                          <input
-                            type="text"
-                            value={overrideReasons[item.line_index] || ''}
-                            onChange={(event) => setOverrideReasons((current) => ({ ...current, [item.line_index]: event.target.value }))}
-                            placeholder="必填：为什么不按合同值结算？如商务协商、历史约定等"
-                          />
-                        </div>
-                      ) : null}
-                    </>
-                  ) : <p className="rd-contract-entry-line__empty">当前合作方/游戏/账期没有找到可自动采用的合同合作清单，账单可先保存为待核对。</p>}
-                </article>
-              )
-            })}
-          </div>
-        ) : null}
-
-        {recommendation ? (
-          <div className="rd-contract-entry-summary">
-            <div><span>合同应结</span><strong>{money(contractExpected)}</strong></div>
-            <div><span>当前账单</span><strong>{money(currentFinal)}</strong></div>
-            {hasPrepayment ? <div><span>预付款抵扣</span><strong>-{money(prepaymentDeductionTotal)}</strong></div> : null}
-            {hasPrepayment ? <div><span>实际应付</span><strong>{money(actualPayableTotal)}</strong></div> : null}
-            <div className={adjustment != null && Math.abs(adjustment) > 0.01 ? 'is-diff' : ''}>
-              <span>人工调整</span><strong>{adjustment == null ? '-' : `${adjustment >= 0 ? '+' : ''}${money(adjustment)}`}</strong>
-            </div>
-            <button type="button" onClick={forceApplyRecommendation} disabled={!recommendationCurrent || !recommendation.lines?.some((item) => item.auto_apply)}>
-              {mode === 'edit' ? '恢复为合同值' : '重新带入合同值'}
-            </button>
-          </div>
-        ) : null}
-      </section>
+      <RdContractReview
+        record={formState}
+        recommendation={recommendation}
+        current={recommendationCurrent}
+        loading={recommendationLoading}
+        error={recommendationError}
+        snapshotInfo={snapshotInfo}
+        onApply={forceApplyRecommendation}
+        mode={mode}
+        deviationMap={deviationMap}
+        overrideReasons={overrideReasons}
+        onOverrideChange={(index, value) => setOverrideReasons((current) => ({ ...current, [index]: value }))}
+      />
 
       <ReconciliationLineItemsForm
         {...rest}

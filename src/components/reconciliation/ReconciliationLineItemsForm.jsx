@@ -16,6 +16,8 @@ import {
 } from '@/domain/reconciliation/rdDateInputs.js'
 import { getQuickSdkGameFlow, listQuickSdkRdLines } from '@/lib/api/quicksdk.ts'
 import '@/components/ChannelBilling.css'
+import { hasRdAdditionalFees } from '@/domain/reconciliation/rdContractReview.js'
+import RdSettlementExplanation from './RdSettlementExplanation.jsx'
 
 export function createEmptyRdLine(sortOrder = 0, settlementCycle = '') {
   return {
@@ -139,6 +141,7 @@ function ReconciliationLineItemsForm({
   })
   const [lines, setLines] = useState([createEmptyRdLine(0, initialCycle)])
   const [gameSuggestions, setGameSuggestions] = useState({})
+  const [expandedFeeRows, setExpandedFeeRows] = useState({})
   const [flowStatuses, setFlowStatuses] = useState({})
   const gameSearchTimersRef = useRef({})
 
@@ -668,20 +671,14 @@ function ReconciliationLineItemsForm({
             showAddButton={false}
             hint="点击月份字段直接选择年月；新增一行会自动继承上一行月份，仍可单独修改。"
           >
-            <div className={`rd-line-items-grid${showPrepaymentColumns ? ' rd-line-items-grid--prepayment' : ''}`}>
-              <div className="rd-line-items-grid-head" aria-hidden="true">
+            <div className={`rd-focused-grid${showPrepaymentColumns ? ' rd-focused-grid--prepayment' : ''}`}>
+              <div className="rd-focused-grid-head" aria-hidden="true">
                 <div className="channel-cell">结算周期</div>
                 <div className="channel-cell">游戏名称</div>
                 <div className="channel-cell channel-cell--num">后台流水</div>
                 <div className="channel-cell channel-cell--num">折扣</div>
-                <div className="channel-cell channel-cell--num">总流水</div>
                 <div className="channel-cell channel-cell--num">代金券</div>
-                <div className="channel-cell channel-cell--num">测试费</div>
-                <div className="channel-cell channel-cell--num">额外费用</div>
-                <div className="channel-cell channel-cell--num">通道费%</div>
-                <div className="channel-cell channel-cell--num">税率%</div>
                 <div className="channel-cell channel-cell--num">分成%</div>
-                <div className="channel-cell channel-cell--num">参与分成金额</div>
                 <div className="channel-cell channel-cell--num">研发应结</div>
                 {showPrepaymentColumns ? <div className="channel-cell channel-cell--num">预付款抵扣</div> : null}
                 {showPrepaymentColumns ? <div className="channel-cell channel-cell--num">实际应付</div> : null}
@@ -699,9 +696,12 @@ function ReconciliationLineItemsForm({
                 )
                 const actualPayable = Math.max(0, settlement - prepaymentDeduction)
                 const flowStatus = flowStatuses[line.id]
+                const hasFees = hasRdAdditionalFees(line, header.channelFeeRate)
+                const showFees = expandedFeeRows[line.id] ?? hasFees
                 const gameListId = `${formId || 'rd'}-game-list-${index}`
                 return (
-                  <div key={line.id} className="rd-line-items-grid-row">
+                  <div key={line.id} className="rd-focused-item">
+                  <div className="rd-focused-grid-row">
                     <div className="channel-cell rd-period-cell">
                       <input
                         type="month"
@@ -785,14 +785,8 @@ function ReconciliationLineItemsForm({
                     <div className="channel-cell channel-cell--num">
                       <input type="number" step="0.001" min="0" max="1" aria-label={`第 ${index + 1} 行折扣`} className="admin-input channel-input-num" value={line.discountRate} onChange={(e) => updateLine(index, 'discountRate', e.target.value)} title="0.05折填0.005" />
                     </div>
-                    <div className="channel-cell channel-cell--num"><input type="text" readOnly disabled aria-label={`第 ${index + 1} 行总流水`} className="admin-input readonly-input channel-input-num" value={net.toFixed(2)} /></div>
                     <div className="channel-cell channel-cell--num"><input type="number" step="0.01" aria-label={`第 ${index + 1} 行代金券`} className="admin-input channel-input-num" value={line.couponAmount} onChange={(e) => updateLine(index, 'couponAmount', e.target.value)} /></div>
-                    <div className="channel-cell channel-cell--num"><input type="number" step="0.01" aria-label={`第 ${index + 1} 行测试费`} className="admin-input channel-input-num" value={line.testFee} onChange={(e) => updateLine(index, 'testFee', e.target.value)} /></div>
-                    <div className="channel-cell channel-cell--num"><input type="number" step="0.01" aria-label={`第 ${index + 1} 行额外费用`} className="admin-input channel-input-num" value={line.extraFee} onChange={(e) => updateLine(index, 'extraFee', e.target.value)} /></div>
-                    <div className="channel-cell channel-cell--num"><input type="number" step="0.01" aria-label={`第 ${index + 1} 行通道费率`} className="admin-input channel-input-num" value={header.channelFeeRate} onChange={(e) => setHeader((h) => ({ ...h, channelFeeRate: e.target.value }))} /></div>
-                    <div className="channel-cell channel-cell--num"><input type="number" step="0.01" aria-label={`第 ${index + 1} 行税率`} className="admin-input channel-input-num" value={line.taxRate} onChange={(e) => updateLine(index, 'taxRate', e.target.value)} /></div>
                     <div className="channel-cell channel-cell--num"><input type="number" step="0.01" aria-label={`第 ${index + 1} 行分成比例`} className="admin-input channel-input-num" value={line.shareRatio} onChange={(e) => updateLine(index, 'shareRatio', e.target.value)} /></div>
-                    <div className="channel-cell channel-cell--num"><input type="text" readOnly disabled aria-label={`第 ${index + 1} 行参与分成金额`} className="admin-input readonly-input channel-input-num" value={gross.toFixed(2)} /></div>
                     <div className="channel-cell channel-cell--num"><input type="text" readOnly disabled aria-label={`第 ${index + 1} 行研发应结`} className="admin-input readonly-input channel-input-num" value={settlement.toFixed(2)} /></div>
                     {showPrepaymentColumns ? <div className="channel-cell channel-cell--num"><input type="text" readOnly disabled aria-label={`第 ${index + 1} 行预付款抵扣`} className="admin-input readonly-input channel-input-num" value={prepayment.enabled ? `-${prepaymentDeduction.toFixed(2)}` : '—'} /></div> : null}
                     {showPrepaymentColumns ? <div className="channel-cell channel-cell--num"><input type="text" readOnly disabled aria-label={`第 ${index + 1} 行实际应付`} className="admin-input readonly-input channel-input-num" value={actualPayable.toFixed(2)} /></div> : null}
@@ -800,6 +794,20 @@ function ReconciliationLineItemsForm({
                       <button type="button" className="rec-btn rec-btn--ghost" onClick={addRow} title="新增一行并继承当前月份">+</button>
                       <button type="button" className="rec-btn rec-btn--danger-outline" disabled={lines.length <= 1} onClick={() => removeRow(index)} title="删除当前行">-</button>
                     </div>
+                  </div>
+                  <div className="rd-focused-extra-bar">
+                    <button type="button" aria-expanded={showFees} aria-controls={`rd-fees-${line.id}`} onClick={() => setExpandedFeeRows((current) => ({ ...current, [line.id]: !showFees }))}>
+                      {showFees ? '收起费用与税率' : '费用与税率'}{hasFees ? ' · 含非零费用/费率' : ' · 当前均为 0'}
+                    </button>
+                    <span>折后流水 ¥{net.toFixed(2)} · 参与分成 ¥{gross.toFixed(2)}</span>
+                  </div>
+                  <div className="rd-focused-fees" id={`rd-fees-${line.id}`} hidden={!showFees}>
+                      <label>测试费<input type="number" step="0.01" aria-label={`第 ${index + 1} 行测试费`} className="admin-input channel-input-num" value={line.testFee} onChange={(e) => updateLine(index, 'testFee', e.target.value)} /></label>
+                      <label>额外费用<input type="number" step="0.01" aria-label={`第 ${index + 1} 行额外费用`} className="admin-input channel-input-num" value={line.extraFee} onChange={(e) => updateLine(index, 'extraFee', e.target.value)} /></label>
+                      <label>通道费率（%）<input type="number" step="0.01" aria-label={`第 ${index + 1} 行通道费率`} className="admin-input channel-input-num" value={header.channelFeeRate} onChange={(e) => setHeader((h) => ({ ...h, channelFeeRate: e.target.value }))} /></label>
+                      <label>税率（%）<input type="number" step="0.01" aria-label={`第 ${index + 1} 行税率`} className="admin-input channel-input-num" value={line.taxRate} onChange={(e) => updateLine(index, 'taxRate', e.target.value)} /></label>
+                  </div>
+                  <details className="rd-focused-formula"><summary>查看本行计算过程</summary><RdSettlementExplanation line={line} channelFeeRate={header.channelFeeRate} /></details>
                   </div>
                 )
               })}
