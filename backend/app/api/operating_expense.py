@@ -86,8 +86,8 @@ def _validate_invoice_status(raw: str | None) -> str:
 
 
 def _normalize_expense_kind(raw: str | None) -> str:
-    value = str(raw or "general").strip().lower()
-    return value or "general"
+    value = str(raw or "other").strip().lower()
+    return value or "other"
 
 
 def _apply_filters(
