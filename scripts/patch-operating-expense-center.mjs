@@ -102,8 +102,38 @@ function patchProfitAnalysis() {
   write(path, source)
 }
 
+function patchPaymentDateEditor() {
+  const path = 'src/pages/OperatingExpenseCenterPage.jsx'
+  let source = read(path)
+  if (source.includes('const updatePaymentDate = (event) =>')) return
+
+  source = replaceRequired(
+    source,
+    "function ExpenseEditor({ mode, form, setForm, saving, editing, onClose, onSubmit }) {\n  const update = (key) => (event) => setForm((old) => ({ ...old, [key]: event.target.value }))\n",
+    "function ExpenseEditor({ mode, form, setForm, saving, editing, onClose, onSubmit }) {\n  const update = (key) => (event) => setForm((old) => ({ ...old, [key]: event.target.value }))\n  const updatePaymentStatus = (event) => {\n    const paymentStatus = event.target.value\n    setForm((old) => ({\n      ...old,\n      paymentStatus,\n      paymentDate: paymentStatus === 'unpaid' ? '' : old.paymentDate\n    }))\n  }\n  const updatePaymentDate = (event) => {\n    const paymentDate = event.target.value\n    setForm((old) => ({\n      ...old,\n      paymentDate,\n      paymentStatus: paymentDate ? 'paid' : 'unpaid'\n    }))\n  }\n",
+    'payment date handlers'
+  )
+
+  source = replaceRequired(
+    source,
+    "<select value={form.paymentStatus} onChange={update('paymentStatus')}><option value=\"unpaid\">待支付</option><option value=\"paid\">已支付</option></select>",
+    "<select value={form.paymentStatus} onChange={updatePaymentStatus}><option value=\"unpaid\">待支付</option><option value=\"paid\">已支付</option></select>",
+    'payment status editor'
+  )
+
+  source = replaceRequired(
+    source,
+    "<input type=\"date\" value={form.paymentDate} onChange={update('paymentDate')} disabled={form.paymentStatus !== 'paid'} />",
+    "<input type=\"date\" value={form.paymentDate} onChange={updatePaymentDate} />",
+    'payment date editor'
+  )
+
+  write(path, source)
+}
+
 patchRoutes()
 patchPermissions()
 patchApp()
 patchProfitAnalysis()
+patchPaymentDateEditor()
 console.log('[operating-expense-center] frontend routes patched')
