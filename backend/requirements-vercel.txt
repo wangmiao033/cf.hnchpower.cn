@@ -1,4 +1,7 @@
-# Core FastAPI runtime dependencies
+# Vercel Serverless Functions - Optimized Dependencies
+# This file contains only runtime dependencies needed for Vercel deployment.
+# uvicorn is excluded as Vercel provides its own ASGI handler.
+
 fastapi==0.141.1
 python-multipart==0.0.32
 sqlalchemy==2.0.51
@@ -11,6 +14,3 @@ bcrypt==4.0.1
 vercel==0.8.1
 sqlparse==0.5.5
 pypdf==6.1.1
-
-# Local development only (not needed for Vercel serverless)
-# Install manually: pip install "uvicorn[standard]"
