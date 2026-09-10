@@ -1,0 +1,5 @@
+# Development dependencies - extends requirements.txt
+-r requirements.txt
+
+# ASGI server for local development
+uvicorn[standard]==0.52.1
