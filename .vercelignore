@@ -120,10 +120,10 @@ dmypy.json
 .pytype/
 
 # -----------------------------------------------------------------------------
-# One-off patch scripts (per workspace rules)
+# NOTE: scripts/patch-*.mjs are NOT excluded because they are required
+# during Vercel's prebuild phase (see package.json "prebuild" script).
+# The vercel-production-build-v2.sh script is also needed at build time.
 # -----------------------------------------------------------------------------
-scripts/patch-*.mjs
-scripts/patch-*.js
 
 # -----------------------------------------------------------------------------
 # Large static assets that shouldn't be in functions
