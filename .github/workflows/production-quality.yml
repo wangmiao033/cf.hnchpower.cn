@@ -63,7 +63,7 @@ jobs:
           python -m pip check
 
       - name: Compile Python sources
-        run: python -m compileall -q backend/app backend/tests proxy contract_terms
+        run: python -m compileall -q backend/app backend/tests proxy contract_terms contract_terms/tests
 
       - name: Run backend unit tests
         env:
@@ -73,4 +73,4 @@ jobs:
       - name: Run contract settlement regression tests
         env:
           PYTHONPATH: contract_terms:.
-        run: python -m unittest discover -s contract_terms -p 'test_*.py' -v
+        run: python -m unittest discover -s contract_terms/tests -p 'test_*.py' -v
