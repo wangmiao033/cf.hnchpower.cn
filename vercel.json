@@ -1,21 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "git": {
-    "deploymentEnabled": false
-  },
-  "functions": {
-    "proxy/**/*.py": {
-      "excludeFiles": "{tests/**,__tests__/**,**/*.test.py,**/test_*.py,**/__pycache__/**,**/*.pyc,*.md,Procfile,.env*}"
-    },
-    "backend/**/*.py": {
-      "excludeFiles": "{tests/**,__tests__/**,**/*.test.py,**/test_*.py,**/__pycache__/**,**/*.pyc,*.md,Procfile,.env*,sql/**,scripts/**,var/**,uploads/**}"
-    },
-    "contract_ai/**/*.py": {
-      "excludeFiles": "{tests/**,__tests__/**,**/*.test.py,**/test_*.py,**/__pycache__/**,**/*.pyc,*.md,.env*}"
-    },
-    "contract_terms/**/*.py": {
-      "excludeFiles": "{tests/**,__tests__/**,**/*.test.py,**/test_*.py,**/__pycache__/**,**/*.pyc,*.md,.env*}"
-    }
+    "deploymentEnabled": true
   },
   "services": {
     "frontend": {
@@ -31,22 +17,42 @@
     "backend": {
       "root": "proxy/",
       "entrypoint": "stable_secured_main:app",
-      "framework": "fastapi"
+      "framework": "fastapi",
+      "functions": {
+        "**/*.py": {
+          "excludeFiles": "{tests/**,__tests__/**,**/*.test.py,**/test_*.py,**/__pycache__/**,**/*.pyc,*.md,Procfile,.env*}"
+        }
+      }
     },
     "core": {
       "root": "backend/",
       "entrypoint": "main:app",
-      "framework": "fastapi"
+      "framework": "fastapi",
+      "functions": {
+        "**/*.py": {
+          "excludeFiles": "{tests/**,__tests__/**,**/*.test.py,**/test_*.py,**/__pycache__/**,**/*.pyc,*.md,Procfile,.env*,sql/**,scripts/**,var/**,uploads/**}"
+        }
+      }
     },
     "contract_ai": {
       "root": "contract_ai/",
       "entrypoint": "secured_main:app",
-      "framework": "fastapi"
+      "framework": "fastapi",
+      "functions": {
+        "**/*.py": {
+          "excludeFiles": "{tests/**,__tests__/**,**/*.test.py,**/test_*.py,**/__pycache__/**,**/*.pyc,*.md,.env*}"
+        }
+      }
     },
     "contract_terms": {
       "root": "contract_terms/",
       "entrypoint": "v21_main:app",
-      "framework": "fastapi"
+      "framework": "fastapi",
+      "functions": {
+        "**/*.py": {
+          "excludeFiles": "{tests/**,__tests__/**,**/*.test.py,**/test_*.py,**/__pycache__/**,**/*.pyc,*.md,.env*}"
+        }
+      }
     }
   },
   "headers": [
