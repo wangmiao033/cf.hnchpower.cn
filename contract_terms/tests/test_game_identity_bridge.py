@@ -125,7 +125,7 @@ class GameIdentityBridgeTests(unittest.TestCase):
         self.assertEqual(candidate["share_rate"], 25)
 
     def test_production_endpoint_routes_through_registry_before_contract_matcher(self):
-        root = Path(__file__).resolve().parents[1]
+        root = Path(__file__).resolve().parents[2]
         source = (root / "contract_terms" / "v12_main.py").read_text(encoding="utf-8")
         self.assertIn("enrich_candidates_with_game_ids", source)
         self.assertIn("enrich_lines_with_game_ids", source)
@@ -133,7 +133,7 @@ class GameIdentityBridgeTests(unittest.TestCase):
         self.assertIn('"mode": "registry-first"', source)
 
     def test_migration_only_backfills_identity_not_financial_values(self):
-        root = Path(__file__).resolve().parents[1]
+        root = Path(__file__).resolve().parents[2]
         source = (root / "backend" / "sql" / "062_game_identity_contract_bridge.sql").read_text(encoding="utf-8")
         self.assertIn("contract_access_game_links", source)
         self.assertIn("game_registry_aliases", source)
