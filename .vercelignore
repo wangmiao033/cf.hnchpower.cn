@@ -162,6 +162,9 @@ proxy/.env*
 contract_ai/.env*
 contract_ai/test_*.py
 
+# Standalone PDF renderer is deployed outside Vercel.
+pdf_renderer/
+
 # Contract Terms development files
 contract_terms/.env*
 contract_terms/test_*.py
