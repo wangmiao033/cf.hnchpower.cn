@@ -28,7 +28,6 @@ from app.api.game_registry import router as game_registry_router
 from app.api.health import router as health_router
 from app.api.auth import router as auth_router
 from app.api.invoice import router as invoice_router
-from app.api._one_time_invoice_import_20260920 import router as one_time_invoice_import_20260920_router
 from app.api.exception_status import router as exception_status_router
 from app.api.invoice_payment_link import router as invoice_payment_link_router
 from app.api.operation_log import router as operation_log_router
@@ -229,7 +228,6 @@ data_access = Depends(require_module_access("data.view", "data.manage"))
 audit_access = Depends(require_module_access("audit.view"))
 
 app.include_router(health_router)
-app.include_router(one_time_invoice_import_20260920_router, prefix="/api/_ops/invoice-import-20260920", tags=["ops"])
 app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
 app.include_router(workbench_router, prefix="/api/workbench", tags=["workbench"])
 app.include_router(global_search_router, prefix="/api/global-search", tags=["global-search"])
