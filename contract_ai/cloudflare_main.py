@@ -9,7 +9,6 @@ contract routes, and only replaces /api/contracts/smart-scan.
 from __future__ import annotations
 
 import base64
-import io
 import json
 import os
 import re
@@ -17,9 +16,7 @@ from pathlib import PurePath
 from typing import Any
 
 import httpx
-import pypdfium2 as pdfium
 from fastapi import FastAPI, HTTPException, Request
-from PIL import Image
 
 try:
     from .extraction import CONTRACT_SCAN_SCHEMA, SYSTEM_PROMPT, normalize_contract_scan_result
@@ -57,9 +54,6 @@ CLOUDFLARE_WORKERS_AI_MODEL = (
     or "@cf/google/gemma-4-26b-a4b-it"
 )
 CLOUDFLARE_API_BASE = "https://api.cloudflare.com/client/v4/accounts"
-PDF_RENDER_MAX_LONG_EDGE = 1680
-PDF_RENDER_JPEG_QUALITY = 84
-PDF_MAX_PAGES_PER_REQUEST = 32
 EXTRACTION_TOOL_NAME = "submit_contract_extraction"
 _REQUIRED_RESULT_KEYS = {"contract", "confidence", "evidence", "parties", "access_items"}
 
@@ -75,76 +69,11 @@ def _workers_ai_config() -> tuple[str, str]:
     return account_id, api_token
 
 
-def _jpeg_data_uri(data: bytes) -> str:
-    return f"data:image/jpeg;base64,{base64.b64encode(data).decode('ascii')}"
-
-
 def _image_data_uri(content_type: str, data: bytes) -> str:
     mime = str(content_type or "image/jpeg").split(";", 1)[0].strip().lower()
     if mime not in {"image/jpeg", "image/png", "image/webp"}:
         mime = "image/jpeg"
     return f"data:{mime};base64,{base64.b64encode(data).decode('ascii')}"
-
-
-def _render_pdf_pages(body: bytes) -> list[bytes]:
-    """Render a scanned/text PDF into ordered JPEG pages for vision OCR."""
-
-    try:
-        document = pdfium.PdfDocument(body)
-    except Exception as exc:
-        raise HTTPException(status_code=422, detail="PDF 无法读取或已加密，请先解除密码后再识别") from exc
-
-    try:
-        page_count = len(document)
-        if page_count <= 0:
-            raise HTTPException(status_code=422, detail="PDF 中没有可识别页面")
-        if page_count > PDF_MAX_PAGES_PER_REQUEST:
-            raise HTTPException(
-                status_code=413,
-                detail=f"当前 PDF 分段包含 {page_count} 页，请重新选择文件后让系统自动分段识别",
-            )
-
-        rendered: list[bytes] = []
-        for page_index in range(page_count):
-            page = document[page_index]
-            try:
-                width, height = page.get_size()
-                long_edge = max(float(width or 1), float(height or 1))
-                scale = max(1.25, min(2.6, PDF_RENDER_MAX_LONG_EDGE / long_edge))
-                bitmap = page.render(scale=scale)
-                try:
-                    image = bitmap.to_pil().convert("RGB")
-                finally:
-                    try:
-                        bitmap.close()
-                    except Exception:
-                        pass
-
-                if max(image.size) > PDF_RENDER_MAX_LONG_EDGE:
-                    image.thumbnail(
-                        (PDF_RENDER_MAX_LONG_EDGE, PDF_RENDER_MAX_LONG_EDGE),
-                        Image.Resampling.LANCZOS,
-                    )
-
-                output = io.BytesIO()
-                image.save(
-                    output,
-                    format="JPEG",
-                    quality=PDF_RENDER_JPEG_QUALITY,
-                    optimize=True,
-                )
-                rendered.append(output.getvalue())
-            finally:
-                try:
-                    page.close()
-                except Exception:
-                    pass
-        return rendered
-    finally:
-        try:
-            document.close()
-        except Exception:
-            pass
 
 
 def _workers_ai_payload(
@@ -172,25 +101,14 @@ def _workers_ai_payload(
         }
     ]
 
-    if extension == ".pdf" or content_type == "application/pdf":
-        images = _render_pdf_pages(body)
-        for index, image_bytes in enumerate(images):
-            user_content.append({"type": "text", "text": f"第 {index + 1} 页"})
-            user_content.append(
-                {
-                    "type": "image_url",
-                    "image_url": {"url": _jpeg_data_uri(image_bytes)},
-                }
-            )
-        page_count = len(images)
-    else:
-        user_content.append(
-            {
-                "type": "image_url",
-                "image_url": {"url": _image_data_uri(content_type, body)},
-            }
-        )
-        page_count = 1
+    if (extension == ".pdf" or content_type.split(";", 1)[0].strip().lower() == "application/pdf"
+            or body.lstrip().startswith(b"%PDF-")):
+        raise HTTPException(status_code=422, detail="已停用 PDF 自动解析，请上传 JPG、PNG、WEBP 图片或手工录入")
+    user_content.append({
+        "type": "image_url",
+        "image_url": {"url": _image_data_uri(content_type, body)},
+    })
+    page_count = 1
 
     return (
         {
@@ -431,7 +349,7 @@ async def smart_scan_contract_cloudflare(request: Request) -> dict[str, Any]:
         raise HTTPException(status_code=422, detail="请选择需要识别的合同文件")
     extension = PurePath(file_name).suffix.lower()
     if extension not in SCAN_EXTENSIONS:
-        raise HTTPException(status_code=422, detail="智能识别目前支持 PDF、JPG、PNG、WEBP")
+        raise HTTPException(status_code=422, detail="智能识别目前支持 JPG、PNG、WEBP 图片，PDF 请改用手工录入")
 
     content_length = int(request.headers.get("content-length") or 0)
     if content_length > SCAN_MAX_BYTES:

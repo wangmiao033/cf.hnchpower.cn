@@ -25,7 +25,7 @@ AI_GATEWAY_API_KEY = os.environ.get("AI_GATEWAY_API_KEY", "").strip()
 CONTRACT_SCAN_MODEL = os.environ.get("CONTRACT_SCAN_MODEL", "openai/gpt-5.4-mini").strip() or "openai/gpt-5.4-mini"
 AI_GATEWAY_RESPONSES_URL = "https://ai-gateway.vercel.sh/v1/responses"
 SCAN_MAX_BYTES = 4 * 1024 * 1024
-SCAN_EXTENSIONS = {".pdf", ".jpg", ".jpeg", ".png", ".webp"}
+SCAN_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
 ROLE_DEFAULT_CONTRACT_PERMISSIONS = {
     "admin": {"contracts.view": True, "contracts.manage": True},
     "finance": {"contracts.view": True, "contracts.manage": True},
@@ -325,7 +325,7 @@ async def smart_scan_contract(request: Request) -> dict:
         raise HTTPException(status_code=422, detail="请选择需要识别的合同文件")
     extension = PurePath(file_name).suffix.lower()
     if extension not in SCAN_EXTENSIONS:
-        raise HTTPException(status_code=422, detail="智能识别目前支持 PDF、JPG、PNG、WEBP")
+        raise HTTPException(status_code=422, detail="智能识别目前支持 JPG、PNG、WEBP 图片，PDF 请改用手工录入")
 
     content_length = int(request.headers.get("content-length") or 0)
     if content_length > SCAN_MAX_BYTES:

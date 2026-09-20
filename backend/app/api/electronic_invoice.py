@@ -31,7 +31,7 @@ async def parse_electronic_invoice_file(
     original_name = Path(file.filename or "invoice").name.strip() or "invoice"
     suffix = Path(original_name).suffix.lower()
     if suffix not in SUPPORTED_ELECTRONIC_INVOICE_TYPES:
-        raise HTTPException(status_code=400, detail="仅支持电子发票 PDF、OFD 或 XML 文件")
+        raise HTTPException(status_code=400, detail="仅支持电子发票 OFD 或 XML 文件")
 
     body = await file.read()
     if not body:
@@ -52,7 +52,7 @@ async def parse_electronic_invoice_file(
             status_code=422,
             detail={
                 "error": "invoice_text_layer_missing",
-                "message": "该 PDF 没有可读取的文本层；请改用原始电子发票 PDF/OFD/XML，或使用完整录入。",
+                "message": "文件没有可读取的发票内容；请改用原始电子发票 OFD/XML，或使用完整录入。",
             },
         )
 
