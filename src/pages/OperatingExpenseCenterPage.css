@@ -141,3 +141,19 @@
   .payroll-review-meta .is-company{grid-column:auto}
   .payroll-review-footer{grid-template-columns:1fr}
 }
+
+
+/* Payroll review scrolling: keep the ledger page scrollable and make long employee lists independently scrollable. */
+.payroll-table-wrap{overflow-x:auto;overflow-y:visible}
+.payroll-inline-review-row>td{white-space:normal!important}
+.payroll-inline-review-panel--clean{overflow:visible}
+.payroll-review-sheet-wrap{
+  max-height:420px;
+  overflow-x:auto!important;
+  overflow-y:scroll!important;
+  scrollbar-gutter:stable both-edges;
+  overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch;
+}
+.payroll-review-sheet thead th{position:sticky;top:0;z-index:5}
+.payroll-review-sheet tfoot td{position:sticky;bottom:0;z-index:4}
