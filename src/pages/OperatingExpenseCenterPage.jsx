@@ -63,6 +63,44 @@ function money(value) {
   return `¥${Number(value || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
+function payrollNumber(value) {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+function roundPayroll(value) {
+  return Math.round((payrollNumber(value) + Number.EPSILON) * 100) / 100
+}
+
+function recalcPayrollItem(item) {
+  const deductionTotal = roundPayroll(
+    payrollNumber(item.tax_adjustment)
+    + payrollNumber(item.pension_insurance)
+    + payrollNumber(item.medical_insurance)
+    + payrollNumber(item.unemployment_insurance)
+    + payrollNumber(item.housing_fund)
+    + payrollNumber(item.leave_deduction)
+    + payrollNumber(item.late_deduction)
+  )
+  const netSalary = roundPayroll(
+    payrollNumber(item.gross_salary) - deductionTotal - payrollNumber(item.income_tax)
+  )
+  return {
+    ...item,
+    deduction_total: deductionTotal,
+    net_salary: netSalary
+  }
+}
+
+function payrollFormTotals(items = []) {
+  return items.reduce((totals, item) => ({
+    gross_salary: roundPayroll(totals.gross_salary + payrollNumber(item.gross_salary)),
+    employee_deduction_total: roundPayroll(totals.employee_deduction_total + payrollNumber(item.deduction_total)),
+    income_tax_total: roundPayroll(totals.income_tax_total + payrollNumber(item.income_tax)),
+    net_salary_total: roundPayroll(totals.net_salary_total + payrollNumber(item.net_salary))
+  }), { gross_salary: 0, employee_deduction_total: 0, income_tax_total: 0, net_salary_total: 0 })
+}
+
 function sum(rows, predicate = () => true) {
   return rows.filter(predicate).reduce((total, row) => total + Number(row.amount || 0), 0)
 }
@@ -246,7 +284,8 @@ export default function OperatingExpenseCenterPage() {
         payrollStatus: detail.payroll_status || 'pending_review',
         paymentDate: detail.payment_date || '',
         voucherNote: detail.voucher_note || '',
-        remark: detail.remark || ''
+        remark: detail.remark || '',
+        items: (detail.items || []).map((item) => recalcPayrollItem({ ...item }))
       })
     } catch (error) {
       showToast?.(error instanceof Error ? error.message : '工资明细读取失败', 'error')
@@ -255,14 +294,15 @@ export default function OperatingExpenseCenterPage() {
     }
   }
 
-  const savePayrollDetail = async (event) => {
-    event.preventDefault()
+  const savePayrollDetail = async (event, forcedStatus = '') => {
+    event?.preventDefault?.()
     if (!payrollDetail || !payrollDetailForm) return
     if (!payrollDetailForm.companyName.trim()) {
       showToast?.('请输入工资所属公司', 'error')
       return
     }
-    if (payrollDetailForm.payrollStatus === 'paid' && !payrollDetailForm.paymentDate) {
+    const payrollStatus = forcedStatus || payrollDetailForm.payrollStatus
+    if (payrollStatus === 'paid' && !payrollDetailForm.paymentDate) {
       showToast?.('已发放工资批次请填写发放日期', 'error')
       return
     }
@@ -272,15 +312,37 @@ export default function OperatingExpenseCenterPage() {
         expense_month: payrollDetailForm.expenseMonth,
         company_name: payrollDetailForm.companyName.trim(),
         due_date: payrollDetailForm.dueDate || null,
-        review_status: payrollDetailForm.payrollStatus === 'pending_review' ? 'pending_review' : 'reviewed',
-        payment_status: payrollDetailForm.payrollStatus === 'paid' ? 'paid' : 'unpaid',
-        payment_date: payrollDetailForm.payrollStatus === 'paid' ? (payrollDetailForm.paymentDate || null) : null,
+        review_status: payrollStatus === 'pending_review' ? 'pending_review' : 'reviewed',
+        payment_status: payrollStatus === 'paid' ? 'paid' : 'unpaid',
+        payment_date: payrollStatus === 'paid' ? (payrollDetailForm.paymentDate || null) : null,
         voucher_note: payrollDetailForm.voucherNote.trim() || null,
-        remark: payrollDetailForm.remark.trim() || null
+        remark: payrollDetailForm.remark.trim() || null,
+        items: (payrollDetailForm.items || []).map((item, index) => ({
+          employee_name: String(item.employee_name || '').trim(),
+          gross_salary: payrollNumber(item.gross_salary),
+          tax_adjustment: payrollNumber(item.tax_adjustment),
+          pension_insurance: payrollNumber(item.pension_insurance),
+          medical_insurance: payrollNumber(item.medical_insurance),
+          unemployment_insurance: payrollNumber(item.unemployment_insurance),
+          housing_fund: payrollNumber(item.housing_fund),
+          leave_deduction: payrollNumber(item.leave_deduction),
+          late_deduction: payrollNumber(item.late_deduction),
+          deduction_total: payrollNumber(item.deduction_total),
+          income_tax: payrollNumber(item.income_tax),
+          net_salary: payrollNumber(item.net_salary),
+          signature_date: item.signature_date || null,
+          sort_order: Number.isFinite(Number(item.sort_order)) ? Number(item.sort_order) : index
+        }))
       })
       setPayrollDetail(updated)
+      setPayrollDetailForm((current) => ({
+        ...current,
+        payrollStatus: updated.payroll_status || payrollStatus,
+        paymentDate: updated.payment_date || '',
+        items: (updated.items || []).map((item) => recalcPayrollItem({ ...item }))
+      }))
       setRevision((value) => value + 1)
-      showToast?.('工资批次已更新', 'success')
+      showToast?.(forcedStatus === 'reviewed' ? '财务核对已确认' : '工资批次已更新', 'success')
     } catch (error) {
       showToast?.(error instanceof Error ? error.message : '工资批次更新失败', 'error')
     } finally {
@@ -661,7 +723,7 @@ export default function OperatingExpenseCenterPage() {
                     <td>{row.payment_date || '—'}</td>
                     <td><span className="payroll-source-file" title={[row.source_file_name, row.voucher_note].filter(Boolean).join(' · ')}>{row.source_file_name || row.voucher_note || '—'}</span></td>
                     <td>{row.validation_status === 'valid' ? <StatusBadge type="paid">公式一致</StatusBadge> : <StatusBadge type="danger">存在差异</StatusBadge>}</td>
-                    <td><div className="opex-row-actions"><button type="button" onClick={() => void openPayrollDetail(row)}>查看</button>{canManage ? <button type="button" className="is-danger" onClick={() => void removePayroll(row)}>删除</button> : null}</div></td>
+                    <td><div className="opex-row-actions"><button type="button" onClick={() => void openPayrollDetail(row)}>核对 / 编辑</button>{canManage ? <button type="button" className="is-danger" onClick={() => void removePayroll(row)}>删除</button> : null}</div></td>
                   </tr>
                 ))}
               </tbody>
@@ -676,7 +738,7 @@ export default function OperatingExpenseCenterPage() {
 
         {payrollImportOpen ? <PayrollImportDialog imports={payrollImports} companySuggestions={companySuggestions} saving={saving} onUpdate={updatePayrollImport} onClose={() => !saving && setPayrollImportOpen(false)} onSave={() => void savePayrollImports()} /> : null}
         {payrollDetailLoading ? <div className="opex-backdrop"><div className="payroll-loading-card">正在读取工资明细…</div></div> : null}
-        {payrollDetail && payrollDetailForm ? <PayrollDetailDialog detail={payrollDetail} form={payrollDetailForm} setForm={setPayrollDetailForm} saving={saving} canManage={canManage} onClose={() => { if (!saving) { setPayrollDetail(null); setPayrollDetailForm(null) } }} onSubmit={savePayrollDetail} /> : null}
+        {payrollDetail && payrollDetailForm ? <PayrollDetailDialog detail={payrollDetail} form={payrollDetailForm} setForm={setPayrollDetailForm} saving={saving} canManage={canManage} onClose={() => { if (!saving) { setPayrollDetail(null); setPayrollDetailForm(null) } }} onSubmit={savePayrollDetail} onConfirmReview={() => void savePayrollDetail(null, 'reviewed')} /> : null}
       </PageContainer>
     )
   }
