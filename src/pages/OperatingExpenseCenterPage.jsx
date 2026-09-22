@@ -920,6 +920,16 @@ function PayrollInlineReviewPanel({ detail, form, setForm, saving, canManage, on
       paymentDate: payrollStatus === 'paid' ? old.paymentDate : ''
     }))
   }
+  const updatePaymentDate = (event) => {
+    const paymentDate = event.target.value
+    setForm((old) => ({
+      ...old,
+      paymentDate,
+      payrollStatus: paymentDate
+        ? (old.payrollStatus === 'pending_review' ? 'pending_review' : 'paid')
+        : (old.payrollStatus === 'paid' ? 'reviewed' : old.payrollStatus)
+    }))
+  }
   const hasExtraAdjustments = (form.items || []).some((item) =>
     payrollNumber(item.tax_adjustment) !== 0
     || payrollNumber(item.leave_deduction) !== 0
@@ -970,7 +980,7 @@ function PayrollInlineReviewPanel({ detail, form, setForm, saving, canManage, on
           <label><span>工资月份</span><input type="month" value={form.expenseMonth} onChange={update('expenseMonth')} disabled={!canManage} /></label>
           <label className="is-company"><span>公司</span><input value={form.companyName} onChange={update('companyName')} disabled={!canManage} /></label>
           <label><span>工资状态</span><select value={form.payrollStatus} onChange={updatePayrollStatus} disabled={!canManage}><option value="pending_review">待核对</option><option value="reviewed">财务已核对</option><option value="paid">已发放</option></select></label>
-          <label><span>发放日期</span><input type="date" value={form.paymentDate} onChange={update('paymentDate')} disabled={!canManage || form.payrollStatus !== 'paid'} /></label>
+          <label><span>发放日期</span><input type="date" value={form.paymentDate} onChange={updatePaymentDate} disabled={!canManage || form.payrollStatus === 'pending_review'} title={form.payrollStatus === 'pending_review' ? '请先完成财务核对' : '选择日期后自动标记为已发放'} /></label>
           <label><span>应付日期</span><input type="date" value={form.dueDate} onChange={update('dueDate')} disabled={!canManage} /></label>
           <button type="button" className={showAdjustments ? 'payroll-adjust-toggle is-active' : 'payroll-adjust-toggle'} onClick={() => setShowAdjustments((value) => !value)}>
             {showAdjustments ? '隐藏其他扣款' : '显示其他扣款'}
