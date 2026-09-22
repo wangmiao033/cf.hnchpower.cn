@@ -26,6 +26,20 @@ def _number(value: Any) -> float | None:
     return parsed if parsed == parsed else None
 
 
+def _rd_counterparty_share_rate(candidate: dict) -> float | None:
+    """Contract access share_rate is our share; R&D payable uses the counterparty share."""
+    our_share = _number(candidate.get("share_rate"))
+    if our_share is None or not 0 <= our_share <= 100:
+        return None
+    return round(100.0 - our_share, 4)
+
+
+def _contract_share_rate_for_bill(bill: dict, candidate: dict) -> float | None:
+    if str(bill.get("bill_type") or "").strip().lower() == "rd":
+        return _rd_counterparty_share_rate(candidate)
+    return _number(candidate.get("share_rate"))
+
+
 def _money(value: Any) -> float:
     parsed = _number(value)
     return round(parsed or 0.0, 2)
@@ -328,7 +342,14 @@ def compare_bill_to_candidate(bill: dict, line: dict, candidate: dict, match: di
             )
         )
 
-    checks.append(_compare_rate("share_rate", "分成比例", line.get("share_rate"), candidate.get("share_rate")))
+    checks.append(
+        _compare_rate(
+            "share_rate",
+            "分成比例",
+            line.get("share_rate"),
+            _contract_share_rate_for_bill(bill, candidate),
+        )
+    )
     checks.append(_compare_rate("tax_rate", "税率", line.get("tax_rate"), candidate.get("invoice_tax_rate")))
 
     bill_channel_fee_rate = _number(bill.get("channel_fee_rate"))
@@ -496,7 +517,7 @@ def evaluate_line(bill: dict, line: dict, candidates: list[dict]) -> dict:
             "channel_name": candidate.get("channel_name"),
             "authorization_start": candidate.get("authorization_start"),
             "authorization_end": candidate.get("authorization_end"),
-            "share_rate": candidate.get("share_rate"),
+            "share_rate": _contract_share_rate_for_bill(bill, candidate),
             "channel_fee_rate": candidate.get("channel_fee_rate"),
             "settlement_mode": candidate.get("settlement_mode"),
             "settlement_basis": candidate.get("settlement_basis"),
