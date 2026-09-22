@@ -42,6 +42,14 @@ def _text(value: Any) -> str:
     return str(value or "").strip()
 
 
+def _rd_counterparty_share_rate(candidate: dict) -> float | None:
+    """Contract access share_rate is our share; R&D payable uses the counterparty share."""
+    our_share = _number(candidate.get("share_rate"))
+    if our_share is None or not 0 <= our_share <= 100:
+        return None
+    return 100.0 - our_share
+
+
 def _pricing_mode(candidate: dict) -> str:
     text = " ".join(
         [
@@ -199,13 +207,14 @@ def calculate_rd_contract_amount(
     if guarded is not None:
         return guarded
 
-    share_rate = _number(candidate.get("share_rate"))
+    our_share_rate = _number(candidate.get("share_rate"))
+    share_rate = _rd_counterparty_share_rate(candidate)
     if share_rate is None:
         result.update(
             {
                 "formula_code": "rd_revenue_share",
                 "formula_label": "研发流水分成",
-                "message": "合同合作清单未维护分成比例，无法重算合同标准结算金额。",
+                "message": "合同合作清单未维护有效的我方分成比例，无法推导对方分成并重算合同标准结算金额。",
             }
         )
         return result
@@ -276,6 +285,7 @@ def calculate_rd_contract_amount(
                 "billing_base": _round2(billing_base),
                 "contract_channel_fee_rate": round(contract_channel_fee, 4),
                 "contract_tax_rate": round(contract_tax, 4),
+                "contract_our_share_rate": round(our_share_rate, 4),
                 "contract_share_rate": round(share_rate, 4),
             },
             "assumptions": assumptions,
