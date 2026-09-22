@@ -63,6 +63,44 @@ function money(value) {
   return `¥${Number(value || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
+function payrollNumber(value) {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+function roundPayroll(value) {
+  return Math.round((payrollNumber(value) + Number.EPSILON) * 100) / 100
+}
+
+function recalcPayrollItem(item) {
+  const deductionTotal = roundPayroll(
+    payrollNumber(item.tax_adjustment)
+    + payrollNumber(item.pension_insurance)
+    + payrollNumber(item.medical_insurance)
+    + payrollNumber(item.unemployment_insurance)
+    + payrollNumber(item.housing_fund)
+    + payrollNumber(item.leave_deduction)
+    + payrollNumber(item.late_deduction)
+  )
+  const netSalary = roundPayroll(
+    payrollNumber(item.gross_salary) - deductionTotal - payrollNumber(item.income_tax)
+  )
+  return {
+    ...item,
+    deduction_total: deductionTotal,
+    net_salary: netSalary
+  }
+}
+
+function payrollFormTotals(items = []) {
+  return items.reduce((totals, item) => ({
+    gross_salary: roundPayroll(totals.gross_salary + payrollNumber(item.gross_salary)),
+    employee_deduction_total: roundPayroll(totals.employee_deduction_total + payrollNumber(item.deduction_total)),
+    income_tax_total: roundPayroll(totals.income_tax_total + payrollNumber(item.income_tax)),
+    net_salary_total: roundPayroll(totals.net_salary_total + payrollNumber(item.net_salary))
+  }), { gross_salary: 0, employee_deduction_total: 0, income_tax_total: 0, net_salary_total: 0 })
+}
+
 function sum(rows, predicate = () => true) {
   return rows.filter(predicate).reduce((total, row) => total + Number(row.amount || 0), 0)
 }
@@ -246,7 +284,8 @@ export default function OperatingExpenseCenterPage() {
         payrollStatus: detail.payroll_status || 'pending_review',
         paymentDate: detail.payment_date || '',
         voucherNote: detail.voucher_note || '',
-        remark: detail.remark || ''
+        remark: detail.remark || '',
+        items: (detail.items || []).map((item) => recalcPayrollItem({ ...item }))
       })
     } catch (error) {
       showToast?.(error instanceof Error ? error.message : '工资明细读取失败', 'error')
@@ -255,14 +294,15 @@ export default function OperatingExpenseCenterPage() {
     }
   }
 
-  const savePayrollDetail = async (event) => {
-    event.preventDefault()
+  const savePayrollDetail = async (event, forcedStatus = '') => {
+    event?.preventDefault?.()
     if (!payrollDetail || !payrollDetailForm) return
     if (!payrollDetailForm.companyName.trim()) {
       showToast?.('请输入工资所属公司', 'error')
       return
     }
-    if (payrollDetailForm.payrollStatus === 'paid' && !payrollDetailForm.paymentDate) {
+    const payrollStatus = forcedStatus || payrollDetailForm.payrollStatus
+    if (payrollStatus === 'paid' && !payrollDetailForm.paymentDate) {
       showToast?.('已发放工资批次请填写发放日期', 'error')
       return
     }
@@ -272,15 +312,37 @@ export default function OperatingExpenseCenterPage() {
         expense_month: payrollDetailForm.expenseMonth,
         company_name: payrollDetailForm.companyName.trim(),
         due_date: payrollDetailForm.dueDate || null,
-        review_status: payrollDetailForm.payrollStatus === 'pending_review' ? 'pending_review' : 'reviewed',
-        payment_status: payrollDetailForm.payrollStatus === 'paid' ? 'paid' : 'unpaid',
-        payment_date: payrollDetailForm.payrollStatus === 'paid' ? (payrollDetailForm.paymentDate || null) : null,
+        review_status: payrollStatus === 'pending_review' ? 'pending_review' : 'reviewed',
+        payment_status: payrollStatus === 'paid' ? 'paid' : 'unpaid',
+        payment_date: payrollStatus === 'paid' ? (payrollDetailForm.paymentDate || null) : null,
         voucher_note: payrollDetailForm.voucherNote.trim() || null,
-        remark: payrollDetailForm.remark.trim() || null
+        remark: payrollDetailForm.remark.trim() || null,
+        items: (payrollDetailForm.items || []).map((item, index) => ({
+          employee_name: String(item.employee_name || '').trim(),
+          gross_salary: payrollNumber(item.gross_salary),
+          tax_adjustment: payrollNumber(item.tax_adjustment),
+          pension_insurance: payrollNumber(item.pension_insurance),
+          medical_insurance: payrollNumber(item.medical_insurance),
+          unemployment_insurance: payrollNumber(item.unemployment_insurance),
+          housing_fund: payrollNumber(item.housing_fund),
+          leave_deduction: payrollNumber(item.leave_deduction),
+          late_deduction: payrollNumber(item.late_deduction),
+          deduction_total: payrollNumber(item.deduction_total),
+          income_tax: payrollNumber(item.income_tax),
+          net_salary: payrollNumber(item.net_salary),
+          signature_date: item.signature_date || null,
+          sort_order: Number.isFinite(Number(item.sort_order)) ? Number(item.sort_order) : index
+        }))
       })
       setPayrollDetail(updated)
+      setPayrollDetailForm((current) => ({
+        ...current,
+        payrollStatus: updated.payroll_status || payrollStatus,
+        paymentDate: updated.payment_date || '',
+        items: (updated.items || []).map((item) => recalcPayrollItem({ ...item }))
+      }))
       setRevision((value) => value + 1)
-      showToast?.('工资批次已更新', 'success')
+      showToast?.(forcedStatus === 'reviewed' ? '财务核对已确认' : '工资批次已更新', 'success')
     } catch (error) {
       showToast?.(error instanceof Error ? error.message : '工资批次更新失败', 'error')
     } finally {
@@ -661,7 +723,7 @@ export default function OperatingExpenseCenterPage() {
                     <td>{row.payment_date || '—'}</td>
                     <td><span className="payroll-source-file" title={[row.source_file_name, row.voucher_note].filter(Boolean).join(' · ')}>{row.source_file_name || row.voucher_note || '—'}</span></td>
                     <td>{row.validation_status === 'valid' ? <StatusBadge type="paid">公式一致</StatusBadge> : <StatusBadge type="danger">存在差异</StatusBadge>}</td>
-                    <td><div className="opex-row-actions"><button type="button" onClick={() => void openPayrollDetail(row)}>查看</button>{canManage ? <button type="button" className="is-danger" onClick={() => void removePayroll(row)}>删除</button> : null}</div></td>
+                    <td><div className="opex-row-actions"><button type="button" onClick={() => void openPayrollDetail(row)}>核对 / 编辑</button>{canManage ? <button type="button" className="is-danger" onClick={() => void removePayroll(row)}>删除</button> : null}</div></td>
                   </tr>
                 ))}
               </tbody>
@@ -676,7 +738,7 @@ export default function OperatingExpenseCenterPage() {
 
         {payrollImportOpen ? <PayrollImportDialog imports={payrollImports} companySuggestions={companySuggestions} saving={saving} onUpdate={updatePayrollImport} onClose={() => !saving && setPayrollImportOpen(false)} onSave={() => void savePayrollImports()} /> : null}
         {payrollDetailLoading ? <div className="opex-backdrop"><div className="payroll-loading-card">正在读取工资明细…</div></div> : null}
-        {payrollDetail && payrollDetailForm ? <PayrollDetailDialog detail={payrollDetail} form={payrollDetailForm} setForm={setPayrollDetailForm} saving={saving} canManage={canManage} onClose={() => { if (!saving) { setPayrollDetail(null); setPayrollDetailForm(null) } }} onSubmit={savePayrollDetail} /> : null}
+        {payrollDetail && payrollDetailForm ? <PayrollDetailDialog detail={payrollDetail} form={payrollDetailForm} setForm={setPayrollDetailForm} saving={saving} canManage={canManage} onClose={() => { if (!saving) { setPayrollDetail(null); setPayrollDetailForm(null) } }} onSubmit={savePayrollDetail} onConfirmReview={() => void savePayrollDetail(null, 'reviewed')} /> : null}
       </PageContainer>
     )
   }
@@ -767,7 +829,7 @@ function PayrollImportDialog({ imports, companySuggestions, saving, onUpdate, on
   )
 }
 
-function PayrollDetailDialog({ detail, form, setForm, saving, canManage, onClose, onSubmit }) {
+function PayrollDetailDialog({ detail, form, setForm, saving, canManage, onClose, onSubmit, onConfirmReview }) {
   const update = (key) => (event) => setForm((old) => ({ ...old, [key]: event.target.value }))
   const updatePayrollStatus = (event) => {
     const payrollStatus = event.target.value
@@ -777,6 +839,17 @@ function PayrollDetailDialog({ detail, form, setForm, saving, canManage, onClose
       paymentDate: payrollStatus === 'paid' ? old.paymentDate : ''
     }))
   }
+  const updateItem = (index, key, value) => {
+    setForm((old) => ({
+      ...old,
+      items: (old.items || []).map((item, itemIndex) => {
+        if (itemIndex !== index) return item
+        const next = { ...item, [key]: key === 'employee_name' ? value : payrollNumber(value) }
+        return recalcPayrollItem(next)
+      })
+    }))
+  }
+  const totals = payrollFormTotals(form.items || [])
   return (
     <div className="opex-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
       <section className="opex-editor payroll-detail-dialog" role="dialog" aria-modal="true">
@@ -786,11 +859,11 @@ function PayrollDetailDialog({ detail, form, setForm, saving, canManage, onClose
         </div>
         <form onSubmit={onSubmit}>
           <div className="payroll-detail-summary">
-            <article><span>员工人数</span><strong>{detail.employee_count} 人</strong></article>
-            <article><span>应发工资</span><strong>{money(detail.gross_salary)}</strong></article>
-            <article><span>个人代扣</span><strong>{money(detail.employee_deduction_total)}</strong></article>
-            <article><span>个税</span><strong>{money(detail.income_tax_total)}</strong></article>
-            <article className="is-emph"><span>财务确认实发工资</span><strong>{money(detail.net_salary_total)}</strong></article>
+            <article><span>员工人数</span><strong>{(form.items || []).length} 人</strong></article>
+            <article><span>应发工资</span><strong>{money(totals.gross_salary)}</strong></article>
+            <article><span>个人代扣</span><strong>{money(totals.employee_deduction_total)}</strong></article>
+            <article><span>个税</span><strong>{money(totals.income_tax_total)}</strong></article>
+            <article className="is-emph"><span>财务确认实发工资</span><strong>{money(totals.net_salary_total)}</strong></article>
           </div>
 
           <div className="opex-form-grid payroll-batch-fields">
@@ -805,39 +878,39 @@ function PayrollDetailDialog({ detail, form, setForm, saving, canManage, onClose
           </div>
 
           <div className="payroll-formula-note">
-            <strong>公式：</strong>
-            <span>代扣小计 = 补税 + 养老 + 医疗 + 失业 + 公积金 + 请假扣除 + 迟到罚款；实发 = 应发 − 代扣小计 − 个税。</span>
-            {detail.validation_status === 'valid' ? <StatusBadge type="paid">全部一致</StatusBadge> : <StatusBadge type="danger">存在差异</StatusBadge>}
+            <strong>核对方式：</strong>
+            <span>直接修改下面员工表格。代扣小计和财务确认实发工资会自动重算；核对完成后点击“确认财务已核对”。</span>
+            {detail.validation_status === 'valid' ? <StatusBadge type="paid">原表公式一致</StatusBadge> : <StatusBadge type="danger">原表存在差异</StatusBadge>}
           </div>
 
           <div className="payroll-detail-table-wrap">
-            <table className="payroll-detail-table">
-              <thead><tr><th>员工</th><th className="is-right">应发工资</th><th className="is-right">补税</th><th className="is-right">养老</th><th className="is-right">医疗</th><th className="is-right">失业</th><th className="is-right">公积金</th><th className="is-right">请假扣除</th><th className="is-right">迟到罚款</th><th className="is-right">代扣小计</th><th className="is-right">个税</th><th className="is-right">财务确认实发工资</th><th>校验</th></tr></thead>
+            <table className="payroll-detail-table payroll-detail-table--editable">
+              <thead><tr><th>员工</th><th className="is-right">应发工资</th><th className="is-right">补税</th><th className="is-right">养老</th><th className="is-right">医疗</th><th className="is-right">失业</th><th className="is-right">公积金</th><th className="is-right">请假扣除</th><th className="is-right">迟到罚款</th><th className="is-right">代扣小计</th><th className="is-right">个税</th><th className="is-right">财务确认实发工资</th></tr></thead>
               <tbody>
-                {(detail.items || []).map((item) => (
-                  <tr key={item.id || `${detail.id}-${item.sort_order}`}>
-                    <td><strong>{item.employee_name}</strong></td>
-                    <td className="is-right">{money(item.gross_salary)}</td>
-                    <td className="is-right">{money(item.tax_adjustment)}</td>
-                    <td className="is-right">{money(item.pension_insurance)}</td>
-                    <td className="is-right">{money(item.medical_insurance)}</td>
-                    <td className="is-right">{money(item.unemployment_insurance)}</td>
-                    <td className="is-right">{money(item.housing_fund)}</td>
-                    <td className="is-right">{money(item.leave_deduction)}</td>
-                    <td className="is-right">{money(item.late_deduction)}</td>
-                    <td className="is-right">{money(item.deduction_total)}</td>
-                    <td className="is-right">{money(item.income_tax)}</td>
-                    <td className="is-right"><strong>{money(item.net_salary)}</strong></td>
-                    <td>{item.validation_status === 'valid' ? <StatusBadge type="paid">一致</StatusBadge> : <span className="payroll-validation-error" title={`代扣差异 ${money(item.deduction_difference)}；实发差异 ${money(item.net_difference)}`}>有差异</span>}</td>
+                {(form.items || []).map((item, index) => (
+                  <tr key={item.id || `${detail.id}-${item.sort_order ?? index}`}>
+                    <td><input className="payroll-cell-input payroll-cell-name" value={item.employee_name || ''} onChange={(event) => updateItem(index, 'employee_name', event.target.value)} disabled={!canManage} /></td>
+                    <td><input className="payroll-cell-input is-num" type="number" step="0.01" value={item.gross_salary ?? 0} onChange={(event) => updateItem(index, 'gross_salary', event.target.value)} disabled={!canManage} /></td>
+                    <td><input className="payroll-cell-input is-num" type="number" step="0.01" value={item.tax_adjustment ?? 0} onChange={(event) => updateItem(index, 'tax_adjustment', event.target.value)} disabled={!canManage} /></td>
+                    <td><input className="payroll-cell-input is-num" type="number" step="0.01" value={item.pension_insurance ?? 0} onChange={(event) => updateItem(index, 'pension_insurance', event.target.value)} disabled={!canManage} /></td>
+                    <td><input className="payroll-cell-input is-num" type="number" step="0.01" value={item.medical_insurance ?? 0} onChange={(event) => updateItem(index, 'medical_insurance', event.target.value)} disabled={!canManage} /></td>
+                    <td><input className="payroll-cell-input is-num" type="number" step="0.01" value={item.unemployment_insurance ?? 0} onChange={(event) => updateItem(index, 'unemployment_insurance', event.target.value)} disabled={!canManage} /></td>
+                    <td><input className="payroll-cell-input is-num" type="number" step="0.01" value={item.housing_fund ?? 0} onChange={(event) => updateItem(index, 'housing_fund', event.target.value)} disabled={!canManage} /></td>
+                    <td><input className="payroll-cell-input is-num" type="number" step="0.01" value={item.leave_deduction ?? 0} onChange={(event) => updateItem(index, 'leave_deduction', event.target.value)} disabled={!canManage} /></td>
+                    <td><input className="payroll-cell-input is-num" type="number" step="0.01" value={item.late_deduction ?? 0} onChange={(event) => updateItem(index, 'late_deduction', event.target.value)} disabled={!canManage} /></td>
+                    <td className="is-right payroll-auto-cell">{money(item.deduction_total)}</td>
+                    <td><input className="payroll-cell-input is-num" type="number" step="0.01" value={item.income_tax ?? 0} onChange={(event) => updateItem(index, 'income_tax', event.target.value)} disabled={!canManage} /></td>
+                    <td className="is-right payroll-auto-cell is-net"><strong>{money(item.net_salary)}</strong></td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
 
-          <div className="opex-editor-actions">
+          <div className="opex-editor-actions payroll-review-actions">
             <button type="button" onClick={onClose} disabled={saving}>关闭</button>
-            {canManage ? <button type="submit" className="is-primary" disabled={saving}>{saving ? '保存中…' : '保存批次信息'}</button> : null}
+            {canManage ? <button type="submit" disabled={saving}>{saving ? '保存中…' : '保存修改'}</button> : null}
+            {canManage && form.payrollStatus !== 'paid' ? <button type="button" className="is-primary" onClick={onConfirmReview} disabled={saving}>{saving ? '处理中…' : '确认财务已核对'}</button> : null}
           </div>
         </form>
       </section>
