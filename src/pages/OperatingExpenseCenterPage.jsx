@@ -727,7 +727,7 @@ function PayrollImportDialog({ imports, companySuggestions, saving, onUpdate, on
           <button type="button" onClick={onClose}>×</button>
         </div>
         <div className="payroll-import-body">
-          <p className="payroll-dialog-tip">支持当前工资 Excel 模板。系统只读取第一张工资明细表，不读取银行卡等其他工作表。</p>
+          <p className="payroll-dialog-tip">支持当前工资 Excel 模板。系统只读取第一张工资明细表，不读取银行卡等其他工作表。你提供的这类“财务核对后工资表”默认按“财务已核对”导入，也可手动改为“待核对”。</p>
           <datalist id="payroll-company-options">
             {companySuggestions.map((name) => <option key={name} value={name} />)}
           </datalist>
@@ -740,15 +740,16 @@ function PayrollImportDialog({ imports, companySuggestions, saving, onUpdate, on
                 </div>
                 {item.error ? <p className="payroll-import-error">{item.error}</p> : (
                   <>
-                    <div className="payroll-import-fields">
+                    <div className="payroll-import-fields payroll-import-fields--review">
                       <label><span>工资月份 *</span><input type="month" value={item.expenseMonth || ''} onChange={(event) => onUpdate(item.key, { expenseMonth: event.target.value })} /></label>
                       <label><span>所属公司 *</span><input list="payroll-company-options" value={item.companyName || ''} onChange={(event) => onUpdate(item.key, { companyName: event.target.value })} placeholder="选择或输入公司名称" /></label>
+                      <label><span>导入状态</span><select value={item.payrollStatus || 'reviewed'} onChange={(event) => onUpdate(item.key, { payrollStatus: event.target.value })}><option value="reviewed">财务已核对</option><option value="pending_review">待核对</option></select></label>
                     </div>
                     <div className="payroll-import-kpis">
                       <span>应发 <b>{money(item.totals?.gross_salary)}</b></span>
                       <span>个人代扣 <b>{money(item.totals?.employee_deduction_total)}</b></span>
                       <span>个税 <b>{money(item.totals?.income_tax_total)}</b></span>
-                      <span>实发 <b>{money(item.totals?.net_salary_total)}</b></span>
+                      <span>财务确认实发 <b>{money(item.totals?.net_salary_total)}</b></span>
                     </div>
                     {item.validationStatus !== 'valid' ? <p className="payroll-import-warning">工资表中至少一行“代扣小计”或“实发工资”与公式复算不一致。允许导入，但会保留异常标记。</p> : null}
                   </>
@@ -768,12 +769,12 @@ function PayrollImportDialog({ imports, companySuggestions, saving, onUpdate, on
 
 function PayrollDetailDialog({ detail, form, setForm, saving, canManage, onClose, onSubmit }) {
   const update = (key) => (event) => setForm((old) => ({ ...old, [key]: event.target.value }))
-  const updatePaymentStatus = (event) => {
-    const paymentStatus = event.target.value
+  const updatePayrollStatus = (event) => {
+    const payrollStatus = event.target.value
     setForm((old) => ({
       ...old,
-      paymentStatus,
-      paymentDate: paymentStatus === 'unpaid' ? '' : old.paymentDate
+      payrollStatus,
+      paymentDate: payrollStatus === 'paid' ? old.paymentDate : ''
     }))
   }
   return (
@@ -789,15 +790,15 @@ function PayrollDetailDialog({ detail, form, setForm, saving, canManage, onClose
             <article><span>应发工资</span><strong>{money(detail.gross_salary)}</strong></article>
             <article><span>个人代扣</span><strong>{money(detail.employee_deduction_total)}</strong></article>
             <article><span>个税</span><strong>{money(detail.income_tax_total)}</strong></article>
-            <article className="is-emph"><span>实发工资</span><strong>{money(detail.net_salary_total)}</strong></article>
+            <article className="is-emph"><span>财务确认实发工资</span><strong>{money(detail.net_salary_total)}</strong></article>
           </div>
 
           <div className="opex-form-grid payroll-batch-fields">
             <label><span>工资月份</span><input type="month" value={form.expenseMonth} onChange={update('expenseMonth')} disabled={!canManage} /></label>
             <label><span>公司</span><input value={form.companyName} onChange={update('companyName')} disabled={!canManage} /></label>
             <label><span>应付日期</span><input type="date" value={form.dueDate} onChange={update('dueDate')} disabled={!canManage} /></label>
-            <label><span>支付状态</span><select value={form.paymentStatus} onChange={updatePaymentStatus} disabled={!canManage}><option value="unpaid">待支付</option><option value="paid">已支付</option></select></label>
-            <label><span>实付日期{form.paymentStatus === 'paid' ? ' *' : ''}</span><input type="date" value={form.paymentDate} onChange={update('paymentDate')} disabled={!canManage || form.paymentStatus !== 'paid'} /></label>
+            <label><span>工资状态</span><select value={form.payrollStatus} onChange={updatePayrollStatus} disabled={!canManage}><option value="pending_review">待核对</option><option value="reviewed">财务已核对</option><option value="paid">已发放</option></select></label>
+            <label><span>发放日期{form.payrollStatus === 'paid' ? ' *' : ''}</span><input type="date" value={form.paymentDate} onChange={update('paymentDate')} disabled={!canManage || form.payrollStatus !== 'paid'} /></label>
             <label><span>来源工资表</span><input value={detail.source_file_name || ''} disabled /></label>
             <label className="is-wide"><span>付款凭证 / 回单说明</span><input value={form.voucherNote} onChange={update('voucherNote')} disabled={!canManage} placeholder="例如：工资批量转账回单已存档" /></label>
             <label className="is-wide"><span>备注</span><textarea rows={2} value={form.remark} onChange={update('remark')} disabled={!canManage} /></label>
@@ -811,7 +812,7 @@ function PayrollDetailDialog({ detail, form, setForm, saving, canManage, onClose
 
           <div className="payroll-detail-table-wrap">
             <table className="payroll-detail-table">
-              <thead><tr><th>员工</th><th className="is-right">应发工资</th><th className="is-right">补税</th><th className="is-right">养老</th><th className="is-right">医疗</th><th className="is-right">失业</th><th className="is-right">公积金</th><th className="is-right">请假扣除</th><th className="is-right">迟到罚款</th><th className="is-right">代扣小计</th><th className="is-right">个税</th><th className="is-right">实发工资</th><th>校验</th></tr></thead>
+              <thead><tr><th>员工</th><th className="is-right">应发工资</th><th className="is-right">补税</th><th className="is-right">养老</th><th className="is-right">医疗</th><th className="is-right">失业</th><th className="is-right">公积金</th><th className="is-right">请假扣除</th><th className="is-right">迟到罚款</th><th className="is-right">代扣小计</th><th className="is-right">个税</th><th className="is-right">财务确认实发工资</th><th>校验</th></tr></thead>
               <tbody>
                 {(detail.items || []).map((item) => (
                   <tr key={item.id || `${detail.id}-${item.sort_order}`}>
