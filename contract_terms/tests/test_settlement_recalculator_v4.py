@@ -6,7 +6,7 @@ from settlement_recalculator_v4 import calculate_contract_standard_amount_v4
 class SettlementBasisGuardTests(unittest.TestCase):
     def base_candidate(self, **overrides):
         candidate = {
-            "share_rate": 83,
+            "share_rate": 17,
             "channel_fee_rate": 0,
             "invoice_tax_rate": 0,
             "testing_fee": 0,
