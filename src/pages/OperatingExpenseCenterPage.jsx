@@ -599,6 +599,10 @@ export default function OperatingExpenseCenterPage() {
       employee_deduction_total: 0,
       income_tax_total: 0,
       net_salary_total: 0,
+      confirmed_net_salary_total: 0,
+      pending_review_count: 0,
+      reviewed_count: 0,
+      paid_count: 0,
       total: 0
     }
     const companySuggestions = Array.from(new Set([
@@ -611,7 +615,7 @@ export default function OperatingExpenseCenterPage() {
           <div>
             <span>PAYROLL</span>
             <h1>人工费用</h1>
-            <p>按“公司 + 工资月份”管理月度工资批次；工资表导入后自动校验代扣小计与实发工资公式。</p>
+            <p>按“公司 + 工资月份”管理月度工资批次；财务核对后确认最终实发工资，再记录实际发放。</p>
           </div>
           <div className="opex-head__actions">
             <button type="button" onClick={() => setRevision((value) => value + 1)}>{loading ? '刷新中…' : '刷新'}</button>
@@ -629,18 +633,18 @@ export default function OperatingExpenseCenterPage() {
           <article className="is-total"><span>本月应发工资</span><strong>{money(totals.gross_salary_total)}</strong><small>{totals.total || 0} 个公司工资批次</small></article>
           <article><span>本月个人代扣</span><strong>{money(totals.employee_deduction_total)}</strong><small>养老 / 医疗 / 失业 / 公积金及其他代扣</small></article>
           <article><span>本月个人所得税</span><strong>{money(totals.income_tax_total)}</strong><small>工资表个税合计</small></article>
-          <article className="is-asset"><span>本月实发工资</span><strong>{money(totals.net_salary_total)}</strong><small>实际发给员工的工资合计</small></article>
+          <article className="is-asset"><span>财务确认实发工资</span><strong>{money(totals.confirmed_net_salary_total)}</strong><small>财务已核对 {totals.reviewed_count || 0} 批 · 已发放 {totals.paid_count || 0} 批 · 待核对 {totals.pending_review_count || 0} 批</small></article>
         </section>
 
         <section className="opex-card">
           <div className="opex-toolbar">
             <label><span>工资月份</span><input type="month" value={month} onChange={(event) => setMonth(event.target.value)} /></label>
-            <label><span>支付状态</span><select value={paymentFilter} onChange={(event) => setPaymentFilter(event.target.value)}><option value="all">全部</option><option value="unpaid">待支付</option><option value="paid">已支付</option></select></label>
+            <label><span>工资状态</span><select value={payrollStatusFilter} onChange={(event) => setPayrollStatusFilter(event.target.value)}><option value="all">全部</option><option value="pending_review">待核对</option><option value="reviewed">财务已核对</option><option value="paid">已发放</option></select></label>
             <label className="is-grow"><span>搜索</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="公司、员工、工资表文件、备注…" /></label>
           </div>
           <div className="opex-table-wrap payroll-table-wrap">
             <table>
-              <thead><tr><th>工资月份</th><th>公司</th><th className="is-right">人数</th><th className="is-right">应发工资</th><th className="is-right">个人代扣</th><th className="is-right">个税</th><th className="is-right">实发工资</th><th>支付状态</th><th>实付日期</th><th>工资表 / 凭证</th><th>公式校验</th><th>操作</th></tr></thead>
+              <thead><tr><th>工资月份</th><th>公司</th><th className="is-right">人数</th><th className="is-right">应发工资</th><th className="is-right">个人代扣</th><th className="is-right">个税</th><th className="is-right">财务确认实发工资</th><th>工资状态</th><th>发放日期</th><th>工资表 / 凭证</th><th>公式校验</th><th>操作</th></tr></thead>
               <tbody>
                 {loading ? <tr><td colSpan={12} className="opex-empty">正在读取工资批次…</td></tr> : null}
                 {!loading && rows.length === 0 ? <tr><td colSpan={12} className="opex-empty">本月尚未导入工资表。</td></tr> : null}
@@ -652,8 +656,8 @@ export default function OperatingExpenseCenterPage() {
                     <td className="is-right"><strong>{money(row.gross_salary)}</strong></td>
                     <td className="is-right">{money(row.employee_deduction_total)}</td>
                     <td className="is-right">{money(row.income_tax_total)}</td>
-                    <td className="is-right"><strong>{money(row.net_salary_total)}</strong></td>
-                    <td>{row.payment_status === 'paid' ? <StatusBadge type="paid">已支付</StatusBadge> : <StatusBadge type="unpaid">待支付</StatusBadge>}</td>
+                    <td className="is-right"><strong>{money(row.net_salary_total)}</strong>{row.payroll_status === 'pending_review' ? <small className="opex-cell-note">待财务确认</small> : null}</td>
+                    <td>{row.payroll_status === 'paid' ? <StatusBadge type="paid">已发放</StatusBadge> : row.payroll_status === 'reviewed' ? <StatusBadge type="reviewed">财务已核对</StatusBadge> : <StatusBadge type="unpaid">待核对</StatusBadge>}</td>
                     <td>{row.payment_date || '—'}</td>
                     <td><span className="payroll-source-file" title={[row.source_file_name, row.voucher_note].filter(Boolean).join(' · ')}>{row.source_file_name || row.voucher_note || '—'}</span></td>
                     <td>{row.validation_status === 'valid' ? <StatusBadge type="paid">公式一致</StatusBadge> : <StatusBadge type="danger">存在差异</StatusBadge>}</td>
@@ -667,7 +671,7 @@ export default function OperatingExpenseCenterPage() {
 
         <section className="opex-note">
           <strong>计算公式</strong>
-          <p>代扣小计 = 补税 + 养老保险 + 医疗保险 + 失业保险 + 公积金 + 请假扣除 + 迟到罚款；实发工资 = 应发 / 税前工资 − 代扣小计 − 个人所得税。系统会按员工逐行复算，差异超过 0.01 元时标记异常。</p>
+          <p>代扣小计 = 补税 + 养老保险 + 医疗保险 + 失业保险 + 公积金 + 请假扣除 + 迟到罚款；财务确认实发工资 = 应发 / 税前工资 − 代扣小计 − 个人所得税。工资状态按“待核对 → 财务已核对 → 已发放”流转，差异超过 0.01 元时标记异常。</p>
         </section>
 
         {payrollImportOpen ? <PayrollImportDialog imports={payrollImports} companySuggestions={companySuggestions} saving={saving} onUpdate={updatePayrollImport} onClose={() => !saving && setPayrollImportOpen(false)} onSave={() => void savePayrollImports()} /> : null}
