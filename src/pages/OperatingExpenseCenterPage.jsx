@@ -131,10 +131,7 @@ export default function OperatingExpenseCenterPage() {
   const [payrollDetailLoading, setPayrollDetailLoading] = useState(false)
   const payrollFileInputRef = useRef(null)
 
-  const loadData = useCallback(async () => {
-    setLoading(true)
-    try {
-      const handlePayrollFilesSelected = async (event) => {
+  const handlePayrollFilesSelected = async (event) => {
     const files = Array.from(event.target.files || [])
     event.target.value = ''
     if (!files.length) return
@@ -301,6 +298,9 @@ export default function OperatingExpenseCenterPage() {
     }
   }
 
+  const loadData = useCallback(async () => {
+    setLoading(true)
+    try {
   if (isOverview) {
         const [profitData, expenses, deposits] = await Promise.all([
           getProfitAnalysis({ month, trendMonths: 2 }),
