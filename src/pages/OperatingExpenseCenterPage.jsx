@@ -314,14 +314,17 @@ export default function OperatingExpenseCenterPage() {
         const deposits = await listOperatingDeposits({ status: depositStatus, q: query || undefined, limit: 500 })
         setRows(deposits.items || [])
       } else if (isPayroll) {
-        const payroll = await listPayrollBatches({
-          month,
-          paymentStatus: paymentFilter,
-          q: query || undefined,
-          limit: 500
-        })
+        const [payroll, totals] = await Promise.all([
+          listPayrollBatches({
+            month,
+            paymentStatus: paymentFilter,
+            q: query || undefined,
+            limit: 500
+          }),
+          listPayrollBatches({ month, limit: 500 })
+        ])
         setRows(payroll.items || [])
-        setPayrollSummary(payroll)
+        setPayrollSummary(totals)
       } else if (mode) {
         const expenses = await listOperatingExpenses({
           month,
