@@ -83,3 +83,8 @@
 .payroll-inline-review-panel .payroll-detail-table-wrap{background:#fff}
 .payroll-inline-review-panel .payroll-review-actions{position:static;margin:14px 0 0;padding:0;background:transparent}
 .payroll-inline-loading{margin:10px 0 0;padding:10px 12px;border:1px solid #dfe8f5;border-radius:8px;background:#f8fbff;color:#64748b;font-size:12px}
+
+.payroll-overview-card{margin-bottom:14px}
+.payroll-overview-table-wrap table{min-width:980px}
+.payroll-month-link{height:28px;padding:0 10px;border:1px solid #dbe4f0;border-radius:6px;background:#fff;color:#2563eb;font-size:11px;font-weight:700;cursor:pointer}
+.payroll-month-link:hover{background:#eff6ff;border-color:#bfdbfe}
