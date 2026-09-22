@@ -42,6 +42,8 @@ OPERATING_EXPENSE_CATEGORIES = frozenset(
     }
 )
 PAYMENT_STATUSES = frozenset({"paid", "unpaid"})
+PAYROLL_REVIEW_STATUSES = frozenset({"pending_review", "reviewed"})
+PAYROLL_WORKFLOW_STATUSES = frozenset({"pending_review", "reviewed", "paid"})
 INVOICE_STATUSES = frozenset({"unknown", "none", "pending", "received"})
 
 
@@ -78,6 +80,40 @@ def _validate_payment_status(raw: str | None) -> str:
             detail={"error": "invalid_payment_status", "allowed": sorted(PAYMENT_STATUSES)},
         )
     return value
+
+
+def _validate_payroll_review_status(raw: str | None) -> str:
+    value = str(raw or "").strip().lower()
+    if value not in PAYROLL_REVIEW_STATUSES:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": "invalid_payroll_review_status",
+                "allowed": sorted(PAYROLL_REVIEW_STATUSES),
+            },
+        )
+    return value
+
+
+def _validate_payroll_workflow_status(raw: str | None) -> str:
+    value = str(raw or "").strip().lower()
+    if value not in PAYROLL_WORKFLOW_STATUSES:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": "invalid_payroll_workflow_status",
+                "allowed": sorted(PAYROLL_WORKFLOW_STATUSES),
+            },
+        )
+    return value
+
+
+def _payroll_workflow_status(batch: PayrollBatch, expense: OperatingExpense) -> str:
+    if str(expense.payment_status or "").strip().lower() == "paid":
+        return "paid"
+    if str(batch.review_status or "").strip().lower() == "reviewed":
+        return "reviewed"
+    return "pending_review"
 
 
 def _validate_invoice_status(raw: str | None) -> str:
@@ -406,6 +442,8 @@ def _payroll_batch_to_read(
         remark=expense.remark,
         source_file_name=batch.source_file_name,
         validation_status=batch.validation_status or "valid",
+        review_status=batch.review_status or "pending_review",
+        payroll_status=_payroll_workflow_status(batch, expense),
         created_at=batch.created_at,
         updated_at=batch.updated_at,
         items=item_reads,
@@ -428,6 +466,7 @@ def list_payroll_batches(
     db: Session = Depends(get_db),
     month: str | None = Query(None),
     payment_status: str | None = Query(None),
+    payroll_status: str | None = Query(None),
     q: str | None = Query(None),
     limit: int = Query(200, ge=1, le=500),
     offset: int = Query(0, ge=0),
@@ -442,6 +481,20 @@ def list_payroll_batches(
         stmt = stmt.where(
             OperatingExpense.payment_status == _validate_payment_status(payment_status)
         )
+    if payroll_status and payroll_status.strip() and payroll_status != "all":
+        workflow_status = _validate_payroll_workflow_status(payroll_status)
+        if workflow_status == "paid":
+            stmt = stmt.where(OperatingExpense.payment_status == "paid")
+        elif workflow_status == "reviewed":
+            stmt = stmt.where(
+                OperatingExpense.payment_status == "unpaid",
+                PayrollBatch.review_status == "reviewed",
+            )
+        else:
+            stmt = stmt.where(
+                OperatingExpense.payment_status == "unpaid",
+                PayrollBatch.review_status == "pending_review",
+            )
     if q and q.strip():
         term = f"%{q.strip()}%"
         employee_exists = (
@@ -477,6 +530,16 @@ def list_payroll_batches(
         ),
         income_tax_total=_round_money(sum(item.income_tax_total for item in items)),
         net_salary_total=_round_money(sum(item.net_salary_total for item in items)),
+        confirmed_net_salary_total=_round_money(
+            sum(
+                item.net_salary_total
+                for item in items
+                if item.review_status == "reviewed" or item.payment_status == "paid"
+            )
+        ),
+        pending_review_count=sum(1 for item in items if item.payroll_status == "pending_review"),
+        reviewed_count=sum(1 for item in items if item.payroll_status == "reviewed"),
+        paid_count=sum(1 for item in items if item.payroll_status == "paid"),
     )
 
 
@@ -496,9 +559,12 @@ def create_payroll_batch(
     if not company_name:
         raise HTTPException(status_code=422, detail="请输入工资所属公司")
     payment_status = _validate_payment_status(payload.payment_status)
+    review_status = _validate_payroll_review_status(payload.review_status)
     payment_date = _normalize_text(payload.payment_date)
     if payment_status == "paid" and not payment_date:
-        raise HTTPException(status_code=422, detail="已支付工资批次请填写实付日期")
+        raise HTTPException(status_code=422, detail="已发放工资批次请填写实付日期")
+    if payment_status == "paid":
+        review_status = "reviewed"
 
     existing = db.execute(
         select(PayrollBatch).where(
@@ -553,6 +619,7 @@ def create_payroll_batch(
         net_salary_total=totals["net_salary_total"],
         source_file_name=_normalize_text(payload.source_file_name),
         validation_status=totals["validation_status"],
+        review_status=review_status,
     )
     db.add(expense)
     db.add(batch)
@@ -610,13 +677,21 @@ def update_payroll_batch(
         if "payment_date" in data
         else expense.payment_date
     )
+    review_status = (
+        _validate_payroll_review_status(data.get("review_status"))
+        if "review_status" in data
+        else (batch.review_status or "pending_review")
+    )
     if payment_status == "paid" and not payment_date:
-        raise HTTPException(status_code=422, detail="已支付工资批次请填写实付日期")
+        raise HTTPException(status_code=422, detail="已发放工资批次请填写实付日期")
+    if payment_status == "paid":
+        review_status = "reviewed"
     if payment_status == "unpaid":
         payment_date = None
 
     batch.expense_month = new_month
     batch.company_name = new_company
+    batch.review_status = review_status
     expense.expense_month = new_month
     expense.vendor_name = new_company
     expense.payment_status = payment_status
