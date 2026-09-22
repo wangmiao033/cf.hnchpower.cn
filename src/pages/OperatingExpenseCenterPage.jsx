@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import PageContainer from '@/components/layout/PageContainer.jsx'
 import { VIEWS } from '@/app/routes.js'
 import { useAppState } from '@/app/AppStateContext.jsx'
@@ -7,13 +7,19 @@ import { getProfitAnalysis } from '@/lib/api/profitAnalysis.ts'
 import {
   createOperatingDeposit,
   createOperatingExpense,
+  createPayrollBatch,
   deleteOperatingDeposit,
   deleteOperatingExpense,
+  deletePayrollBatch,
+  getPayrollBatch,
   listOperatingDeposits,
   listOperatingExpenses,
+  listPayrollBatches,
   updateOperatingDeposit,
-  updateOperatingExpense
+  updateOperatingExpense,
+  updatePayrollBatch
 } from '@/lib/api/operatingExpenses.ts'
+import { parsePayrollFile, PAYROLL_COMPANY_SUGGESTIONS } from '@/domain/operatingExpense/payrollImport.js'
 import './OperatingExpenseCenterPage.css'
 
 const EXPENSE_MODES = {
@@ -101,6 +107,7 @@ export default function OperatingExpenseCenterPage() {
   const mode = EXPENSE_MODES[activeView] || null
   const isOverview = activeView === VIEWS.OPERATING_EXPENSES
   const isDeposits = activeView === VIEWS.DEPOSITS
+  const isPayroll = activeView === VIEWS.PAYROLL_EXPENSES
 
   const [month, setMonth] = useState(currentMonth)
   const [query, setQuery] = useState('')
@@ -116,6 +123,13 @@ export default function OperatingExpenseCenterPage() {
   const [expenseForm, setExpenseForm] = useState(() => emptyExpenseForm(currentMonth()))
   const [depositForm, setDepositForm] = useState(emptyDepositForm)
   const [saving, setSaving] = useState(false)
+  const [payrollSummary, setPayrollSummary] = useState(null)
+  const [payrollImports, setPayrollImports] = useState([])
+  const [payrollImportOpen, setPayrollImportOpen] = useState(false)
+  const [payrollDetail, setPayrollDetail] = useState(null)
+  const [payrollDetailForm, setPayrollDetailForm] = useState(null)
+  const [payrollDetailLoading, setPayrollDetailLoading] = useState(false)
+  const payrollFileInputRef = useRef(null)
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -132,6 +146,15 @@ export default function OperatingExpenseCenterPage() {
       } else if (isDeposits) {
         const deposits = await listOperatingDeposits({ status: depositStatus, q: query || undefined, limit: 500 })
         setRows(deposits.items || [])
+      } else if (isPayroll) {
+        const payroll = await listPayrollBatches({
+          month,
+          paymentStatus: paymentFilter,
+          q: query || undefined,
+          limit: 500
+        })
+        setRows(payroll.items || [])
+        setPayrollSummary(payroll)
       } else if (mode) {
         const expenses = await listOperatingExpenses({
           month,
@@ -147,7 +170,7 @@ export default function OperatingExpenseCenterPage() {
     } finally {
       setLoading(false)
     }
-  }, [depositStatus, isDeposits, isOverview, mode, month, query, revision, showToast])
+  }, [depositStatus, isDeposits, isOverview, isPayroll, mode, month, paymentFilter, query, revision, showToast])
 
   useEffect(() => { void loadData() }, [loadData])
 
