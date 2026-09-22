@@ -61,3 +61,13 @@
 .opex-status.is-reviewed{background:#eff6ff;color:#1d4ed8}
 .payroll-import-fields--review{grid-template-columns:180px minmax(260px,1fr) 160px}
 @media(max-width:900px){.payroll-import-fields--review{grid-template-columns:1fr}}
+
+.payroll-detail-table--editable th,.payroll-detail-table--editable td{padding:7px 8px}
+.payroll-cell-input{width:100%;min-width:82px;height:31px;border:1px solid #dce3ee;border-radius:6px;background:#fff;padding:0 7px;color:#334155;font:inherit;outline:none;box-sizing:border-box}
+.payroll-cell-input:focus{border-color:#7da7fb;box-shadow:0 0 0 2px rgba(37,99,235,.08)}
+.payroll-cell-input:disabled{background:#f8fafc;color:#64748b}
+.payroll-cell-input.is-num{text-align:right;font-variant-numeric:tabular-nums}
+.payroll-cell-name{min-width:110px}
+.payroll-auto-cell{min-width:94px;background:#f8fafc;color:#475569;font-variant-numeric:tabular-nums}
+.payroll-auto-cell.is-net{background:#f0fdf4;color:#15803d}
+.payroll-review-actions{position:sticky;bottom:-20px;z-index:3;margin-left:-22px;margin-right:-22px;padding-left:22px;padding-right:22px;background:#fff}
