@@ -183,6 +183,8 @@ export type PayrollBatch = {
   remark?: string | null
   source_file_name?: string | null
   validation_status: string
+  review_status: string
+  payroll_status: string
   created_at: string
   updated_at: string
   items?: PayrollEmployeeItem[]
@@ -197,6 +199,7 @@ export type PayrollBatchPayload = {
   voucher_note?: string | null
   remark?: string | null
   source_file_name?: string | null
+  review_status?: string
   items: PayrollEmployeeItem[]
 }
 
@@ -207,11 +210,16 @@ export type PayrollBatchListResponse = {
   employee_deduction_total: number
   income_tax_total: number
   net_salary_total: number
+  confirmed_net_salary_total: number
+  pending_review_count: number
+  reviewed_count: number
+  paid_count: number
 }
 
 export function listPayrollBatches(params: {
   month?: string
   paymentStatus?: string
+  payrollStatus?: string
   q?: string
   limit?: number
   offset?: number
@@ -219,6 +227,7 @@ export function listPayrollBatches(params: {
   const query = new URLSearchParams()
   if (params.month) query.set('month', params.month)
   if (params.paymentStatus && params.paymentStatus !== 'all') query.set('payment_status', params.paymentStatus)
+  if (params.payrollStatus && params.payrollStatus !== 'all') query.set('payroll_status', params.payrollStatus)
   if (params.q) query.set('q', params.q)
   query.set('limit', String(params.limit ?? 200))
   query.set('offset', String(params.offset ?? 0))
