@@ -157,3 +157,20 @@
 }
 .payroll-review-sheet thead th{position:sticky;top:0;z-index:5}
 .payroll-review-sheet tfoot td{position:sticky;bottom:0;z-index:4}
+
+
+/* Payroll review must expand to full employee height; page scroll handles long content. */
+.opex-page .page-container-body > *{flex:0 0 auto}
+.payroll-inline-review-row,
+.payroll-inline-review-row>td{height:auto!important;max-height:none!important}
+.payroll-inline-review-panel--clean{height:auto!important;max-height:none!important;overflow:visible!important}
+.payroll-review-sheet-wrap{
+  max-height:none!important;
+  height:auto!important;
+  overflow-x:auto!important;
+  overflow-y:visible!important;
+  scrollbar-gutter:auto;
+  overscroll-behavior:auto;
+}
+.payroll-review-sheet thead th{position:sticky;top:0;z-index:5}
+.payroll-review-sheet tfoot td{position:static}
