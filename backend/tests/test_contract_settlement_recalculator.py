@@ -22,7 +22,7 @@ class ContractSettlementRecalculatorTest(unittest.TestCase):
             "minimum_guarantee_amount": None,
         }
 
-    def test_rd_contract_amount_quantifies_under_settlement(self):
+    def test_rd_contract_amount_uses_counterparty_share_direction(self):
         bill = {"channel_fee_rate": 5}
         line = {
             "revenue": 10000,
@@ -39,9 +39,11 @@ class ContractSettlementRecalculatorTest(unittest.TestCase):
         result = calculate_rd_contract_amount(bill, line, self.base_candidate())
         self.assertTrue(result["deterministic"])
         self.assertEqual(result["status"], "fail")
-        self.assertEqual(result["expected_amount"], 363.18)
-        self.assertEqual(result["difference_amount"], -3.18)
-        self.assertEqual(result["variance_direction"], "under")
+        # R&D contract access share_rate stores our share (83%), so payable to
+        # the counterparty is 17%.
+        self.assertEqual(result["expected_amount"], 74.39)
+        self.assertEqual(result["difference_amount"], 285.61)
+        self.assertEqual(result["variance_direction"], "over")
 
     def test_rd_text_deduction_keeps_reference_amount_non_blocking(self):
         bill = {"channel_fee_rate": 5}

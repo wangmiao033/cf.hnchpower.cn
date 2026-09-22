@@ -24,7 +24,7 @@ class RdRuleRecommenderTests(unittest.TestCase):
             "channel_name": "",
             "authorization_start": "2026-01-01",
             "authorization_end": "2026-12-31",
-            "share_rate": 80,
+            "share_rate": 20,
             "channel_fee_rate": channel_fee_rate,
             "invoice_tax_rate": 0,
             "testing_fee": 0,

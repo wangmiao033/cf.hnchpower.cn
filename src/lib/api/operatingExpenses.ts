@@ -143,3 +143,103 @@ export function updateOperatingDeposit(
 export function deleteOperatingDeposit(id: string): Promise<void> {
   return apiDelete(`/api/operating-expenses/deposits/${encodeURIComponent(id)}`)
 }
+
+
+export type PayrollEmployeeItem = {
+  id?: string
+  employee_name: string
+  gross_salary: number
+  tax_adjustment: number
+  pension_insurance: number
+  medical_insurance: number
+  unemployment_insurance: number
+  housing_fund: number
+  leave_deduction: number
+  late_deduction: number
+  deduction_total: number
+  income_tax: number
+  net_salary: number
+  signature_date?: string | null
+  sort_order: number
+  validation_status?: string
+  deduction_difference?: number
+  net_difference?: number
+}
+
+export type PayrollBatch = {
+  id: string
+  operating_expense_id: string
+  expense_month: string
+  company_name: string
+  employee_count: number
+  gross_salary: number
+  employee_deduction_total: number
+  income_tax_total: number
+  net_salary_total: number
+  payment_status: string
+  due_date?: string | null
+  payment_date?: string | null
+  voucher_note?: string | null
+  remark?: string | null
+  source_file_name?: string | null
+  validation_status: string
+  created_at: string
+  updated_at: string
+  items?: PayrollEmployeeItem[]
+}
+
+export type PayrollBatchPayload = {
+  expense_month: string
+  company_name: string
+  due_date?: string | null
+  payment_status?: string
+  payment_date?: string | null
+  voucher_note?: string | null
+  remark?: string | null
+  source_file_name?: string | null
+  items: PayrollEmployeeItem[]
+}
+
+export type PayrollBatchListResponse = {
+  items: PayrollBatch[]
+  total: number
+  gross_salary_total: number
+  employee_deduction_total: number
+  income_tax_total: number
+  net_salary_total: number
+}
+
+export function listPayrollBatches(params: {
+  month?: string
+  paymentStatus?: string
+  q?: string
+  limit?: number
+  offset?: number
+} = {}): Promise<PayrollBatchListResponse> {
+  const query = new URLSearchParams()
+  if (params.month) query.set('month', params.month)
+  if (params.paymentStatus && params.paymentStatus !== 'all') query.set('payment_status', params.paymentStatus)
+  if (params.q) query.set('q', params.q)
+  query.set('limit', String(params.limit ?? 200))
+  query.set('offset', String(params.offset ?? 0))
+  return apiGet(`/api/operating-expenses/payroll-batches?${query.toString()}`)
+}
+
+export function getPayrollBatch(id: string): Promise<PayrollBatch> {
+  return apiGet(`/api/operating-expenses/payroll-batches/${encodeURIComponent(id)}`)
+}
+
+export function createPayrollBatch(payload: PayrollBatchPayload): Promise<PayrollBatch> {
+  return apiPost('/api/operating-expenses/payroll-batches', payload)
+}
+
+export function updatePayrollBatch(
+  id: string,
+  payload: Partial<PayrollBatchPayload>
+): Promise<PayrollBatch> {
+  return apiPut(`/api/operating-expenses/payroll-batches/${encodeURIComponent(id)}`, payload)
+}
+
+export function deletePayrollBatch(id: string): Promise<void> {
+  return apiDelete(`/api/operating-expenses/payroll-batches/${encodeURIComponent(id)}`)
+}
