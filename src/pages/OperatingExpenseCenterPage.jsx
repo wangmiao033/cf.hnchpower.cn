@@ -112,6 +112,7 @@ export default function OperatingExpenseCenterPage() {
   const [month, setMonth] = useState(currentMonth)
   const [query, setQuery] = useState('')
   const [paymentFilter, setPaymentFilter] = useState('all')
+  const [payrollStatusFilter, setPayrollStatusFilter] = useState('all')
   const [depositStatus, setDepositStatus] = useState('all')
   const [rows, setRows] = useState([])
   const [profit, setProfit] = useState(null)
@@ -147,6 +148,7 @@ export default function OperatingExpenseCenterPage() {
           ...result,
           expenseMonth: result.expenseMonth || month,
           companyName: result.companyName || '',
+          payrollStatus: 'reviewed',
           error: ''
         })
       } catch (error) {
@@ -155,6 +157,7 @@ export default function OperatingExpenseCenterPage() {
           fileName: file.name,
           expenseMonth: month,
           companyName: '',
+          payrollStatus: 'reviewed',
           items: [],
           totals: { gross_salary: 0, employee_deduction_total: 0, income_tax_total: 0, net_salary_total: 0 },
           validationStatus: 'mismatch',
@@ -197,6 +200,7 @@ export default function OperatingExpenseCenterPage() {
         await createPayrollBatch({
           expense_month: item.expenseMonth,
           company_name: String(item.companyName).trim(),
+          review_status: item.payrollStatus === 'pending_review' ? 'pending_review' : 'reviewed',
           payment_status: 'unpaid',
           payment_date: null,
           due_date: null,
@@ -239,7 +243,7 @@ export default function OperatingExpenseCenterPage() {
         expenseMonth: detail.expense_month || month,
         companyName: detail.company_name || '',
         dueDate: detail.due_date || '',
-        paymentStatus: detail.payment_status || 'unpaid',
+        payrollStatus: detail.payroll_status || 'pending_review',
         paymentDate: detail.payment_date || '',
         voucherNote: detail.voucher_note || '',
         remark: detail.remark || ''
@@ -258,8 +262,8 @@ export default function OperatingExpenseCenterPage() {
       showToast?.('请输入工资所属公司', 'error')
       return
     }
-    if (payrollDetailForm.paymentStatus === 'paid' && !payrollDetailForm.paymentDate) {
-      showToast?.('已支付工资批次请填写实付日期', 'error')
+    if (payrollDetailForm.payrollStatus === 'paid' && !payrollDetailForm.paymentDate) {
+      showToast?.('已发放工资批次请填写发放日期', 'error')
       return
     }
     setSaving(true)
@@ -268,8 +272,9 @@ export default function OperatingExpenseCenterPage() {
         expense_month: payrollDetailForm.expenseMonth,
         company_name: payrollDetailForm.companyName.trim(),
         due_date: payrollDetailForm.dueDate || null,
-        payment_status: payrollDetailForm.paymentStatus,
-        payment_date: payrollDetailForm.paymentStatus === 'paid' ? (payrollDetailForm.paymentDate || null) : null,
+        review_status: payrollDetailForm.payrollStatus === 'pending_review' ? 'pending_review' : 'reviewed',
+        payment_status: payrollDetailForm.payrollStatus === 'paid' ? 'paid' : 'unpaid',
+        payment_date: payrollDetailForm.payrollStatus === 'paid' ? (payrollDetailForm.paymentDate || null) : null,
         voucher_note: payrollDetailForm.voucherNote.trim() || null,
         remark: payrollDetailForm.remark.trim() || null
       })
@@ -317,7 +322,7 @@ export default function OperatingExpenseCenterPage() {
         const [payroll, totals] = await Promise.all([
           listPayrollBatches({
             month,
-            paymentStatus: paymentFilter,
+            payrollStatus: payrollStatusFilter,
             q: query || undefined,
             limit: 500
           }),
@@ -340,7 +345,7 @@ export default function OperatingExpenseCenterPage() {
     } finally {
       setLoading(false)
     }
-  }, [depositStatus, isDeposits, isOverview, isPayroll, mode, month, paymentFilter, query, revision, showToast])
+  }, [depositStatus, isDeposits, isOverview, isPayroll, mode, month, paymentFilter, payrollStatusFilter, query, revision, showToast])
 
   useEffect(() => { void loadData() }, [loadData])
 
