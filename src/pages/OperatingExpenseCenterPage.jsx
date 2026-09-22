@@ -709,6 +709,132 @@ function ExpenseEditor({ mode, form, setForm, saving, editing, onClose, onSubmit
   return <div className="opex-backdrop" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}><section className="opex-editor" role="dialog" aria-modal="true"><div className="opex-editor-head"><div><span>{mode.kicker}</span><h2>{editing ? `编辑${mode.title}` : mode.addLabel.replace('+ ', '')}</h2></div><button type="button" onClick={onClose}>×</button></div><form onSubmit={onSubmit}><div className="opex-form-grid"><label><span>费用月份 *</span><input type="month" value={form.expenseMonth} onChange={update('expenseMonth')} required /></label><label><span>金额 *</span><input type="number" min="0.01" step="0.01" value={form.amount} onChange={update('amount')} placeholder="0.00" required /></label><label><span>应付日期</span><input type="date" value={form.dueDate} onChange={update('dueDate')} /></label><label><span>{mode.vendorLabel}</span><input value={form.vendorName} onChange={update('vendorName')} placeholder={mode.vendorLabel} /></label><label><span>支付状态 *</span><select value={form.paymentStatus} onChange={update('paymentStatus')}><option value="unpaid">待支付</option><option value="paid">已支付</option></select></label><label><span>实付日期{form.paymentStatus === 'paid' ? ' *' : ''}</span><input type="date" value={form.paymentDate} onChange={update('paymentDate')} disabled={form.paymentStatus !== 'paid'} /></label><label><span>发票状态</span><select value={form.invoiceStatus} onChange={update('invoiceStatus')}><option value="pending">待取得</option><option value="received">已取得</option><option value="none">无需发票</option><option value="unknown">待确认</option></select></label><label><span>发票号</span><input value={form.invoiceNumber} onChange={update('invoiceNumber')} placeholder="可留空" /></label><label className="is-wide"><span>付款凭证 / 回单说明</span><input value={form.voucherNote} onChange={update('voucherNote')} placeholder="例如：工行转账、回单已存档" /></label><label className="is-wide"><span>备注</span><textarea value={form.remark} onChange={update('remark')} rows={3} placeholder="租赁周期、订阅周期或其他说明" /></label></div><div className="opex-editor-actions"><button type="button" onClick={onClose} disabled={saving}>取消</button><button type="submit" className="is-primary" disabled={saving}>{saving ? '保存中…' : '保存'}</button></div></form></section></div>
 }
 
+function PayrollImportDialog({ imports, companySuggestions, saving, onUpdate, onClose, onSave }) {
+  return (
+    <div className="opex-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
+      <section className="opex-editor payroll-import-dialog" role="dialog" aria-modal="true">
+        <div className="opex-editor-head">
+          <div><span>PAYROLL IMPORT</span><h2>导入工资表</h2></div>
+          <button type="button" onClick={onClose}>×</button>
+        </div>
+        <div className="payroll-import-body">
+          <p className="payroll-dialog-tip">支持当前工资 Excel 模板。系统只读取第一张工资明细表，不读取银行卡等其他工作表。</p>
+          <datalist id="payroll-company-options">
+            {companySuggestions.map((name) => <option key={name} value={name} />)}
+          </datalist>
+          <div className="payroll-import-list">
+            {imports.map((item) => (
+              <article key={item.key} className={`payroll-import-item${item.error ? ' is-error' : ''}`}>
+                <div className="payroll-import-item__head">
+                  <div><strong>{item.fileName}</strong><span>{item.items?.length || 0} 名员工</span></div>
+                  {item.error ? <StatusBadge type="danger">解析失败</StatusBadge> : item.validationStatus === 'valid' ? <StatusBadge type="paid">公式一致</StatusBadge> : <StatusBadge type="danger">存在公式差异</StatusBadge>}
+                </div>
+                {item.error ? <p className="payroll-import-error">{item.error}</p> : (
+                  <>
+                    <div className="payroll-import-fields">
+                      <label><span>工资月份 *</span><input type="month" value={item.expenseMonth || ''} onChange={(event) => onUpdate(item.key, { expenseMonth: event.target.value })} /></label>
+                      <label><span>所属公司 *</span><input list="payroll-company-options" value={item.companyName || ''} onChange={(event) => onUpdate(item.key, { companyName: event.target.value })} placeholder="选择或输入公司名称" /></label>
+                    </div>
+                    <div className="payroll-import-kpis">
+                      <span>应发 <b>{money(item.totals?.gross_salary)}</b></span>
+                      <span>个人代扣 <b>{money(item.totals?.employee_deduction_total)}</b></span>
+                      <span>个税 <b>{money(item.totals?.income_tax_total)}</b></span>
+                      <span>实发 <b>{money(item.totals?.net_salary_total)}</b></span>
+                    </div>
+                    {item.validationStatus !== 'valid' ? <p className="payroll-import-warning">工资表中至少一行“代扣小计”或“实发工资”与公式复算不一致。允许导入，但会保留异常标记。</p> : null}
+                  </>
+                )}
+              </article>
+            ))}
+          </div>
+        </div>
+        <div className="opex-editor-actions payroll-dialog-actions">
+          <button type="button" onClick={onClose} disabled={saving}>取消</button>
+          <button type="button" className="is-primary" onClick={onSave} disabled={saving}>{saving ? '导入中…' : `导入 ${imports.filter((item) => !item.error).length} 个工资批次`}</button>
+        </div>
+      </section>
+    </div>
+  )
+}
+
+function PayrollDetailDialog({ detail, form, setForm, saving, canManage, onClose, onSubmit }) {
+  const update = (key) => (event) => setForm((old) => ({ ...old, [key]: event.target.value }))
+  const updatePaymentStatus = (event) => {
+    const paymentStatus = event.target.value
+    setForm((old) => ({
+      ...old,
+      paymentStatus,
+      paymentDate: paymentStatus === 'unpaid' ? '' : old.paymentDate
+    }))
+  }
+  return (
+    <div className="opex-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
+      <section className="opex-editor payroll-detail-dialog" role="dialog" aria-modal="true">
+        <div className="opex-editor-head">
+          <div><span>PAYROLL BATCH</span><h2>{detail.company_name} · {detail.expense_month}</h2></div>
+          <button type="button" onClick={onClose}>×</button>
+        </div>
+        <form onSubmit={onSubmit}>
+          <div className="payroll-detail-summary">
+            <article><span>员工人数</span><strong>{detail.employee_count} 人</strong></article>
+            <article><span>应发工资</span><strong>{money(detail.gross_salary)}</strong></article>
+            <article><span>个人代扣</span><strong>{money(detail.employee_deduction_total)}</strong></article>
+            <article><span>个税</span><strong>{money(detail.income_tax_total)}</strong></article>
+            <article className="is-emph"><span>实发工资</span><strong>{money(detail.net_salary_total)}</strong></article>
+          </div>
+
+          <div className="opex-form-grid payroll-batch-fields">
+            <label><span>工资月份</span><input type="month" value={form.expenseMonth} onChange={update('expenseMonth')} disabled={!canManage} /></label>
+            <label><span>公司</span><input value={form.companyName} onChange={update('companyName')} disabled={!canManage} /></label>
+            <label><span>应付日期</span><input type="date" value={form.dueDate} onChange={update('dueDate')} disabled={!canManage} /></label>
+            <label><span>支付状态</span><select value={form.paymentStatus} onChange={updatePaymentStatus} disabled={!canManage}><option value="unpaid">待支付</option><option value="paid">已支付</option></select></label>
+            <label><span>实付日期{form.paymentStatus === 'paid' ? ' *' : ''}</span><input type="date" value={form.paymentDate} onChange={update('paymentDate')} disabled={!canManage || form.paymentStatus !== 'paid'} /></label>
+            <label><span>来源工资表</span><input value={detail.source_file_name || ''} disabled /></label>
+            <label className="is-wide"><span>付款凭证 / 回单说明</span><input value={form.voucherNote} onChange={update('voucherNote')} disabled={!canManage} placeholder="例如：工资批量转账回单已存档" /></label>
+            <label className="is-wide"><span>备注</span><textarea rows={2} value={form.remark} onChange={update('remark')} disabled={!canManage} /></label>
+          </div>
+
+          <div className="payroll-formula-note">
+            <strong>公式：</strong>
+            <span>代扣小计 = 补税 + 养老 + 医疗 + 失业 + 公积金 + 请假扣除 + 迟到罚款；实发 = 应发 − 代扣小计 − 个税。</span>
+            {detail.validation_status === 'valid' ? <StatusBadge type="paid">全部一致</StatusBadge> : <StatusBadge type="danger">存在差异</StatusBadge>}
+          </div>
+
+          <div className="payroll-detail-table-wrap">
+            <table className="payroll-detail-table">
+              <thead><tr><th>员工</th><th className="is-right">应发工资</th><th className="is-right">补税</th><th className="is-right">养老</th><th className="is-right">医疗</th><th className="is-right">失业</th><th className="is-right">公积金</th><th className="is-right">请假扣除</th><th className="is-right">迟到罚款</th><th className="is-right">代扣小计</th><th className="is-right">个税</th><th className="is-right">实发工资</th><th>校验</th></tr></thead>
+              <tbody>
+                {(detail.items || []).map((item) => (
+                  <tr key={item.id || `${detail.id}-${item.sort_order}`}>
+                    <td><strong>{item.employee_name}</strong></td>
+                    <td className="is-right">{money(item.gross_salary)}</td>
+                    <td className="is-right">{money(item.tax_adjustment)}</td>
+                    <td className="is-right">{money(item.pension_insurance)}</td>
+                    <td className="is-right">{money(item.medical_insurance)}</td>
+                    <td className="is-right">{money(item.unemployment_insurance)}</td>
+                    <td className="is-right">{money(item.housing_fund)}</td>
+                    <td className="is-right">{money(item.leave_deduction)}</td>
+                    <td className="is-right">{money(item.late_deduction)}</td>
+                    <td className="is-right">{money(item.deduction_total)}</td>
+                    <td className="is-right">{money(item.income_tax)}</td>
+                    <td className="is-right"><strong>{money(item.net_salary)}</strong></td>
+                    <td>{item.validation_status === 'valid' ? <StatusBadge type="paid">一致</StatusBadge> : <span className="payroll-validation-error" title={`代扣差异 ${money(item.deduction_difference)}；实发差异 ${money(item.net_difference)}`}>有差异</span>}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="opex-editor-actions">
+            <button type="button" onClick={onClose} disabled={saving}>关闭</button>
+            {canManage ? <button type="submit" className="is-primary" disabled={saving}>{saving ? '保存中…' : '保存批次信息'}</button> : null}
+          </div>
+        </form>
+      </section>
+    </div>
+  )
+}
+
 function DepositEditor({ form, setForm, saving, editing, onClose, onSubmit }) {
   const update = (key) => (event) => setForm((old) => ({ ...old, [key]: event.target.value }))
   return <div className="opex-backdrop" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}><section className="opex-editor" role="dialog" aria-modal="true"><div className="opex-editor-head"><div><span>DEPOSIT LEDGER</span><h2>{editing ? '编辑押金 / 保证金' : '新增押金 / 保证金'}</h2></div><button type="button" onClick={onClose}>×</button></div><form onSubmit={onSubmit}><div className="opex-form-grid"><label><span>类型 *</span><select value={form.depositType} onChange={update('depositType')}><option value="office">办公室</option><option value="service">服务保证金</option><option value="other">其他</option></select></label><label><span>名称 *</span><input value={form.title} onChange={update('title')} required /></label><label><span>金额 *</span><input type="number" min="0.01" step="0.01" value={form.amount} onChange={update('amount')} required /></label><label><span>往来方</span><input value={form.counterparty} onChange={update('counterparty')} placeholder="房东 / 服务商" /></label><label><span>支付日期</span><input type="date" value={form.paidDate} onChange={update('paidDate')} /></label><label><span>预计退回日期</span><input type="date" value={form.expectedRefundDate} onChange={update('expectedRefundDate')} /></label><label><span>状态</span><select value={form.status} onChange={update('status')}><option value="held">持有中</option><option value="refunded">已退回</option><option value="forfeited">无法收回</option></select></label><label><span>实际退回日期{form.status === 'refunded' ? ' *' : ''}</span><input type="date" value={form.refundDate} onChange={update('refundDate')} disabled={form.status !== 'refunded'} /></label><label className="is-wide"><span>备注</span><textarea value={form.remark} onChange={update('remark')} rows={3} placeholder="合同、退租、保证金条款等说明" /></label></div>{form.status === 'forfeited' ? <div className="opex-editor-warning">标记为“无法收回”不会自动计入利润；确认损失后，请另外在“其他费用”录入对应费用。</div> : null}<div className="opex-editor-actions"><button type="button" onClick={onClose} disabled={saving}>取消</button><button type="submit" className="is-primary" disabled={saving}>{saving ? '保存中…' : '保存'}</button></div></form></section></div>
