@@ -88,3 +88,56 @@
 .payroll-overview-table-wrap table{min-width:980px}
 .payroll-month-link{height:28px;padding:0 10px;border:1px solid #dbe4f0;border-radius:6px;background:#fff;color:#2563eb;font-size:11px;font-weight:700;cursor:pointer}
 .payroll-month-link:hover{background:#eff6ff;border-color:#bfdbfe}
+
+
+/* Compact finance review sheet */
+.payroll-inline-review-panel--clean{padding:14px 16px 16px;background:#fff}
+.payroll-review-titlebar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid #edf1f6}
+.payroll-review-title span{display:block;color:#64748b;font-size:10px;font-weight:800;letter-spacing:.08em}
+.payroll-review-title h3{margin:2px 0 0;color:#172033;font-size:15px}
+.payroll-review-title p{margin:4px 0 0;color:#94a3b8;font-size:10px}
+.payroll-review-title-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.payroll-review-title-actions button{height:31px;padding:0 11px;border:1px solid #dce3ee;border-radius:7px;background:#fff;color:#475569;font-size:11px;font-weight:700;cursor:pointer}
+.payroll-review-title-actions button.is-primary{border-color:#2563eb;background:#2563eb;color:#fff}
+.payroll-review-title-actions button:disabled{opacity:.6;cursor:not-allowed}
+
+.payroll-review-meta{display:grid;grid-template-columns:145px minmax(240px,1fr) 140px 145px 145px auto;gap:8px;align-items:end;margin-bottom:10px}
+.payroll-review-meta label{display:flex;flex-direction:column;gap:4px;min-width:0}
+.payroll-review-meta label>span{color:#64748b;font-size:10px;font-weight:700}
+.payroll-review-meta input,.payroll-review-meta select{height:32px;min-width:0;border:1px solid #dce3ee;border-radius:6px;background:#fff;padding:0 8px;color:#334155;font:inherit;font-size:11px;outline:none}
+.payroll-review-meta input:disabled{background:#f8fafc;color:#94a3b8}
+.payroll-review-meta .is-company{min-width:0}
+.payroll-adjust-toggle{height:32px;padding:0 10px;border:1px solid #dce3ee;border-radius:6px;background:#fff;color:#64748b;font-size:10px;font-weight:700;cursor:pointer}
+.payroll-adjust-toggle.is-active{border-color:#bfdbfe;background:#eff6ff;color:#1d4ed8}
+
+.payroll-review-hint{margin-bottom:8px;padding:7px 9px;border-radius:6px;background:#f8fafc;color:#64748b;font-size:10px}
+.payroll-review-hint strong{color:#334155}
+
+.payroll-review-sheet-wrap{border-radius:6px;border-color:#dfe4eb}
+.payroll-review-sheet{min-width:1120px!important}
+.payroll-review-sheet th,.payroll-review-sheet td{padding:6px 7px!important}
+.payroll-review-sheet th{background:#f5f7fa!important;color:#596579!important;font-size:10px!important}
+.payroll-review-sheet tbody tr:hover{background:#fafcff}
+.payroll-review-sheet .payroll-cell-input{height:29px;min-width:78px;border-radius:4px;padding:0 6px;font-size:11px}
+.payroll-review-sheet .payroll-cell-name{min-width:100px}
+.payroll-review-sheet .payroll-auto-cell{background:#f8fafc}
+.payroll-review-sheet .payroll-auto-cell.is-net{background:#f0fdf4;color:#15803d}
+.payroll-review-sheet tfoot td{border-top:2px solid #d8e0ea;border-bottom:0;background:#fbfcfe;font-size:11px}
+.payroll-review-sheet tfoot .payroll-total-net{background:#ecfdf3;color:#15803d}
+
+.payroll-review-footer{display:grid;grid-template-columns:1.25fr 1fr;gap:10px;margin-top:10px}
+.payroll-review-footer label{display:flex;align-items:center;gap:8px;min-width:0}
+.payroll-review-footer label>span{flex:0 0 auto;color:#64748b;font-size:10px;font-weight:700}
+.payroll-review-footer input{height:30px;min-width:0;flex:1;border:1px solid #dce3ee;border-radius:6px;padding:0 8px;background:#fff;color:#334155;font:inherit;font-size:11px}
+
+@media(max-width:1180px){
+  .payroll-review-meta{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .payroll-review-meta .is-company{grid-column:span 2}
+}
+@media(max-width:760px){
+  .payroll-review-titlebar{align-items:flex-start;flex-direction:column}
+  .payroll-review-title-actions{justify-content:flex-start}
+  .payroll-review-meta{grid-template-columns:1fr}
+  .payroll-review-meta .is-company{grid-column:auto}
+  .payroll-review-footer{grid-template-columns:1fr}
+}
