@@ -259,7 +259,7 @@ export default function OperatingExpenseCenterPage() {
     }
     setSaving(false)
     if (successCount) {
-      setMonth(importedMonths[0] || month)
+      setPayrollMonthFilter('all')
       setRevision((value) => value + 1)
       showToast?.(`已导入 ${successCount} 个工资批次`, 'success')
     }
@@ -692,7 +692,8 @@ export default function OperatingExpenseCenterPage() {
           gross: 0,
           deductions: 0,
           tax: 0,
-          net: 0
+          net: 0,
+          confirmedNet: 0
         }
       }
       const group = groups[key]
@@ -702,6 +703,9 @@ export default function OperatingExpenseCenterPage() {
       group.deductions += Number(row.employee_deduction_total || 0)
       group.tax += Number(row.income_tax_total || 0)
       group.net += Number(row.net_salary_total || 0)
+      if (row.payroll_status === 'reviewed' || row.payroll_status === 'paid') {
+        group.confirmedNet += Number(row.net_salary_total || 0)
+      }
       return groups
     }, {})).sort((a, b) => String(b.month).localeCompare(String(a.month)))
     return (
@@ -738,7 +742,7 @@ export default function OperatingExpenseCenterPage() {
             </div>
             <div className="opex-table-wrap payroll-overview-table-wrap">
               <table>
-                <thead><tr><th>工资月份</th><th className="is-right">公司数</th><th className="is-right">人数</th><th className="is-right">应发工资</th><th className="is-right">个人代扣</th><th className="is-right">个税</th><th className="is-right">实发工资</th><th>查看</th></tr></thead>
+                <thead><tr><th>工资月份</th><th className="is-right">公司数</th><th className="is-right">人数</th><th className="is-right">应发工资</th><th className="is-right">个人代扣</th><th className="is-right">个税</th><th className="is-right">财务确认实发</th><th>查看</th></tr></thead>
                 <tbody>
                   {payrollMonthGroups.map((group) => (
                     <tr key={group.month}>
@@ -748,7 +752,7 @@ export default function OperatingExpenseCenterPage() {
                       <td className="is-right"><strong>{money(group.gross)}</strong></td>
                       <td className="is-right">{money(group.deductions)}</td>
                       <td className="is-right">{money(group.tax)}</td>
-                      <td className="is-right"><strong>{money(group.net)}</strong></td>
+                      <td className="is-right"><strong>{money(group.confirmedNet)}</strong>{group.confirmedNet !== group.net ? <small className="opex-cell-note">另有待核对 {money(group.net - group.confirmedNet)}</small> : null}</td>
                       <td><button type="button" className="payroll-month-link" onClick={() => setPayrollMonthFilter(group.month)}>只看这个月</button></td>
                     </tr>
                   ))}
