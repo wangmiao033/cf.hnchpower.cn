@@ -95,6 +95,7 @@ class PayrollBatchCreate(BaseModel):
     voucher_note: str | None = Field(default=None, max_length=1000)
     remark: str | None = Field(default=None, max_length=2000)
     source_file_name: str | None = Field(default=None, max_length=500)
+    review_status: str = Field(default="pending_review", min_length=1, max_length=16)
     items: list[PayrollEmployeeItemIn] = Field(min_length=1, max_length=500)
 
 
@@ -107,6 +108,7 @@ class PayrollBatchUpdate(BaseModel):
     voucher_note: str | None = Field(default=None, max_length=1000)
     remark: str | None = Field(default=None, max_length=2000)
     source_file_name: str | None = Field(default=None, max_length=500)
+    review_status: str | None = Field(default=None, min_length=1, max_length=16)
     items: list[PayrollEmployeeItemIn] | None = Field(default=None, min_length=1, max_length=500)
 
 
@@ -127,6 +129,8 @@ class PayrollBatchRead(BaseModel):
     remark: str | None = None
     source_file_name: str | None = None
     validation_status: str
+    review_status: str
+    payroll_status: str
     created_at: datetime
     updated_at: datetime
     items: list[PayrollEmployeeItemRead] = []
@@ -139,3 +143,7 @@ class PayrollBatchListResponse(BaseModel):
     employee_deduction_total: float = 0
     income_tax_total: float = 0
     net_salary_total: float = 0
+    confirmed_net_salary_total: float = 0
+    pending_review_count: int = 0
+    reviewed_count: int = 0
+    paid_count: int = 0
