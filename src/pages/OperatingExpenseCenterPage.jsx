@@ -829,7 +829,7 @@ function PayrollImportDialog({ imports, companySuggestions, saving, onUpdate, on
   )
 }
 
-function PayrollDetailDialog({ detail, form, setForm, saving, canManage, onClose, onSubmit }) {
+function PayrollDetailDialog({ detail, form, setForm, saving, canManage, onClose, onSubmit, onConfirmReview }) {
   const update = (key) => (event) => setForm((old) => ({ ...old, [key]: event.target.value }))
   const updatePayrollStatus = (event) => {
     const payrollStatus = event.target.value
@@ -839,6 +839,17 @@ function PayrollDetailDialog({ detail, form, setForm, saving, canManage, onClose
       paymentDate: payrollStatus === 'paid' ? old.paymentDate : ''
     }))
   }
+  const updateItem = (index, key, value) => {
+    setForm((old) => ({
+      ...old,
+      items: (old.items || []).map((item, itemIndex) => {
+        if (itemIndex !== index) return item
+        const next = { ...item, [key]: key === 'employee_name' ? value : payrollNumber(value) }
+        return recalcPayrollItem(next)
+      })
+    }))
+  }
+  const totals = payrollFormTotals(form.items || [])
   return (
     <div className="opex-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
       <section className="opex-editor payroll-detail-dialog" role="dialog" aria-modal="true">
@@ -848,11 +859,11 @@ function PayrollDetailDialog({ detail, form, setForm, saving, canManage, onClose
         </div>
         <form onSubmit={onSubmit}>
           <div className="payroll-detail-summary">
-            <article><span>员工人数</span><strong>{detail.employee_count} 人</strong></article>
-            <article><span>应发工资</span><strong>{money(detail.gross_salary)}</strong></article>
-            <article><span>个人代扣</span><strong>{money(detail.employee_deduction_total)}</strong></article>
-            <article><span>个税</span><strong>{money(detail.income_tax_total)}</strong></article>
-            <article className="is-emph"><span>财务确认实发工资</span><strong>{money(detail.net_salary_total)}</strong></article>
+            <article><span>员工人数</span><strong>{(form.items || []).length} 人</strong></article>
+            <article><span>应发工资</span><strong>{money(totals.gross_salary)}</strong></article>
+            <article><span>个人代扣</span><strong>{money(totals.employee_deduction_total)}</strong></article>
+            <article><span>个税</span><strong>{money(totals.income_tax_total)}</strong></article>
+            <article className="is-emph"><span>财务确认实发工资</span><strong>{money(totals.net_salary_total)}</strong></article>
           </div>
 
           <div className="opex-form-grid payroll-batch-fields">
@@ -867,39 +878,39 @@ function PayrollDetailDialog({ detail, form, setForm, saving, canManage, onClose
           </div>
 
           <div className="payroll-formula-note">
-            <strong>公式：</strong>
-            <span>代扣小计 = 补税 + 养老 + 医疗 + 失业 + 公积金 + 请假扣除 + 迟到罚款；实发 = 应发 − 代扣小计 − 个税。</span>
-            {detail.validation_status === 'valid' ? <StatusBadge type="paid">全部一致</StatusBadge> : <StatusBadge type="danger">存在差异</StatusBadge>}
+            <strong>核对方式：</strong>
+            <span>直接修改下面员工表格。代扣小计和财务确认实发工资会自动重算；核对完成后点击“确认财务已核对”。</span>
+            {detail.validation_status === 'valid' ? <StatusBadge type="paid">原表公式一致</StatusBadge> : <StatusBadge type="danger">原表存在差异</StatusBadge>}
           </div>
 
           <div className="payroll-detail-table-wrap">
-            <table className="payroll-detail-table">
-              <thead><tr><th>员工</th><th className="is-right">应发工资</th><th className="is-right">补税</th><th className="is-right">养老</th><th className="is-right">医疗</th><th className="is-right">失业</th><th className="is-right">公积金</th><th className="is-right">请假扣除</th><th className="is-right">迟到罚款</th><th className="is-right">代扣小计</th><th className="is-right">个税</th><th className="is-right">财务确认实发工资</th><th>校验</th></tr></thead>
+            <table className="payroll-detail-table payroll-detail-table--editable">
+              <thead><tr><th>员工</th><th className="is-right">应发工资</th><th className="is-right">补税</th><th className="is-right">养老</th><th className="is-right">医疗</th><th className="is-right">失业</th><th className="is-right">公积金</th><th className="is-right">请假扣除</th><th className="is-right">迟到罚款</th><th className="is-right">代扣小计</th><th className="is-right">个税</th><th className="is-right">财务确认实发工资</th></tr></thead>
               <tbody>
-                {(detail.items || []).map((item) => (
-                  <tr key={item.id || `${detail.id}-${item.sort_order}`}>
-                    <td><strong>{item.employee_name}</strong></td>
-                    <td className="is-right">{money(item.gross_salary)}</td>
-                    <td className="is-right">{money(item.tax_adjustment)}</td>
-                    <td className="is-right">{money(item.pension_insurance)}</td>
-                    <td className="is-right">{money(item.medical_insurance)}</td>
-                    <td className="is-right">{money(item.unemployment_insurance)}</td>
-                    <td className="is-right">{money(item.housing_fund)}</td>
-                    <td className="is-right">{money(item.leave_deduction)}</td>
-                    <td className="is-right">{money(item.late_deduction)}</td>
-                    <td className="is-right">{money(item.deduction_total)}</td>
-                    <td className="is-right">{money(item.income_tax)}</td>
-                    <td className="is-right"><strong>{money(item.net_salary)}</strong></td>
-                    <td>{item.validation_status === 'valid' ? <StatusBadge type="paid">一致</StatusBadge> : <span className="payroll-validation-error" title={`代扣差异 ${money(item.deduction_difference)}；实发差异 ${money(item.net_difference)}`}>有差异</span>}</td>
+                {(form.items || []).map((item, index) => (
+                  <tr key={item.id || `${detail.id}-${item.sort_order ?? index}`}>
+                    <td><input className="payroll-cell-input payroll-cell-name" value={item.employee_name || ''} onChange={(event) => updateItem(index, 'employee_name', event.target.value)} disabled={!canManage} /></td>
+                    <td><input className="payroll-cell-input is-num" type="number" step="0.01" value={item.gross_salary ?? 0} onChange={(event) => updateItem(index, 'gross_salary', event.target.value)} disabled={!canManage} /></td>
+                    <td><input className="payroll-cell-input is-num" type="number" step="0.01" value={item.tax_adjustment ?? 0} onChange={(event) => updateItem(index, 'tax_adjustment', event.target.value)} disabled={!canManage} /></td>
+                    <td><input className="payroll-cell-input is-num" type="number" step="0.01" value={item.pension_insurance ?? 0} onChange={(event) => updateItem(index, 'pension_insurance', event.target.value)} disabled={!canManage} /></td>
+                    <td><input className="payroll-cell-input is-num" type="number" step="0.01" value={item.medical_insurance ?? 0} onChange={(event) => updateItem(index, 'medical_insurance', event.target.value)} disabled={!canManage} /></td>
+                    <td><input className="payroll-cell-input is-num" type="number" step="0.01" value={item.unemployment_insurance ?? 0} onChange={(event) => updateItem(index, 'unemployment_insurance', event.target.value)} disabled={!canManage} /></td>
+                    <td><input className="payroll-cell-input is-num" type="number" step="0.01" value={item.housing_fund ?? 0} onChange={(event) => updateItem(index, 'housing_fund', event.target.value)} disabled={!canManage} /></td>
+                    <td><input className="payroll-cell-input is-num" type="number" step="0.01" value={item.leave_deduction ?? 0} onChange={(event) => updateItem(index, 'leave_deduction', event.target.value)} disabled={!canManage} /></td>
+                    <td><input className="payroll-cell-input is-num" type="number" step="0.01" value={item.late_deduction ?? 0} onChange={(event) => updateItem(index, 'late_deduction', event.target.value)} disabled={!canManage} /></td>
+                    <td className="is-right payroll-auto-cell">{money(item.deduction_total)}</td>
+                    <td><input className="payroll-cell-input is-num" type="number" step="0.01" value={item.income_tax ?? 0} onChange={(event) => updateItem(index, 'income_tax', event.target.value)} disabled={!canManage} /></td>
+                    <td className="is-right payroll-auto-cell is-net"><strong>{money(item.net_salary)}</strong></td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
 
-          <div className="opex-editor-actions">
+          <div className="opex-editor-actions payroll-review-actions">
             <button type="button" onClick={onClose} disabled={saving}>关闭</button>
-            {canManage ? <button type="submit" className="is-primary" disabled={saving}>{saving ? '保存中…' : '保存批次信息'}</button> : null}
+            {canManage ? <button type="submit" disabled={saving}>{saving ? '保存中…' : '保存修改'}</button> : null}
+            {canManage && form.payrollStatus !== 'paid' ? <button type="button" className="is-primary" onClick={onConfirmReview} disabled={saving}>{saving ? '处理中…' : '确认财务已核对'}</button> : null}
           </div>
         </form>
       </section>
