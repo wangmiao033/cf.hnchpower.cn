@@ -33,6 +33,14 @@ def _text(value: Any) -> str:
     return str(value or "").strip()
 
 
+def _rd_counterparty_share_rate(candidate: dict) -> float | None:
+    """Contract access share_rate is our share; R&D payable uses the counterparty share."""
+    our_share = _number(candidate.get("share_rate"))
+    if our_share is None or not 0 <= our_share <= 100:
+        return None
+    return round(100.0 - our_share, 4)
+
+
 def _candidate_snapshot(candidate: dict, scored: dict) -> dict:
     return {
         "contract_id": candidate.get("contract_id"),
@@ -43,7 +51,8 @@ def _candidate_snapshot(candidate: dict, scored: dict) -> dict:
         "partner_name": candidate.get("partner_name") or candidate.get("counterparty") or "",
         "authorization_start": candidate.get("authorization_start"),
         "authorization_end": candidate.get("authorization_end"),
-        "share_rate": candidate.get("share_rate"),
+        "share_rate": _rd_counterparty_share_rate(candidate),
+        "our_share_rate": candidate.get("share_rate"),
         "channel_fee_rate": candidate.get("channel_fee_rate"),
         "invoice_tax_rate": candidate.get("invoice_tax_rate"),
         "testing_fee": candidate.get("testing_fee"),
@@ -74,7 +83,7 @@ def _recommended(candidate: dict, raw: dict) -> dict:
         discount_policy = "manual"
 
     warnings: list[str] = []
-    share = _number(candidate.get("share_rate"))
+    share = _rd_counterparty_share_rate(candidate)
     fee = _number(candidate.get("channel_fee_rate"))
     tax = _number(candidate.get("invoice_tax_rate"))
     testing = _number(candidate.get("testing_fee"))
@@ -88,7 +97,7 @@ def _recommended(candidate: dict, raw: dict) -> dict:
         ),
     )
     if share is None:
-        warnings.append("合同未维护分成比例")
+        warnings.append("合同未维护有效的我方分成比例，无法推导对方分成")
     if fee is None:
         warnings.append("合同未结构化通道费率，保留当前账单值")
     if tax is None:
