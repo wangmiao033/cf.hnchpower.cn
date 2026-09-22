@@ -508,13 +508,7 @@ export function useInvoiceStore({ showToast, enabled = true }) {
 
     try {
       if (lowerName.endsWith('.pdf')) {
-        const parsedInfo = parseInvoiceFromFilename(file.name)
-        if (parsedInfo) {
-          setInvoiceForm({ ...invoiceForm, ...parsedInfo })
-          showToast('已从文件名解析发票信息，请确认并补充税号后保存', 'success')
-          return
-        }
-        showToast('无法从文件名解析信息，请手动录入', 'info')
+        showToast('已停用 PDF 自动解析，请手工录入或导入 Excel / JSON', 'info')
         return
       }
 

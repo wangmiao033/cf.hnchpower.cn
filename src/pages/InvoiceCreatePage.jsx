@@ -24,7 +24,7 @@ function InvoiceCreatePage() {
       pageMode={fullMode ? '完整录入' : '电子专票极速录入'}
       toolsSlot={(
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span>{fullMode ? '用于红冲、纸票或特殊场景。' : '电子发票直接拖入 PDF / OFD / XML，核对后保存。'}</span>
+          <span>{fullMode ? '用于红冲、纸票或特殊场景。' : '电子发票直接拖入 OFD / XML，核对后保存。'}</span>
           <button
             type="button"
             className="rec-btn rec-btn--ghost rec-btn--xs"

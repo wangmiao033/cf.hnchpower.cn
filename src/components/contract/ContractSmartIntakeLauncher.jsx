@@ -20,7 +20,7 @@ export default function ContractSmartIntakeLauncher() {
       >
         <span aria-hidden="true">✦</span>
         <strong>上传合同智能录入</strong>
-        <small>PDF / 扫描件自动填表</small>
+        <small>合同图片自动填表</small>
       </button>
       {open ? (
         <ContractSmartIntakeModal
