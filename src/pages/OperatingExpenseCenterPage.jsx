@@ -272,6 +272,11 @@ export default function OperatingExpenseCenterPage() {
   }
 
   const openPayrollDetail = async (row) => {
+    if (payrollDetail?.id === row.id) {
+      setPayrollDetail(null)
+      setPayrollDetailForm(null)
+      return
+    }
     setPayrollDetailLoading(true)
     setPayrollDetail(null)
     try {
@@ -711,20 +716,37 @@ export default function OperatingExpenseCenterPage() {
                 {loading ? <tr><td colSpan={12} className="opex-empty">正在读取工资批次…</td></tr> : null}
                 {!loading && rows.length === 0 ? <tr><td colSpan={12} className="opex-empty">本月尚未导入工资表。</td></tr> : null}
                 {!loading && rows.map((row) => (
-                  <tr key={row.id}>
-                    <td><strong>{row.expense_month}</strong></td>
-                    <td><strong>{row.company_name}</strong></td>
-                    <td className="is-right">{row.employee_count} 人</td>
-                    <td className="is-right"><strong>{money(row.gross_salary)}</strong></td>
-                    <td className="is-right">{money(row.employee_deduction_total)}</td>
-                    <td className="is-right">{money(row.income_tax_total)}</td>
-                    <td className="is-right"><strong>{money(row.net_salary_total)}</strong>{row.payroll_status === 'pending_review' ? <small className="opex-cell-note">待财务确认</small> : null}</td>
-                    <td>{row.payroll_status === 'paid' ? <StatusBadge type="paid">已发放</StatusBadge> : row.payroll_status === 'reviewed' ? <StatusBadge type="reviewed">财务已核对</StatusBadge> : <StatusBadge type="unpaid">待核对</StatusBadge>}</td>
-                    <td>{row.payment_date || '—'}</td>
-                    <td><span className="payroll-source-file" title={[row.source_file_name, row.voucher_note].filter(Boolean).join(' · ')}>{row.source_file_name || row.voucher_note || '—'}</span></td>
-                    <td>{row.validation_status === 'valid' ? <StatusBadge type="paid">公式一致</StatusBadge> : <StatusBadge type="danger">存在差异</StatusBadge>}</td>
-                    <td><div className="opex-row-actions"><button type="button" onClick={() => void openPayrollDetail(row)}>核对 / 编辑</button>{canManage ? <button type="button" className="is-danger" onClick={() => void removePayroll(row)}>删除</button> : null}</div></td>
-                  </tr>
+                  <React.Fragment key={row.id}>
+                    <tr className={payrollDetail?.id === row.id ? 'payroll-batch-row is-expanded' : 'payroll-batch-row'}>
+                      <td><strong>{row.expense_month}</strong></td>
+                      <td><strong>{row.company_name}</strong></td>
+                      <td className="is-right">{row.employee_count} 人</td>
+                      <td className="is-right"><strong>{money(row.gross_salary)}</strong></td>
+                      <td className="is-right">{money(row.employee_deduction_total)}</td>
+                      <td className="is-right">{money(row.income_tax_total)}</td>
+                      <td className="is-right"><strong>{money(row.net_salary_total)}</strong>{row.payroll_status === 'pending_review' ? <small className="opex-cell-note">待财务确认</small> : null}</td>
+                      <td>{row.payroll_status === 'paid' ? <StatusBadge type="paid">已发放</StatusBadge> : row.payroll_status === 'reviewed' ? <StatusBadge type="reviewed">财务已核对</StatusBadge> : <StatusBadge type="unpaid">待核对</StatusBadge>}</td>
+                      <td>{row.payment_date || '—'}</td>
+                      <td><span className="payroll-source-file" title={[row.source_file_name, row.voucher_note].filter(Boolean).join(' · ')}>{row.source_file_name || row.voucher_note || '—'}</span></td>
+                      <td>{row.validation_status === 'valid' ? <StatusBadge type="paid">公式一致</StatusBadge> : <StatusBadge type="danger">存在差异</StatusBadge>}</td>
+                      <td><div className="opex-row-actions"><button type="button" onClick={() => void openPayrollDetail(row)}>{payrollDetail?.id === row.id ? '收起' : '直接核对'}</button>{canManage ? <button type="button" className="is-danger" onClick={() => void removePayroll(row)}>删除</button> : null}</div></td>
+                    </tr>
+                    {payrollDetail?.id === row.id && payrollDetailForm ? (
+                      <tr className="payroll-inline-review-row">
+                        <td colSpan={12}>
+                          <PayrollInlineReviewPanel
+                            detail={payrollDetail}
+                            form={payrollDetailForm}
+                            setForm={setPayrollDetailForm}
+                            saving={saving}
+                            canManage={canManage}
+                            onSubmit={savePayrollDetail}
+                            onConfirmReview={() => void savePayrollDetail(null, 'reviewed')}
+                          />
+                        </td>
+                      </tr>
+                    ) : null}
+                  </React.Fragment>
                 ))}
               </tbody>
             </table>
@@ -737,8 +759,7 @@ export default function OperatingExpenseCenterPage() {
         </section>
 
         {payrollImportOpen ? <PayrollImportDialog imports={payrollImports} companySuggestions={companySuggestions} saving={saving} onUpdate={updatePayrollImport} onClose={() => !saving && setPayrollImportOpen(false)} onSave={() => void savePayrollImports()} /> : null}
-        {payrollDetailLoading ? <div className="opex-backdrop"><div className="payroll-loading-card">正在读取工资明细…</div></div> : null}
-        {payrollDetail && payrollDetailForm ? <PayrollDetailDialog detail={payrollDetail} form={payrollDetailForm} setForm={setPayrollDetailForm} saving={saving} canManage={canManage} onClose={() => { if (!saving) { setPayrollDetail(null); setPayrollDetailForm(null) } }} onSubmit={savePayrollDetail} onConfirmReview={() => void savePayrollDetail(null, 'reviewed')} /> : null}
+        {payrollDetailLoading ? <div className="payroll-inline-loading">正在读取工资明细…</div> : null}
       </PageContainer>
     )
   }
@@ -829,7 +850,7 @@ function PayrollImportDialog({ imports, companySuggestions, saving, onUpdate, on
   )
 }
 
-function PayrollDetailDialog({ detail, form, setForm, saving, canManage, onClose, onSubmit, onConfirmReview }) {
+function PayrollInlineReviewPanel({ detail, form, setForm, saving, canManage, onSubmit, onConfirmReview }) {
   const update = (key) => (event) => setForm((old) => ({ ...old, [key]: event.target.value }))
   const updatePayrollStatus = (event) => {
     const payrollStatus = event.target.value
@@ -851,13 +872,12 @@ function PayrollDetailDialog({ detail, form, setForm, saving, canManage, onClose
   }
   const totals = payrollFormTotals(form.items || [])
   return (
-    <div className="opex-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
-      <section className="opex-editor payroll-detail-dialog" role="dialog" aria-modal="true">
-        <div className="opex-editor-head">
-          <div><span>PAYROLL BATCH</span><h2>{detail.company_name} · {detail.expense_month}</h2></div>
-          <button type="button" onClick={onClose}>×</button>
+    <section className="payroll-inline-review-panel">
+      <form onSubmit={onSubmit}>
+        <div className="payroll-inline-review-head">
+          <div><span>财务核对</span><h3>{detail.company_name} · {detail.expense_month}</h3></div>
+          <div>{form.payrollStatus === 'paid' ? <StatusBadge type="paid">已发放</StatusBadge> : form.payrollStatus === 'reviewed' ? <StatusBadge type="reviewed">财务已核对</StatusBadge> : <StatusBadge type="unpaid">待核对</StatusBadge>}</div>
         </div>
-        <form onSubmit={onSubmit}>
           <div className="payroll-detail-summary">
             <article><span>员工人数</span><strong>{(form.items || []).length} 人</strong></article>
             <article><span>应发工资</span><strong>{money(totals.gross_salary)}</strong></article>
@@ -908,13 +928,11 @@ function PayrollDetailDialog({ detail, form, setForm, saving, canManage, onClose
           </div>
 
           <div className="opex-editor-actions payroll-review-actions">
-            <button type="button" onClick={onClose} disabled={saving}>关闭</button>
             {canManage ? <button type="submit" disabled={saving}>{saving ? '保存中…' : '保存修改'}</button> : null}
             {canManage && form.payrollStatus !== 'paid' ? <button type="button" className="is-primary" onClick={onConfirmReview} disabled={saving}>{saving ? '处理中…' : '确认财务已核对'}</button> : null}
           </div>
         </form>
-      </section>
-    </div>
+    </section>
   )
 }
 
