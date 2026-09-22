@@ -150,6 +150,7 @@ export default function OperatingExpenseCenterPage() {
   const [month, setMonth] = useState(currentMonth)
   const [query, setQuery] = useState('')
   const [paymentFilter, setPaymentFilter] = useState('all')
+  const [payrollMonthFilter, setPayrollMonthFilter] = useState('all')
   const [payrollStatusFilter, setPayrollStatusFilter] = useState('all')
   const [depositStatus, setDepositStatus] = useState('all')
   const [rows, setRows] = useState([])
@@ -388,12 +389,15 @@ export default function OperatingExpenseCenterPage() {
       } else if (isPayroll) {
         const [payroll, totals] = await Promise.all([
           listPayrollBatches({
-            month,
+            month: payrollMonthFilter === 'all' ? undefined : payrollMonthFilter,
             payrollStatus: payrollStatusFilter,
             q: query || undefined,
             limit: 500
           }),
-          listPayrollBatches({ month, limit: 500 })
+          listPayrollBatches({
+            month: payrollMonthFilter === 'all' ? undefined : payrollMonthFilter,
+            limit: 500
+          })
         ])
         setRows(payroll.items || [])
         setPayrollSummary(totals)
@@ -412,7 +416,7 @@ export default function OperatingExpenseCenterPage() {
     } finally {
       setLoading(false)
     }
-  }, [depositStatus, isDeposits, isOverview, isPayroll, mode, month, paymentFilter, payrollStatusFilter, query, revision, showToast])
+  }, [depositStatus, isDeposits, isOverview, isPayroll, mode, month, paymentFilter, payrollMonthFilter, payrollStatusFilter, query, revision, showToast])
 
   useEffect(() => { void loadData() }, [loadData])
 
@@ -676,6 +680,30 @@ export default function OperatingExpenseCenterPage() {
       ...PAYROLL_COMPANY_SUGGESTIONS,
       ...rows.map((row) => row.company_name).filter(Boolean)
     ]))
+    const payrollAllMonths = payrollMonthFilter === 'all'
+    const payrollPeriodText = payrollAllMonths ? '全部' : '本月'
+    const payrollMonthGroups = Object.values(rows.reduce((groups, row) => {
+      const key = row.expense_month || '未设置月份'
+      if (!groups[key]) {
+        groups[key] = {
+          month: key,
+          companies: new Set(),
+          employeeCount: 0,
+          gross: 0,
+          deductions: 0,
+          tax: 0,
+          net: 0
+        }
+      }
+      const group = groups[key]
+      if (row.company_name) group.companies.add(row.company_name)
+      group.employeeCount += Number(row.employee_count || 0)
+      group.gross += Number(row.gross_salary || 0)
+      group.deductions += Number(row.employee_deduction_total || 0)
+      group.tax += Number(row.income_tax_total || 0)
+      group.net += Number(row.net_salary_total || 0)
+      return groups
+    }, {})).sort((a, b) => String(b.month).localeCompare(String(a.month)))
     return (
       <PageContainer hideHeader className="opex-page">
         <section className="opex-head">
@@ -697,15 +725,43 @@ export default function OperatingExpenseCenterPage() {
         </section>
 
         <section className="opex-metrics payroll-metrics">
-          <article className="is-total"><span>本月应发工资</span><strong>{money(totals.gross_salary_total)}</strong><small>{totals.total || 0} 个公司工资批次</small></article>
-          <article><span>本月个人代扣</span><strong>{money(totals.employee_deduction_total)}</strong><small>养老 / 医疗 / 失业 / 公积金及其他代扣</small></article>
-          <article><span>本月个人所得税</span><strong>{money(totals.income_tax_total)}</strong><small>工资表个税合计</small></article>
+          <article className="is-total"><span>{payrollPeriodText}应发工资</span><strong>{money(totals.gross_salary_total)}</strong><small>{totals.total || 0} 个公司工资批次</small></article>
+          <article><span>{payrollPeriodText}个人代扣</span><strong>{money(totals.employee_deduction_total)}</strong><small>养老 / 医疗 / 失业 / 公积金及其他代扣</small></article>
+          <article><span>{payrollPeriodText}个人所得税</span><strong>{money(totals.income_tax_total)}</strong><small>工资表个税合计</small></article>
           <article className="is-asset"><span>财务确认实发工资</span><strong>{money(totals.confirmed_net_salary_total)}</strong><small>财务已核对 {totals.reviewed_count || 0} 批 · 已发放 {totals.paid_count || 0} 批 · 待核对 {totals.pending_review_count || 0} 批</small></article>
         </section>
 
+        {payrollAllMonths && payrollMonthGroups.length ? (
+          <section className="opex-card payroll-overview-card">
+            <div className="opex-card-head">
+              <div><span>PAYROLL OVERVIEW</span><h2>工资全览</h2><p>按月份汇总所有工资批次，下面仍保留每家公司明细和直接核对入口。</p></div>
+            </div>
+            <div className="opex-table-wrap payroll-overview-table-wrap">
+              <table>
+                <thead><tr><th>工资月份</th><th className="is-right">公司数</th><th className="is-right">人数</th><th className="is-right">应发工资</th><th className="is-right">个人代扣</th><th className="is-right">个税</th><th className="is-right">实发工资</th><th>查看</th></tr></thead>
+                <tbody>
+                  {payrollMonthGroups.map((group) => (
+                    <tr key={group.month}>
+                      <td><strong>{group.month}</strong></td>
+                      <td className="is-right">{group.companies.size}</td>
+                      <td className="is-right">{group.employeeCount} 人</td>
+                      <td className="is-right"><strong>{money(group.gross)}</strong></td>
+                      <td className="is-right">{money(group.deductions)}</td>
+                      <td className="is-right">{money(group.tax)}</td>
+                      <td className="is-right"><strong>{money(group.net)}</strong></td>
+                      <td><button type="button" className="payroll-month-link" onClick={() => setPayrollMonthFilter(group.month)}>只看这个月</button></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        ) : null}
+
         <section className="opex-card">
           <div className="opex-toolbar">
-            <label><span>工资月份</span><input type="month" value={month} onChange={(event) => setMonth(event.target.value)} /></label>
+            <label><span>查看范围</span><select value={payrollAllMonths ? 'all' : 'month'} onChange={(event) => setPayrollMonthFilter(event.target.value === 'all' ? 'all' : currentMonth())}><option value="all">全部月份</option><option value="month">指定月份</option></select></label>
+            {!payrollAllMonths ? <label><span>工资月份</span><input type="month" value={payrollMonthFilter} onChange={(event) => setPayrollMonthFilter(event.target.value || currentMonth())} /></label> : null}
             <label><span>工资状态</span><select value={payrollStatusFilter} onChange={(event) => setPayrollStatusFilter(event.target.value)}><option value="all">全部</option><option value="pending_review">待核对</option><option value="reviewed">财务已核对</option><option value="paid">已发放</option></select></label>
             <label className="is-grow"><span>搜索</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="公司、员工、工资表文件、备注…" /></label>
           </div>
@@ -714,7 +770,7 @@ export default function OperatingExpenseCenterPage() {
               <thead><tr><th>工资月份</th><th>公司</th><th className="is-right">人数</th><th className="is-right">应发工资</th><th className="is-right">个人代扣</th><th className="is-right">个税</th><th className="is-right">财务确认实发工资</th><th>工资状态</th><th>发放日期</th><th>工资表 / 凭证</th><th>公式校验</th><th>操作</th></tr></thead>
               <tbody>
                 {loading ? <tr><td colSpan={12} className="opex-empty">正在读取工资批次…</td></tr> : null}
-                {!loading && rows.length === 0 ? <tr><td colSpan={12} className="opex-empty">本月尚未导入工资表。</td></tr> : null}
+                {!loading && rows.length === 0 ? <tr><td colSpan={12} className="opex-empty">{payrollAllMonths ? '暂无工资记录。' : '该月份尚未导入工资表。'}</td></tr> : null}
                 {!loading && rows.map((row) => (
                   <React.Fragment key={row.id}>
                     <tr className={payrollDetail?.id === row.id ? 'payroll-batch-row is-expanded' : 'payroll-batch-row'}>
