@@ -28,20 +28,81 @@
   font-size: 10px;
 }
 
-.core-bill-footer-actions .confirm-review {
-  border-color: #1f7a56;
-  background: #1f7a56;
-  color: #fff;
+/* The generic .core-bill-footer button:hover rule sets the text to the
+   primary theme colour; override it for this green primary action. */
+.core-bill-form-page--rd .core-bill-footer-actions .confirm-review {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-width: 160px;
+  min-height: 38px;
+  height: 38px;
+  padding: 0 15px;
+  border: 1px solid #12603e;
+  border-radius: 8px;
+  background: #146c45;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1.25;
+  white-space: nowrap;
+  box-shadow: 0 2px 7px rgba(15, 88, 55, .18);
+  transition: background-color .15s ease, border-color .15s ease, box-shadow .15s ease;
 }
 
-.core-bill-footer-actions .confirm-review:hover:not(:disabled) {
-  border-color: #176243;
-  background: #176243;
+.core-bill-form-page--rd .core-bill-footer-actions .confirm-review__icon {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 15px;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.core-bill-form-page--rd .core-bill-footer-actions .confirm-review:hover:not(:disabled) {
+  border-color: #0d4d31;
+  background: #0d5a38;
+  color: #ffffff;
+  box-shadow: 0 3px 10px rgba(10, 76, 47, .24);
+}
+
+.core-bill-form-page--rd .core-bill-footer-actions .confirm-review:active:not(:disabled) {
+  border-color: #0a422b;
+  background: #0a422b;
+  color: #ffffff;
+}
+
+.core-bill-form-page--rd .core-bill-footer-actions .confirm-review:focus-visible {
+  outline: 3px solid #87dcb0;
+  outline-offset: 2px;
+  color: #ffffff;
 }
 
 .core-bill-footer-actions button:disabled {
   opacity: .58;
   cursor: wait;
+}
+
+/* Busy state must remain legible instead of dimming the entire button. */
+.core-bill-form-page--rd .core-bill-footer-actions .confirm-review:disabled {
+  opacity: 1;
+  border-color: #b8c6d7;
+  background: #e2e8f0;
+  color: #334155;
+  box-shadow: none;
+  cursor: progress;
+}
+
+.core-bill-form-page--rd .core-bill-footer-actions .confirm-review:disabled .confirm-review__icon {
+  color: #475569;
+}
+
+@media (max-width: 420px) {
+  .core-bill-form-page--rd .core-bill-footer-actions .confirm-review {
+    min-width: 0;
+    max-width: 100%;
+  }
 }
 
 /* R&D V2 visual polish only. No settlement formula or rule authority lives here. */
