@@ -134,6 +134,8 @@ export default function ContractDrivenRdEntry(props) {
     editRecord,
     draftRecord,
     quickFillData,
+    allowManualSave = false,
+    collapseContractReview = false,
     onFormStateChange,
     onAddRecord,
     onUpdateRecord,
@@ -150,6 +152,7 @@ export default function ContractDrivenRdEntry(props) {
   const [contractDraftOverride, setContractDraftOverride] = useState(null)
   const [overrideReasons, setOverrideReasons] = useState({})
   const [snapshotInfo, setSnapshotInfo] = useState(null)
+  const [showContractReview, setShowContractReview] = useState(false)
   const productDiscountRefs = useRef({})
   const recommendationRef = useRef(null)
   const lastRequestSignatureRef = useRef('')
@@ -287,6 +290,14 @@ export default function ContractDrivenRdEntry(props) {
     return out
   }, [formState, recommendation])
 
+  const hasContractDeviations = useMemo(
+    () => Object.values(deviationMap).some((fields) => fields.length > 0),
+    [deviationMap]
+  )
+  useEffect(() => {
+    if (collapseContractReview && hasContractDeviations) setShowContractReview(true)
+  }, [collapseContractReview, hasContractDeviations])
+
   const prepaymentByLine = useMemo(() => {
     if (!recommendationCurrent) return {}
     return Object.fromEntries(
@@ -304,10 +315,10 @@ export default function ContractDrivenRdEntry(props) {
       })
     )
   }, [recommendation, recommendationCurrent])
-  const buildAuditMetadata = useCallback((record) => {
+  const buildAuditMetadata = useCallback((record, activeRecommendation) => {
     const rows = Array.isArray(record?.items) ? record.items : []
     return rows.map((line, index) => {
-      const result = recommendation?.lines?.find((item) => item.line_index === index)
+      const result = activeRecommendation?.lines?.find((item) => item.line_index === index)
       const match = result?.match
       const recommended = result?.recommended
       const identity = lineIdentity(record?.partner, line, index)
@@ -354,30 +365,38 @@ export default function ContractDrivenRdEntry(props) {
         actual_payable: recommended?.actual_payable ?? result?.contract_amount?.expected_amount ?? 0,
         deviations,
         override_reason: String(overrideReasons[index] || '').trim(),
-        recommendation_generated_at: recommendation?.generated_at || null
+        recommendation_generated_at: activeRecommendation?.generated_at || null
       }
     })
-  }, [overrideReasons, recommendation])
+  }, [overrideReasons])
 
-  const validateContractEntry = useCallback((record) => {
-    if (recommendationLoading) return '合同正在重新匹配，请完成本轮匹配后再保存。'
-    if (recommendation && !recommendationMatchesRecord(record, recommendation)) return '合同匹配结果已过期，正在按当前合作方/游戏/账期重新匹配，请稍后保存。'
-    if (recommendation?.header_recommendation?.compatible === false) {
-      return recommendation.header_recommendation.message || '同一账单匹配到不同合同通道费率，请拆分账单'
+
+  const validateContractEntry = useCallback((record, activeRecommendation) => {
+    // A bill can be saved while contract evidence is missing or still refreshing.
+    // An explicit, current contract field conflict still requires an override reason.
+    if (!allowManualSave && recommendationLoading) return '合同正在重新匹配，请完成本轮匹配后再保存。'
+    if (!allowManualSave && recommendation && !activeRecommendation) {
+      return '合同匹配结果已过期，正在按当前合作方/游戏/账期重新匹配，请稍后保存。'
+    }
+    if (activeRecommendation?.header_recommendation?.compatible === false) {
+      return activeRecommendation.header_recommendation.message || '同一账单匹配到不同合同通道费率，请拆分账单'
     }
     const rows = Array.isArray(record?.items) ? record.items : []
     for (let index = 0; index < rows.length; index += 1) {
-      const result = recommendation?.lines?.find((item) => item.line_index === index)
+      const result = activeRecommendation?.lines?.find((item) => item.line_index === index)
       const deviations = deviationsFor(record, index, result)
       if (deviations.length && !String(overrideReasons[index] || '').trim()) {
         return `游戏「${rows[index]?.gameName || `第${index + 1}行`}」已偏离合同字段（${deviations.join('、')}），请填写人工调整原因。`
       }
     }
     return ''
-  }, [overrideReasons, recommendation, recommendationLoading])
+  }, [allowManualSave, overrideReasons, recommendation, recommendationLoading])
 
   const prepareForSave = useCallback(async (record) => {
-    const validation = validateContractEntry(record)
+    const activeRecommendation = recommendation && !recommendationLoading && recommendationMatchesRecord(record, recommendation)
+      ? recommendation
+      : null
+    const validation = validateContractEntry(record, activeRecommendation)
     if (validation) throw new Error(validation)
     const statementNo = String(record?.settlementNumber || '').trim() || nextSettlementNumberForRecord(
       record,
@@ -385,12 +404,13 @@ export default function ContractDrivenRdEntry(props) {
       settlementNumberFormat
     )
     const preparedRecord = { ...record, settlementNumber: statementNo }
-    const metadata = buildAuditMetadata(preparedRecord)
-    if (recommendation) {
+    if (activeRecommendation) {
+      // Do not persist a stale contract match as evidence for newly edited bill data.
+      const metadata = buildAuditMetadata(preparedRecord, activeRecommendation)
       await prepareRdContractEntry({ statement_no: statementNo, metadata })
     }
-    return { preparedRecord, statementNo }
-  }, [buildAuditMetadata, existingRecords, recommendation, settlementNumberFormat, validateContractEntry])
+    return { preparedRecord, statementNo, hasContractRecommendation: Boolean(activeRecommendation) }
+  }, [buildAuditMetadata, existingRecords, recommendation, recommendationLoading, settlementNumberFormat, validateContractEntry])
 
   const handleAddRecord = useCallback(async (record) => {
     let prepared
@@ -402,7 +422,7 @@ export default function ContractDrivenRdEntry(props) {
       throw error
     }
     const result = await onAddRecord?.(prepared.preparedRecord)
-    if (recommendation) {
+    if (prepared.hasContractRecommendation) {
       try {
         await finalizeRdContractEntry(prepared.statementNo)
       } catch (error) {
@@ -411,7 +431,7 @@ export default function ContractDrivenRdEntry(props) {
       }
     }
     return result
-  }, [onAddRecord, onError, prepareForSave, recommendation])
+  }, [onAddRecord, onError, prepareForSave])
 
   const handleUpdateRecord = useCallback(async (id, record) => {
     let prepared
@@ -423,7 +443,7 @@ export default function ContractDrivenRdEntry(props) {
     }
     const result = await onUpdateRecord?.(id, prepared.preparedRecord)
     if (result === false) return false
-    if (recommendation) {
+    if (prepared.hasContractRecommendation) {
       try {
         await finalizeRdContractEntry(prepared.statementNo)
       } catch (error) {
@@ -432,26 +452,48 @@ export default function ContractDrivenRdEntry(props) {
       }
     }
     return result
-  }, [onError, onUpdateRecord, prepareForSave, recommendation])
+  }, [onError, onUpdateRecord, prepareForSave])
 
   const effectiveQuickFill = mode === 'add' && contractQuickFill ? contractQuickFill : quickFillData
   const effectiveDraftRecord = mode === 'edit' && contractDraftOverride ? contractDraftOverride : draftRecord
 
+
+  const contractReviewPanel = (
+    <RdContractReview
+      record={formState}
+      recommendation={recommendation}
+      current={recommendationCurrent}
+      loading={recommendationLoading}
+      error={recommendationError}
+      snapshotInfo={snapshotInfo}
+      onApply={forceApplyRecommendation}
+      mode={mode}
+      deviationMap={deviationMap}
+      overrideReasons={overrideReasons}
+      onOverrideChange={(index, value) => setOverrideReasons((current) => ({ ...current, [index]: value }))}
+    />
+  )
+
   return (
     <div className="rd-contract-entry-v31">
-      <RdContractReview
-        record={formState}
-        recommendation={recommendation}
-        current={recommendationCurrent}
-        loading={recommendationLoading}
-        error={recommendationError}
-        snapshotInfo={snapshotInfo}
-        onApply={forceApplyRecommendation}
-        mode={mode}
-        deviationMap={deviationMap}
-        overrideReasons={overrideReasons}
-        onOverrideChange={(index, value) => setOverrideReasons((current) => ({ ...current, [index]: value }))}
-      />
+      {collapseContractReview ? (
+        <section className="rd-contract-review-disclosure">
+          <button
+            type="button"
+            className="rd-contract-review-disclosure__trigger"
+            aria-expanded={showContractReview}
+            onClick={() => setShowContractReview((open) => !open)}
+          >
+            <span>合同核对（辅助功能）</span>
+            <small>{hasContractDeviations
+              ? '检测到合同字段差异，请展开填写调整原因'
+              : '不影响账单填写和金额计算，需要时可展开查看'}
+            </small>
+            <span aria-hidden="true">{showContractReview ? '收起 ▲' : '展开 ▼'}</span>
+          </button>
+          {showContractReview ? contractReviewPanel : null}
+        </section>
+      ) : contractReviewPanel}
 
       <ReconciliationLineItemsForm
         {...rest}

@@ -207,7 +207,7 @@ function CoreRdBillFormPage({ mode }) {
       return
     }
     const confirmed = window.confirm(
-      `确认核对这张研发账单吗？\n\n结算金额：${money(candidate?.settlementAmount || previewAmount)}\n\n系统会先按研发合同优先规则保存并固化合同快照，再执行确认核对。`
+      `确认核对这张研发账单吗？\n\n结算金额：${money(candidate?.settlementAmount || previewAmount)}\n\n系统将先保存账单，再执行确认核对；若发现明确的合同差异，会提示处理后再确认。`
     )
     if (!confirmed) return
 
@@ -278,12 +278,12 @@ function CoreRdBillFormPage({ mode }) {
           <div className="core-bill-form-title-row">
             <span className="core-bill-form-kind">研发账单</span>
             <h1>{isEdit ? '编辑研发账单' : '新增研发账单'}</h1>
-            <span className={`core-bill-state-tag ${isEdit ? 'is-pending' : ''}`}>{isEdit ? '待核对' : '合同优先录入'}</span>
+            <span className={`core-bill-state-tag ${isEdit ? 'is-pending' : ''}`}>{isEdit ? '待核对' : '账单录入'}</span>
           </div>
           <span className="core-bill-form-tip">
             {isEdit
-              ? '合同优先：先按合作方和账期读取研发合同，再定位游戏合作清单；合同规则确认后再核对当前账单金额。'
-              : '先选择研发合作方和账期，系统读取研发合同及合作游戏，再带入结算规则；后台流水仍由你填写。'}
+              ? '按账单明细直接保存；合同核对为辅助功能，仅在存在明确合同差异时需要处理。'
+              : '选择研发合作方和账期，填写游戏流水与结算字段即可保存；合同辅助功能可选。'}
           </span>
           {isEdit ? <span className="core-bill-review-hint">合同字段发生人工偏离时，保存前必须填写调整原因</span> : null}
           <div className={`core-bill-draft-state ${safety.dirty ? 'is-dirty' : 'is-clean'}`}>
@@ -312,6 +312,8 @@ function CoreRdBillFormPage({ mode }) {
           formId={FORM_ID}
           layout="createPage"
           mode={isEdit ? 'edit' : 'add'}
+          allowManualSave
+          collapseContractReview
           editRecord={stableEditRecord}
           draftRecord={contractSmartRecord || (isEdit || !recon.quickFillData ? safety.draftRecord : null)}
           showSubmitButton={false}
