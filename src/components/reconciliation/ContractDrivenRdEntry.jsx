@@ -2,6 +2,9 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ReconciliationLineItemsForm from './ReconciliationLineItemsForm.jsx'
 import { calculateRdSettlementRow } from '@/domain/settlement/calculateSettlementAmount.js'
 import { nextSettlementNumberForRecord } from '@/utils/settlementNumber.js'
+import { useAuth } from '@/features/auth/AuthContext.jsx'
+import { listContracts, updateContractAccessItem } from '@/lib/api/contract.ts'
+import { buildRdContractAccessShareUpdate } from '@/domain/reconciliation/rdContractShareCorrection.js'
 import {
   finalizeRdContractEntry,
   getLatestRdContractEntry,
@@ -140,10 +143,13 @@ export default function ContractDrivenRdEntry(props) {
     onAddRecord,
     onUpdateRecord,
     onError,
+    onNotice,
     existingRecords = [],
     settlementNumberFormat,
     ...rest
   } = props
+  const { can } = useAuth()
+  const canManageContracts = can('contracts.manage')
   const [formState, setFormState] = useState(draftRecord || editRecord || null)
   const [recommendation, setRecommendation] = useState(null)
   const [recommendationLoading, setRecommendationLoading] = useState(false)
@@ -153,6 +159,8 @@ export default function ContractDrivenRdEntry(props) {
   const [overrideReasons, setOverrideReasons] = useState({})
   const [snapshotInfo, setSnapshotInfo] = useState(null)
   const [showContractReview, setShowContractReview] = useState(false)
+  const [contractRuleRevision, setContractRuleRevision] = useState(0)
+  const [correctingAccessId, setCorrectingAccessId] = useState('')
   const productDiscountRefs = useRef({})
   const recommendationRef = useRef(null)
   const lastRequestSignatureRef = useRef('')
@@ -250,7 +258,7 @@ export default function ContractDrivenRdEntry(props) {
       }
     }, 320)
     return () => window.clearTimeout(timer)
-  }, [formState, mode, editRecord?.id])
+  }, [formState, mode, editRecord?.id, contractRuleRevision])
 
   const forceApplyRecommendation = useCallback(() => {
     if (!formState || !recommendation || !recommendationMatchesRecord(formState, recommendation)) return
@@ -458,6 +466,49 @@ export default function ContractDrivenRdEntry(props) {
   const effectiveDraftRecord = mode === 'edit' && contractDraftOverride ? contractDraftOverride : draftRecord
 
 
+
+  const correctContractShare = useCallback(async ({ line, item }) => {
+    const match = item?.match
+    const accessItemId = String(match?.access_item_id || '')
+    if (!canManageContracts || !accessItemId || !recommendationCurrent || recommendationLoading || correctingAccessId) {
+      onError?.('合同匹配尚未完成，或当前账号没有维护合作清单的权限。')
+      return
+    }
+    setCorrectingAccessId(accessItemId)
+    try {
+      const query = String(match.contract_no || match.contract_name || formState?.partner || '').trim()
+      if (!query) throw new Error('无法确定合同查询条件，请到合同与客户页面核实。')
+      const response = await listContracts({ q: query, limit: 100 })
+      const contract = (response.items || []).find((row) => String(row.id) === String(match.contract_id))
+      if (!contract) throw new Error('合同信息未在最新列表中找到，请前往合同与客户核实，未执行修改。')
+      const accessItem = (contract.access_items || []).find((row) => String(row.id) === accessItemId)
+      const correction = buildRdContractAccessShareUpdate({
+        contract, accessItem, match, line,
+        partnerId: formState?.partnerId,
+        auditDate: new Date().toISOString().slice(0, 10)
+      })
+      const approved = window.confirm(
+        '修正「' + accessItem.product_name + '」的合作清单分成？\\n\\n'
+        + '当前：我方 ' + correction.currentOurShare + '% / 研发 ' + (100 - correction.currentOurShare) + '%\\n'
+        + '修正：我方 ' + correction.ourShare + '% / 研发 ' + correction.developerShare + '%\\n\\n'
+        + '只更新当前匹配的结构化合作清单，并记录修改原因；原始合同文件和账单金额不会被改动。'
+        + '该清单可能被其他月份的未锁定账单共用。请确认确属原始录入错误。'
+      )
+      if (!approved) return
+      await updateContractAccessItem(correction.contractId, correction.accessItemId, correction.payload)
+      // Invalidate any older in-flight match without touching unsaved bill fields.
+      requestSeqRef.current += 1
+      lastRequestSignatureRef.current = ''
+      setRecommendation(null)
+      setContractRuleRevision((revision) => revision + 1)
+      onNotice?.('合作清单已修正为我方 ' + correction.ourShare + '% / 研发 ' + correction.developerShare + '%。正在重新核对，结算基数仍按合同条款独立检查。', 'success')
+    } catch (error) {
+      onError?.(error instanceof Error ? error.message : '合作清单分成修正失败')
+    } finally {
+      setCorrectingAccessId('')
+    }
+  }, [canManageContracts, correctingAccessId, formState?.partner, formState?.partnerId, onError, onNotice, recommendationCurrent, recommendationLoading])
+
   const contractReviewPanel = (
     <RdContractReview
       record={formState}
@@ -467,6 +518,9 @@ export default function ContractDrivenRdEntry(props) {
       error={recommendationError}
       snapshotInfo={snapshotInfo}
       onApply={forceApplyRecommendation}
+      onCorrectShare={correctContractShare}
+      canCorrectShare={canManageContracts}
+      correctingShareId={correctingAccessId}
       mode={mode}
       deviationMap={deviationMap}
       overrideReasons={overrideReasons}

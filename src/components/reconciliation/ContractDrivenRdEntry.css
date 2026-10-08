@@ -218,3 +218,39 @@
     justify-content:flex-start;
   }
 }
+/* Controlled, audited cooperation-list share correction on the R&D review. */
+.rd-review-share-correction {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  margin-top: 8px;
+  border: 1px solid #d3e0ed;
+  border-radius: 8px;
+  background: #f6faff;
+}
+.rd-review-share-correction > span {
+  flex: 1 1 270px;
+  font-size: 12px;
+  color: #294c76;
+}
+.rd-review-share-correction > button {
+  border: 1px solid #7ba0cd;
+  border-radius: 6px;
+  background: #fff;
+  color: #1a5792;
+  padding: 6px 11px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.rd-review-share-correction > button:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+.rd-review-share-correction > small {
+  flex-basis: 100%;
+  font-size: 11px;
+  color: #6b7c90;
+}

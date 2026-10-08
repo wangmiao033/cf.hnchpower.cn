@@ -1,8 +1,9 @@
 import React from 'react'
 import { buildRdContractReview } from '@/domain/reconciliation/rdContractReview.js'
 import RdSettlementExplanation, { rdMoney } from './RdSettlementExplanation.jsx'
+import { proposeRdContractShareCorrection } from '@/domain/reconciliation/rdContractShareCorrection.js'
 
-export default function RdContractReview({ record, recommendation, current, loading, error, snapshotInfo, onApply, mode, deviationMap, overrideReasons, onOverrideChange }) {
+export default function RdContractReview({ record, recommendation, current, loading, error, snapshotInfo, onApply, onCorrectShare, canCorrectShare = false, correctingShareId = '', mode, deviationMap, overrideReasons, onOverrideChange }) {
   const review = buildRdContractReview(record, recommendation, { current, loading, error })
   const status = loading ? '正在匹配合同' : error ? '合同服务暂不可用' : !current && recommendation ? '匹配结果待刷新' : review.pendingCount ? `${review.pendingCount} 项需核对` : review.comparable ? '合同口径明确' : '等待合作方和游戏'
   return (
@@ -16,6 +17,9 @@ export default function RdContractReview({ record, recommendation, current, load
           const { line, item, index } = entry
           const rec = item?.recommended
           const deviations = deviationMap?.[index] || []
+          const shareCorrection = current && !loading && !error
+            ? proposeRdContractShareCorrection(line, item?.match)
+            : null
           return (
             <article className="rd-review-line" key={`${index}-${line.id || line.gameName}`}>
               <div className="rd-review-line-head"><strong title={line.gameName}>{line.gameName}</strong><span>{line.settlementCycle || record?.settlementMonth}</span><b className={entry.comparable ? 'rd-review-pass' : 'rd-review-pending'}>{entry.comparable ? Math.abs(entry.difference) <= 0.01 ? '金额一致' : '存在金额差异' : '待人工核对'}</b></div>
@@ -39,6 +43,15 @@ export default function RdContractReview({ record, recommendation, current, load
                 <h3>当前账单如何计算</h3>
                 <RdSettlementExplanation line={line} channelFeeRate={record?.channelFeeRate} />
               </details>
+              {shareCorrection && canCorrectShare && item?.match?.access_item_id ? (
+                <div className="rd-review-share-correction">
+                  <span>当前合作清单记录我方 {shareCorrection.currentOurShare}% ，按本账单确认应为我方 {shareCorrection.ourShare}% / 研发 {shareCorrection.developerShare}% 。</span>
+                  <button type="button" disabled={Boolean(correctingShareId)} onClick={() => onCorrectShare?.({ line, item, index })}>
+                    {correctingShareId === String(item.match.access_item_id) ? '正在修正…' : '修正合作清单分成'}
+                  </button>
+                  <small>仅修正结构化合作清单，原始合同文件不变；折扣结算口径需另行核实。</small>
+                </div>
+              ) : null}
               {deviations.length ? <label className="rd-review-override">与合同字段不同：{deviations.join('、')}<input value={overrideReasons?.[index] || ''} onChange={(event) => onOverrideChange(index, event.target.value)} placeholder="填写调整原因，随账单保留" /></label> : null}
             </article>
           )
