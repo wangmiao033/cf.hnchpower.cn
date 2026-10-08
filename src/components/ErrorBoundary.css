@@ -96,3 +96,24 @@
 .reload-btn:hover {
   filter: brightness(1.05);
 }
+
+/* A stale dynamic import is recovered automatically; avoid flashing an error screen. */
+.error-boundary--recovering .error-content {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+}
+.error-boundary--recovering .error-content h2 {
+  margin: 0;
+  font-size: 18px;
+}
+.error-boundary--recovering .error-content p { margin: 0; }
+.error-boundary__spinner {
+  width: 25px;
+  height: 25px;
+  border: 3px solid #dce7f5;
+  border-top-color: #2563eb;
+  border-radius: 50%;
+  animation: error-boundary-spin .8s linear infinite;
+}
+@keyframes error-boundary-spin { to { transform: rotate(360deg); } }
