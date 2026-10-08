@@ -399,8 +399,16 @@ function CoreRdBillFormPage({ mode }) {
             {isEdit ? '保存修改' : '保存账单'}
           </button>
           {isEdit ? (
-            <button type="button" className="confirm-review" disabled={reviewing} onClick={confirmReview}>
-              {reviewing ? '正在确认…' : '保存并确认核对'}
+            <button
+              type="button"
+              className="confirm-review"
+              disabled={reviewing}
+              aria-busy={reviewing}
+              title={reviewing ? '正在保存并确认，请稍候' : '保存研发账单并确认核对；确认后账单将锁定'}
+              onClick={confirmReview}
+            >
+              <span className="confirm-review__icon" aria-hidden="true">{reviewing ? '…' : '✓'}</span>
+              <span>{reviewing ? '正在确认…' : '保存并确认核对'}</span>
             </button>
           ) : null}
         </div>
