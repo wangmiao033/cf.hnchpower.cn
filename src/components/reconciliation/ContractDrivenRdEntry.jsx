@@ -488,9 +488,9 @@ export default function ContractDrivenRdEntry(props) {
         auditDate: new Date().toISOString().slice(0, 10)
       })
       const approved = window.confirm(
-        '修正「' + accessItem.product_name + '」的合作清单分成？\\n\\n'
-        + '当前：我方 ' + correction.currentOurShare + '% / 研发 ' + (100 - correction.currentOurShare) + '%\\n'
-        + '修正：我方 ' + correction.ourShare + '% / 研发 ' + correction.developerShare + '%\\n\\n'
+        '修正「' + accessItem.product_name + '」的合作清单分成？\n\n'
+        + '当前：我方 ' + correction.currentOurShare + '% / 研发 ' + (100 - correction.currentOurShare) + '%\n'
+        + '修正：我方 ' + correction.ourShare + '% / 研发 ' + correction.developerShare + '%\n\n'
         + '只更新当前匹配的结构化合作清单，并记录修改原因；原始合同文件和账单金额不会被改动。'
         + '该清单可能被其他月份的未锁定账单共用。请确认确属原始录入错误。'
       )
