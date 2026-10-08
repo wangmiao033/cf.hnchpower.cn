@@ -64,7 +64,7 @@ patchFile(
     {
       name: 'ignore stale error status',
       before: "    } catch (error) {\n      setFlowStatus(lineId, {\n",
-      after: "    } catch (error) {\n      if (!isCurrentRequest()) return\n      setFlowStatus(lineId, {\n"
+      after: "    } catch (error) {\n      if (!isCurrentRequest() || !autoFlowReadRef.current || autoFlowRevisionRef.current !== requestRevision) return\n      setFlowStatus(lineId, {\n"
     },
     {
       name: 'invalidate lookup while typing',
