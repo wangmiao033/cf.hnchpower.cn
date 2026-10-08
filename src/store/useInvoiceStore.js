@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { STORAGE_KEYS, storageGet, storageSet } from '@/store/useAppStorage.js'
+import { readInvoiceWithRetry } from '@/domain/invoice/invoiceLoadRetry.js'
 import { parseInvoiceFromFilename } from '@/domain/invoice/invoiceParsers.js'
 import { parseTaxInvoiceWorkbook } from '@/domain/invoice/taxInvoiceExcelImport.js'
 import { filterInvoiceRecords } from '@/domain/invoice/invoiceFilters.js'
@@ -174,6 +175,8 @@ function upsertLocalInvoiceRecords(current, incoming) {
 export function useInvoiceStore({ showToast, enabled = true }) {
   const [invoiceForm, setInvoiceForm] = useState(defaultInvoiceForm)
   const [invoiceApiEnabled, setInvoiceApiEnabled] = useState(false)
+  const [invoiceLoadStatus, setInvoiceLoadStatus] = useState('idle')
+  const invoiceLoadVersionRef = useRef(0)
   const [invoiceRecords, setInvoiceRecords] = useState([])
   const [invoiceFilter, setInvoiceFilter] = useState({
     direction: 'all',
@@ -201,33 +204,48 @@ export function useInvoiceStore({ showToast, enabled = true }) {
     setInvoiceRecords(items.map(apiInvoiceRowToFrontend))
   }, [])
 
-  useEffect(() => {
-    if (!enabled) return undefined
-    let cancelled = false
-    ;(async () => {
-      try {
-        await refetchInvoiceFromApi()
-        if (cancelled) return
-        setInvoiceApiEnabled(true)
-      } catch (err) {
-        console.warn('Invoice API unavailable, falling back to local cache.', err)
-        if (cancelled) return
-        const savedInvoices = storageGet(STORAGE_KEYS.INVOICE_RECORDS)
-        if (savedInvoices?.length) {
-          setInvoiceRecords(normalizeLocalInvoiceRecords(savedInvoices))
-        }
-        setInvoiceApiEnabled(false)
+  // First entrance: wait for the real server response before showing invoice totals.
+  // Retry only idempotent reads on short-lived network/server errors.
+  const retryInvoiceLoad = useCallback(async () => {
+    const version = ++invoiceLoadVersionRef.current
+    setInvoiceLoadStatus('loading')
+    try {
+      const { items } = await readInvoiceWithRetry(() => listInvoiceRecords({ limit: 500, offset: 0 }))
+      if (version !== invoiceLoadVersionRef.current) return false
+      setInvoiceRecords(items.map(apiInvoiceRowToFrontend))
+      setInvoiceApiEnabled(true)
+      setInvoiceLoadStatus('ready')
+      return true
+    } catch (err) {
+      if (version !== invoiceLoadVersionRef.current) return false
+      console.warn('Invoice API unavailable; displaying local cache only if available.', err)
+      const savedInvoices = storageGet(STORAGE_KEYS.INVOICE_RECORDS)
+      if (Array.isArray(savedInvoices) && savedInvoices.length > 0) {
+        setInvoiceRecords(normalizeLocalInvoiceRecords(savedInvoices))
       }
-    })()
-    return () => {
-      cancelled = true
+      setInvoiceApiEnabled(false)
+      setInvoiceLoadStatus('offline')
+      return false
     }
-  }, [enabled, refetchInvoiceFromApi])
+  }, [])
 
   useEffect(() => {
-    if (!enabled) return
+    if (!enabled) {
+      invoiceLoadVersionRef.current += 1
+      setInvoiceLoadStatus('idle')
+      return undefined
+    }
+    void retryInvoiceLoad()
+    return () => {
+      invoiceLoadVersionRef.current += 1
+    }
+  }, [enabled, retryInvoiceLoad])
+
+  // Initial [] must never overwrite saved invoice data before the first read completes.
+  useEffect(() => {
+    if (!enabled || (invoiceLoadStatus !== 'ready' && invoiceLoadStatus !== 'offline')) return
     storageSet(STORAGE_KEYS.INVOICE_RECORDS, invoiceRecords)
-  }, [enabled, invoiceRecords])
+  }, [enabled, invoiceLoadStatus, invoiceRecords])
 
   const filteredInvoices = filterInvoiceRecords(invoiceRecords, invoiceFilter)
 
@@ -560,6 +578,8 @@ export function useInvoiceStore({ showToast, enabled = true }) {
     setInvoiceFilter,
     filteredInvoices,
     invoiceApiEnabled,
+    invoiceLoadStatus,
+    retryInvoiceLoad,
     showVerificationDialog,
     setShowVerificationDialog,
     selectedInvoiceForVerification,
