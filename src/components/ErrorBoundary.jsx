@@ -8,11 +8,12 @@ const CHUNK_RECOVERY_KEY = 'cf-chunk-recovery'
 class ErrorBoundary extends React.Component {
   constructor(props) {
     super(props)
-    this.state = { hasError: false, error: null }
+    this.state = { hasError: false, error: null, recoveringChunk: false }
   }
 
   static getDerivedStateFromError(error) {
-    return { hasError: true, error }
+    const message = `${error?.name || ''} ${error?.message || ''}`
+    return { hasError: true, error, recoveringChunk: CHUNK_ERROR_PATTERN.test(message) }
   }
 
   componentDidCatch(error, errorInfo) {
@@ -21,13 +22,22 @@ class ErrorBoundary extends React.Component {
     if (!CHUNK_ERROR_PATTERN.test(message)) return
 
     const pageKey = `${window.location.pathname}${window.location.search}`
-    if (window.sessionStorage.getItem(CHUNK_RECOVERY_KEY) === pageKey) return
-    window.sessionStorage.setItem(CHUNK_RECOVERY_KEY, pageKey)
+    try {
+      if (window.sessionStorage.getItem(CHUNK_RECOVERY_KEY) === pageKey) {
+        this.setState({ recoveringChunk: false })
+        return
+      }
+      window.sessionStorage.setItem(CHUNK_RECOVERY_KEY, pageKey)
+    } catch {
+      // Storage restrictions must not cause an infinite auto-reload loop.
+      this.setState({ recoveringChunk: false })
+      return
+    }
     window.location.reload()
   }
 
   handleReset = () => {
-    this.setState({ hasError: false, error: null })
+    this.setState({ hasError: false, error: null, recoveringChunk: false })
   }
 
   handleReload = () => {
@@ -36,6 +46,18 @@ class ErrorBoundary extends React.Component {
 
   render() {
     if (this.state.hasError) {
+      if (this.state.recoveringChunk) {
+        return (
+          <div className="error-boundary error-boundary--recovering" role="status">
+            <div className="error-content">
+              <span className="error-boundary__spinner" aria-hidden="true" />
+              <h2>正在恢复页面资源…</h2>
+              <p>浏览器缓存与新版页面不一致，正在自动恢复。</p>
+              <button type="button" className="reload-btn" onClick={this.handleReload}>手动刷新</button>
+            </div>
+          </div>
+        )
+      }
       return (
         <div className="error-boundary">
           <div className="error-content">

@@ -26,6 +26,7 @@ import { getBillInvoiceSummary } from '@/lib/api/billInvoiceAllocations.ts'
 import { prefetchEditRecord } from '@/lib/api/editRecordCache.js'
 import Bill360WorkspaceBar from './components/reconciliation/Bill360WorkspaceBar.jsx'
 import CoreDashboardPage from './pages/CoreDashboardPage.jsx'
+import InvoicePage from './pages/InvoicePage.jsx'
 import LoginPage from './pages/LoginPage.jsx'
 import '@/styles/admin-polish.css'
 import '@/styles/ui-v4.css'
@@ -48,7 +49,6 @@ const PAGE_LOADERS = Object.freeze({
   channelReconciliationCreate: () => import('./pages/ChannelReconciliationCreatePage.jsx'),
   channelReconciliationEdit: () => import('./pages/ChannelReconciliationEditPage.jsx'),
   contracts: () => import('./pages/ContractManagementPage.jsx'),
-  invoices: () => import('./pages/InvoicePage.jsx'),
   invoiceCreate: () => import('./pages/InvoiceCreatePage.jsx'),
   invoiceEdit: () => import('./pages/InvoiceEditPage.jsx'),
   quickSdkLibrary: () => import('./pages/QuickSdkLibraryPage.jsx'),
@@ -75,7 +75,6 @@ const CoreChannelReconciliationPage = lazy(PAGE_LOADERS.channelReconciliation)
 const ChannelReconciliationCreatePage = lazy(PAGE_LOADERS.channelReconciliationCreate)
 const ChannelReconciliationEditPage = lazy(PAGE_LOADERS.channelReconciliationEdit)
 const ContractManagementPage = lazy(PAGE_LOADERS.contracts)
-const InvoicePage = lazy(PAGE_LOADERS.invoices)
 const InvoiceCreatePage = lazy(PAGE_LOADERS.invoiceCreate)
 const InvoiceEditPage = lazy(PAGE_LOADERS.invoiceEdit)
 const QuickSdkLibraryPage = lazy(PAGE_LOADERS.quickSdkLibrary)
