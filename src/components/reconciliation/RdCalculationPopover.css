@@ -1,0 +1,160 @@
+
+/* R&D editor: a single icon in the payable cell replaces a full-width detail row. */
+.rd-calculation-amount {
+  position: relative;
+  min-width: 0;
+}
+.rd-calculation-amount > .admin-input {
+  width: 100%;
+  padding-right: 29px !important;
+}
+.rd-calculation-trigger {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 24px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #6480a3;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+.rd-calculation-trigger:hover,
+.rd-calculation-trigger:focus-visible {
+  background: #e5effa;
+  color: #1e5b9d;
+  outline: none;
+}
+.rd-calculation-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10010;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(15, 23, 42, .32);
+}
+.rd-calculation-dialog {
+  width: min(560px, 100%);
+  max-height: min(85vh, 730px);
+  overflow: auto;
+  border: 1px solid #d7e1ec;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 25px 85px rgba(15, 23, 42, .21);
+  padding: 18px 20px;
+  color: #21334c;
+}
+.rd-calculation-dialog__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e8edf4;
+}
+.rd-calculation-dialog__head h3 {
+  margin: 0 0 4px;
+  font-size: 16px;
+  font-weight: 750;
+  color: #1c3048;
+}
+.rd-calculation-dialog__head small {
+  color: #718199;
+  font-size: 11px;
+}
+.rd-calculation-dialog__close {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border: 1px solid #e0e6ef;
+  border-radius: 8px;
+  background: #fff;
+  color: #687a91;
+  font-size: 21px;
+  line-height: 1;
+  cursor: pointer;
+}
+.rd-calculation-dialog__close:hover { background: #f1f5f9; }
+.rd-calculation-dialog .rd-calculation-steps {
+  display: grid;
+  gap: 10px;
+}
+.rd-calculation-dialog .rd-calculation-steps > div {
+  background: #f8fafc;
+  border: 1px solid #e8eef5;
+  border-radius: 9px;
+  padding: 11px 13px;
+}
+.rd-calculation-dialog .rd-calculation-steps > div > span {
+  display: block;
+  margin-bottom: 5px;
+  font-size: 12px;
+  font-weight: 750;
+  color: #426185;
+}
+.rd-calculation-dialog .rd-calculation-steps p {
+  margin: 4px 0;
+  font-size: 12px;
+  line-height: 1.65;
+  word-break: break-word;
+}
+.rd-calculation-dialog .rd-calculation-steps > small {
+  color: #8190a4;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+/* Compact manual-only mode: do not reserve room for the old "读取中" badge. */
+.rd-recon-billing-form .rd-game-source-field--manual .admin-input {
+  padding-right: 8px !important;
+}
+.rd-recon-billing-form .rd-game-detail-title {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px 16px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.rd-recon-billing-form .rd-auto-flow-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #66758b;
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+}
+.rd-recon-billing-form .rd-auto-flow-toggle input {
+  width: 13px;
+  height: 13px;
+  margin: 0;
+  accent-color: #2563eb;
+  cursor: pointer;
+}
+.rd-recon-billing-form .rd-auto-flow-toggle em {
+  font-style: normal;
+  font-size: 10px;
+  border-radius: 5px;
+  background: #f1f5f9;
+  padding: 2px 5px;
+  color: #64748b;
+}
+.rd-recon-billing-form .rd-auto-flow-toggle input:checked ~ em {
+  background: #e8f5ee;
+  color: #15803d;
+}
+@media (max-width: 580px) {
+  .rd-calculation-overlay { padding: 10px; }
+  .rd-calculation-dialog { padding: 13px; max-height: 90vh; }
+}
