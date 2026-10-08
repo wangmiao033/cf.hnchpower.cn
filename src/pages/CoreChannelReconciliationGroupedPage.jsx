@@ -2,6 +2,10 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useAppState } from '@/app/AppStateContext.jsx'
 import PageContainer from '@/components/layout/PageContainer.jsx'
 import BillQuickFilters from '@/components/reconciliation/BillQuickFilters.jsx'
+import {
+  channelBillMonthOptions,
+  sharedBillMonthOptions
+} from '@/domain/reconciliation/sharedBillMonthOptions.js'
 import ChannelReceiptDrawer from '@/components/channel/ChannelReceiptDrawer.jsx'
 import { VIEWS } from '@/app/routes.js'
 import {
@@ -230,8 +234,14 @@ function CoreChannelReconciliationGroupedPage() {
     void refreshArchiveState(true)
   }, [recon.channelRecords])
 
+  // Let the same accounting months be selectable in both the channel ledger
+  // and the R&D progress page, without mixing their underlying bill amounts.
   const monthOptions = useMemo(
-    () => [...new Set((recon.channelRecords || []).flatMap(channelMonths))].sort((a, b) => b.localeCompare(a)),
+    () => sharedBillMonthOptions(recon.channelRecords, recon.records),
+    [recon.channelRecords, recon.records]
+  )
+  const channelRecordedMonths = useMemo(
+    () => new Set(channelBillMonthOptions(recon.channelRecords)),
     [recon.channelRecords]
   )
 
@@ -635,7 +645,11 @@ function CoreChannelReconciliationGroupedPage() {
             <span>月份</span>
             <select value={month} aria-label="筛选明细结算月份" onChange={(event) => { setMonth(event.target.value); setExpandedKeys([]) }}>
               <option value="">全部月份</option>
-              {monthOptions.map((value) => <option key={value} value={value}>{monthLabel(value)}</option>)}
+              {monthOptions.map((value) => (
+                <option key={value} value={value}>
+                  {monthLabel(value)}{channelRecordedMonths.has(value) ? '' : '（暂无渠道账单）'}
+                </option>
+              ))}
             </select>
           </label>
           <div className="core-recon-filter-control core-recon-partner-filter">
@@ -747,7 +761,15 @@ function CoreChannelReconciliationGroupedPage() {
 
           {!groups.length ? (
             <div className="core-recon-empty channel-group-empty">
-              {quickFilter === 'trash' ? '垃圾桶为空' : quickFilter === 'archived' ? '暂无归档账单' : '暂无渠道账单'}
+              {month && !channelRecordedMonths.has(month)
+                ? `${monthLabel(month)}暂无渠道账单（该月份的研发账单可在对账进度查看）`
+                : quickFilter === 'trash'
+                  ? '垃圾桶为空'
+                  : quickFilter === 'archived'
+                    ? '暂无归档账单'
+                    : month
+                      ? `${monthLabel(month)}当前筛选条件下暂无渠道账单`
+                      : '暂无渠道账单'}
             </div>
           ) : groups.map((group) => {
             const expanded = expandedChannels.has(group.key)
