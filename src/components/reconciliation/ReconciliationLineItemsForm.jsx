@@ -16,7 +16,11 @@ import {
 } from '@/domain/reconciliation/rdDateInputs.js'
 import { getQuickSdkGameFlow, listQuickSdkRdLines } from '@/lib/api/quicksdk.ts'
 import '@/components/ChannelBilling.css'
-import RdSettlementExplanation from './RdSettlementExplanation.jsx'
+import RdCalculationPopover from './RdCalculationPopover.jsx'
+import {
+  readRdAutoFlowPreference,
+  writeRdAutoFlowPreference
+} from '@/domain/reconciliation/rdAutoFlowPreference.js'
 
 export function createEmptyRdLine(sortOrder = 0, settlementCycle = '') {
   return {
@@ -141,7 +145,34 @@ function ReconciliationLineItemsForm({
   const [lines, setLines] = useState([createEmptyRdLine(0, initialCycle)])
   const [gameSuggestions, setGameSuggestions] = useState({})
   const [flowStatuses, setFlowStatuses] = useState({})
+  // Optional QuickSDK flow lookup is OFF unless explicitly enabled by this user.
+  const [autoFlowReadEnabled, setAutoFlowReadEnabled] = useState(() => {
+    try {
+      return typeof window !== 'undefined' && readRdAutoFlowPreference(window.localStorage)
+    } catch {
+      return false
+    }
+  })
+  const autoFlowReadRef = useRef(autoFlowReadEnabled)
+  const autoFlowRevisionRef = useRef(0)
   const gameSearchTimersRef = useRef({})
+
+  const changeAutoFlowRead = (enabled) => {
+    const next = Boolean(enabled)
+    autoFlowReadRef.current = next
+    autoFlowRevisionRef.current += 1
+    setAutoFlowReadEnabled(next)
+    try {
+      if (typeof window !== 'undefined') writeRdAutoFlowPreference(window.localStorage, next)
+    } catch {
+      // Privacy modes may prohibit localStorage; session mode still works.
+    }
+    if (!next) {
+      Object.values(gameSearchTimersRef.current).forEach((timer) => clearTimeout(timer))
+      setGameSuggestions({})
+      setFlowStatuses({})
+    }
+  }
 
   const periodSummary = useMemo(
     () => summarizeRdFormPeriods(lines, header.settlementMonth),
@@ -442,20 +473,29 @@ function ReconciliationLineItemsForm({
     const query = String(rawName || '').trim()
     const month = settlementCycleToMonthValue(line.settlementCycle || header.settlementMonth)
     clearTimeout(gameSearchTimersRef.current[lineId])
+    if (!autoFlowReadRef.current) {
+      setGameSuggestions((current) => (current[lineId]?.length ? { ...current, [lineId]: [] } : current))
+      return
+    }
     if (!query || !month) {
       setGameSuggestions((prev) => ({ ...prev, [lineId]: [] }))
       return
     }
+    const requestRevision = autoFlowRevisionRef.current
     gameSearchTimersRef.current[lineId] = setTimeout(async () => {
+      if (!autoFlowReadRef.current || autoFlowRevisionRef.current !== requestRevision) return
       try {
         const response = await listQuickSdkRdLines({
           settlement_month: month,
           q: query,
           limit: 20
         })
+        if (!autoFlowReadRef.current || autoFlowRevisionRef.current !== requestRevision) return
         setGameSuggestions((prev) => ({ ...prev, [lineId]: response.items || [] }))
       } catch {
-        setGameSuggestions((prev) => ({ ...prev, [lineId]: [] }))
+        if (autoFlowReadRef.current && autoFlowRevisionRef.current === requestRevision) {
+          setGameSuggestions((prev) => ({ ...prev, [lineId]: [] }))
+        }
       }
     }, 220)
   }
@@ -468,6 +508,8 @@ function ReconciliationLineItemsForm({
     const month = settlementCycleToMonthValue(
       cycleOverride || line.settlementCycle || header.settlementMonth
     )
+    if (!autoFlowReadRef.current) return
+    const requestRevision = autoFlowRevisionRef.current
     if (!gameName) {
       setFlowStatus(lineId, null)
       return
@@ -484,6 +526,7 @@ function ReconciliationLineItemsForm({
         game_name: gameName
       })
       const totalFlow = Number(result?.total_flow || 0)
+      if (!autoFlowReadRef.current || autoFlowRevisionRef.current !== requestRevision) return
       if (!Number.isFinite(totalFlow) || totalFlow <= 0) {
         setFlowStatus(lineId, {
           type: 'warning',
@@ -663,7 +706,19 @@ function ReconciliationLineItemsForm({
         </div>
 
         <div className="channel-form-section">
-          <div className="form-section-title">2）游戏明细（每行独立选择结算月份）</div>
+          <div className="form-section-title rd-game-detail-title">
+            <span>2）游戏明细（每行独立选择结算月份）</span>
+            <label className="rd-auto-flow-toggle" title="默认关闭。开启后可按游戏和结算月份自动读取数据库流水。">
+              <input
+                type="checkbox"
+                checked={autoFlowReadEnabled}
+                onChange={(event) => changeAutoFlowRead(event.target.checked)}
+                aria-label="自动读取后台流水"
+              />
+              <span>自动读取后台流水</span>
+              <em>{autoFlowReadEnabled ? '已开启' : '已关闭'}</em>
+            </label>
+          </div>
           <LineItemsTable
             onAddRow={addRow}
             showAddButton={false}
@@ -697,7 +752,7 @@ function ReconciliationLineItemsForm({
                   Math.max(0, Number(prepayment.deduction || 0))
                 )
                 const actualPayable = Math.max(0, settlement - prepaymentDeduction)
-                const flowStatus = flowStatuses[line.id]
+                const flowStatus = autoFlowReadEnabled ? flowStatuses[line.id] : null
                 const gameListId = `${formId || 'rd'}-game-list-${index}`
                 return (
                   <div key={line.id} className="rd-focused-item">
@@ -713,7 +768,7 @@ function ReconciliationLineItemsForm({
                         onChange={(event) => {
                           const normalized = monthInputValueToSettlementCycle(event.target.value)
                           updateLine(index, 'settlementCycle', normalized)
-                          if (String(line.gameName || '').trim()) {
+                          if (autoFlowReadRef.current && String(line.gameName || '').trim()) {
                             syncGameFlow(index, line.gameName, normalized)
                           }
                         }}
@@ -721,7 +776,7 @@ function ReconciliationLineItemsForm({
                       />
                     </div>
                     <div className="channel-cell">
-                      <div className={`rd-game-source-field${flowStatus ? ` is-${flowStatus.type}` : ''}`}>
+                      <div className={`rd-game-source-field${autoFlowReadEnabled ? '' : ' rd-game-source-field--manual'}${flowStatus ? ` is-${flowStatus.type}` : ''}`}>
                         <input
                           type="search"
                           list={gameListId}
@@ -736,7 +791,7 @@ function ReconciliationLineItemsForm({
                           }}
                           onBlur={(e) => {
                             onGameNameBlur(index, e.target.value)
-                            syncGameFlow(index, e.target.value)
+                            if (autoFlowReadRef.current) syncGameFlow(index, e.target.value)
                           }}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter') {
@@ -744,8 +799,10 @@ function ReconciliationLineItemsForm({
                               e.currentTarget.blur()
                             }
                           }}
-                          placeholder="搜索数据库游戏"
-                          title={flowStatus?.detail || '输入游戏名称，自动读取该行结算周期的数据库流水'}
+                          placeholder={autoFlowReadEnabled ? '搜索数据库游戏' : '填写游戏名称'}
+                          title={autoFlowReadEnabled
+                            ? (flowStatus?.detail || '输入游戏名称，自动读取该行结算周期的数据库流水')
+                            : '已关闭自动读取，游戏名称及后台流水可手动填写'}
                         />
                         {flowStatus ? (
                           <span className="rd-game-source-field__status" title={flowStatus.detail}>
@@ -773,11 +830,11 @@ function ReconciliationLineItemsForm({
                         value={line.revenue}
                         onChange={(e) => {
                           updateLine(index, 'revenue', e.target.value)
-                          setFlowStatus(line.id, {
+                          setFlowStatus(line.id, autoFlowReadRef.current ? {
                             type: 'manual',
                             label: '已调整',
                             detail: '该流水已由人工调整'
-                          })
+                          } : null)
                         }}
                         title={flowStatus?.detail || '后台流水'}
                       />
@@ -791,7 +848,14 @@ function ReconciliationLineItemsForm({
                     <div className="channel-cell channel-cell--num"><input type="number" step="0.01" aria-label={`第 ${index + 1} 行通道费率`} className="admin-input channel-input-num" value={header.channelFeeRate} onChange={(e) => setHeader((h) => ({ ...h, channelFeeRate: e.target.value }))} /></div>
                     <div className="channel-cell channel-cell--num"><input type="number" step="0.01" aria-label={`第 ${index + 1} 行税率`} className="admin-input channel-input-num" value={line.taxRate} onChange={(e) => updateLine(index, 'taxRate', e.target.value)} /></div>
                     <div className="channel-cell channel-cell--num"><input type="number" step="0.01" aria-label={`第 ${index + 1} 行分成比例`} className="admin-input channel-input-num" value={line.shareRatio} onChange={(e) => updateLine(index, 'shareRatio', e.target.value)} /></div>
-                    <div className="channel-cell channel-cell--num"><input type="text" readOnly disabled aria-label={`第 ${index + 1} 行研发应结`} className="admin-input readonly-input channel-input-num" value={settlement.toFixed(2)} /></div>
+                    <div className="channel-cell channel-cell--num">
+                      <RdCalculationPopover
+                        line={line}
+                        channelFeeRate={header.channelFeeRate}
+                        amount={settlement}
+                        rowIndex={index}
+                      />
+                    </div>
                     {showPrepaymentColumns ? <div className="channel-cell channel-cell--num"><input type="text" readOnly disabled aria-label={`第 ${index + 1} 行预付款抵扣`} className="admin-input readonly-input channel-input-num" value={prepayment.enabled ? `-${prepaymentDeduction.toFixed(2)}` : '—'} /></div> : null}
                     {showPrepaymentColumns ? <div className="channel-cell channel-cell--num"><input type="text" readOnly disabled aria-label={`第 ${index + 1} 行实际应付`} className="admin-input readonly-input channel-input-num" value={actualPayable.toFixed(2)} /></div> : null}
                     <div className="channel-cell channel-cell--actions">
@@ -802,7 +866,6 @@ function ReconciliationLineItemsForm({
                   <div className="rd-focused-extra-bar">
                     <span>折后流水 ¥{net.toFixed(2)} · 参与分成 ¥{gross.toFixed(2)}</span>
                   </div>
-                  <details className="rd-focused-formula"><summary>查看本行计算过程</summary><RdSettlementExplanation line={line} channelFeeRate={header.channelFeeRate} /></details>
                   </div>
                 )
               })}
