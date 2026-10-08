@@ -327,6 +327,7 @@ function CoreRdBillFormPage({ mode }) {
           settlementCycles={(recon.records || []).map((row) => row.settlementMonth)}
           existingRecords={recon.records || []}
           settlementNumberFormat={settings.settlementNumberFormat}
+          onNotice={handleContractNotice}
           onError={(msg) => {
             submitIntentRef.current = 'back'
             setReviewing(false)
