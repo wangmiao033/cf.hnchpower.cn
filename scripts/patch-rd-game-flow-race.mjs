@@ -128,14 +128,14 @@ patchFile(
     },
     {
       name: 'rerun recommendation when contract source changes',
-      before: "    return () => window.clearTimeout(timer)\n  }, [formState, mode, editRecord?.id])\n",
-      after: "    return () => window.clearTimeout(timer)\n  }, [formState, mode, editRecord?.id, contractSourceRevision])\n"
+      before: "    return () => window.clearTimeout(timer)\n  }, [formState, mode, editRecord?.id, contractRuleRevision])\n",
+      after: "    return () => window.clearTimeout(timer)\n  }, [formState, mode, editRecord?.id, contractRuleRevision, contractSourceRevision])\n"
     }
   ],
   [
     'contractSourceRevision = 0',
     'contractSourceRevision,',
-    '[formState, mode, editRecord?.id, contractSourceRevision]'
+    '[formState, mode, editRecord?.id, contractRuleRevision, contractSourceRevision]'
   ],
   'RD contract-refresh hotfix'
 )
