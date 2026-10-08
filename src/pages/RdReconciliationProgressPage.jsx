@@ -10,6 +10,10 @@ import {
   buildRdMonthlyProgressRecords,
   buildRdSettlementPeriodOptions
 } from '@/domain/reconciliation/rdSettlementPeriods.js'
+import {
+  channelBillMonthOptions,
+  sharedBillMonthOptions
+} from '@/domain/reconciliation/sharedBillMonthOptions.js'
 import { totalReconciliationSettlementAmount } from '@/domain/settlement/calculateSettlementAmount.js'
 import { useAuth } from '@/features/auth/AuthContext.jsx'
 import { getBillInvoiceSummary } from '@/lib/api/billInvoiceAllocations.ts'
@@ -67,20 +71,24 @@ export default function RdReconciliationProgressPage() {
   const gameRecords = recon.records || []
   const channelRecords = recon.channelRecords || []
 
-  const monthOptions = useMemo(() => {
-    if (mode === 'game') return buildRdSettlementPeriodOptions(gameRecords)
-    return Array.from(
-      new Set(
-        channelRecords
-          .map((record) => monthKey(record.settlementMonth || record.billMonth || record.month))
-          .filter(Boolean)
-      )
-    ).sort((a, b) => b.localeCompare(a))
-  }, [channelRecords, gameRecords, mode])
-
+  // Both progress modes offer the same periods; the two bill ledgers remain
+  // separate and the default month is the latest recorded in that mode.
+  const rdMonthOptions = useMemo(
+    () => buildRdSettlementPeriodOptions(gameRecords),
+    [gameRecords]
+  )
+  const channelMonthOptions = useMemo(
+    () => channelBillMonthOptions(channelRecords),
+    [channelRecords]
+  )
+  const monthOptions = useMemo(
+    () => sharedBillMonthOptions(channelRecords, gameRecords),
+    [channelRecords, gameRecords]
+  )
+  const modeMonthOptions = mode === 'game' ? rdMonthOptions : channelMonthOptions
   const activeMonth = selectedMonth && monthOptions.includes(selectedMonth)
     ? selectedMonth
-    : monthOptions[0] || ''
+    : modeMonthOptions[0] || monthOptions[0] || ''
 
   const gameSnapshot = useMemo(() => {
     const keyword = clean(query).toLowerCase()
@@ -203,8 +211,10 @@ export default function RdReconciliationProgressPage() {
   }
 
   function changeMode(nextMode) {
+    if (nextMode === mode) return
+    // Keep the user's selected accounting month when comparing game vs channel.
+    setSelectedMonth(activeMonth || null)
     setMode(nextMode)
-    setSelectedMonth(null)
     setQuery('')
   }
 
@@ -231,7 +241,14 @@ export default function RdReconciliationProgressPage() {
             <span>统计月份</span>
             <select value={activeMonth} onChange={(event) => setSelectedMonth(event.target.value)}>
               {monthOptions.length === 0 && <option value="">暂无账期</option>}
-              {monthOptions.map((month) => <option key={month} value={month}>{monthLabel(month)}</option>)}
+              {monthOptions.map((month) => (
+                <option key={month} value={month}>
+                  {monthLabel(month)}
+                  {modeMonthOptions.includes(month)
+                    ? ''
+                    : mode === 'game' ? '（暂无研发账单）' : '（暂无渠道账单）'}
+                </option>
+              ))}
             </select>
           </label>
           <label className="core-recon-filter-search">
