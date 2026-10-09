@@ -2,8 +2,11 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useAppState } from '@/app/AppStateContext.jsx'
 import PageContainer from '@/components/layout/PageContainer.jsx'
 import BillQuickFilters from '@/components/reconciliation/BillQuickFilters.jsx'
+import ChannelMonthCoveragePanel from '@/components/channel/ChannelMonthCoveragePanel.jsx'
+import { channelAuditMonths } from '@/domain/channel/channelMonthCoverage.js'
 import {
   channelBillMonthOptions,
+  channelBillMonths,
   sharedBillMonthOptions
 } from '@/domain/reconciliation/sharedBillMonthOptions.js'
 import ChannelReceiptDrawer from '@/components/channel/ChannelReceiptDrawer.jsx'
@@ -63,11 +66,7 @@ function monthLabel(value) {
 }
 
 function channelMonths(record) {
-  const fromItems = Array.isArray(record?.items)
-    ? record.items.map((item) => monthKey(item?.settlementCycle)).filter(Boolean)
-    : []
-  const values = fromItems.length ? fromItems : [monthKey(record?.settlementMonth)].filter(Boolean)
-  return [...new Set(values)].sort()
+  return channelBillMonths(record)
 }
 
 function channelPeriodLabel(record) {
@@ -202,6 +201,7 @@ function CoreChannelReconciliationGroupedPage() {
   const [status, setStatus] = useState('')
   const [query, setQuery] = useState('')
   const [quickFilter, setQuickFilter] = useState('all')
+  const [inspectedGap, setInspectedGap] = useState(null)
   const [selectedIds, setSelectedIds] = useState([])
   const [expandedKeys, setExpandedKeys] = useState([])
   const [isWorking, setIsWorking] = useState(false)
@@ -237,8 +237,12 @@ function CoreChannelReconciliationGroupedPage() {
   // Let the same accounting months be selectable in both the channel ledger
   // and the R&D progress page, without mixing their underlying bill amounts.
   const monthOptions = useMemo(
-    () => sharedBillMonthOptions(recon.channelRecords, recon.records),
-    [recon.channelRecords, recon.records]
+    () => [...new Set([
+      ...sharedBillMonthOptions(recon.channelRecords, recon.records),
+      ...channelAuditMonths({ windowSize: 12 }),
+      inspectedGap?.month
+    ].filter(Boolean))].sort((a, b) => b.localeCompare(a)),
+    [recon.channelRecords, recon.records, inspectedGap?.month]
   )
   const channelRecordedMonths = useMemo(
     () => new Set(channelBillMonthOptions(recon.channelRecords)),
@@ -250,6 +254,25 @@ function CoreChannelReconciliationGroupedPage() {
       .sort((a, b) => a.localeCompare(b, 'zh-CN')),
     [recon.channelRecords]
   )
+
+  const inspectCoverageMonth = (channelName, period) => {
+    setMonth(period)
+    setChannel(channelName)
+    setChannelDraft(channelName)
+    setStatus('')
+    setQuery('')
+    setQuickFilter('all')
+    setExpandedKeys([])
+    setSelectedIds([])
+    setInspectedGap({ channelName, month: period })
+    window.requestAnimationFrame(() => {
+      document.querySelector('.core-channel-recon-page .channel-group-panel')?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start'
+      })
+    })
+  }
+  const inspectingCurrentGap = inspectedGap && inspectedGap.month === month && inspectedGap.channelName === channel
 
   const scopedRows = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -713,6 +736,29 @@ function CoreChannelReconciliationGroupedPage() {
       <section className="core-recon-stats">
         {stats.map((item) => <div key={item.label}><span>{item.label}</span><strong>{item.value}</strong>{item.note && <small>{item.note}</small>}</div>)}
       </section>
+
+      <ChannelMonthCoveragePanel
+        records={recon.channelRecords || []}
+        enabled={recon.channelApiEnabled}
+        onInspectMonth={inspectCoverageMonth}
+        onCreateBill={() => setActiveView(VIEWS.CHANNEL_RECON_CREATE)}
+      />
+
+      {inspectingCurrentGap ? (
+        <section className="channel-month-audit-target" role="status">
+          <div>
+            <strong>{'正在排查：' + inspectedGap.channelName + ' · ' + monthLabel(inspectedGap.month)}</strong>
+            <span>下方按该渠道与月份定位；若列表为空，请先核实是否有应结算流水，再决定是否补录。</span>
+          </div>
+          <button type="button" onClick={() => setActiveView(VIEWS.CHANNEL_RECON_CREATE)}>新增账单</button>
+          <button type="button" onClick={() => {
+            setMonth('')
+            setChannel('')
+            setChannelDraft('')
+            setInspectedGap(null)
+          }}>退出排查</button>
+        </section>
+      ) : null}
 
       <section className="core-recon-panel channel-group-panel">
         <div className="core-recon-panel-head">
