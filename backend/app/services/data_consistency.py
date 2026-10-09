@@ -19,6 +19,7 @@ from app.models.channel import ChannelRecord
 from app.models.invoice import InvoiceRecord
 from app.models.reconciliation import ReconciliationRecord
 from app.services.bank_auto_reconciliation import transaction_direction
+from app.services.payroll_consistency import scan_payroll_integrity
 from app.services.rd_bank_payment_aggregate import aggregate_rd_payments_for_ids, fill_payable_for_row
 
 EPS = 0.01
@@ -102,7 +103,7 @@ def _issue(
     }
 
 
-def _summarize(items: list[dict], bills_scanned: int, allocations_scanned: int, bank_matches_scanned: int, archived_scanned: int) -> dict:
+def _summarize(items: list[dict], bills_scanned: int, allocations_scanned: int, bank_matches_scanned: int, archived_scanned: int, payroll_batches_scanned: int = 0) -> dict:
     severity = defaultdict(int)
     categories = defaultdict(int)
     for item in items:
@@ -118,11 +119,12 @@ def _summarize(items: list[dict], bills_scanned: int, allocations_scanned: int, 
         "invoice_allocations_scanned": allocations_scanned,
         "bank_matches_scanned": bank_matches_scanned,
         "archived_bills_scanned": archived_scanned,
+        "payroll_batches_scanned": payroll_batches_scanned,
         "category_counts": dict(categories),
     }
 
 
-def build_data_consistency_audit(db: Session, *, limit: int = 500) -> dict:
+def build_data_consistency_audit(db: Session, *, limit: int = 500, include_payroll: bool = False) -> dict:
     """Return cross-module consistency issues without mutating any source fact."""
     rd_rows = list(db.execute(select(ReconciliationRecord)).scalars().all())
     channel_rows = list(db.execute(select(ChannelRecord)).scalars().all())
@@ -501,6 +503,11 @@ def build_data_consistency_audit(db: Session, *, limit: int = 500) -> dict:
                 target_view="bank-reconciliation",
             ))
 
+    payroll_count = 0
+    if include_payroll:
+        payroll_issues, payroll_count = scan_payroll_integrity(db)
+        items.extend(payroll_issues)
+
     items.sort(key=lambda item: (
         SEVERITY_ORDER.get(str(item.get("severity")), 9),
         str(item.get("category") or ""),
@@ -512,6 +519,7 @@ def build_data_consistency_audit(db: Session, *, limit: int = 500) -> dict:
         allocations_scanned=len(allocation_rows),
         bank_matches_scanned=len(bank_matches),
         archived_scanned=len(archive_rows),
+        payroll_batches_scanned=payroll_count,
     )
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
