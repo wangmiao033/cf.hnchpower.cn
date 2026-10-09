@@ -1,4 +1,5 @@
 import { apiDelete, apiGet, apiPost, apiPut } from '@/lib/api/client.ts'
+import { fetchEveryLedgerPage } from '@/domain/operatingExpense/loadLedgerPages.js'
 
 export type OperatingExpense = {
   id: string
@@ -147,6 +148,26 @@ export function deleteOperatingDeposit(id: string): Promise<void> {
 }
 
 
+/** Complete expense/asset ledgers: never base finance totals on only the first 500 rows. */
+export async function listAllOperatingExpenses(params: {
+  month?: string
+  category?: string
+  expenseKind?: string
+  gameName?: string
+  q?: string
+} = {}): Promise<OperatingExpenseListResponse> {
+  return fetchEveryLedgerPage(({ limit, offset }) => listOperatingExpenses({ ...params, limit, offset }))
+}
+
+export async function listAllOperatingDeposits(params: {
+  status?: string
+  depositType?: string
+  q?: string
+} = {}): Promise<OperatingDepositListResponse> {
+  return fetchEveryLedgerPage(({ limit, offset }) => listOperatingDeposits({ ...params, limit, offset }))
+}
+
+
 export type PayrollEmployeeItem = {
   id?: string
   employee_name: string
@@ -234,6 +255,15 @@ export function listPayrollBatches(params: {
   query.set('limit', String(params.limit ?? 200))
   query.set('offset', String(params.offset ?? 0))
   return apiGet(`/api/operating-expenses/payroll-batches?${query.toString()}`)
+}
+
+export async function listAllPayrollBatches(params: {
+  month?: string
+  paymentStatus?: string
+  payrollStatus?: string
+  q?: string
+} = {}): Promise<PayrollBatchListResponse> {
+  return fetchEveryLedgerPage(({ limit, offset }) => listPayrollBatches({ ...params, limit, offset }))
 }
 
 export function getPayrollBatch(id: string): Promise<PayrollBatch> {

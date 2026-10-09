@@ -193,3 +193,9 @@
 .payroll-import-summary{margin:0 22px 10px;padding:10px 12px;border:1px solid #dbeafe;border-radius:8px;background:#f8fbff;color:#526174;font-size:12px;line-height:1.65}
 .payroll-import-summary strong{font-weight:800;color:#1d4ed8}
 .payroll-import-item .payroll-import-warning strong{font-weight:800;color:#b45309}
+
+/* Failed financial loads must be visibly recoverable; never show stale ledgers. */
+.opex-warning[role="alert"]{align-items:center;flex-wrap:wrap;margin-top:18px}
+.opex-warning[role="alert"] span{flex:1;min-width:250px}
+.opex-warning[role="alert"] button{height:32px;padding:0 12px;border:1px solid #fbbf24;border-radius:8px;background:#fff;color:#92400e;font-weight:700;cursor:pointer}
+.opex-warning[role="alert"] button:hover{background:#fef3c7}

@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import delete, func, or_, select
+from sqlalchemy import and_, case, delete, func, or_, select, text
 from sqlalchemy.orm import Session
 
 from app.api.operating_deposit import router as operating_deposit_router
@@ -215,6 +215,7 @@ def list_operating_expenses(
             base.order_by(
                 OperatingExpense.expense_month.desc(),
                 OperatingExpense.created_at.desc(),
+                OperatingExpense.id.desc(),
             ).limit(limit).offset(offset)
         )
         .scalars()
@@ -543,31 +544,52 @@ def list_payroll_batches(
             )
         )
 
+    # Aggregate the complete filtered ledger BEFORE applying pagination. Previously
+    # total and sums were calculated from only the current page, understating wages
+    # and hiding later company/month batches once the ledger exceeded the page size.
+    summary_query = stmt.with_only_columns(
+        func.count(PayrollBatch.id),
+        func.coalesce(func.sum(PayrollBatch.gross_salary), 0),
+        func.coalesce(func.sum(PayrollBatch.employee_deduction_total), 0),
+        func.coalesce(func.sum(PayrollBatch.income_tax_total), 0),
+        func.coalesce(func.sum(PayrollBatch.net_salary_total), 0),
+        func.coalesce(
+            func.sum(case(
+                (or_(PayrollBatch.review_status == "reviewed", OperatingExpense.payment_status == "paid"),
+                 PayrollBatch.net_salary_total),
+                else_=0,
+            )), 0
+        ),
+        func.coalesce(func.sum(case((
+            and_(OperatingExpense.payment_status == "unpaid",
+                 PayrollBatch.review_status == "pending_review"), 1), else_=0)), 0),
+        func.coalesce(func.sum(case((
+            and_(OperatingExpense.payment_status == "unpaid",
+                 PayrollBatch.review_status == "reviewed"), 1), else_=0)), 0),
+        func.coalesce(func.sum(case((
+            OperatingExpense.payment_status == "paid", 1), else_=0)), 0),
+    ).order_by(None)
+    summary = db.execute(summary_query).one()
+
     pairs = db.execute(
-        stmt.order_by(PayrollBatch.expense_month.desc(), PayrollBatch.company_name.asc())
-        .limit(limit)
-        .offset(offset)
+        stmt.order_by(
+            PayrollBatch.expense_month.desc(),
+            PayrollBatch.company_name.asc(),
+            PayrollBatch.id.asc(),
+        ).limit(limit).offset(offset)
     ).all()
     items = [_payroll_batch_to_read(db, pair[0], pair[1]) for pair in pairs]
     return PayrollBatchListResponse(
         items=items,
-        total=len(items),
-        gross_salary_total=_round_money(sum(item.gross_salary for item in items)),
-        employee_deduction_total=_round_money(
-            sum(item.employee_deduction_total for item in items)
-        ),
-        income_tax_total=_round_money(sum(item.income_tax_total for item in items)),
-        net_salary_total=_round_money(sum(item.net_salary_total for item in items)),
-        confirmed_net_salary_total=_round_money(
-            sum(
-                item.net_salary_total
-                for item in items
-                if item.review_status == "reviewed" or item.payment_status == "paid"
-            )
-        ),
-        pending_review_count=sum(1 for item in items if item.payroll_status == "pending_review"),
-        reviewed_count=sum(1 for item in items if item.payroll_status == "reviewed"),
-        paid_count=sum(1 for item in items if item.payroll_status == "paid"),
+        total=int(summary[0] or 0),
+        gross_salary_total=_round_money(summary[1]),
+        employee_deduction_total=_round_money(summary[2]),
+        income_tax_total=_round_money(summary[3]),
+        net_salary_total=_round_money(summary[4]),
+        confirmed_net_salary_total=_round_money(summary[5]),
+        pending_review_count=int(summary[6] or 0),
+        reviewed_count=int(summary[7] or 0),
+        paid_count=int(summary[8] or 0),
     )
 
 
@@ -575,6 +597,19 @@ def list_payroll_batches(
 def get_payroll_batch(batch_id: str, db: Session = Depends(get_db)) -> PayrollBatchRead:
     batch, expense = _get_payroll_batch_pair(db, batch_id)
     return _payroll_batch_to_read(db, batch, expense, include_items=True)
+
+
+def _lock_payroll_company_month(db: Session, month: str, company_name: str) -> None:
+    """Serialize same-company/month creates and renames across concurrent browser tabs.
+
+    PostgreSQL transaction advisory locks avoid schema changes and stay held until the
+    existing request commits or rolls back. SQLite-based tests need no PostgreSQL lock.
+    """
+    if db.get_bind().dialect.name == "postgresql":
+        db.execute(
+            text("SELECT pg_advisory_xact_lock(hashtext(:lock_key))"),
+            {"lock_key": f"payroll-batch:{month}:{company_name}"},
+        )
 
 
 @router.post("/payroll-batches", response_model=PayrollBatchRead, status_code=status.HTTP_201_CREATED)
@@ -594,6 +629,7 @@ def create_payroll_batch(
     if payment_status == "paid":
         review_status = "reviewed"
 
+    _lock_payroll_company_month(db, month, company_name)
     existing = db.execute(
         select(PayrollBatch).where(
             PayrollBatch.expense_month == month,
@@ -678,6 +714,7 @@ def update_payroll_batch(
         raise HTTPException(status_code=422, detail="请输入工资所属公司")
 
     if new_month != batch.expense_month or new_company != batch.company_name:
+        _lock_payroll_company_month(db, new_month, new_company)
         existing = db.execute(
             select(PayrollBatch).where(
                 PayrollBatch.id != batch.id,

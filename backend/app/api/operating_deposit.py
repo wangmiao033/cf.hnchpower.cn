@@ -86,6 +86,7 @@ def list_operating_deposits(
             stmt.order_by(
                 OperatingDeposit.status.asc(),
                 OperatingDeposit.created_at.desc(),
+                OperatingDeposit.id.desc(),
             ).limit(limit).offset(offset)
         )
         .scalars()
