@@ -6,6 +6,7 @@ export type OperatingExpense = {
   expense_date?: string | null
   category: string
   expense_kind: string
+  expense_subcategory?: string | null
   amount: number
   game_name?: string | null
   vendor_name?: string | null
@@ -26,6 +27,7 @@ export type OperatingExpensePayload = {
   expense_date?: string | null
   category: string
   expense_kind?: string
+  expense_subcategory?: string | null
   amount: number
   game_name?: string | null
   vendor_name?: string | null
