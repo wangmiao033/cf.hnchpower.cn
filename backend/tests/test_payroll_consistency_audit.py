@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from app.services.payroll_consistency import inspect_payroll_integrity
+from app.services.data_consistency import _summarize
 from app.api.anomaly import get_consistency_audit
 
 
@@ -80,6 +81,15 @@ class PayrollIntegrityTests(unittest.TestCase):
         )
         self.assertTrue(any("缺少支付日期" in x["title"] for x in issues))
         self.assertTrue(any("公司或月份不一致" in x["title"] for x in issues))
+
+    def test_unprivileged_audit_omits_payroll_count_entirely(self):
+        summary = _summarize([], bills_scanned=0, allocations_scanned=0,
+                             bank_matches_scanned=0, archived_scanned=0)
+        self.assertNotIn("payroll_batches_scanned", summary)
+        authorized = _summarize([], bills_scanned=0, allocations_scanned=0,
+                                bank_matches_scanned=0, archived_scanned=0,
+                                payroll_batches_scanned=0)
+        self.assertEqual(authorized["payroll_batches_scanned"], 0)
 
     def test_aggregate_findings_require_analytics_view_not_only_anomalies_access(self):
         db = object()
