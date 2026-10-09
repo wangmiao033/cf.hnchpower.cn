@@ -31,6 +31,7 @@ class MigrationExecutionContextTests(unittest.TestCase):
         self.assertIn("050_contract_difference_workflow.sql", names)
         self.assertIn("051_rd_contract_entry.sql", names)
         self.assertIn("069_channel_settlement_adjustments.sql", names)
+        self.assertIn("073_operating_expense_subcategory.sql", names)
 
 
 if __name__ == "__main__":
