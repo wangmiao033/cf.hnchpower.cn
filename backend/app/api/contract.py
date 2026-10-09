@@ -49,7 +49,7 @@ def list_contract_records(
     count_stmt = _apply_filters(count_stmt, search=search)
     total = int(db.execute(count_stmt).scalar_one())
     rows = (
-        db.execute(base.order_by(ContractRecord.created_at.desc()).limit(limit).offset(offset))
+        db.execute(base.order_by(ContractRecord.created_at.desc(), ContractRecord.id.desc()).limit(limit).offset(offset))
         .scalars()
         .all()
     )

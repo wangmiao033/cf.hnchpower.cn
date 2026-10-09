@@ -11,8 +11,8 @@ import {
 } from '@/lib/api/bankAutoReconciliation.ts'
 import {
   getBankAccountSummaries,
-  getBankImportBatches,
-  getBankTransactions
+  getAllBankImportBatches,
+  getAllBankTransactions
 } from '@/lib/api/bankTransaction.ts'
 import './BankAutoReconciliationPage.css'
 import './BankCenterPage.css'
@@ -282,13 +282,11 @@ export default function BankCenterPageV2() {
     let cancelled = false
     setLedgerLoading(true)
     setLedgerError('')
-    getBankTransactions({
+    getAllBankTransactions({
       q: ledgerSearch.trim() || undefined,
       date_from: ledgerRange.from || undefined,
       date_to: ledgerRange.to || undefined,
-      bank_account: accountFilter || undefined,
-      limit: 500,
-      offset: 0
+      bank_account: accountFilter || undefined
     })
       .then((result) => {
         if (cancelled) return
@@ -309,7 +307,7 @@ export default function BankCenterPageV2() {
     let cancelled = false
     setImportsLoading(true)
     setImportsError('')
-    getBankImportBatches({ limit: 200, offset: 0 })
+    getAllBankImportBatches()
       .then((result) => {
         if (cancelled) return
         setImportBatches(result.items || [])

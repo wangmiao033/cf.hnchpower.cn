@@ -1,3 +1,4 @@
+import { fetchEveryLedgerPage } from '@/domain/operatingExpense/loadLedgerPages.js'
 import {
   API_BASE_URL,
   apiDelete,
@@ -229,6 +230,16 @@ export function listContracts(params?: {
   })
   contractListInflight.set(url, request)
   return request
+}
+
+/** Full contract register, including historical rows beyond the first 1,000. */
+export async function listAllContracts(
+  params: Omit<NonNullable<Parameters<typeof listContracts>[0]>, 'limit' | 'offset'> = {}
+): Promise<ContractListResponse> {
+  return fetchEveryLedgerPage(
+    ({ limit, offset }) => listContracts({ ...params, limit, offset }),
+    { pageSize: 1000, maxPages: 25 }
+  )
 }
 
 function invalidateContractMetadata<T>(request: Promise<T>): Promise<T> {

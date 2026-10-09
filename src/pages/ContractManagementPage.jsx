@@ -7,7 +7,7 @@ import {
   deleteContractAccessItem,
   deleteContract,
   importContracts,
-  listContracts,
+  listAllContracts,
   relinkContracts,
   updateContract
 } from '@/lib/api/contract.ts'
@@ -241,12 +241,14 @@ function ContractManagementPage() {
     setLoading(true)
     setError('')
     try {
-      const response = await listContracts({ limit: 1000, offset: 0 })
+      const response = await listAllContracts()
       setRecords(Array.isArray(response.items) ? response.items : [])
       setSummary({ ...EMPTY_SUMMARY, ...(response.summary || {}) })
     } catch (loadError) {
       console.error(loadError)
-      setError('合同数据暂时无法读取，请检查网络后重试。')
+      setRecords([])
+      setSummary(EMPTY_SUMMARY)
+      setError(loadError instanceof Error ? loadError.message : '合同数据暂时无法读取，请检查网络后重试。')
     } finally {
       setLoading(false)
     }

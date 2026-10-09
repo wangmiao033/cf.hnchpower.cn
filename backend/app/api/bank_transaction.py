@@ -151,7 +151,7 @@ def list_bank_transactions(
             )
         )
     total = int(db.execute(select(func.count()).select_from(stmt.subquery())).scalar_one())
-    rows = db.execute(stmt.order_by(BankTransaction.trade_date.desc().nullslast(), BankTransaction.created_at.desc()).limit(limit).offset(offset)).scalars().all()
+    rows = db.execute(stmt.order_by(BankTransaction.trade_date.desc().nullslast(), BankTransaction.created_at.desc(), BankTransaction.id.desc()).limit(limit).offset(offset)).scalars().all()
     return BankTransactionListResponse(items=[_row_to_read(r) for r in rows], total=total)
 
 
@@ -184,7 +184,7 @@ def list_bank_import_batches(
               legacy_backfill,
               created_at
             FROM bank_import_batches
-            ORDER BY created_at DESC
+            ORDER BY created_at DESC, id DESC
             LIMIT :limit OFFSET :offset
             """
         ),
