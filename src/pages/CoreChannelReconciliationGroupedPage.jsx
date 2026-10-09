@@ -733,8 +733,16 @@ function CoreChannelReconciliationGroupedPage() {
 
       <BillQuickFilters value={quickFilter} items={quickItems} onChange={handleQuickFilter} />
 
-      <section className="core-recon-stats">
-        {stats.map((item) => <div key={item.label}><span>{item.label}</span><strong>{item.value}</strong>{item.note && <small>{item.note}</small>}</div>)}
+      <section className="core-recon-stats core-channel-stats-compact" aria-label="渠道账单概览">
+        {stats.map((item) => (
+          <div key={item.label} className="core-channel-stat">
+            <span className="core-channel-stat__label">{item.label}</span>
+            <div className="core-channel-stat__bottom">
+              <strong>{item.value}</strong>
+              {item.note ? <small>{item.note}</small> : null}
+            </div>
+          </div>
+        ))}
       </section>
 
       <ChannelMonthCoveragePanel
