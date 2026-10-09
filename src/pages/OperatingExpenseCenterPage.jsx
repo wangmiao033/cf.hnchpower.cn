@@ -1050,24 +1050,39 @@ function PayrollImportDialog({ imports, companySuggestions, saving, onUpdate, on
           <button type="button" onClick={onClose}>×</button>
         </div>
         <div className="payroll-import-body">
-          <p className="payroll-dialog-tip">支持当前工资 Excel 模板。系统只读取第一张工资明细表，不读取银行卡等其他工作表。你提供的这类“财务核对后工资表”默认按“财务已核对”导入，也可手动改为“待核对”。</p>
+          <p className="payroll-dialog-tip">支持单个或多个 Excel，也支持一个文件包含多家公司、多个月份的工资工作表；自动跳过“导入说明”和汇总页。按工作表逐批预览，已存在的公司 / 月份自动跳过，不会覆盖。导入默认“待核对”，需财务核对后再确认或发放。</p>
           <datalist id="payroll-company-options">
             {companySuggestions.map((name) => <option key={name} value={name} />)}
           </datalist>
-          <div className="payroll-import-list">
+          <div className="payroll-import-summary">
+          识别到 <strong>{imports.filter((item) => item.items?.length).length}</strong> 个工资批次，
+          可新增 <strong>{imports.filter((item) => !item.error && !item.existingBatch && item.items?.length).length}</strong> 个，
+          已存在 <strong>{imports.filter((item) => item.existingBatch).length}</strong> 个（自动跳过）。
+        </div>
+        <div className="payroll-import-list">
             {imports.map((item) => (
               <article key={item.key} className={`payroll-import-item${item.error ? ' is-error' : ''}`}>
                 <div className="payroll-import-item__head">
                   <div><strong>{item.fileName}</strong><span>{item.items?.length || 0} 名员工</span></div>
-                  {item.error ? <StatusBadge type="danger">解析失败</StatusBadge> : item.validationStatus === 'valid' ? <StatusBadge type="paid">公式一致</StatusBadge> : <StatusBadge type="danger">存在公式差异</StatusBadge>}
+                  {item.error ? <StatusBadge type="danger">无法导入</StatusBadge> : item.existingBatch ? <StatusBadge type="muted">已存在 · 跳过</StatusBadge> : item.validationStatus === 'valid' ? <StatusBadge type="paid">公式一致</StatusBadge> : <StatusBadge type="danger">存在公式差异</StatusBadge>}
                 </div>
                 {item.error ? <p className="payroll-import-error">{item.error}</p> : (
                   <>
-                    <div className="payroll-import-fields payroll-import-fields--review">
-                      <label><span>工资月份 *</span><input type="month" value={item.expenseMonth || ''} onChange={(event) => onUpdate(item.key, { expenseMonth: event.target.value })} /></label>
-                      <label><span>所属公司 *</span><input list="payroll-company-options" value={item.companyName || ''} onChange={(event) => onUpdate(item.key, { companyName: event.target.value })} placeholder="选择或输入公司名称" /></label>
-                      <label><span>导入状态</span><select value={item.payrollStatus || 'reviewed'} onChange={(event) => onUpdate(item.key, { payrollStatus: event.target.value })}><option value="reviewed">财务已核对</option><option value="pending_review">待核对</option></select></label>
-                    </div>
+                    {item.existingBatch ? (
+                      <p className="payroll-import-warning">
+                        {item.companyName} {item.expenseMonth} 已在系统中有工资批次，本次不会覆盖。
+                        系统实发：{money(item.existingBatch.net_salary_total)}；文件实发：{money(item.totals?.net_salary_total)}。
+                        {Math.abs(item.existingNetDifference || 0) > 0.01
+                          ? <strong> 金额差异 {money(Math.abs(item.existingNetDifference))}，请在现有工资批次中人工核对。</strong>
+                          : ' 金额一致。'}
+                      </p>
+                    ) : (
+                      <div className="payroll-import-fields payroll-import-fields--review">
+                        <label><span>工资月份 *</span><input type="month" value={item.expenseMonth || ''} onChange={(event) => onUpdate(item.key, { expenseMonth: event.target.value })} /></label>
+                        <label><span>所属公司 *</span><input list="payroll-company-options" value={item.companyName || ''} onChange={(event) => onUpdate(item.key, { companyName: event.target.value })} placeholder="选择或输入公司名称" /></label>
+                        <label><span>导入状态</span><select value={item.payrollStatus || 'pending_review'} onChange={(event) => onUpdate(item.key, { payrollStatus: event.target.value })}><option value="pending_review">待核对</option><option value="reviewed">财务已核对</option></select></label>
+                      </div>
+                    )}
                     <div className="payroll-import-kpis">
                       <span>应发 <b>{money(item.totals?.gross_salary)}</b></span>
                       <span>个人代扣 <b>{money(item.totals?.employee_deduction_total)}</b></span>
@@ -1083,7 +1098,7 @@ function PayrollImportDialog({ imports, companySuggestions, saving, onUpdate, on
         </div>
         <div className="opex-editor-actions payroll-dialog-actions">
           <button type="button" onClick={onClose} disabled={saving}>取消</button>
-          <button type="button" className="is-primary" onClick={onSave} disabled={saving}>{saving ? '导入中…' : `导入 ${imports.filter((item) => !item.error).length} 个工资批次`}</button>
+          <button type="button" className="is-primary" onClick={onSave} disabled={saving || !imports.some((item) => !item.error && !item.existingBatch && item.items?.length)}>{saving ? '导入中…' : `导入 ${imports.filter((item) => !item.error && !item.existingBatch && item.items?.length).length} 个新工资批次`}</button>
         </div>
       </section>
     </div>
