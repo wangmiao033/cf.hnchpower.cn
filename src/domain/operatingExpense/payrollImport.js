@@ -254,4 +254,33 @@ export async function parsePayrollFile(file) {
   return parsePayrollWorkbookSheets(sheets, file.name)
 }
 
+function payrollIdentity(month, company) {
+  return `${String(month || '').trim()}|${text(company)}`
+}
+
+/**
+ * Never overwrite existing payroll batches; the server also rejects duplicate company+month.
+ * Existing records may disagree with newly supplied source sheets, so retain both totals for review.
+ */
+export function markExistingPayrollBatches(imports, existingBatches = []) {
+  const known = new Map(existingBatches.map((item) => [
+    payrollIdentity(item.expense_month, item.company_name), item
+  ]))
+  const seen = new Set()
+  return imports.map((item) => {
+    if (item.error || !item.items?.length || !item.companyName || !item.expenseMonth) return item
+    const key = payrollIdentity(item.expenseMonth, item.companyName)
+    const existingBatch = known.get(key)
+    if (existingBatch) {
+      const difference = round2(Number(item.totals?.net_salary_total || 0) - Number(existingBatch.net_salary_total || 0))
+      return { ...item, existingBatch, existingNetDifference: difference }
+    }
+    if (seen.has(key)) {
+      return { ...item, error: '本次选中的文件中存在同月份、同公司重复工资表，请勿重复录入' }
+    }
+    seen.add(key)
+    return { ...item, existingBatch: null, existingNetDifference: 0 }
+  })
+}
+
 export { COMPANY_HINTS as PAYROLL_COMPANY_SUGGESTIONS }
