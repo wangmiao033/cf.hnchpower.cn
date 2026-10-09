@@ -7,9 +7,12 @@ from unittest.mock import Mock, patch
 from fastapi import HTTPException
 
 from app.api.invoice import (
-    _identity_key, _normalize_invoice_amounts, update_invoice_record,
+    _identity_key, _lock_invoice_identity, _normalize_invoice_amounts,
+    import_invoice_records, update_invoice_record,
 )
-from app.schemas.invoice import InvoiceRecordUpdate
+from app.schemas.invoice import (
+    InvoiceRecordCreate, InvoiceRecordImportRequest, InvoiceRecordUpdate,
+)
 
 
 def existing_invoice(**overrides):
@@ -94,6 +97,38 @@ class InvoiceIdentityRegressionTests(unittest.TestCase):
         invoice, duplicate_check = self.save({"invoice_no": "101"}, duplicate=True)
         self.assertEqual(invoice.invoice_no, "100")
         self.assertEqual(duplicate_check.call_args.args[1], "legacy:001:101")
+
+    def test_advisory_lock_only_issued_for_postgres_and_nonempty_identity(self):
+        calls = []
+        pg = Mock()
+        pg.get_bind.return_value.dialect.name = "postgresql"
+        pg.execute.side_effect = lambda stmt, params: calls.append((str(stmt), params))
+        _lock_invoice_identity(pg, "digital:123")
+        self.assertEqual(len(calls), 1)
+        self.assertIn("pg_advisory_xact_lock", calls[0][0])
+        self.assertEqual(calls[0][1]["key"], "invoice-identity:digital:123")
+        _lock_invoice_identity(pg, None)
+        self.assertEqual(len(calls), 1)
+
+        sqlite = Mock()
+        sqlite.get_bind.return_value.dialect.name = "sqlite"
+        _lock_invoice_identity(sqlite, "digital:123")
+        sqlite.execute.assert_not_called()
+
+    def test_bulk_import_locks_invoice_keys_in_deterministic_order(self):
+        db = Mock()
+        db.get_bind.return_value.dialect.name = "sqlite"
+        db.execute.return_value.scalars.return_value.all.return_value = []
+        body = InvoiceRecordImportRequest(items=[
+            InvoiceRecordCreate(digital_invoice_no="B", amount_with_tax=200),
+            InvoiceRecordCreate(digital_invoice_no="A", amount_with_tax=100),
+        ])
+        seen = []
+        with patch("app.api.invoice._lock_invoice_identity", side_effect=lambda _db, key: seen.append(key)):
+            outcome = import_invoice_records(body, db=db)
+        self.assertEqual(seen, ["digital:A", "digital:B"])
+        self.assertEqual(outcome.created, 2)
+        db.commit.assert_called_once()
 
     def test_unstructured_historical_identity_remains_when_number_untouched(self):
         invoice, _ = self.save(
