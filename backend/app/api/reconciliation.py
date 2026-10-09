@@ -274,7 +274,7 @@ def list_reconciliation(
         status=status,
     )
     total = int(db.execute(count_stmt).scalar_one())
-    rows = db.execute(base.order_by(ReconciliationRecord.created_at.desc()).limit(limit).offset(offset)).scalars().all()
+    rows = db.execute(base.order_by(ReconciliationRecord.created_at.desc(), ReconciliationRecord.id.desc()).limit(limit).offset(offset)).scalars().all()
     bp_map: dict[str, BankPaymentRecord] = {}
     if rows:
         ids = [r.id for r in rows]
@@ -338,7 +338,7 @@ def list_reconciliation_payments(record_id: str, db: Session = Depends(get_db)) 
             BankTransaction.reconciliation_type == RD_TYPE,
             BankTransaction.type == "payment_register",
         )
-        .order_by(BankTransaction.created_at.desc())
+        .order_by(BankTransaction.created_at.desc(), BankTransaction.id.desc())
     )
     btx_rows = db.execute(stmt).scalars().all()
     items = [BankTransactionRead.model_validate(x) for x in btx_rows]
