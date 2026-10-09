@@ -27,7 +27,7 @@ class ProfitNarrowLoaderTests(unittest.TestCase):
         self.db.add_all([
             ReconciliationRecord(
                 id="rd-profit-1", statement_no="RD-PROFIT-TEST",
-                settlement_month="2026-07", status="completed", game_name="A",
+                settlement_month="2026-07", status="pending", game_name="A",
                 settlement_amount=100, game_flow=1000,
                 remark="A very long unused original RD note",
             ),
@@ -37,7 +37,7 @@ class ProfitNarrowLoaderTests(unittest.TestCase):
                 settlement_amount=100, revenue=1000, sort_order=0,
             ),
             ChannelRecord(
-                id="channel-profit-1", status="completed",
+                id="channel-profit-1", status="pending",
                 settlement_month="2026-06", game_name="A",
                 settlement_amount=500, billing_flow=1200, server_cost=20,
                 settlement_adjustment_amount=0,
