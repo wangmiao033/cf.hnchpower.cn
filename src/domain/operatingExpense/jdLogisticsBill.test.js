@@ -23,7 +23,7 @@ const details = [
 
 describe('JD Logistics expense quick import', () => {
   it('parses the official monthly statement into a single unpaid accounting entry', () => {
-    const bill = parseJdBillWithDetails(summaryRows)
+    const bill = parseJdBillWithDetails(summaryRows, details)
     expect(bill).toMatchObject({ expenseMonth: '2026-09', amount:171, original:228, discount:57, count:15, billNo:'BR2105791606329257984' })
     const form = jdBillToExpenseForm(bill, { invoiceNumber:'' })
     expect(form).toMatchObject({ paymentStatus:'unpaid', invoiceStatus:'pending', expenseSubcategory:'courier_logistics', amount:'171.00', vendorName:'京东物流' })
