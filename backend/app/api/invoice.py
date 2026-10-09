@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import delete, func, or_, select
+from sqlalchemy import delete, func, or_, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -88,6 +88,22 @@ def _normalize_verified_ids(raw: list | None) -> list[str]:
     return out
 
 
+def _lock_invoice_identity(db: Session, identity_key: str | None) -> None:
+    """Serialize writes to the same identity before checking for duplicates.
+
+    The legacy identity column is indexed but has no unique constraint; a
+    PostgreSQL transaction advisory lock protects concurrent insert/import/edit
+    operations without rewriting existing records.
+    """
+    if not identity_key:
+        return
+    if db.get_bind().dialect.name == "postgresql":
+        db.execute(
+            text("SELECT pg_advisory_xact_lock(hashtext(:key))"),
+            {"key": f"invoice-identity:{identity_key}"},
+        )
+
+
 def _ensure_unique_identity(db: Session, identity_key: str | None, *, exclude_id: str | None = None) -> None:
     if not identity_key:
         return
@@ -159,7 +175,11 @@ def import_invoice_records(
         data["verified_record_ids"] = _normalize_verified_ids(data.get("verified_record_ids"))
         prepared.append(data)
 
-    identities = list({str(item["invoice_identity_key"]) for item in prepared})
+    # Sorted advisory-lock acquisition avoids deadlocks for overlapping bulk
+    # imports in multiple browser tabs.
+    identities = sorted({str(item["invoice_identity_key"]) for item in prepared})
+    for identity in identities:
+        _lock_invoice_identity(db, identity)
     existing_rows = (
         db.execute(select(InvoiceRecord).where(InvoiceRecord.invoice_identity_key.in_(identities)))
         .scalars()
@@ -254,6 +274,7 @@ def create_invoice_record(
     data = payload.model_dump()
     _normalize_invoice_amounts(data)
     _normalize_tax_status(data)
+    _lock_invoice_identity(db, data.get("invoice_identity_key"))
     _ensure_unique_identity(db, data.get("invoice_identity_key"))
     data["verified_record_ids"] = _normalize_verified_ids(data.get("verified_record_ids"))
     row = InvoiceRecord(id=str(uuid4()), **data)
@@ -290,6 +311,7 @@ def update_invoice_record(
     if any(name in patch for name in ("digital_invoice_no", "invoice_code", "invoice_no")):
         merged_for_identity["invoice_identity_key"] = _identity_key(merged_for_identity)
     _normalize_invoice_amounts(merged_for_identity)
+    _lock_invoice_identity(db, merged_for_identity.get("invoice_identity_key"))
     _ensure_unique_identity(db, merged_for_identity.get("invoice_identity_key"), exclude_id=record_id)
     if "amount_with_tax" not in patch and float(row.amount_with_tax or 0) == 0:
         patch["amount_with_tax"] = merged_for_identity["amount_with_tax"]
