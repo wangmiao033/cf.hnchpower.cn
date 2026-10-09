@@ -24,7 +24,9 @@
 .channel-difference-review__fields button:hover{background:#d4eaf9}
 .channel-difference-review__saved{display:block;margin-top:9px;color:#267252;font-size:11px;font-weight:700}
 .channel-difference-review__duplicate{margin:10px 0 0;padding:7px 9px;border-radius:6px;background:#fff0df;color:#9a4b1c;font-size:11px;font-weight:700;line-height:1.5}
-.channel-difference-review__adjustment-hint{margin:9px 0 0;color:#7c5c18;font-size:11px;line-height:1.5}
+.channel-difference-review__adjustment-hint{display:flex;gap:9px;align-items:center;justify-content:space-between;margin:9px 0 0;color:#7c5c18;font-size:11px;line-height:1.5}
+.channel-difference-review__adjustment-hint button{flex:0 0 auto;padding:5px 9px;border:1px solid #d5c487;border-radius:6px;background:#fff;color:#775a19;font-size:11px;font-weight:800;cursor:pointer}
+@media(max-width:650px){.channel-difference-review__adjustment-hint{align-items:flex-start;flex-direction:column}}
 .channel-rule-summary .is-advisory{border-color:#b9d8ee;background:#f6faff}
 .channel-rule-summary .is-advisory strong{color:#215a89}
 @media(max-width:850px){.channel-difference-review__fields{grid-template-columns:1fr 1fr}.channel-difference-review__fields button{grid-column:1/-1}}
