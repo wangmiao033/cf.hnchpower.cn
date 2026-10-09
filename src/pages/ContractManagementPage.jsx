@@ -1,3 +1,4 @@
+import { csvRow } from '@/domain/export/csvSafety.js'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAppState } from '@/app/AppStateContext.jsx'
 import PageContainer from '@/components/layout/PageContainer.jsx'
@@ -177,26 +178,22 @@ function exportCsv(records) {
     '账款类型',
     '合同附件'
   ]
-  const lines = records.map((record) =>
-    [
-      record.internal_contract_no,
-      record.contract_name,
-      record.contract_type,
-      record.amount,
-      record.counterparty,
-      record.contract_no,
-      record.signing_date,
-      record.signing_status,
-      record.effective_date,
-      record.end_date,
-      record.performance_status,
-      record.payment_type,
-      (record.attachments || []).join('；')
-    ]
-      .map((value) => `"${String(value ?? '').replace(/"/g, '""')}"`)
-      .join(',')
-  )
-  const blob = new Blob([`\uFEFF${[headers.join(','), ...lines].join('\n')}`], {
+  const lines = records.map((record) => csvRow([
+    record.internal_contract_no,
+    record.contract_name,
+    record.contract_type,
+    record.amount,
+    record.counterparty,
+    record.contract_no,
+    record.signing_date,
+    record.signing_status,
+    record.effective_date,
+    record.end_date,
+    record.performance_status,
+    record.payment_type,
+    (record.attachments || []).join('；')
+  ]))
+  const blob = new Blob([`\uFEFF${[csvRow(headers), ...lines].join('\n')}`], {
     type: 'text/csv;charset=utf-8'
   })
   const url = URL.createObjectURL(blob)
