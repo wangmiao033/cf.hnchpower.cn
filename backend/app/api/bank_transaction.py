@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
@@ -14,7 +15,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import Numeric, cast, func, or_, select, text
 from sqlalchemy.orm import Session
 
-from app.core.blob_storage import private_blob_response, upload_private_blob
+from app.core.blob_storage import private_blob_response, read_limited_attachment, upload_private_blob
 from app.core.deps import get_db
 from app.models.bank_transaction import BankTransaction
 from app.schemas.bank_transaction import (
@@ -244,11 +245,13 @@ async def upload_bank_transaction_attachment(file: UploadFile = File(...)) -> di
     orig = Path(file.filename or "file").name
     if not orig or orig in (".", ".."):
         orig = "file"
-    filename = f"{uuid4().hex}_{orig}"
+    safe_name = re.sub(r"[^\w.()\-\u4e00-\u9fff]+", "_", orig)[:160] or "file"
+    filename = f"{uuid4().hex}_{safe_name}"
+    body = await read_limited_attachment(file)
     blob_url = await upload_private_blob(
         f"bank-transactions/{filename}",
-        await file.read(),
-        file.content_type or "application/octet-stream",
+        body,
+        "application/octet-stream",
     )
     return {"url": f"/api/bank-transactions/attachments/{filename}/file", "storage_url": blob_url}
 
@@ -258,7 +261,7 @@ async def download_bank_transaction_attachment(file_id: str) -> StreamingRespons
     safe_name = Path(file_id).name
     if safe_name != file_id or not safe_name:
         raise HTTPException(status_code=400, detail={"error": "invalid_file_id"})
-    return await private_blob_response(f"bank-transactions/{safe_name}", file_name=safe_name, inline=True)
+    return await private_blob_response(f"bank-transactions/{safe_name}", file_name=safe_name, inline=False)
 
 
 @router.post("/bulk-import", response_model=BankTransactionBulkImportResponse, status_code=status.HTTP_201_CREATED)
