@@ -60,11 +60,14 @@ function findColumn(headers, aliases) {
 
 function parseMonthLabel(source) {
   const compact = text(source)
-  const match = compact.match(/(20\d{2})年([一二三四五六七八九十]{1,3}|1[0-2]|0?[1-9])月/)
-  if (!match) return ''
-  const year = Number(match[1])
-  const raw = match[2]
-  const month = /^\d+$/.test(raw) ? Number(raw) : MONTH_MAP[raw]
+  // Old template: "2026年八月", new monthly workbook: "2026-05" or "5月2026".
+  // Match sheet-specific labels before the shared workbook filename (which can contain a date range).
+  const chinese = compact.match(/(20\d{2})年([一二三四五六七八九十]{1,3}|1[0-2]|0?[1-9])月/)
+  const iso = compact.match(/(20\d{2})[-/.](1[0-2]|0?[1-9])(?=[^\d]|$)/)
+  const reversed = compact.match(/(1[0-2]|0?[1-9])月(20\d{2})年?/)
+  const year = Number(chinese?.[1] || iso?.[1] || reversed?.[2])
+  const raw = chinese?.[2] || iso?.[2] || reversed?.[1]
+  const month = /^\d+$/.test(raw || '') ? Number(raw) : MONTH_MAP[raw]
   if (!year || !month || month < 1 || month > 12) return ''
   return `${year}-${String(month).padStart(2, '0')}`
 }
@@ -191,18 +194,64 @@ export function parsePayrollRows(rows, sourceName = '') {
   }
 }
 
+function safeFilename(name) {
+  const raw = String(name || '工资表.xlsx')
+  try { return /%[0-9a-f]{2}/i.test(raw) ? decodeURIComponent(raw) : raw } catch { return raw }
+}
+
+function isPayrollHeader(rows) {
+  return (rows || []).slice(0, 30).some((row) => {
+    const columns = buildColumnMap(row || [])
+    return columns.employee_name >= 0 && columns.gross_salary >= 0 && columns.net_salary >= 0
+  })
+}
+
+/**
+ * One workbook may contain many company/month batches plus instructions and summaries.
+ * Only real payroll sheets become batches; instructions and notes are never booked as wages.
+ */
+export function parsePayrollWorkbookSheets(sheets, sourceName = '') {
+  const filename = safeFilename(sourceName)
+  const results = []
+  for (const sheet of sheets || []) {
+    const sheetName = String(sheet?.name || '').trim()
+    if (/^(导入说明|说明|工资汇总|汇总|使用指南|readme)/i.test(sheetName)) continue
+    const rows = Array.isArray(sheet?.rows) ? sheet.rows : []
+    const title = rows.slice(0, 4).flat().filter((value) => value != null).join(' ')
+    const display = `${filename} · ${sheetName}`
+    if (!isPayrollHeader(rows)) {
+      if (/工资表|工资明细|薪资表|payroll/i.test(`${sheetName} ${title}`)) {
+        results.push({ fileName: display, sheetName, items: [],
+          error: '此工作表缺少“姓名 / 应发工资 / 实发工资”表头，请核对源文件' })
+      }
+      continue
+    }
+    try {
+      const parsed = parsePayrollRows(rows, `${sheetName} ${filename}`)
+      // Do not silently default a multi-month workbook to the currently selected month.
+      if (!parsed.expenseMonth) throw new Error('无法识别工资月份，请检查工作表名称或标题')
+      results.push({ fileName: display, sheetName, ...parsed, error: '' })
+    } catch (error) {
+      results.push({ fileName: display, sheetName, items: [],
+        error: error instanceof Error ? error.message : '工作表解析失败' })
+    }
+  }
+  if (!results.length) {
+    throw new Error('未在 Excel 中找到工资明细工作表。可以直接选择包含 5—8 月的整本工资表。')
+  }
+  return results
+}
+
 export async function parsePayrollFile(file) {
   const XLSX = await import('xlsx')
   const buffer = await file.arrayBuffer()
   const workbook = XLSX.read(buffer, { type: 'array', cellDates: true, cellFormula: true })
-  const firstSheetName = workbook.SheetNames?.[0]
-  if (!firstSheetName) throw new Error('Excel 中没有可读取的工作表')
-  const sheet = workbook.Sheets[firstSheetName]
-  const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null, raw: true })
-  return {
-    fileName: file.name,
-    ...parsePayrollRows(rows, file.name)
-  }
+  if (!workbook.SheetNames?.length) throw new Error('Excel 中没有可读取的工作表')
+  const sheets = workbook.SheetNames.map((name) => ({
+    name,
+    rows: XLSX.utils.sheet_to_json(workbook.Sheets[name], { header: 1, defval: null, raw: true })
+  }))
+  return parsePayrollWorkbookSheets(sheets, file.name)
 }
 
 export { COMPANY_HINTS as PAYROLL_COMPANY_SUGGESTIONS }
