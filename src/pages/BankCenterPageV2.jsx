@@ -11,7 +11,7 @@ import {
 } from '@/lib/api/bankAutoReconciliation.ts'
 import {
   getBankAccountSummaries,
-  getBankImportBatches,
+  getAllBankImportBatches,
   getAllBankTransactions
 } from '@/lib/api/bankTransaction.ts'
 import './BankAutoReconciliationPage.css'
@@ -307,7 +307,7 @@ export default function BankCenterPageV2() {
     let cancelled = false
     setImportsLoading(true)
     setImportsError('')
-    getBankImportBatches({ limit: 200, offset: 0 })
+    getAllBankImportBatches()
       .then((result) => {
         if (cancelled) return
         setImportBatches(result.items || [])
