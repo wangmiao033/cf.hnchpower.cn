@@ -103,7 +103,7 @@ def _issue(
     }
 
 
-def _summarize(items: list[dict], bills_scanned: int, allocations_scanned: int, bank_matches_scanned: int, archived_scanned: int, payroll_batches_scanned: int = 0) -> dict:
+def _summarize(items: list[dict], bills_scanned: int, allocations_scanned: int, bank_matches_scanned: int, archived_scanned: int, payroll_batches_scanned: int | None = None) -> dict:
     severity = defaultdict(int)
     categories = defaultdict(int)
     for item in items:
@@ -119,7 +119,7 @@ def _summarize(items: list[dict], bills_scanned: int, allocations_scanned: int, 
         "invoice_allocations_scanned": allocations_scanned,
         "bank_matches_scanned": bank_matches_scanned,
         "archived_bills_scanned": archived_scanned,
-        "payroll_batches_scanned": payroll_batches_scanned,
+        **({"payroll_batches_scanned": payroll_batches_scanned} if payroll_batches_scanned is not None else {}),
         "category_counts": dict(categories),
     }
 
@@ -503,7 +503,7 @@ def build_data_consistency_audit(db: Session, *, limit: int = 500, include_payro
                 target_view="bank-reconciliation",
             ))
 
-    payroll_count = 0
+    payroll_count = None
     if include_payroll:
         payroll_issues, payroll_count = scan_payroll_integrity(db)
         items.extend(payroll_issues)
