@@ -215,6 +215,7 @@ def list_operating_expenses(
             base.order_by(
                 OperatingExpense.expense_month.desc(),
                 OperatingExpense.created_at.desc(),
+                OperatingExpense.id.desc(),
             ).limit(limit).offset(offset)
         )
         .scalars()
