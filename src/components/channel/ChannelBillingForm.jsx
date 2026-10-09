@@ -872,9 +872,22 @@ function ChannelBillingForm({
             <label style={{ display: 'grid', gap: 4, fontSize: 11 }}><span>调整原因 {adjustmentActive ? '*' : ''}</span><input type="text" className="admin-input" value={header.settlementAdjustmentReason || ''} onChange={(e) => handleHeaderChange('settlementAdjustmentReason', e.target.value)} placeholder="例如：10月差额于12月结转，双方确认最终金额" /></label>
           </div>
           {hasAdjustmentTypeWithoutAmount && hasDifferenceToReview ? (
-            <p className="channel-difference-review__adjustment-hint">
-              仅选择调整类型并不会增加金额；如果只是记录上面的渠道账单差异，建议将调整类型设为“不调整”，使用“写入账单备注”留痕。
-            </p>
+            <div className="channel-difference-review__adjustment-hint">
+              <span>仅选择调整类型并不会增加金额；这笔差异已包含在平台结算中，无需再“商务补差”。</span>
+              <button
+                type="button"
+                onClick={() => setHeader((current) => ({
+                  ...current,
+                  settlementAdjustmentType: '',
+                  settlementAdjustmentSourceMonth: '',
+                  settlementAdjustmentAmount: '',
+                  settlementFinalOverride: '',
+                  settlementAdjustmentReason: ''
+                }))}
+              >
+                一键改回不调整
+              </button>
+            </div>
           ) : null}
           {adjustmentActive ? (
             <div style={{ marginTop: 9, display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', fontSize: 12 }}>
