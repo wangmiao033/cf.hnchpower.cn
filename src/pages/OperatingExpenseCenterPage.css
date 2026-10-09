@@ -174,3 +174,17 @@
 }
 .payroll-review-sheet thead th{position:sticky;top:0;z-index:5}
 .payroll-review-sheet tfoot td{position:static}
+
+/* Compact monthly subtotals for miscellaneous operating expenses. */
+.opex-subcategory-summary{margin-bottom:18px;padding:14px 16px;border:1px solid #e2e8f2;border-radius:12px;background:#fff;box-shadow:0 3px 14px rgba(18,38,63,.035)}
+.opex-subcategory-heading{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.opex-subcategory-heading strong{font-size:13px;color:#334155}
+.opex-subcategory-heading span{font-size:11px;color:#94a3b8}
+.opex-subcategory-items{display:flex;gap:8px;flex-wrap:wrap}
+.opex-subcategory-items button{display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:145px;padding:10px 12px;border:1px solid #e5eaf2;border-radius:8px;background:#fbfcfe;color:#64748b;cursor:pointer}
+.opex-subcategory-items button:hover{border-color:#bfdbfe;background:#f8fbff}
+.opex-subcategory-items button.is-active{border-color:#93c5fd;background:#eff6ff;color:#1d4ed8}
+.opex-subcategory-items button span{font-size:11px;white-space:nowrap}
+.opex-subcategory-items button strong{font-size:12px;color:#1e293b;font-variant-numeric:tabular-nums}
+.opex-subcategory-items button.is-active strong{color:#1d4ed8}
+@media(max-width:760px){.opex-subcategory-items button{flex:1 1 145px}}

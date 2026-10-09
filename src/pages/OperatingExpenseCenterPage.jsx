@@ -20,6 +20,7 @@ import {
   updatePayrollBatch
 } from '@/lib/api/operatingExpenses.ts'
 import { parsePayrollFile, PAYROLL_COMPANY_SUGGESTIONS } from '@/domain/operatingExpense/payrollImport.js'
+import { OTHER_EXPENSE_SUBCATEGORIES, expenseSubcategoryLabel, filterOtherExpenses, summarizeOtherExpenses } from '@/domain/operatingExpense/subcategories.js'
 import './OperatingExpenseCenterPage.css'
 
 const EXPENSE_MODES = {
@@ -40,7 +41,7 @@ const EXPENSE_MODES = {
   },
   [VIEWS.OTHER_EXPENSES]: {
     kind: 'other', category: 'other', kicker: 'OTHER EXPENSES', title: '其他费用',
-    description: '维护无法归入租金、服务器、软件或人工的其他日常经营费用。',
+    description: '按快递物流、办公用品、交通差旅、业务招待等子类记录经营费用，并查看每月分类汇总。',
     addLabel: '+ 新增费用', vendorLabel: '费用项目 / 往来方', emptyLabel: '本月尚未录入其他费用。'
   }
 }
@@ -61,6 +62,12 @@ function currentMonth() {
 
 function money(value) {
   return `¥${Number(value || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+}
+
+function expenseCategoryName(row) {
+  if (row.category === 'other') return '其他费用 · ' + expenseSubcategoryLabel(row.expense_subcategory)
+  const kindNames = { office_rent: '办公室租金', software_subscription: '软件订阅', payroll: '人工费用' }
+  return kindNames[row.expense_kind] || row.expense_kind || row.category
 }
 
 function payrollNumber(value) {
@@ -111,6 +118,7 @@ function emptyExpenseForm(month) {
     amount: '',
     dueDate: '',
     vendorName: '',
+    expenseSubcategory: '',
     paymentStatus: 'unpaid',
     paymentDate: '',
     invoiceStatus: 'pending',
@@ -150,6 +158,7 @@ export default function OperatingExpenseCenterPage() {
   const [month, setMonth] = useState(currentMonth)
   const [query, setQuery] = useState('')
   const [paymentFilter, setPaymentFilter] = useState('all')
+  const [otherSubcategoryFilter, setOtherSubcategoryFilter] = useState('all')
   const [payrollMonthFilter, setPayrollMonthFilter] = useState('all')
   const [payrollStatusFilter, setPayrollStatusFilter] = useState('all')
   const [depositStatus, setDepositStatus] = useState('all')
@@ -420,10 +429,14 @@ export default function OperatingExpenseCenterPage() {
 
   useEffect(() => { void loadData() }, [loadData])
 
+  const categorizedExpenseRows = useMemo(() => (
+    activeView === VIEWS.OTHER_EXPENSES ? filterOtherExpenses(rows, otherSubcategoryFilter) : rows
+  ), [activeView, otherSubcategoryFilter, rows])
+  const otherExpenseSummary = useMemo(() => summarizeOtherExpenses(rows), [rows])
   const visibleExpenseRows = useMemo(() => {
-    if (!mode || paymentFilter === 'all') return rows
-    return rows.filter((row) => row.payment_status === paymentFilter)
-  }, [mode, paymentFilter, rows])
+    if (!mode || paymentFilter === 'all') return categorizedExpenseRows
+    return categorizedExpenseRows.filter((row) => row.payment_status === paymentFilter)
+  }, [categorizedExpenseRows, mode, paymentFilter])
 
   const overviewPending = useMemo(() => sum(rows, (row) => row.payment_status === 'unpaid'), [rows])
   const overviewInvoicePending = useMemo(
@@ -432,7 +445,7 @@ export default function OperatingExpenseCenterPage() {
   )
   const heldDepositTotal = useMemo(() => sum(heldDeposits), [heldDeposits])
   const expenseTotal = useMemo(() => sum(visibleExpenseRows), [visibleExpenseRows])
-  const unpaidTotal = useMemo(() => sum(rows, (row) => row.payment_status === 'unpaid'), [rows])
+  const unpaidTotal = useMemo(() => sum(categorizedExpenseRows, (row) => row.payment_status === 'unpaid'), [categorizedExpenseRows])
 
   const shortcutAmount = useCallback((kind) => {
     if (kind === 'server') return Number(profit?.server_cost?.value || 0)
@@ -455,6 +468,7 @@ export default function OperatingExpenseCenterPage() {
       amount: String(row.amount ?? ''),
       dueDate: row.due_date || '',
       vendorName: row.vendor_name || '',
+      expenseSubcategory: row.expense_subcategory || '',
       paymentStatus: row.payment_status || 'paid',
       paymentDate: row.payment_date || '',
       invoiceStatus: row.invoice_status || 'unknown',
@@ -477,11 +491,16 @@ export default function OperatingExpenseCenterPage() {
       showToast?.('已支付费用请填写实付日期', 'error')
       return
     }
+    if (mode.kind === 'other' && !editingId && !expenseForm.expenseSubcategory) {
+      showToast?.('请选择费用子类', 'error')
+      return
+    }
     const payload = {
       expense_month: expenseForm.expenseMonth,
       expense_date: expenseForm.paymentDate || expenseForm.dueDate || null,
       category: mode.category,
       expense_kind: mode.kind,
+      expense_subcategory: mode.kind === 'other' ? (expenseForm.expenseSubcategory || null) : null,
       amount,
       game_name: null,
       vendor_name: expenseForm.vendorName.trim() || null,
@@ -631,7 +650,7 @@ export default function OperatingExpenseCenterPage() {
           <div className="opex-table-wrap"><table><thead><tr><th>费用月份</th><th>分类</th><th>往来方 / 项目</th><th>应付日</th><th>支付</th><th>发票</th><th className="is-right">金额</th></tr></thead><tbody>
             {loading ? <tr><td colSpan={7} className="opex-empty">正在读取运营费用…</td></tr> : null}
             {!loading && rows.length === 0 ? <tr><td colSpan={7} className="opex-empty">本月暂无经营费用。</td></tr> : null}
-            {!loading && rows.map((row) => <tr key={row.id}><td><strong>{row.expense_month}</strong></td><td>{row.expense_kind || row.category}</td><td>{row.vendor_name || '—'}</td><td>{row.due_date || '—'}</td><td>{row.payment_status === 'paid' ? <StatusBadge type="paid">已支付</StatusBadge> : <StatusBadge type="unpaid">待支付</StatusBadge>}</td><td>{row.invoice_status === 'received' ? <StatusBadge type="paid">已取得</StatusBadge> : <StatusBadge type="pending">待处理</StatusBadge>}</td><td className="is-right"><strong>{money(row.amount)}</strong></td></tr>)}
+            {!loading && rows.map((row) => <tr key={row.id}><td><strong>{row.expense_month}</strong></td><td>{expenseCategoryName(row)}</td><td>{row.vendor_name || '—'}</td><td>{row.due_date || '—'}</td><td>{row.payment_status === 'paid' ? <StatusBadge type="paid">已支付</StatusBadge> : <StatusBadge type="unpaid">待支付</StatusBadge>}</td><td>{row.invoice_status === 'received' ? <StatusBadge type="paid">已取得</StatusBadge> : <StatusBadge type="pending">待处理</StatusBadge>}</td><td className="is-right"><strong>{money(row.amount)}</strong></td></tr>)}
           </tbody></table></div>
         </section>
 
@@ -838,15 +857,22 @@ export default function OperatingExpenseCenterPage() {
       <section className="opex-metrics opex-metrics--compact">
         <article><span>当前筛选合计</span><strong>{money(expenseTotal)}</strong><small>{visibleExpenseRows.length} 笔记录</small></article>
         <article className={unpaidTotal > 0 ? 'is-warning' : ''}><span>本月待支付</span><strong>{money(unpaidTotal)}</strong><small>用于现金付款跟踪</small></article>
-        <article><span>本月已支付</span><strong>{money(sum(rows, (row) => row.payment_status === 'paid'))}</strong><small>{rows.filter((row) => row.payment_status === 'paid').length} 笔</small></article>
+        <article><span>本月已支付</span><strong>{money(sum(categorizedExpenseRows, (row) => row.payment_status === 'paid'))}</strong><small>{categorizedExpenseRows.filter((row) => row.payment_status === 'paid').length} 笔</small></article>
       </section>
+
+      {activeView === VIEWS.OTHER_EXPENSES ? <section className="opex-subcategory-summary" aria-label="本月其他费用分类汇总">
+        <div className="opex-subcategory-heading"><strong>本月分类汇总</strong><span>点击分类筛选 · 旧记录保留“未分类”</span></div>
+        <div className="opex-subcategory-items">
+          {otherExpenseSummary.map((item) => <button type="button" key={item.value} className={otherSubcategoryFilter === item.value ? 'is-active' : ''} aria-pressed={otherSubcategoryFilter === item.value} onClick={() => setOtherSubcategoryFilter(item.value)}><span>{item.label}</span><strong>{money(item.amount)}</strong></button>)}
+        </div>
+      </section> : null}
 
       <section className="opex-card">
         <div className="opex-toolbar"><label><span>费用月份</span><input type="month" value={month} onChange={(e) => setMonth(e.target.value)} /></label><label><span>支付状态</span><select value={paymentFilter} onChange={(e) => setPaymentFilter(e.target.value)}><option value="all">全部</option><option value="unpaid">待支付</option><option value="paid">已支付</option></select></label><label className="is-grow"><span>搜索</span><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={`${mode.vendorLabel}、发票号、备注…`} /></label></div>
         <div className="opex-table-wrap"><table><thead><tr><th>费用月份</th><th>应付日期</th><th>{mode.vendorLabel}</th><th>支付状态</th><th>实付日期</th><th>发票</th><th>发票号</th><th>备注 / 凭证</th><th className="is-right">金额</th><th>操作</th></tr></thead><tbody>
           {loading ? <tr><td colSpan={10} className="opex-empty">正在读取{mode.title}…</td></tr> : null}
           {!loading && visibleExpenseRows.length === 0 ? <tr><td colSpan={10} className="opex-empty">{mode.emptyLabel}</td></tr> : null}
-          {!loading && visibleExpenseRows.map((row) => <tr key={row.id}><td><strong>{row.expense_month}</strong></td><td>{row.due_date || '—'}</td><td>{row.vendor_name || '—'}</td><td>{row.payment_status === 'paid' ? <StatusBadge type="paid">已支付</StatusBadge> : <StatusBadge type="unpaid">待支付</StatusBadge>}</td><td>{row.payment_date || '—'}</td><td>{row.invoice_status === 'received' ? <StatusBadge type="paid">已取得</StatusBadge> : row.invoice_status === 'none' ? <StatusBadge type="muted">无需发票</StatusBadge> : <StatusBadge type="pending">待处理</StatusBadge>}</td><td>{row.invoice_number || '—'}</td><td className="opex-remark" title={[row.remark, row.voucher_note].filter(Boolean).join(' · ')}>{[row.remark, row.voucher_note].filter(Boolean).join(' · ') || '—'}</td><td className="is-right"><strong>{money(row.amount)}</strong></td><td><div className="opex-row-actions">{canManage ? <><button type="button" onClick={() => openExpenseEdit(row)}>编辑</button><button type="button" className="is-danger" onClick={() => void removeExpense(row)}>删除</button></> : <span>只读</span>}</div></td></tr>)}
+          {!loading && visibleExpenseRows.map((row) => <tr key={row.id}><td><strong>{row.expense_month}</strong></td><td>{row.due_date || '—'}</td><td>{row.vendor_name || '—'}{activeView === VIEWS.OTHER_EXPENSES ? <small className="opex-cell-note">{expenseSubcategoryLabel(row.expense_subcategory)}</small> : null}</td><td>{row.payment_status === 'paid' ? <StatusBadge type="paid">已支付</StatusBadge> : <StatusBadge type="unpaid">待支付</StatusBadge>}</td><td>{row.payment_date || '—'}</td><td>{row.invoice_status === 'received' ? <StatusBadge type="paid">已取得</StatusBadge> : row.invoice_status === 'none' ? <StatusBadge type="muted">无需发票</StatusBadge> : <StatusBadge type="pending">待处理</StatusBadge>}</td><td>{row.invoice_number || '—'}</td><td className="opex-remark" title={[row.remark, row.voucher_note].filter(Boolean).join(' · ')}>{[row.remark, row.voucher_note].filter(Boolean).join(' · ') || '—'}</td><td className="is-right"><strong>{money(row.amount)}</strong></td><td><div className="opex-row-actions">{canManage ? <><button type="button" onClick={() => openExpenseEdit(row)}>编辑</button><button type="button" className="is-danger" onClick={() => void removeExpense(row)}>删除</button></> : <span>只读</span>}</div></td></tr>)}
         </tbody></table></div>
       </section>
 
@@ -858,7 +884,7 @@ export default function OperatingExpenseCenterPage() {
 
 function ExpenseEditor({ mode, form, setForm, saving, editing, onClose, onSubmit }) {
   const update = (key) => (event) => setForm((old) => ({ ...old, [key]: event.target.value }))
-  return <div className="opex-backdrop" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}><section className="opex-editor" role="dialog" aria-modal="true"><div className="opex-editor-head"><div><span>{mode.kicker}</span><h2>{editing ? `编辑${mode.title}` : mode.addLabel.replace('+ ', '')}</h2></div><button type="button" onClick={onClose}>×</button></div><form onSubmit={onSubmit}><div className="opex-form-grid"><label><span>费用月份 *</span><input type="month" value={form.expenseMonth} onChange={update('expenseMonth')} required /></label><label><span>金额 *</span><input type="number" min="0.01" step="0.01" value={form.amount} onChange={update('amount')} placeholder="0.00" required /></label><label><span>应付日期</span><input type="date" value={form.dueDate} onChange={update('dueDate')} /></label><label><span>{mode.vendorLabel}</span><input value={form.vendorName} onChange={update('vendorName')} placeholder={mode.vendorLabel} /></label><label><span>支付状态 *</span><select value={form.paymentStatus} onChange={update('paymentStatus')}><option value="unpaid">待支付</option><option value="paid">已支付</option></select></label><label><span>实付日期{form.paymentStatus === 'paid' ? ' *' : ''}</span><input type="date" value={form.paymentDate} onChange={update('paymentDate')} disabled={form.paymentStatus !== 'paid'} /></label><label><span>发票状态</span><select value={form.invoiceStatus} onChange={update('invoiceStatus')}><option value="pending">待取得</option><option value="received">已取得</option><option value="none">无需发票</option><option value="unknown">待确认</option></select></label><label><span>发票号</span><input value={form.invoiceNumber} onChange={update('invoiceNumber')} placeholder="可留空" /></label><label className="is-wide"><span>付款凭证 / 回单说明</span><input value={form.voucherNote} onChange={update('voucherNote')} placeholder="例如：工行转账、回单已存档" /></label><label className="is-wide"><span>备注</span><textarea value={form.remark} onChange={update('remark')} rows={3} placeholder="租赁周期、订阅周期或其他说明" /></label></div><div className="opex-editor-actions"><button type="button" onClick={onClose} disabled={saving}>取消</button><button type="submit" className="is-primary" disabled={saving}>{saving ? '保存中…' : '保存'}</button></div></form></section></div>
+  return <div className="opex-backdrop" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}><section className="opex-editor" role="dialog" aria-modal="true"><div className="opex-editor-head"><div><span>{mode.kicker}</span><h2>{editing ? `编辑${mode.title}` : mode.addLabel.replace('+ ', '')}</h2></div><button type="button" onClick={onClose}>×</button></div><form onSubmit={onSubmit}><div className="opex-form-grid"><label><span>费用月份 *</span><input type="month" value={form.expenseMonth} onChange={update('expenseMonth')} required /></label><label><span>金额 *</span><input type="number" min="0.01" step="0.01" value={form.amount} onChange={update('amount')} placeholder="0.00" required /></label><label><span>应付日期</span><input type="date" value={form.dueDate} onChange={update('dueDate')} /></label><label><span>{mode.vendorLabel}</span><input value={form.vendorName} onChange={update('vendorName')} placeholder={mode.vendorLabel} /></label>{mode.kind === 'other' ? <label><span>费用子类{editing ? '' : ' *'}</span><select value={form.expenseSubcategory} onChange={update('expenseSubcategory')} required={!editing}><option value="">{editing ? '未分类（历史记录）' : '请选择费用子类'}</option>{OTHER_EXPENSE_SUBCATEGORIES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label> : null}<label><span>支付状态 *</span><select value={form.paymentStatus} onChange={update('paymentStatus')}><option value="unpaid">待支付</option><option value="paid">已支付</option></select></label><label><span>实付日期{form.paymentStatus === 'paid' ? ' *' : ''}</span><input type="date" value={form.paymentDate} onChange={update('paymentDate')} disabled={form.paymentStatus !== 'paid'} /></label><label><span>发票状态</span><select value={form.invoiceStatus} onChange={update('invoiceStatus')}><option value="pending">待取得</option><option value="received">已取得</option><option value="none">无需发票</option><option value="unknown">待确认</option></select></label><label><span>发票号</span><input value={form.invoiceNumber} onChange={update('invoiceNumber')} placeholder="可留空" /></label><label className="is-wide"><span>付款凭证 / 回单说明</span><input value={form.voucherNote} onChange={update('voucherNote')} placeholder="例如：工行转账、回单已存档" /></label><label className="is-wide"><span>备注</span><textarea value={form.remark} onChange={update('remark')} rows={3} placeholder="租赁周期、订阅周期或其他说明" /></label></div><div className="opex-editor-actions"><button type="button" onClick={onClose} disabled={saving}>取消</button><button type="submit" className="is-primary" disabled={saving}>{saving ? '保存中…' : '保存'}</button></div></form></section></div>
 }
 
 function PayrollImportDialog({ imports, companySuggestions, saving, onUpdate, onClose, onSave }) {
