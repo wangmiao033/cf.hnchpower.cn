@@ -12,8 +12,9 @@ import {
   deleteOperatingExpense,
   deletePayrollBatch,
   getPayrollBatch,
-  listOperatingDeposits,
-  listOperatingExpenses,
+  listAllOperatingDeposits,
+  listAllOperatingExpenses,
+  listAllPayrollBatches,
   listPayrollBatches,
   updateOperatingDeposit,
   updateOperatingExpense,
@@ -168,6 +169,8 @@ export default function OperatingExpenseCenterPage() {
   const [profit, setProfit] = useState(null)
   const [heldDeposits, setHeldDeposits] = useState([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
+  const loadRequestIdRef = useRef(0)
   const [revision, setRevision] = useState(0)
   const [editorOpen, setEditorOpen] = useState(false)
   const [editingId, setEditingId] = useState('')
@@ -186,8 +189,8 @@ export default function OperatingExpenseCenterPage() {
 
   const findExistingPayrollBatches = async (items) => {
     const months = Array.from(new Set(items.filter((item) => item.items?.length && item.expenseMonth).map((item) => item.expenseMonth)))
-    const responses = await Promise.all(months.map((expenseMonth) => listPayrollBatches({
-      month: expenseMonth, limit: 500
+    const responses = await Promise.all(months.map((expenseMonth) => listAllPayrollBatches({
+      month: expenseMonth
     })))
     return responses.flatMap((response) => response.items || [])
   }
@@ -424,51 +427,61 @@ export default function OperatingExpenseCenterPage() {
   }
 
   const loadData = useCallback(async () => {
+    const requestId = ++loadRequestIdRef.current
     setLoading(true)
+    setLoadError('')
     try {
-  if (isOverview) {
+      if (isOverview) {
         const [profitData, expenses, deposits] = await Promise.all([
           getProfitAnalysis({ month, trendMonths: 2 }),
-          listOperatingExpenses({ month, limit: 500 }),
-          listOperatingDeposits({ status: 'held', limit: 500 })
+          listAllOperatingExpenses({ month }),
+          listAllOperatingDeposits({ status: 'held' })
         ])
+        if (requestId !== loadRequestIdRef.current) return
         setProfit(profitData)
         setRows(expenses.items || [])
         setHeldDeposits(deposits.items || [])
       } else if (isDeposits) {
-        const deposits = await listOperatingDeposits({ status: depositStatus, q: query || undefined, limit: 500 })
+        const deposits = await listAllOperatingDeposits({
+          status: depositStatus, q: query || undefined
+        })
+        if (requestId !== loadRequestIdRef.current) return
         setRows(deposits.items || [])
       } else if (isPayroll) {
         const [payroll, totals] = await Promise.all([
-          listPayrollBatches({
+          listAllPayrollBatches({
             month: payrollMonthFilter === 'all' ? undefined : payrollMonthFilter,
             payrollStatus: payrollStatusFilter,
-            q: query || undefined,
-            limit: 500
+            q: query || undefined
           }),
+          // Salary totals are now correctly aggregated by the server BEFORE paging.
           listPayrollBatches({
             month: payrollMonthFilter === 'all' ? undefined : payrollMonthFilter,
-            limit: 500
+            limit: 1
           })
         ])
+        if (requestId !== loadRequestIdRef.current) return
         setRows(payroll.items || [])
         setPayrollSummary(totals)
       } else if (mode) {
-        const expenses = await listOperatingExpenses({
+        const expenses = await listAllOperatingExpenses({
           month,
           category: mode.category,
           expenseKind: mode.kind,
-          q: query || undefined,
-          limit: 500
+          q: query || undefined
         })
+        if (requestId !== loadRequestIdRef.current) return
         setRows(expenses.items || [])
       }
     } catch (error) {
-      showToast?.(error instanceof Error ? error.message : '运营费用读取失败', 'error')
+      if (requestId !== loadRequestIdRef.current) return
+      const message = error instanceof Error ? error.message : '运营费用读取失败'
+      setLoadError(message)
+      showToast?.(message, 'error')
     } finally {
-      setLoading(false)
+      if (requestId === loadRequestIdRef.current) setLoading(false)
     }
-  }, [depositStatus, isDeposits, isOverview, isPayroll, mode, month, paymentFilter, payrollMonthFilter, payrollStatusFilter, query, revision, showToast])
+  }, [depositStatus, isDeposits, isOverview, isPayroll, mode, month, payrollMonthFilter, payrollStatusFilter, query, revision, showToast])
 
   useEffect(() => { void loadData() }, [loadData])
 
@@ -506,7 +519,7 @@ export default function OperatingExpenseCenterPage() {
   const prepareJdBillDraft = useCallback(async (bill) => {
     if (!canManage) throw new Error('当前账号没有录入运营费用的权限')
     // Search the full ledger, not just this category, to avoid booking one statement twice.
-    const existing = await listOperatingExpenses({ month: bill.expenseMonth, q: bill.billNo, limit: 500 })
+    const existing = await listAllOperatingExpenses({ month: bill.expenseMonth, q: bill.billNo, limit: 500 })
     if ((existing.items || []).some((row) => [row.voucher_note, row.remark, row.invoice_number].some((field) => String(field || '').includes(bill.billNo)))) {
       throw new Error(`结算单号 ${bill.billNo} 已录入，已阻止重复记账`)
     }
@@ -561,7 +574,7 @@ export default function OperatingExpenseCenterPage() {
 
   const prepareWecomReceiptDraft = useCallback(async (receipt) => {
     if (!canManage) throw new Error('当前账号没有录入运营费用的权限')
-    const existing = await listOperatingExpenses({ month: receipt.expenseMonth, q: '企业微信', limit: 500 })
+    const existing = await listAllOperatingExpenses({ month: receipt.expenseMonth, q: '企业微信', limit: 500 })
     if (hasDuplicateWecomExpense(existing.items, receipt)) {
       throw new Error('该笔企业微信认证费可能已录入（同月、同日、同金额），请先核对现有记录')
     }
@@ -642,7 +655,7 @@ export default function OperatingExpenseCenterPage() {
     setSaving(true)
     try {
       if (!editingId && expenseForm.wecomReceiptFingerprint) {
-        const existingWecom = await listOperatingExpenses({
+        const existingWecom = await listAllOperatingExpenses({
           month: expenseForm.expenseMonth, q: '企业微信', limit: 500
         })
         const receipt = {
@@ -655,7 +668,7 @@ export default function OperatingExpenseCenterPage() {
         }
       }
       if (!editingId && expenseForm.importBillNo) {
-        const duplicate = await listOperatingExpenses({
+        const duplicate = await listAllOperatingExpenses({
           month: expenseForm.expenseMonth, q: expenseForm.importBillNo, limit: 500
         })
         if ((duplicate.items || []).some((row) => [row.voucher_note, row.remark, row.invoice_number].some((field) => String(field || '').includes(expenseForm.importBillNo)))) {
@@ -761,6 +774,18 @@ export default function OperatingExpenseCenterPage() {
     } catch (error) {
       showToast?.(error instanceof Error ? error.message : '删除失败', 'error')
     }
+  }
+
+  if (loadError && !loading) {
+    return (
+      <PageContainer hideHeader className="opex-page">
+        <section className="opex-warning" role="alert">
+          <strong>财务数据读取失败：</strong>
+          <span>{loadError}。为防止显示不完整或过期的金额，当前页面已停止展示报表。</span>
+          <button type="button" onClick={() => setRevision((v) => v + 1)}>重新加载</button>
+        </section>
+      </PageContainer>
+    )
   }
 
   if (isOverview) {
