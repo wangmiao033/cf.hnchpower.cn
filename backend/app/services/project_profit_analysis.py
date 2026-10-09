@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from collections import defaultdict
 
-from sqlalchemy import select
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session
 
+from app.services.profit_record_loader import load_profit_records
 from app.models.channel import ChannelRecord
 from app.models.operating_expense import OperatingExpense
 from app.models.reconciliation import ReconciliationRecord
@@ -59,22 +59,7 @@ def _load_buckets(db: Session) -> tuple[
     dict[str, ProfitMonthBucket],
     dict[str, dict[str, ProfitGameBucket]],
 ]:
-    rd_records = db.execute(
-        select(ReconciliationRecord)
-        .options(selectinload(ReconciliationRecord.line_items))
-        .order_by(ReconciliationRecord.created_at.asc())
-    ).scalars().all()
-    channel_records = db.execute(
-        select(ChannelRecord)
-        .options(selectinload(ChannelRecord.line_items))
-        .order_by(ChannelRecord.created_at.asc())
-    ).scalars().all()
-    standalone_server_costs = db.execute(
-        select(ServerCost).order_by(ServerCost.expense_month.asc(), ServerCost.created_at.asc())
-    ).scalars().all()
-    expenses = db.execute(
-        select(OperatingExpense).order_by(OperatingExpense.expense_month.asc(), OperatingExpense.created_at.asc())
-    ).scalars().all()
+    rd_records, channel_records, standalone_server_costs, expenses = load_profit_records(db)
 
     months: dict[str, ProfitMonthBucket] = defaultdict(ProfitMonthBucket)
     games: dict[str, dict[str, ProfitGameBucket]] = defaultdict(

@@ -6,11 +6,26 @@ import os
 from collections.abc import AsyncIterator
 from urllib.parse import quote
 
-from fastapi import HTTPException
+from fastapi import HTTPException, UploadFile
 from fastapi.responses import Response, StreamingResponse
 from vercel.blob import AsyncBlobClient
 
 MAX_SERVER_UPLOAD_BYTES = 4 * 1024 * 1024
+
+
+async def read_limited_attachment(file: UploadFile) -> bytes:
+    """Bound buffered uploads to 4MiB plus one validation byte."""
+    body = await file.read(MAX_SERVER_UPLOAD_BYTES + 1)
+    if len(body) > MAX_SERVER_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail={
+            "error": "file_too_large", "max_bytes": MAX_SERVER_UPLOAD_BYTES,
+            "message": "单个附件不能超过 4MB",
+        })
+    if not body:
+        raise HTTPException(status_code=400, detail="附件内容为空")
+    return body
+
+
 
 
 def _token() -> str:

@@ -259,6 +259,27 @@ def create_operating_expense(
     return OperatingExpenseRead.model_validate(row)
 
 
+def _protect_linked_payroll_expense(db: Session, row: OperatingExpense) -> None:
+    """Prevent generic mutations from desynchronizing payroll batch and wage items."""
+    if row.source == "payroll_import":
+        raise HTTPException(
+            status_code=409,
+            detail={"error": "payroll_batch_managed",
+                    "message": "工资记录请在“运营费用 → 人工费用”中修改或删除"},
+        )
+    linked_id = db.execute(
+        select(PayrollBatch.id)
+        .where(PayrollBatch.operating_expense_id == row.id)
+        .limit(1)
+    ).scalar_one_or_none()
+    if linked_id is not None:
+        raise HTTPException(
+            status_code=409,
+            detail={"error": "payroll_batch_managed",
+                    "message": "已关联工资明细的费用，请通过人工费用台账修改"},
+        )
+
+
 @router.put("/{expense_id}", response_model=OperatingExpenseRead)
 def update_operating_expense(
     expense_id: str,
@@ -268,6 +289,7 @@ def update_operating_expense(
     row = db.get(OperatingExpense, expense_id)
     if row is None:
         raise HTTPException(status_code=404, detail={"error": "not_found", "id": expense_id})
+    _protect_linked_payroll_expense(db, row)
     data = payload.model_dump(exclude_unset=True)
     if "expense_month" in data:
         data["expense_month"] = _validate_month(data.get("expense_month"))
@@ -317,6 +339,7 @@ def delete_operating_expense(expense_id: str, db: Session = Depends(get_db)) -> 
     row = db.get(OperatingExpense, expense_id)
     if row is None:
         raise HTTPException(status_code=404, detail={"error": "not_found", "id": expense_id})
+    _protect_linked_payroll_expense(db, row)
     db.delete(row)
     db.commit()
 

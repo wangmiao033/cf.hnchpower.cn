@@ -97,7 +97,9 @@ function patchProfitAnalysis() {
   let source = read(path)
   const oldButton = '<button type="button" onClick={openCreate}>+ 录入费用</button>'
   const newButton = '<button type="button" onClick={() => setActiveView(VIEWS.OPERATING_EXPENSES)}>去运营费用 →</button>'
-  if (source.includes(newButton)) return
+  // Newer profit pages delegate all writes to the dedicated expense ledgers.
+  // Do not try to patch an obsolete editor/delete action back into the safe page.
+  if (source.includes(newButton) || source.includes('const openExpenseLedger = () =>')) return
   source = replaceRequired(source, oldButton, newButton, 'profit expense entry')
   write(path, source)
 }

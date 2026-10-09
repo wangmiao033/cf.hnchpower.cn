@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from datetime import datetime, timezone
 from pathlib import Path
@@ -15,6 +16,7 @@ from sqlalchemy.orm import Session
 from app.core.blob_storage import (
     delete_private_blob,
     private_blob_response,
+    read_limited_attachment,
     upload_private_blob,
 )
 from app.core.deps import get_db
@@ -28,6 +30,7 @@ from app.schemas.bank_payment import (
     BankPaymentUpsert,
 )
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 _ALLOWED_CONTENT_TYPES: dict[str, str] = {
@@ -68,9 +71,9 @@ def _get_or_create_empty_bank_payment(db: Session, record_id: str) -> BankPaymen
         is_scheduled=False,
         is_personal_payee=False,
     )
+    # Defer commit so failed uploads cannot leave phantom empty payments.
     db.add(bp)
-    db.commit()
-    db.refresh(bp)
+    db.flush()
     return bp
 
 
@@ -158,7 +161,6 @@ async def upload_bank_payment_attachment(
     file: UploadFile = File(...),
 ) -> BankPaymentAttachmentRead:
     _require_reconciliation(db, record_id)
-    bp = _get_or_create_empty_bank_payment(db, record_id)
 
     content_type = (file.content_type or "").split(";")[0].strip().lower()
     if content_type not in _ALLOWED_CONTENT_TYPES:
@@ -170,23 +172,33 @@ async def upload_bank_payment_attachment(
             },
         )
     ext = _ALLOWED_CONTENT_TYPES[content_type]
-    body = await file.read()
-    att_id = str(uuid4())
-    pathname = f"bank-payments/{bp.id}/{att_id}{ext}"
-    blob_url = await upload_private_blob(pathname, body, content_type)
-
-    orig_name = _safe_original_name(file.filename or f"attachment{ext}")
-    row = BankPaymentAttachment(
-        id=att_id,
-        bank_payment_id=bp.id,
-        file_name=orig_name,
-        file_url=blob_url,
-        file_type=content_type,
-    )
-    db.add(row)
-    db.commit()
-    db.refresh(row)
-    return _attachment_to_read(row, record_id)
+    body = await read_limited_attachment(file)
+    blob_url = None
+    try:
+        bp = _get_or_create_empty_bank_payment(db, record_id)
+        att_id = str(uuid4())
+        pathname = f"bank-payments/{bp.id}/{att_id}{ext}"
+        blob_url = await upload_private_blob(pathname, body, content_type)
+        orig_name = _safe_original_name(file.filename or f"attachment{ext}")
+        row = BankPaymentAttachment(
+            id=att_id,
+            bank_payment_id=bp.id,
+            file_name=orig_name,
+            file_url=blob_url,
+            file_type=content_type,
+        )
+        db.add(row)
+        db.commit()
+        db.refresh(row)
+        return _attachment_to_read(row, record_id)
+    except Exception:
+        db.rollback()
+        if blob_url:
+            try:
+                await delete_private_blob(blob_url)
+            except Exception:
+                logger.exception("Failed to clean orphaned bank payment blob")
+        raise
 
 
 @router.delete(
