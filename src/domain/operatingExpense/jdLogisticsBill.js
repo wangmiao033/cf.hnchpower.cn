@@ -13,7 +13,7 @@ function valueAfterLabel(rows, target) {
 
 function toAmount(value, label) {
   const amount = Number(String(value ?? '').replace(/[¥￥,，\s]/g, ''))
-  if (!Number.isFinite(amount) || amount <= 0 || !Number.isInteger(amount * 100 + 1e-7)) {
+  if (!Number.isFinite(amount) || amount <= 0 || Math.abs(amount * 100 - Math.round(amount * 100)) > 0.001) {
     throw new Error(`${label}无效，请检查京东账单`)
   }
   return Math.round(amount * 100) / 100
@@ -53,26 +53,16 @@ function makeJdBill({ period, billNo, amount, count, original, discount, company
 
 /** Read JD Logistics' monthly summary sheet; do not upload package/recipient details. */
 export function parseJdLogisticsBillRows(summaryRows, detailRows = []) {
+  return parseJdBillWithDetails(summaryRows, detailRows)
+}
+
+export function parseJdBillWithDetails(summaryRows, detailRows = []) {
   if (!(summaryRows || []).slice(0, 6).some((row) => (row || []).some((value) => compact(value).includes('京东物流账单明细')))) {
     throw new Error('文件不是京东物流账单汇总页')
   }
   if (!compact(valueAfterLabel(summaryRows, '费用科目')).includes('收派服务费')) {
     throw new Error('当前只支持京东物流收派服务费账单')
   }
-  const summary = makeJdBill({
-    period: valueAfterLabel(summaryRows, '结算日期'),
-    billNo: valueAfterLabel(summaryRows, '结算单号'),
-    amount: valueAfterLabel(summaryRows, '应付合计'),
-    count: valueAfterLabel(summaryRows, '单量'),
-    original: null,
-    discount: null,
-    company: valueAfterLabel(summaryRows, '客户名称'),
-    payee: valueAfterLabel(summaryRows, '涉及主体如下')
-  })
-  return summary
-}
-
-export function parseJdBillWithDetails(summaryRows, detailRows = []) {
   const header = (summaryRows || []).find((row) => (row || []).some((v) => compact(v) === '商家编号') && (row || []).some((v) => compact(v) === '结算金额'))
   if (!header) throw new Error('未找到京东物流结算金额明细')
   const cType = header.findIndex((v) => compact(v) === '费用类型')
@@ -81,7 +71,6 @@ export function parseJdBillWithDetails(summaryRows, detailRows = []) {
   const cAmount = header.findIndex((v) => compact(v) === '结算金额')
   const feeRow = (summaryRows || []).find((row) => compact((row || [])[cType]) === '快递运费')
   if (!feeRow) throw new Error('未找到快递运费结算项目')
-  const enriched = (summaryRows || []).map((row) => [...(row || [])])
   // Reuse label-based parser while validating invoice math.
   const initial = Object.fromEntries(['结算日期','结算单号','应付合计','单量','客户名称','涉及主体如下'].map(label => [label, valueAfterLabel(summaryRows,label)]))
   const bill = makeJdBill({
