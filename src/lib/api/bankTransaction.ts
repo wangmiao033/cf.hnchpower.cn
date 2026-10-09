@@ -3,6 +3,7 @@
  */
 
 import { apiDelete, apiGet, apiPost, apiPostMultipart, apiPut } from '@/lib/api/client.ts'
+import { fetchEveryLedgerPage } from '@/domain/operatingExpense/loadLedgerPages.js'
 
 export type BankTransactionType =
   | 'statement_import'
@@ -155,6 +156,16 @@ export async function getBankTransactions(
   if (params.offset != null) sp.set('offset', String(params.offset))
   const qs = sp.toString()
   return apiGet<BankTransactionListResponse>(`${PATH}${qs ? `?${qs}` : ''}`)
+}
+
+/** Read all pages for the bank centre's client-side reconciliation filters. */
+export async function getAllBankTransactions(
+  params: Omit<GetBankTransactionsParams, 'limit' | 'offset'> = {}
+): Promise<BankTransactionListResponse> {
+  return fetchEveryLedgerPage(
+    ({ limit, offset }) => getBankTransactions({ ...params, limit, offset }),
+    { pageSize: 500, maxPages: 40 }
+  )
 }
 
 export async function getBankImportBatches(
