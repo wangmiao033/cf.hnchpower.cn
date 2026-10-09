@@ -22,6 +22,7 @@ import {
 import { parsePayrollFile, PAYROLL_COMPANY_SUGGESTIONS } from '@/domain/operatingExpense/payrollImport.js'
 import { OTHER_EXPENSE_SUBCATEGORIES, expenseSubcategoryLabel, filterOtherExpenses, summarizeOtherExpenses } from '@/domain/operatingExpense/subcategories.js'
 import { jdBillToExpenseForm, parseJdBillWithDetails, parseJdExpenseHash } from '@/domain/operatingExpense/jdLogisticsBill.js'
+import { hasDuplicateWecomExpense, parseWecomReceiptHash, wecomReceiptToExpenseForm } from '@/domain/operatingExpense/wecomReceiptDraft.js'
 import './OperatingExpenseCenterPage.css'
 
 const EXPENSE_MODES = {
@@ -519,6 +520,33 @@ export default function OperatingExpenseCenterPage() {
     }
   }, [activeView, canManage, prepareJdBillDraft, showToast])
 
+  const prepareWecomReceiptDraft = useCallback(async (receipt) => {
+    if (!canManage) throw new Error('当前账号没有录入运营费用的权限')
+    const existing = await listOperatingExpenses({ month: receipt.expenseMonth, q: '企业微信', limit: 500 })
+    if (hasDuplicateWecomExpense(existing.items, receipt)) {
+      throw new Error('该笔企业微信认证费可能已录入（同月、同日、同金额），请先核对现有记录')
+    }
+    setMonth(receipt.expenseMonth)
+    setEditingId('')
+    setExpenseForm(wecomReceiptToExpenseForm(receipt, emptyExpenseForm(receipt.expenseMonth)))
+    setEditorOpen(true)
+  }, [canManage])
+
+  useEffect(() => {
+    if (activeView !== VIEWS.SOFTWARE_EXPENSES || !canManage || typeof window === 'undefined') return
+    const hash = window.location.hash
+    if (!hash.startsWith('#wecom-expense?')) return
+    window.history.replaceState(window.history.state, '', window.location.pathname + window.location.search)
+    try {
+      const receipt = parseWecomReceiptHash(hash)
+      void prepareWecomReceiptDraft(receipt).then(() => {
+        showToast?.('企业微信 300 元已支付费用已预填，核对后点击保存', 'success')
+      }).catch((error) => showToast?.(error.message || '账单预填失败', 'error'))
+    } catch (error) {
+      showToast?.(error.message || '付款凭证链接无效', 'error')
+    }
+  }, [activeView, canManage, prepareWecomReceiptDraft, showToast])
+
   const openExpenseEdit = (row) => {
     if (!canManage || !mode) return
     setEditingId(row.id)
@@ -574,6 +602,19 @@ export default function OperatingExpenseCenterPage() {
     }
     setSaving(true)
     try {
+      if (!editingId && expenseForm.wecomReceiptFingerprint) {
+        const existingWecom = await listOperatingExpenses({
+          month: expenseForm.expenseMonth, q: '企业微信', limit: 500
+        })
+        const receipt = {
+          expenseMonth: expenseForm.expenseMonth,
+          paymentDate: expenseForm.paymentDate,
+          amount: Number(expenseForm.amount)
+        }
+        if (hasDuplicateWecomExpense(existingWecom.items, receipt)) {
+          throw new Error('该笔企业微信费用已存在，请勿重复记账')
+        }
+      }
       if (!editingId && expenseForm.importBillNo) {
         const duplicate = await listOperatingExpenses({
           month: expenseForm.expenseMonth, q: expenseForm.importBillNo, limit: 500
@@ -958,7 +999,7 @@ export default function OperatingExpenseCenterPage() {
 
 function ExpenseEditor({ mode, form, setForm, saving, editing, onClose, onSubmit }) {
   const update = (key) => (event) => setForm((old) => ({ ...old, [key]: event.target.value }))
-  return <div className="opex-backdrop" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}><section className="opex-editor" role="dialog" aria-modal="true"><div className="opex-editor-head"><div><span>{mode.kicker}</span><h2>{editing ? `编辑${mode.title}` : mode.addLabel.replace('+ ', '')}</h2></div><button type="button" onClick={onClose}>×</button></div><form onSubmit={onSubmit}><div className="opex-form-grid"><label><span>费用月份 *</span><input type="month" value={form.expenseMonth} onChange={update('expenseMonth')} required /></label><label><span>金额 *</span><input type="number" min="0.01" step="0.01" value={form.amount} onChange={update('amount')} placeholder="0.00" required /></label><label><span>应付日期</span><input type="date" value={form.dueDate} onChange={update('dueDate')} /></label><label><span>{mode.vendorLabel}</span><input value={form.vendorName} onChange={update('vendorName')} placeholder={mode.vendorLabel} /></label>{mode.kind === 'other' ? <label><span>费用子类{editing ? '' : ' *'}</span><select value={form.expenseSubcategory} onChange={update('expenseSubcategory')} required={!editing}><option value="">{editing ? '未分类（历史记录）' : '请选择费用子类'}</option>{OTHER_EXPENSE_SUBCATEGORIES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label> : null}<label><span>支付状态 *</span><select value={form.paymentStatus} onChange={update('paymentStatus')}><option value="unpaid">待支付</option><option value="paid">已支付</option></select></label><label><span>实付日期{form.paymentStatus === 'paid' ? ' *' : ''}</span><input type="date" value={form.paymentDate} onChange={update('paymentDate')} disabled={form.paymentStatus !== 'paid'} /></label><label><span>发票状态</span><select value={form.invoiceStatus} onChange={update('invoiceStatus')}><option value="pending">待取得</option><option value="received">已取得</option><option value="none">无需发票</option><option value="unknown">待确认</option></select></label><label><span>发票号</span><input value={form.invoiceNumber} onChange={update('invoiceNumber')} placeholder="可留空" /></label><label className="is-wide"><span>付款凭证 / 回单说明</span><input value={form.voucherNote} onChange={update('voucherNote')} placeholder="例如：工行转账、回单已存档" /></label><label className="is-wide"><span>备注</span><textarea value={form.remark} onChange={update('remark')} rows={3} placeholder="租赁周期、订阅周期或其他说明" /></label></div>{form.importBillNo ? <div className="opex-editor-warning">已从京东账单预填。费用按账单所属月份入账，付款与发票状态默认为“待支付 / 待取得”；请核对后保存。</div> : null}<div className="opex-editor-actions"><button type="button" onClick={onClose} disabled={saving}>取消</button><button type="submit" className="is-primary" disabled={saving}>{saving ? '保存中…' : '保存'}</button></div></form></section></div>
+  return <div className="opex-backdrop" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}><section className="opex-editor" role="dialog" aria-modal="true"><div className="opex-editor-head"><div><span>{mode.kicker}</span><h2>{editing ? `编辑${mode.title}` : mode.addLabel.replace('+ ', '')}</h2></div><button type="button" onClick={onClose}>×</button></div><form onSubmit={onSubmit}><div className="opex-form-grid"><label><span>费用月份 *</span><input type="month" value={form.expenseMonth} onChange={update('expenseMonth')} required /></label><label><span>金额 *</span><input type="number" min="0.01" step="0.01" value={form.amount} onChange={update('amount')} placeholder="0.00" required /></label><label><span>应付日期</span><input type="date" value={form.dueDate} onChange={update('dueDate')} /></label><label><span>{mode.vendorLabel}</span><input value={form.vendorName} onChange={update('vendorName')} placeholder={mode.vendorLabel} /></label>{mode.kind === 'other' ? <label><span>费用子类{editing ? '' : ' *'}</span><select value={form.expenseSubcategory} onChange={update('expenseSubcategory')} required={!editing}><option value="">{editing ? '未分类（历史记录）' : '请选择费用子类'}</option>{OTHER_EXPENSE_SUBCATEGORIES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label> : null}<label><span>支付状态 *</span><select value={form.paymentStatus} onChange={update('paymentStatus')}><option value="unpaid">待支付</option><option value="paid">已支付</option></select></label><label><span>实付日期{form.paymentStatus === 'paid' ? ' *' : ''}</span><input type="date" value={form.paymentDate} onChange={update('paymentDate')} disabled={form.paymentStatus !== 'paid'} /></label><label><span>发票状态</span><select value={form.invoiceStatus} onChange={update('invoiceStatus')}><option value="pending">待取得</option><option value="received">已取得</option><option value="none">无需发票</option><option value="unknown">待确认</option></select></label><label><span>发票号</span><input value={form.invoiceNumber} onChange={update('invoiceNumber')} placeholder="可留空" /></label><label className="is-wide"><span>付款凭证 / 回单说明</span><input value={form.voucherNote} onChange={update('voucherNote')} placeholder="例如：工行转账、回单已存档" /></label><label className="is-wide"><span>备注</span><textarea value={form.remark} onChange={update('remark')} rows={3} placeholder="租赁周期、订阅周期或其他说明" /></label></div>{form.importBillNo ? <div className="opex-editor-warning">已从京东账单预填。费用按账单所属月份入账，付款与发票状态默认为“待支付 / 待取得”；请核对后保存。</div> : null}{form.wecomReceiptFingerprint ? <div className="opex-editor-warning">企业微信付款截图已预填：300 元，已支付（零钱通），费用归属 2026 年 10 月。当前只有付款截图，发票暂记“待取得”；请核对后保存。</div> : null}<div className="opex-editor-actions"><button type="button" onClick={onClose} disabled={saving}>取消</button><button type="submit" className="is-primary" disabled={saving}>{saving ? '保存中…' : '保存'}</button></div></form></section></div>
 }
 
 function PayrollImportDialog({ imports, companySuggestions, saving, onUpdate, onClose, onSave }) {

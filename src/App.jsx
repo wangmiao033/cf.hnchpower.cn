@@ -227,13 +227,17 @@ function App() {
 
   useEffect(() => {
     if (!isAuthenticated || loading || typeof window === 'undefined') return
-    if (!window.location.hash.startsWith('#jd-expense?')) return
-    if (!canOpenView(can, VIEWS.OTHER_EXPENSES)) {
+    const hash = window.location.hash
+    const receiptView = hash.startsWith('#jd-expense?') ? VIEWS.OTHER_EXPENSES
+      : hash.startsWith('#wecom-expense?') ? VIEWS.SOFTWARE_EXPENSES
+        : null
+    if (!receiptView) return
+    if (!canOpenView(can, receiptView)) {
       showToast('当前账号没有录入运营费用的权限', 'error')
       return
     }
-    setOpenTabs((current) => current.includes(VIEWS.OTHER_EXPENSES) ? current : [...current, VIEWS.OTHER_EXPENSES])
-    setActiveViewState(VIEWS.OTHER_EXPENSES)
+    setOpenTabs((current) => current.includes(receiptView) ? current : [...current, receiptView])
+    setActiveViewState(receiptView)
   }, [isAuthenticated, loading, can, showToast])
 
   useEffect(() => {
