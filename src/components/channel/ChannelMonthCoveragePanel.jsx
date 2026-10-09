@@ -58,6 +58,13 @@ export default function ChannelMonthCoveragePanel({
           {expanded ? '收起巡检' : '展开月份检查'}
         </button>
       </header>
+      {!enabled || records.length >= 500 ? (
+        <div className="channel-month-audit__data-note" role="status">
+          {!enabled
+            ? '当前渠道接口未连接，巡检可能只基于本机缓存；请在联网并同步成功后复核。'
+            : '已加载达到 500 张渠道账单，后端可能还有更多历史页；当前断档判断仅基于已加载记录。'}
+        </div>
+      ) : null}
       <div className="channel-month-audit__metrics">
         <div className="channel-month-audit__metric is-important">
           <strong>{audit.gapChannelCount}</strong>
