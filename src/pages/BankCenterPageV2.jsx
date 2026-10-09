@@ -12,7 +12,7 @@ import {
 import {
   getBankAccountSummaries,
   getBankImportBatches,
-  getBankTransactions
+  getAllBankTransactions
 } from '@/lib/api/bankTransaction.ts'
 import './BankAutoReconciliationPage.css'
 import './BankCenterPage.css'
@@ -282,13 +282,11 @@ export default function BankCenterPageV2() {
     let cancelled = false
     setLedgerLoading(true)
     setLedgerError('')
-    getBankTransactions({
+    getAllBankTransactions({
       q: ledgerSearch.trim() || undefined,
       date_from: ledgerRange.from || undefined,
       date_to: ledgerRange.to || undefined,
-      bank_account: accountFilter || undefined,
-      limit: 500,
-      offset: 0
+      bank_account: accountFilter || undefined
     })
       .then((result) => {
         if (cancelled) return
