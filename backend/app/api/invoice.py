@@ -52,8 +52,14 @@ def _normalize_invoice_amounts(data: dict) -> None:
     gross = float(data.get("amount_with_tax") or 0)
     if gross == 0 and (net != 0 or tax != 0):
         data["amount_with_tax"] = round(net + tax, 2)
-    if not data.get("invoice_identity_key"):
-        data["invoice_identity_key"] = _identity_key(data)
+    # A structured invoice number is the canonical identity, not an untrusted
+    # or stale client-supplied key. Keep historical custom identifiers only when
+    # there are no structured invoice number fields.
+    canonical = _identity_key(data)
+    if canonical:
+        data["invoice_identity_key"] = canonical
+    elif not data.get("invoice_identity_key"):
+        data["invoice_identity_key"] = None
 
 
 def _normalize_tax_status(data: dict) -> None:
@@ -125,7 +131,7 @@ def list_invoice_records(
     count_stmt = _apply_filters(count_stmt, search=search, status=status)
     total = int(db.execute(count_stmt).scalar_one())
     rows = (
-        db.execute(base.order_by(InvoiceRecord.created_at.desc()).limit(limit).offset(offset))
+        db.execute(base.order_by(InvoiceRecord.created_at.desc(), InvoiceRecord.id.desc()).limit(limit).offset(offset))
         .scalars()
         .all()
     )
@@ -279,6 +285,10 @@ def update_invoice_record(
         "amount_with_tax": patch.get("amount_with_tax", row.amount_with_tax),
         "invoice_identity_key": patch.get("invoice_identity_key", row.invoice_identity_key),
     }
+    # A changed invoice code/number invalidates the old identity even if the
+    # new fields were cleared. Re-derive it from the complete merged record.
+    if any(name in patch for name in ("digital_invoice_no", "invoice_code", "invoice_no")):
+        merged_for_identity["invoice_identity_key"] = _identity_key(merged_for_identity)
     _normalize_invoice_amounts(merged_for_identity)
     _ensure_unique_identity(db, merged_for_identity.get("invoice_identity_key"), exclude_id=record_id)
     if "amount_with_tax" not in patch and float(row.amount_with_tax or 0) == 0:
