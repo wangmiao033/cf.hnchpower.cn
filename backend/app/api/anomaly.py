@@ -9,14 +9,17 @@ from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_db
+from app.core.security import require_current_user
 from app.models.bill_invoice_allocation import BillInvoiceAllocation
 from app.models.channel import ChannelRecord
 from app.models.invoice import InvoiceRecord
 from app.models.reconciliation import ReconciliationRecord
+from app.models.user import AuthUser
 from app.schemas.anomaly import BillInvoiceOverview
 from app.schemas.anomaly_ai import AnomalyAiAnalysisRequest, AnomalyAiAnalysisResponse
 from app.services.anomaly_ai import analyze_with_database
 from app.services.data_consistency import build_data_consistency_audit
+from app.services.permissions import resolve_permissions
 
 router = APIRouter()
 ACTIVE_STATUSES = ("suggested", "confirmed")
@@ -177,9 +180,13 @@ def list_bill_invoice_overviews(
 def get_consistency_audit(
     limit: int = Query(default=500, ge=1, le=1000),
     db: Session = Depends(get_db),
+    user: AuthUser = Depends(require_current_user),
 ) -> dict:
-    """只读巡检账单、发票、银行核销和归档之间的数据一致性。"""
-    return build_data_consistency_audit(db, limit=limit)
+    """Read-only audit; employee payroll amounts require separate analytics permission."""
+    allowed = resolve_permissions(db, user)
+    return build_data_consistency_audit(
+        db, limit=limit, include_payroll="analytics.view" in allowed,
+    )
 
 
 @router.post("/ai-analysis", response_model=AnomalyAiAnalysisResponse)
