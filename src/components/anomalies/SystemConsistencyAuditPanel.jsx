@@ -9,7 +9,8 @@ const CATEGORY_LABELS = {
   invoice: '发票一致性',
   funding: '资金一致性',
   archive: '归档一致性',
-  reference: '关联完整性'
+  reference: '关联完整性',
+  payroll: '工资一致性'
 }
 
 const CATEGORY_ACTIONS = {
@@ -17,7 +18,8 @@ const CATEGORY_ACTIONS = {
   invoice: '进入账单 360° 核对发票覆盖，再到发票中心解除错误分配或重新关联。',
   funding: '进入账单 360° 核对资金事实，再到银行中心处理错误核销或超额分配。',
   archive: '先确认发票与资金是否完整闭环；未闭环的账单应取消归档后继续处理。',
-  reference: '优先核对孤儿关联来源；不要直接补造账单、发票或流水来消除异常。'
+  reference: '优先核对孤儿关联来源；不要直接补造账单、发票或流水来消除异常。',
+  payroll: '进入人工费用台账核对工资批次与员工明细，不要直接改动其他经营费用。'
 }
 
 function money(value) {
@@ -35,6 +37,7 @@ function severityLabel(value) {
 }
 
 function actionLabel(issue) {
+  if (issue?.category === 'payroll') return '去人工费用'
   if (issue?.category === 'invoice') return '去发票处理'
   if (issue?.category === 'funding') return '去银行处理'
   if (issue?.category === 'archive') return '去账单处理'
@@ -113,7 +116,7 @@ export default function SystemConsistencyAuditPanel() {
         <div>
           <div className="system-consistency-badges"><span>DATA CONSISTENCY</span><em>只读巡检</em></div>
           <h2>系统数据一致性巡检</h2>
-          <p>核对账单、发票、银行核销和归档是否互相矛盾。这里只发现问题，不自动修改任何账单或资金事实。</p>
+          <p>核对账单、发票、银行核销、归档及有权限查看的工资批次是否互相矛盾。只发现问题，不自动改账。</p>
         </div>
         <button type="button" onClick={() => setRevision((value) => value + 1)} disabled={loading}>
           {loading ? '巡检中…' : '重新巡检'}
@@ -158,7 +161,7 @@ export default function SystemConsistencyAuditPanel() {
           {summary.healthy ? (
             <div className="system-consistency-empty">
               <strong>当前未发现结构性数据矛盾</strong>
-              <span>已检查 {summary.invoice_allocations_scanned || 0} 条发票分配、{summary.bank_matches_scanned || 0} 条银行核销、{summary.archived_bills_scanned || 0} 张归档账单。</span>
+              <span>已检查 {summary.invoice_allocations_scanned || 0} 条发票分配、{summary.bank_matches_scanned || 0} 条银行核销、{summary.archived_bills_scanned || 0} 张归档账单。{summary.payroll_batches_scanned != null ? `工资批次 ${summary.payroll_batches_scanned} 个。` : ''}</span>
             </div>
           ) : filtered.length === 0 ? (
             <div className="system-consistency-empty">
@@ -210,6 +213,7 @@ export default function SystemConsistencyAuditPanel() {
             <span>发票分配 {summary.invoice_allocations_scanned || 0}</span>
             <span>银行核销 {summary.bank_matches_scanned || 0}</span>
             <span>归档账单 {summary.archived_bills_scanned || 0}</span>
+            {summary.payroll_batches_scanned != null ? <span>工资批次 {summary.payroll_batches_scanned} 个</span> : null}
             <span>{data.generated_at ? new Date(data.generated_at).toLocaleString('zh-CN', { hour12: false }) : '-'}</span>
           </footer>
         </>
