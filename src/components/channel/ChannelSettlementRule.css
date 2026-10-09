@@ -2,3 +2,32 @@
 /* 分成比例、税率都由合同合作清单决定：主表只展示合同值，不作为日常手工录入项。合同缺失时走“补合作清单”流程。 */
 .channel-line-items-table tbody :is(td:nth-child(12),td:nth-child(13)) input.admin-input{pointer-events:none;caret-color:transparent;user-select:none;border-color:transparent!important;background:transparent!important;box-shadow:none!important;padding-left:0;padding-right:0;text-align:right;font-weight:800;color:#355e85;cursor:default}.channel-line-items-table tbody :is(td:nth-child(12),td:nth-child(13)) input.admin-input::placeholder{color:transparent}
 @media(max-width:1100px){.channel-rule-grid{grid-template-columns:1fr 1fr 1fr}.channel-rule-summary{grid-template-columns:1fr 1fr 1fr}.channel-contract-rule-override{grid-template-columns:1fr}}@media(max-width:720px){.channel-rule-panel__head{display:block}.channel-rule-panel__head small{display:block;margin-top:6px;text-align:left}.channel-contract-rule-status{align-items:flex-start}.channel-rule-grid,.channel-rule-summary{grid-template-columns:1fr 1fr}}
+
+/* Channel-vs-platform review is explanatory: the platform amount is already included. */
+.channel-difference-review{margin-top:12px;padding:12px 14px;border:1px solid #c5daee;border-radius:10px;background:#f6faff;color:#37536e}
+.channel-difference-review.is-lower{border-color:#e7c5c3;background:#fff9f8}
+.channel-difference-review.is-offsetting,.channel-difference-review.is-partial{border-color:#efdea9;background:#fffcf3}
+.channel-difference-review__heading{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.channel-difference-review__heading strong{display:block;font-size:13px;font-weight:800;color:#2c4765}
+.channel-difference-review__heading small{display:block;margin-top:4px;color:#637b96;font-size:11px;line-height:1.5}
+.channel-difference-review__badge{display:inline-flex;align-items:center;flex:0 0 auto;padding:5px 9px;border:1px solid #a5cbe8;border-radius:999px;background:#e8f3fd;color:#225b88;font-size:11px;font-weight:800}
+.is-lower .channel-difference-review__badge{border-color:#e1aaa5;background:#fff0ee;color:#a03f36}
+.is-offsetting .channel-difference-review__badge,.is-partial .channel-difference-review__badge{border-color:#e8d194;background:#fff5d9;color:#825d17}
+.channel-difference-review__figures{display:flex;flex-wrap:wrap;gap:6px 22px;margin-top:12px;font-size:12px}
+.channel-difference-review__figures strong{margin-left:5px;font-size:13px;color:#223e5e}
+.channel-difference-review__note{margin:9px 0 0;color:#58718c;font-size:11px;line-height:1.6}
+.channel-difference-review__fields{display:grid;grid-template-columns:minmax(150px,.8fr) minmax(220px,1.7fr) auto;gap:9px;align-items:end;margin-top:12px}
+.channel-difference-review__fields label{display:grid;gap:5px;min-width:0}
+.channel-difference-review__fields label>span{font-size:11px;font-weight:700;color:#48637d}
+.channel-difference-review__fields select,.channel-difference-review__fields input{width:100%;min-width:0;height:36px;box-sizing:border-box;padding:0 9px;border:1px solid #cbd9e7;border-radius:7px;background:#fff;color:#34485e;font:inherit;font-size:12px}
+.channel-difference-review__fields button{height:36px;padding:0 12px;border:1px solid #7fb2d8;border-radius:7px;background:#e6f2fb;color:#195786;font-size:12px;font-weight:800;cursor:pointer}
+.channel-difference-review__fields button:hover{background:#d4eaf9}
+.channel-difference-review__saved{display:block;margin-top:9px;color:#267252;font-size:11px;font-weight:700}
+.channel-difference-review__duplicate{margin:10px 0 0;padding:7px 9px;border-radius:6px;background:#fff0df;color:#9a4b1c;font-size:11px;font-weight:700;line-height:1.5}
+.channel-difference-review__adjustment-hint{display:flex;gap:9px;align-items:center;justify-content:space-between;margin:9px 0 0;color:#7c5c18;font-size:11px;line-height:1.5}
+.channel-difference-review__adjustment-hint button{flex:0 0 auto;padding:5px 9px;border:1px solid #d5c487;border-radius:6px;background:#fff;color:#775a19;font-size:11px;font-weight:800;cursor:pointer}
+@media(max-width:650px){.channel-difference-review__adjustment-hint{align-items:flex-start;flex-direction:column}}
+.channel-rule-summary .is-advisory{border-color:#b9d8ee;background:#f6faff}
+.channel-rule-summary .is-advisory strong{color:#215a89}
+@media(max-width:850px){.channel-difference-review__fields{grid-template-columns:1fr 1fr}.channel-difference-review__fields button{grid-column:1/-1}}
+@media(max-width:560px){.channel-difference-review__heading{align-items:flex-start;flex-direction:column}.channel-difference-review__fields{grid-template-columns:1fr}.channel-difference-review__fields button{grid-column:auto;width:100%}}

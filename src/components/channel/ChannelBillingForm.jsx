@@ -21,6 +21,13 @@ import {
   ruleFormulaText
 } from '@/domain/channel/channelBillingForm.js'
 import { recommendChannelContractRules } from '@/lib/api/contractTerms.ts'
+import {
+  channelDifferenceLabel,
+  createChannelDifferenceNote,
+  describeChannelDifference,
+  potentialDoubleAdjustment,
+  upsertChannelDifferenceNote
+} from '@/domain/channel/channelDifferenceReview.js'
 import '@/components/ChannelBilling.css'
 import './ChannelSettlementRule.css'
 import LineItemsTable from '@/components/shared/LineItemsTable.jsx'
@@ -185,6 +192,9 @@ function ChannelBillingForm({
   const [contractRuleRevision, setContractRuleRevision] = useState(0)
   const [lastContractRuleKey, setLastContractRuleKey] = useState('')
   const [contractOverrideReason, setContractOverrideReason] = useState('')
+  const [differenceReviewStatus, setDifferenceReviewStatus] = useState('pending')
+  const [differenceReviewReason, setDifferenceReviewReason] = useState('')
+  const [differenceNoteWritten, setDifferenceNoteWritten] = useState(false)
   const currentMonthKey = currentMonth()
 
   const fullRecord = useMemo(
@@ -209,6 +219,10 @@ function ChannelBillingForm({
   }), [fullRecord, previewSettlement])
 
   const adjustmentActive = Math.abs(Number(header.settlementAdjustmentAmount || 0)) > 0.0001 || String(header.settlementFinalOverride ?? '').trim() !== ''
+  const differenceReview = useMemo(() => describeChannelDifference(fullRecord), [fullRecord])
+  const hasDifferenceToReview = ['higher', 'lower', 'offsetting'].includes(differenceReview.kind)
+  const repeatedDifferenceAdjustment = potentialDoubleAdjustment(differenceReview, header.settlementAdjustmentAmount)
+  const hasAdjustmentTypeWithoutAmount = Boolean(header.settlementAdjustmentType) && !adjustmentActive
 
   const selectedPartner = useMemo(() => {
     if (partnerId) {
@@ -271,6 +285,9 @@ function ChannelBillingForm({
       setContractRuleState(emptyContractRuleState())
       setLastContractRuleKey('')
       setContractOverrideReason('')
+      setDifferenceReviewStatus('pending')
+      setDifferenceReviewReason('')
+      setDifferenceNoteWritten(false)
       return
     }
     setHeader({ ...initialHeaderForm })
@@ -279,6 +296,9 @@ function ChannelBillingForm({
     setContractRuleState(emptyContractRuleState())
     setLastContractRuleKey('')
     setContractOverrideReason('')
+    setDifferenceReviewStatus('pending')
+    setDifferenceReviewReason('')
+    setDifferenceNoteWritten(false)
   }, [mode, sourceRecord?.id, draftRecord])
 
   useEffect(() => {
@@ -508,6 +528,7 @@ function ChannelBillingForm({
   }
 
   const handleLineChange = (index, field, value) => {
+    setDifferenceNoteWritten(false)
     setLines((current) => current.map((row, rowIndex) => {
       if (rowIndex !== index) return row
       const identityChanged = field === 'gameName' || field === 'settlementCycle'
@@ -521,6 +542,7 @@ function ChannelBillingForm({
   }
 
   const addLine = () => {
+    setDifferenceNoteWritten(false)
     const last = lines[lines.length - 1] || {}
     const lastCycle = normalizeChannelSettlementCycle(last.settlementCycle)
     const recommendation = contractRuleState.recommendation
@@ -540,7 +562,28 @@ function ChannelBillingForm({
     }
     setLines((current) => [...current, next])
   }
-  const removeLine = (index) => setLines((current) => current.length <= 1 ? current : current.filter((_, rowIndex) => rowIndex !== index))
+  const removeLine = (index) => {
+    setDifferenceNoteWritten(false)
+    setLines((current) => current.length <= 1 ? current : current.filter((_, rowIndex) => rowIndex !== index))
+  }
+
+  const writeDifferenceNote = () => {
+    try {
+      const note = createChannelDifferenceNote(fullRecord, differenceReview, {
+        status: differenceReviewStatus,
+        reason: differenceReviewReason
+      })
+      setHeader((current) => ({
+        ...current,
+        remark: upsertChannelDifferenceNote(current.remark, note)
+      }))
+      setDifferenceNoteWritten(true)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '生成差异说明失败'
+      if (onError) onError(message)
+      else window.alert(message)
+    }
+  }
 
   const formStateRecord = useMemo(() => ({ ...fullRecord, ...(recordId != null ? { id: recordId } : {}) }), [fullRecord, recordId])
   useEffect(() => { onFormStateChange?.(formStateRecord) }, [formStateRecord, onFormStateChange])
@@ -567,6 +610,14 @@ function ChannelBillingForm({
     if (adjustmentActive && !String(header.settlementAdjustmentReason || '').trim()) {
       const msg = '使用结算调整时必须填写调整原因，避免账单金额被无依据修改。'
       onError?.(msg) ?? window.alert(msg); return
+    }
+    if (repeatedDifferenceAdjustment) {
+      const proceed = window.confirm(
+        `渠道平台金额已经包含差异 ${differenceReview.delta > 0 ? '+' : ''}${differenceReview.delta.toFixed(2)} 元。\\n` +
+        '本次又填入与这笔差异同额的结算调整，可能重复计入应收。\\n\\n' +
+        '如确实是另一笔独立商务调整，请确认有依据并继续；否则请取消并清空调整金额。'
+      )
+      if (!proceed) return
     }
 
     const nextMonths = recordMonths({ settlementMonth: fullRecord.settlementMonth, items: lines })
@@ -636,7 +687,9 @@ function ChannelBillingForm({
     if (submitIntentRef) submitIntentRef.current = 'back'
   }
 
-  const validationTone = totals.validationStatus === 'fail' ? 'is-danger' : totals.validationStatus === 'pass' ? 'is-good' : ''
+  const validationTone = totals.validationStatus === 'fail'
+    ? differenceReview.kind === 'higher' ? 'is-advisory' : 'is-danger'
+    : totals.validationStatus === 'pass' ? 'is-good' : ''
 
   return (
     <form id={formId} onSubmit={handleSubmit} className={`channel-form channel-form--page ${className}`}>
@@ -751,6 +804,58 @@ function ChannelBillingForm({
           <div className="summary-item"><div className="label">总退款</div><div className="value">{formatMoney(totals.refund)}</div></div>
           <div className="summary-item summary-item--hero"><div className="label">{adjustmentActive ? '最终应收' : '实际结算金额'}</div><div className="value">{formatMoney(totals.settlement)}</div></div>
         </div>
+        {differenceReview.kind !== 'unvalidated' && differenceReview.kind !== 'matched' ? (
+          <section className={`channel-difference-review is-${differenceReview.kind}`} aria-label="渠道账单差异处理">
+            <div className="channel-difference-review__heading">
+              <div>
+                <strong>渠道账单差异核对</strong>
+                <small>独立记录核对结果，不修改后台流水、折扣、分成规则或结算金额。</small>
+              </div>
+              <span className="channel-difference-review__badge">{channelDifferenceLabel(differenceReview)}</span>
+            </div>
+            {differenceReview.kind === 'partial' ? (
+              <p className="channel-difference-review__note">
+                仍有游戏未填写平台结算金额，合计差额可能不准确。请先补齐各游戏的平台账单金额，再判断是否需要核对。
+              </p>
+            ) : (
+              <>
+                <div className="channel-difference-review__figures">
+                  <span>系统核算 <strong>{formatMoney(differenceReview.system)}</strong></span>
+                  <span>渠道账单 <strong>{formatMoney(differenceReview.platform)}</strong></span>
+                  <span>业务应收 <strong>{formatMoney(totals.businessSettlement)}</strong></span>
+                </div>
+                <p className="channel-difference-review__note">
+                  各行“平台结算”已纳入业务应收；{differenceReview.kind === 'higher' ? '渠道账单金额高于系统核算，并不需要在下面再做“商务补差”。' : '请核实差额来源，不能通过修改真实流水来消除差异。'}
+                </p>
+                <div className="channel-difference-review__fields">
+                  <label>
+                    <span>核对状态</span>
+                    <select value={differenceReviewStatus} onChange={(event) => { setDifferenceReviewStatus(event.target.value); setDifferenceNoteWritten(false) }}>
+                      <option value="pending">待核实（先保留差异）</option>
+                      <option value="platform_confirmed">渠道金额已核实</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>说明 / 核对依据{differenceReviewStatus === 'platform_confirmed' ? ' *' : ''}</span>
+                    <input
+                      type="text"
+                      value={differenceReviewReason}
+                      onChange={(event) => { setDifferenceReviewReason(event.target.value); setDifferenceNoteWritten(false) }}
+                      placeholder={differenceReviewStatus === 'platform_confirmed' ? '必填：订单明细或对方确认依据' : '可选：例如渠道订单明细待提供'}
+                    />
+                  </label>
+                  <button type="button" onClick={writeDifferenceNote}>写入账单备注</button>
+                </div>
+                {differenceNoteWritten ? (
+                  <small className="channel-difference-review__saved" role="status">差异说明已写入上方备注；请保存账单后才会同步到服务器。此操作不增加应收。</small>
+                ) : null}
+              </>
+            )}
+            {repeatedDifferenceAdjustment ? (
+              <p className="channel-difference-review__duplicate" role="alert">注意：下面的结算调整与当前平台差异同额，可能重复计入。请检查是否另有独立补款依据。</p>
+            ) : null}
+          </section>
+        ) : null}
         <div style={{ marginTop: 10, border: '1px solid #dbe5f3', borderRadius: 10, padding: '10px 12px', background: '#f8fbff' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start', marginBottom: 8 }}>
             <div style={{ display: 'grid', gap: 2 }}>
@@ -766,6 +871,24 @@ function ChannelBillingForm({
             <label style={{ display: 'grid', gap: 4, fontSize: 11 }}><span>最终确认金额（选填）</span><input type="number" step="0.01" min="0" className="admin-input" value={header.settlementFinalOverride ?? ''} onChange={(e) => handleHeaderChange('settlementFinalOverride', e.target.value)} placeholder="如双方确认 376.00" /></label>
             <label style={{ display: 'grid', gap: 4, fontSize: 11 }}><span>调整原因 {adjustmentActive ? '*' : ''}</span><input type="text" className="admin-input" value={header.settlementAdjustmentReason || ''} onChange={(e) => handleHeaderChange('settlementAdjustmentReason', e.target.value)} placeholder="例如：10月差额于12月结转，双方确认最终金额" /></label>
           </div>
+          {hasAdjustmentTypeWithoutAmount && hasDifferenceToReview ? (
+            <div className="channel-difference-review__adjustment-hint">
+              <span>仅选择调整类型并不会增加金额；这笔差异已包含在平台结算中，无需再“商务补差”。</span>
+              <button
+                type="button"
+                onClick={() => setHeader((current) => ({
+                  ...current,
+                  settlementAdjustmentType: '',
+                  settlementAdjustmentSourceMonth: '',
+                  settlementAdjustmentAmount: '',
+                  settlementFinalOverride: '',
+                  settlementAdjustmentReason: ''
+                }))}
+              >
+                一键改回不调整
+              </button>
+            </div>
+          ) : null}
           {adjustmentActive ? (
             <div style={{ marginTop: 9, display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', fontSize: 12 }}>
               <span>本期业务结算 <strong>{formatMoney(totals.businessSettlement)}</strong></span>
@@ -781,7 +904,7 @@ function ChannelBillingForm({
         <div className="channel-rule-summary">
           <div><span>系统计算合计</span><strong>{formatMoney(totals.system)}</strong></div>
           <div><span>平台结算合计</span><strong>{totals.platform == null ? '未录入' : formatMoney(totals.platform)}</strong></div>
-          <div className={validationTone}><span>系统 - 平台</span><strong>{totals.difference == null ? '-' : `${totals.difference >= 0 ? '+' : ''}${formatMoney(totals.difference)}`}</strong></div>
+          <div className={validationTone}><span>系统 - 平台（仅用于核对）</span><strong>{totals.difference == null ? '-' : `${totals.difference >= 0 ? '+' : ''}${formatMoney(totals.difference)}`}</strong></div>
           <div className={validationTone}><span>校验状态</span><strong>{validationText(totals.validationStatus)}</strong></div>
           <div><span>允许误差</span><strong>±{formatMoney(header.validationTolerance)}</strong></div>
         </div>
