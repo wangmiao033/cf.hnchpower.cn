@@ -1,3 +1,4 @@
+import { csvRow } from '@/domain/export/csvSafety.js'
 import React from 'react'
 import './CSVExport.css'
 
@@ -59,8 +60,8 @@ function CSVExport({ records, statistics, onExportSuccess, onExportError }) {
 
       // 转换为CSV格式
       const csvContent = [
-        headers.join(','),
-        ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+        csvRow(headers),
+        ...rows.map(csvRow)
       ].join('\n')
 
       // 添加BOM以支持中文
