@@ -178,6 +178,14 @@ export async function getBankImportBatches(
   return apiGet<BankImportBatchListResponse>(`${PATH}/import-batches${qs ? `?${qs}` : ''}`)
 }
 
+/** Complete bank import history beyond the server's 200-row page size. */
+export async function getAllBankImportBatches(): Promise<BankImportBatchListResponse> {
+  return fetchEveryLedgerPage(
+    ({ limit, offset }) => getBankImportBatches({ limit, offset }),
+    { pageSize: 200, maxPages: 30 }
+  )
+}
+
 export async function getBankAccountSummaries(): Promise<BankAccountSummaryListResponse> {
   return apiGet<BankAccountSummaryListResponse>(`${PATH}/accounts`)
 }
