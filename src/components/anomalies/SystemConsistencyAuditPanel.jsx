@@ -59,6 +59,7 @@ export default function SystemConsistencyAuditPanel() {
   useEffect(() => {
     let cancelled = false
     setLoading(true)
+    setData(null)
     setError('')
     getSystemConsistencyAudit(500)
       .then((result) => {
