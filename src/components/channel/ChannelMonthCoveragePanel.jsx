@@ -27,7 +27,7 @@ export default function ChannelMonthCoveragePanel({
 }) {
   const [windowSize, setWindowSize] = useState(6)
   const [endMonth, setEndMonth] = useState(() => lastCompletedChannelMonth())
-  const [expanded, setExpanded] = useState(true)
+  const [expanded, setExpanded] = useState(false)
   const [onlyGaps, setOnlyGaps] = useState(true)
   const [search, setSearch] = useState('')
   const latestFullMonth = lastCompletedChannelMonth()
@@ -45,47 +45,35 @@ export default function ChannelMonthCoveragePanel({
     <section className="channel-month-audit" aria-label="渠道账期巡检">
       <header className="channel-month-audit__head">
         <div className="channel-month-audit__intro">
-          <div className="channel-month-audit__eyebrow">账期巡检 · 自动检查</div>
-          <h2>哪些渠道可能漏了账单？</h2>
-          <p>自动扫描已录账期之间的空档。它是核对提醒，不代表该月一定产生流水或需要结算。</p>
+          <h2>账期巡检</h2>
+          <p>自动查找渠道账期空档，仅作核对提醒</p>
+        </div>
+        <div className="channel-month-audit__inline-metrics" aria-label="账期巡检概况">
+          <span className="is-important"><strong>{audit.gapChannelCount}</strong> 个渠道断档</span>
+          <span><strong>{audit.gapMonthCount}</strong> 个月次待核实</span>
+          <span><strong>{audit.trailingChannelCount}</strong> 个渠道期末未出账</span>
+          <span><strong>{audit.coveredChannelCount}</strong> 个渠道已检查</span>
         </div>
         <button
           type="button"
           className="channel-month-audit__toggle"
           aria-expanded={expanded}
+          aria-controls="channel-month-audit-details"
           onClick={() => setExpanded((value) => !value)}
         >
-          {expanded ? '收起巡检' : '展开月份检查'}
+          {expanded ? '收起检查' : '展开检查'}
+          <span aria-hidden="true">{expanded ? '⌃' : '⌄'}</span>
         </button>
       </header>
       {!enabled || records.length >= 500 ? (
         <div className="channel-month-audit__data-note" role="status">
           {!enabled
-            ? '当前渠道接口未连接，巡检可能只基于本机缓存；请在联网并同步成功后复核。'
-            : '已加载达到 500 张渠道账单，后端可能还有更多历史页；当前断档判断仅基于已加载记录。'}
+            ? '渠道接口暂未连接，巡检可能基于本机缓存。请恢复同步后复核。'
+            : '已加载500张账单，可能仍有历史页未读取，巡检结果仅供参考。'}
         </div>
       ) : null}
-      <div className="channel-month-audit__metrics">
-        <div className="channel-month-audit__metric is-important">
-          <strong>{audit.gapChannelCount}</strong>
-          <span>账期断档渠道</span>
-        </div>
-        <div className="channel-month-audit__metric">
-          <strong>{audit.gapMonthCount}</strong>
-          <span>断档月次 · 待核实</span>
-        </div>
-        <div className="channel-month-audit__metric">
-          <strong>{audit.trailingChannelCount}</strong>
-          <span>检查期末无新账单</span>
-        </div>
-        <div className="channel-month-audit__metric">
-          <strong>{audit.coveredChannelCount}</strong>
-          <span>本次覆盖渠道</span>
-        </div>
-      </div>
-
       {expanded ? (
-        <div className="channel-month-audit__body">
+        <div id="channel-month-audit-details" className="channel-month-audit__body">
           <div className="channel-month-audit__filters">
             <label>
               <span>检查范围</span>
@@ -189,9 +177,9 @@ export default function ChannelMonthCoveragePanel({
           )}
 
           <div className="channel-month-audit__foot">
-            <p><strong>判读方法：</strong>“1张”=已有账单；“断档”=该月前后都有已录账单，但该月未找到；“未出”=最后一张之后暂无记录；“—”=该月早于首次观察到的账期。均不能单独证明漏账。</p>
+            <p><strong>标识：</strong>已录 = 有账单 · 断档 = 前后有记录但本月无账单 · 未出 = 最后一张之后暂无记录。仅供核查，不代表必有流水。</p>
             <div>
-              <span>包含归档 · 不计作废 · 只检查当前已加载的渠道账单</span>
+              <span>已归档计入 · 已作废不计 · 根据已加载账单统计</span>
               <button type="button" onClick={() => onCreateBill?.()}>新增渠道账单</button>
             </div>
           </div>
