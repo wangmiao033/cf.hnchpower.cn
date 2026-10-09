@@ -188,3 +188,8 @@
 .opex-subcategory-items button strong{font-size:12px;color:#1e293b;font-variant-numeric:tabular-nums}
 .opex-subcategory-items button.is-active strong{color:#1d4ed8}
 @media(max-width:760px){.opex-subcategory-items button{flex:1 1 145px}}
+
+/* Multi-sheet payroll import: per-month review and existing-record notice. */
+.payroll-import-summary{margin:0 22px 10px;padding:10px 12px;border:1px solid #dbeafe;border-radius:8px;background:#f8fbff;color:#526174;font-size:12px;line-height:1.65}
+.payroll-import-summary strong{font-weight:800;color:#1d4ed8}
+.payroll-import-item .payroll-import-warning strong{font-weight:800;color:#b45309}
