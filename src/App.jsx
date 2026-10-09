@@ -226,6 +226,17 @@ function App() {
   }, [isAuthenticated, loading, user?.id, user?.role, can])
 
   useEffect(() => {
+    if (!isAuthenticated || loading || typeof window === 'undefined') return
+    if (!window.location.hash.startsWith('#jd-expense?')) return
+    if (!canOpenView(can, VIEWS.OTHER_EXPENSES)) {
+      showToast('当前账号没有录入运营费用的权限', 'error')
+      return
+    }
+    setOpenTabs((current) => current.includes(VIEWS.OTHER_EXPENSES) ? current : [...current, VIEWS.OTHER_EXPENSES])
+    setActiveViewState(VIEWS.OTHER_EXPENSES)
+  }, [isAuthenticated, loading, can, showToast])
+
+  useEffect(() => {
     if (!hasReconciliationAccess || !reconDataActivated) return undefined
     let cancelled = false
     const tasks = [
