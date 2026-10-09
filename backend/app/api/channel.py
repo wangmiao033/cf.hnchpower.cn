@@ -229,7 +229,7 @@ def list_channel_records(db: Session = Depends(get_db), search: str | None = Que
     base = _apply_filters(select(ChannelRecord).options(selectinload(ChannelRecord.line_items)), search=search, settlement_month=settlement_month, channel_name=channel_name, game_name=game_name, status=status)
     count_stmt = _apply_filters(select(func.count(ChannelRecord.id)), search=search, settlement_month=settlement_month, channel_name=channel_name, game_name=game_name, status=status)
     total = int(db.execute(count_stmt).scalar_one())
-    rows = db.execute(base.order_by(ChannelRecord.created_at.desc()).limit(limit).offset(offset)).scalars().all()
+    rows = db.execute(base.order_by(ChannelRecord.created_at.desc(), ChannelRecord.id.desc()).limit(limit).offset(offset)).scalars().all()
     return ChannelRecordListResponse(items=[_to_read(r) for r in rows], total=total)
 
 
@@ -256,7 +256,7 @@ def list_channel_receipts(record_id: str, db: Session = Depends(get_db)) -> Chan
     rows = db.execute(
         select(ChannelReceipt)
         .where(ChannelReceipt.channel_record_id == record_id)
-        .order_by(ChannelReceipt.created_at.desc())
+        .order_by(ChannelReceipt.created_at.desc(), ChannelReceipt.id.desc())
     ).scalars().all()
     receipt_ids = [str(row.id) for row in rows]
     match_map, tx_map = _receipt_source_maps(db, receipt_ids)

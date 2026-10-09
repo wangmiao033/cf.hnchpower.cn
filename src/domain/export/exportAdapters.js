@@ -1,3 +1,5 @@
+import { csvRow } from '@/domain/export/csvSafety.js'
+
 /**
  * 导出前数据结构组装（不改变下游 ExportButton / 文件格式，仅集中 JSON 备份类导出）
  */
@@ -83,12 +85,12 @@ export function downloadJsonBlob(data, filename) {
 export function buildInvoiceCsvContent(invoiceRecords) {
   const headers = ['抬头', '税号', '金额', '状态', '开票日期', '备注']
   const rows = (invoiceRecords || []).map((r) => [
-    `"${r.title || ''}"`,
-    `"${r.taxNo || ''}"`,
-    r.amount || '0.00',
+    r.title || '',
+    r.taxNo || '',
+    r.amount ?? '0.00',
     r.status || '',
     r.issueDate || '',
-    `"${r.remark || ''}"`
+    r.remark || ''
   ])
-  return [headers.join(','), ...rows.map((r) => r.join(','))].join('\n')
+  return [csvRow(headers), ...rows.map(csvRow)].join('\n')
 }
