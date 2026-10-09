@@ -19,7 +19,7 @@ import {
   updateOperatingExpense,
   updatePayrollBatch
 } from '@/lib/api/operatingExpenses.ts'
-import { parsePayrollFile, PAYROLL_COMPANY_SUGGESTIONS } from '@/domain/operatingExpense/payrollImport.js'
+import { markExistingPayrollBatches, parsePayrollFile, PAYROLL_COMPANY_SUGGESTIONS } from '@/domain/operatingExpense/payrollImport.js'
 import { OTHER_EXPENSE_SUBCATEGORIES, expenseSubcategoryLabel, filterOtherExpenses, summarizeOtherExpenses } from '@/domain/operatingExpense/subcategories.js'
 import { jdBillToExpenseForm, parseJdBillWithDetails, parseJdExpenseHash } from '@/domain/operatingExpense/jdLogisticsBill.js'
 import { hasDuplicateWecomExpense, parseWecomReceiptHash, wecomReceiptToExpenseForm } from '@/domain/operatingExpense/wecomReceiptDraft.js'
@@ -184,6 +184,14 @@ export default function OperatingExpenseCenterPage() {
   const [payrollDetailLoading, setPayrollDetailLoading] = useState(false)
   const payrollFileInputRef = useRef(null)
 
+  const findExistingPayrollBatches = async (items) => {
+    const months = Array.from(new Set(items.filter((item) => item.items?.length && item.expenseMonth).map((item) => item.expenseMonth)))
+    const responses = await Promise.all(months.map((expenseMonth) => listPayrollBatches({
+      month: expenseMonth, limit: 500
+    })))
+    return responses.flatMap((response) => response.items || [])
+  }
+
   const handlePayrollFilesSelected = async (event) => {
     const files = Array.from(event.target.files || [])
     event.target.value = ''
@@ -191,35 +199,49 @@ export default function OperatingExpenseCenterPage() {
 
     setSaving(true)
     const parsed = []
-    for (let index = 0; index < files.length; index += 1) {
-      const file = files[index]
-      try {
-        const result = await parsePayrollFile(file)
-        parsed.push({
-          key: `${file.name}-${index}-${Date.now()}`,
-          ...result,
-          expenseMonth: result.expenseMonth || month,
-          companyName: result.companyName || '',
-          payrollStatus: 'reviewed',
-          error: ''
-        })
-      } catch (error) {
-        parsed.push({
-          key: `${file.name}-${index}-${Date.now()}`,
-          fileName: file.name,
-          expenseMonth: month,
-          companyName: '',
-          payrollStatus: 'reviewed',
-          items: [],
-          totals: { gross_salary: 0, employee_deduction_total: 0, income_tax_total: 0, net_salary_total: 0 },
-          validationStatus: 'mismatch',
-          error: error instanceof Error ? error.message : '工资表解析失败'
-        })
+    try {
+      for (let fileIndex = 0; fileIndex < files.length; fileIndex += 1) {
+        const file = files[fileIndex]
+        try {
+          // A single workbook may contain 8 company/month worksheets, not just its first sheet.
+          const sheets = await parsePayrollFile(file)
+          sheets.forEach((sheet, sheetIndex) => {
+            parsed.push({
+              key: `${fileIndex}-${sheetIndex}-${file.name}`,
+              ...sheet,
+              expenseMonth: sheet.expenseMonth || '',
+              companyName: sheet.companyName || '',
+              payrollStatus: 'pending_review',
+              items: sheet.items || [],
+              totals: sheet.totals || { gross_salary: 0, employee_deduction_total: 0, income_tax_total: 0, net_salary_total: 0 },
+              validationStatus: sheet.validationStatus || 'mismatch',
+              error: sheet.error || ''
+            })
+          })
+        } catch (error) {
+          parsed.push({
+            key: `error-${fileIndex}-${file.name}`,
+            fileName: file.name,
+            expenseMonth: '',
+            companyName: '',
+            payrollStatus: 'pending_review',
+            items: [],
+            totals: { gross_salary: 0, employee_deduction_total: 0, income_tax_total: 0, net_salary_total: 0 },
+            validationStatus: 'mismatch',
+            error: error instanceof Error ? error.message : '工资表解析失败'
+          })
+        }
       }
+      const existing = await findExistingPayrollBatches(parsed)
+      setPayrollImports(markExistingPayrollBatches(parsed, existing))
+      setPayrollImportOpen(true)
+    } catch (error) {
+      showToast?.(error instanceof Error ? `读取现有工资批次失败：${error.message}` : '无法读取现有工资批次，请重试', 'error')
+      setPayrollImports([])
+      setPayrollImportOpen(false)
+    } finally {
+      setSaving(false)
     }
-    setPayrollImports(parsed)
-    setPayrollImportOpen(true)
-    setSaving(false)
   }
 
   const updatePayrollImport = (key, patch) => {
@@ -227,61 +249,78 @@ export default function OperatingExpenseCenterPage() {
   }
 
   const savePayrollImports = async () => {
-    const ready = payrollImports.filter((item) => !item.error && item.items?.length)
-    if (!ready.length) {
+    const candidates = payrollImports.filter((item) => !item.error && item.items?.length)
+    if (!candidates.length) {
       showToast?.('没有可导入的工资表', 'error')
       return
     }
-    for (const item of ready) {
-      if (!String(item.companyName || '').trim()) {
-        showToast?.(`请填写“${item.fileName}”所属公司`, 'error')
-        return
-      }
-      if (!item.expenseMonth) {
-        showToast?.(`请填写“${item.fileName}”工资月份`, 'error')
+    for (const item of candidates) {
+      if (!String(item.companyName || '').trim() || !item.expenseMonth) {
+        showToast?.(`请填写“${item.fileName}”的公司与工资月份`, 'error')
         return
       }
     }
 
     setSaving(true)
-    const failed = []
-    const importedMonths = []
-    let successCount = 0
-    for (const item of ready) {
-      try {
-        await createPayrollBatch({
-          expense_month: item.expenseMonth,
-          company_name: String(item.companyName).trim(),
-          review_status: item.payrollStatus === 'pending_review' ? 'pending_review' : 'reviewed',
-          payment_status: 'unpaid',
-          payment_date: null,
-          due_date: null,
-          voucher_note: null,
-          remark: null,
-          source_file_name: item.fileName,
-          items: item.items
-        })
-        successCount += 1
-        importedMonths.push(item.expenseMonth)
-      } catch (error) {
-        failed.push({
-          ...item,
-          error: error instanceof Error ? error.message : '工资批次保存失败'
-        })
+    try {
+      // Re-check immediately before saving in case another tab imported these months.
+      const existing = await findExistingPayrollBatches(candidates)
+      const checked = markExistingPayrollBatches(payrollImports, existing)
+      const alreadyExists = checked.filter((item) => item.existingBatch)
+      const ready = checked.filter((item) => !item.error && !item.existingBatch && item.items?.length)
+      setPayrollImports(checked)
+      if (!ready.length) {
+        showToast?.('所选工资批次已存在或不可导入，未创建重复记录', 'error')
+        return
       }
-    }
-    setSaving(false)
-    if (successCount) {
-      setPayrollMonthFilter('all')
-      setRevision((value) => value + 1)
-      showToast?.(`已导入 ${successCount} 个工资批次`, 'success')
-    }
-    if (failed.length) {
-      setPayrollImports(failed)
-      showToast?.('部分工资表未导入，请查看错误提示', 'error')
-    } else {
-      setPayrollImportOpen(false)
-      setPayrollImports([])
+
+      const failed = []
+      let successCount = 0
+      for (const item of ready) {
+        try {
+          await createPayrollBatch({
+            expense_month: item.expenseMonth,
+            company_name: String(item.companyName).trim(),
+            review_status: item.payrollStatus === 'reviewed' ? 'reviewed' : 'pending_review',
+            payment_status: 'unpaid',
+            payment_date: null,
+            due_date: null,
+            voucher_note: null,
+            remark: null,
+            source_file_name: item.fileName,
+            items: item.items
+          })
+          successCount += 1
+        } catch (error) {
+          failed.push({
+            ...item,
+            error: error instanceof Error ? error.message : '工资批次保存失败'
+          })
+        }
+      }
+      const skippedCount = alreadyExists.length
+      if (successCount) {
+        setPayrollMonthFilter('all')
+        setRevision((value) => value + 1)
+        showToast?.(`已导入 ${successCount} 批次，跳过 ${skippedCount} 个已存在批次`, 'success')
+      }
+      const conflicts = alreadyExists.filter((item) => Math.abs(item.existingNetDifference || 0) > 0.01)
+      if (failed.length || conflicts.length) {
+        // Keep the actual discrepancy visible until it is reviewed, never overwrite automatically.
+        setPayrollImports([...failed, ...alreadyExists])
+        if (conflicts.length) {
+          showToast?.(`发现 ${conflicts.length} 个已存在批次与源表实发金额不同，请核对原记录`, 'error')
+        } else {
+          showToast?.('部分工资表未导入，请查看错误提示', 'error')
+        }
+      } else {
+        setPayrollImportOpen(false)
+        setPayrollImports([])
+      }
+    } catch (error) {
+      showToast?.(error instanceof Error ? `入账前重复检查失败：${error.message}` : '保存前检查失败，请重试', 'error')
+    } finally {
+      setSaving(false)
     }
   }
 
