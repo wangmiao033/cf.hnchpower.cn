@@ -21,6 +21,7 @@ import {
 } from '@/lib/api/operatingExpenses.ts'
 import { parsePayrollFile, PAYROLL_COMPANY_SUGGESTIONS } from '@/domain/operatingExpense/payrollImport.js'
 import { OTHER_EXPENSE_SUBCATEGORIES, expenseSubcategoryLabel, filterOtherExpenses, summarizeOtherExpenses } from '@/domain/operatingExpense/subcategories.js'
+import { jdBillToExpenseForm, parseJdBillWithDetails, parseJdExpenseHash } from '@/domain/operatingExpense/jdLogisticsBill.js'
 import './OperatingExpenseCenterPage.css'
 
 const EXPENSE_MODES = {
@@ -172,6 +173,8 @@ export default function OperatingExpenseCenterPage() {
   const [expenseForm, setExpenseForm] = useState(() => emptyExpenseForm(currentMonth()))
   const [depositForm, setDepositForm] = useState(emptyDepositForm)
   const [saving, setSaving] = useState(false)
+  const [jdImporting, setJdImporting] = useState(false)
+  const jdFileInputRef = useRef(null)
   const [payrollSummary, setPayrollSummary] = useState(null)
   const [payrollImports, setPayrollImports] = useState([])
   const [payrollImportOpen, setPayrollImportOpen] = useState(false)
@@ -460,6 +463,62 @@ export default function OperatingExpenseCenterPage() {
     setEditorOpen(true)
   }
 
+  const prepareJdBillDraft = useCallback(async (bill) => {
+    if (!canManage) throw new Error('当前账号没有录入运营费用的权限')
+    // Search the full ledger, not just this category, to avoid booking one statement twice.
+    const existing = await listOperatingExpenses({ month: bill.expenseMonth, q: bill.billNo, limit: 500 })
+    if ((existing.items || []).some((row) => [row.voucher_note, row.remark, row.invoice_number].some((field) => String(field || '').includes(bill.billNo)))) {
+      throw new Error(`结算单号 ${bill.billNo} 已录入，已阻止重复记账`)
+    }
+    setMonth(bill.expenseMonth)
+    setEditingId('')
+    setExpenseForm(jdBillToExpenseForm(bill, emptyExpenseForm(bill.expenseMonth)))
+    setEditorOpen(true)
+  }, [canManage])
+
+  const importJdBillFile = async (event) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    if (file.size > 8 * 1024 * 1024) {
+      showToast?.('账单不能超过 8MB', 'error')
+      return
+    }
+    setJdImporting(true)
+    try {
+      const XLSX = await import('xlsx')
+      const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array' })
+      const summaryName = workbook.SheetNames.find((name) => /汇总/.test(name))
+      if (!summaryName) throw new Error('未找到京东物流“汇总页”工作表')
+      const detailsName = workbook.SheetNames.find((name) => /明细/.test(name))
+      const summaryRows = XLSX.utils.sheet_to_json(workbook.Sheets[summaryName], { header: 1, defval: '' })
+      const detailRows = detailsName ? XLSX.utils.sheet_to_json(workbook.Sheets[detailsName], { header: 1, defval: '' }) : []
+      const bill = parseJdBillWithDetails(summaryRows, detailRows)
+      await prepareJdBillDraft(bill)
+      showToast?.('京东账单识别成功，请核对后点击保存', 'success')
+    } catch (error) {
+      showToast?.(error instanceof Error ? error.message : '京东账单读取失败', 'error')
+    } finally {
+      setJdImporting(false)
+    }
+  }
+
+  useEffect(() => {
+    if (activeView !== VIEWS.OTHER_EXPENSES || !canManage || typeof window === 'undefined') return
+    const hash = window.location.hash
+    if (!hash.startsWith('#jd-expense?')) return
+    // Only data in the fragment is read; nothing is posted to the server until the user saves.
+    window.history.replaceState(window.history.state, '', window.location.pathname + window.location.search)
+    try {
+      const bill = parseJdExpenseHash(hash)
+      void prepareJdBillDraft(bill).then(() => {
+        showToast?.('京东账单已预填，核对后点击保存', 'success')
+      }).catch((error) => showToast?.(error.message || '预填失败', 'error'))
+    } catch (error) {
+      showToast?.(error.message || '预填链接无效', 'error')
+    }
+  }, [activeView, canManage, prepareJdBillDraft, showToast])
+
   const openExpenseEdit = (row) => {
     if (!canManage || !mode) return
     setEditingId(row.id)
@@ -515,6 +574,14 @@ export default function OperatingExpenseCenterPage() {
     }
     setSaving(true)
     try {
+      if (!editingId && expenseForm.importBillNo) {
+        const duplicate = await listOperatingExpenses({
+          month: expenseForm.expenseMonth, q: expenseForm.importBillNo, limit: 500
+        })
+        if ((duplicate.items || []).some((row) => [row.voucher_note, row.remark, row.invoice_number].some((field) => String(field || '').includes(expenseForm.importBillNo)))) {
+          throw new Error(`结算单号 ${expenseForm.importBillNo} 已存在，请勿重复录入`)
+        }
+      }
       if (editingId) await updateOperatingExpense(editingId, payload)
       else await createOperatingExpense(payload)
       showToast?.(editingId ? '经营费用已更新' : '经营费用已录入', 'success')
@@ -849,7 +916,14 @@ export default function OperatingExpenseCenterPage() {
     <PageContainer hideHeader className="opex-page">
       <section className="opex-head">
         <div><span>{mode.kicker}</span><h1>{mode.title}</h1><p>{mode.description}</p></div>
-        <div className="opex-head__actions"><button type="button" onClick={() => setRevision((v) => v + 1)}>{loading ? '刷新中…' : '刷新'}</button>{canManage ? <button type="button" className="is-primary" onClick={openExpenseCreate}>{mode.addLabel}</button> : null}</div>
+        <div className="opex-head__actions">
+          <button type="button" onClick={() => setRevision((v) => v + 1)}>{loading ? '刷新中…' : '刷新'}</button>
+          {canManage && activeView === VIEWS.OTHER_EXPENSES ? <>
+            <input ref={jdFileInputRef} type="file" accept=".xlsx,.xls" className="visually-hidden" aria-label="选择京东物流账单 Excel" onChange={(event) => void importJdBillFile(event)} />
+            <button type="button" disabled={jdImporting} onClick={() => jdFileInputRef.current?.click()}>{jdImporting ? '识别中…' : '导入京东账单'}</button>
+          </> : null}
+          {canManage ? <button type="button" className="is-primary" onClick={openExpenseCreate}>{mode.addLabel}</button> : null}
+        </div>
       </section>
 
       {activeView === VIEWS.OFFICE_RENT ? <section className="opex-info"><strong>租金规则：</strong><span>租金计入费用月份的经营利润；办公室押金请放到“押金 / 保证金”，不要混在租金里。</span><button type="button" onClick={() => setActiveView(VIEWS.DEPOSITS)}>去押金台账 →</button></section> : null}
@@ -884,7 +958,7 @@ export default function OperatingExpenseCenterPage() {
 
 function ExpenseEditor({ mode, form, setForm, saving, editing, onClose, onSubmit }) {
   const update = (key) => (event) => setForm((old) => ({ ...old, [key]: event.target.value }))
-  return <div className="opex-backdrop" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}><section className="opex-editor" role="dialog" aria-modal="true"><div className="opex-editor-head"><div><span>{mode.kicker}</span><h2>{editing ? `编辑${mode.title}` : mode.addLabel.replace('+ ', '')}</h2></div><button type="button" onClick={onClose}>×</button></div><form onSubmit={onSubmit}><div className="opex-form-grid"><label><span>费用月份 *</span><input type="month" value={form.expenseMonth} onChange={update('expenseMonth')} required /></label><label><span>金额 *</span><input type="number" min="0.01" step="0.01" value={form.amount} onChange={update('amount')} placeholder="0.00" required /></label><label><span>应付日期</span><input type="date" value={form.dueDate} onChange={update('dueDate')} /></label><label><span>{mode.vendorLabel}</span><input value={form.vendorName} onChange={update('vendorName')} placeholder={mode.vendorLabel} /></label>{mode.kind === 'other' ? <label><span>费用子类{editing ? '' : ' *'}</span><select value={form.expenseSubcategory} onChange={update('expenseSubcategory')} required={!editing}><option value="">{editing ? '未分类（历史记录）' : '请选择费用子类'}</option>{OTHER_EXPENSE_SUBCATEGORIES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label> : null}<label><span>支付状态 *</span><select value={form.paymentStatus} onChange={update('paymentStatus')}><option value="unpaid">待支付</option><option value="paid">已支付</option></select></label><label><span>实付日期{form.paymentStatus === 'paid' ? ' *' : ''}</span><input type="date" value={form.paymentDate} onChange={update('paymentDate')} disabled={form.paymentStatus !== 'paid'} /></label><label><span>发票状态</span><select value={form.invoiceStatus} onChange={update('invoiceStatus')}><option value="pending">待取得</option><option value="received">已取得</option><option value="none">无需发票</option><option value="unknown">待确认</option></select></label><label><span>发票号</span><input value={form.invoiceNumber} onChange={update('invoiceNumber')} placeholder="可留空" /></label><label className="is-wide"><span>付款凭证 / 回单说明</span><input value={form.voucherNote} onChange={update('voucherNote')} placeholder="例如：工行转账、回单已存档" /></label><label className="is-wide"><span>备注</span><textarea value={form.remark} onChange={update('remark')} rows={3} placeholder="租赁周期、订阅周期或其他说明" /></label></div><div className="opex-editor-actions"><button type="button" onClick={onClose} disabled={saving}>取消</button><button type="submit" className="is-primary" disabled={saving}>{saving ? '保存中…' : '保存'}</button></div></form></section></div>
+  return <div className="opex-backdrop" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}><section className="opex-editor" role="dialog" aria-modal="true"><div className="opex-editor-head"><div><span>{mode.kicker}</span><h2>{editing ? `编辑${mode.title}` : mode.addLabel.replace('+ ', '')}</h2></div><button type="button" onClick={onClose}>×</button></div><form onSubmit={onSubmit}><div className="opex-form-grid"><label><span>费用月份 *</span><input type="month" value={form.expenseMonth} onChange={update('expenseMonth')} required /></label><label><span>金额 *</span><input type="number" min="0.01" step="0.01" value={form.amount} onChange={update('amount')} placeholder="0.00" required /></label><label><span>应付日期</span><input type="date" value={form.dueDate} onChange={update('dueDate')} /></label><label><span>{mode.vendorLabel}</span><input value={form.vendorName} onChange={update('vendorName')} placeholder={mode.vendorLabel} /></label>{mode.kind === 'other' ? <label><span>费用子类{editing ? '' : ' *'}</span><select value={form.expenseSubcategory} onChange={update('expenseSubcategory')} required={!editing}><option value="">{editing ? '未分类（历史记录）' : '请选择费用子类'}</option>{OTHER_EXPENSE_SUBCATEGORIES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label> : null}<label><span>支付状态 *</span><select value={form.paymentStatus} onChange={update('paymentStatus')}><option value="unpaid">待支付</option><option value="paid">已支付</option></select></label><label><span>实付日期{form.paymentStatus === 'paid' ? ' *' : ''}</span><input type="date" value={form.paymentDate} onChange={update('paymentDate')} disabled={form.paymentStatus !== 'paid'} /></label><label><span>发票状态</span><select value={form.invoiceStatus} onChange={update('invoiceStatus')}><option value="pending">待取得</option><option value="received">已取得</option><option value="none">无需发票</option><option value="unknown">待确认</option></select></label><label><span>发票号</span><input value={form.invoiceNumber} onChange={update('invoiceNumber')} placeholder="可留空" /></label><label className="is-wide"><span>付款凭证 / 回单说明</span><input value={form.voucherNote} onChange={update('voucherNote')} placeholder="例如：工行转账、回单已存档" /></label><label className="is-wide"><span>备注</span><textarea value={form.remark} onChange={update('remark')} rows={3} placeholder="租赁周期、订阅周期或其他说明" /></label></div>{form.importBillNo ? <div className="opex-editor-warning">已从京东账单预填。费用按账单所属月份入账，付款与发票状态默认为“待支付 / 待取得”；请核对后保存。</div> : null}<div className="opex-editor-actions"><button type="button" onClick={onClose} disabled={saving}>取消</button><button type="submit" className="is-primary" disabled={saving}>{saving ? '保存中…' : '保存'}</button></div></form></section></div>
 }
 
 function PayrollImportDialog({ imports, companySuggestions, saving, onUpdate, onClose, onSave }) {
