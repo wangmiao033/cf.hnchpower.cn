@@ -45,6 +45,13 @@ PAYMENT_STATUSES = frozenset({"paid", "unpaid"})
 PAYROLL_REVIEW_STATUSES = frozenset({"pending_review", "reviewed"})
 PAYROLL_WORKFLOW_STATUSES = frozenset({"pending_review", "reviewed", "paid"})
 INVOICE_STATUSES = frozenset({"unknown", "none", "pending", "received"})
+OTHER_EXPENSE_SUBCATEGORIES = frozenset({
+    "courier_logistics",
+    "office_supplies",
+    "travel_transport",
+    "business_entertainment",
+    "miscellaneous",
+})
 
 
 def _normalize_text(value: str | None) -> str | None:
@@ -131,6 +138,19 @@ def _normalize_expense_kind(raw: str | None) -> str:
     return value or "other"
 
 
+def _normalize_expense_subcategory(raw: str | None, category: str) -> str | None:
+    """Keep historical blank subcategories, but reject invalid new classification."""
+    value = str(raw or "").strip().lower()
+    if not value:
+        return None
+    if category != "other" or value not in OTHER_EXPENSE_SUBCATEGORIES:
+        raise HTTPException(
+            status_code=422,
+            detail={"error": "invalid_expense_subcategory", "allowed": sorted(OTHER_EXPENSE_SUBCATEGORIES)},
+        )
+    return value
+
+
 def _apply_filters(
     stmt,
     *,
@@ -158,6 +178,7 @@ def _apply_filters(
                 OperatingExpense.remark.ilike(term),
                 OperatingExpense.category.ilike(term),
                 OperatingExpense.expense_kind.ilike(term),
+                OperatingExpense.expense_subcategory.ilike(term),
                 OperatingExpense.invoice_number.ilike(term),
                 OperatingExpense.voucher_note.ilike(term),
             )
@@ -215,6 +236,7 @@ def create_operating_expense(
     data["expense_month"] = _validate_month(data.get("expense_month"))
     data["category"] = _validate_category(data.get("category"))
     data["expense_kind"] = _normalize_expense_kind(data.get("expense_kind"))
+    data["expense_subcategory"] = _normalize_expense_subcategory(data.get("expense_subcategory"), data["category"])
     data["payment_status"] = _validate_payment_status(data.get("payment_status"))
     data["invoice_status"] = _validate_invoice_status(data.get("invoice_status"))
     for field in (
@@ -252,6 +274,12 @@ def update_operating_expense(
         data["category"] = _validate_category(data.get("category"))
     if "expense_kind" in data:
         data["expense_kind"] = _normalize_expense_kind(data.get("expense_kind"))
+    if "category" in data or "expense_subcategory" in data:
+        category = data.get("category", row.category)
+        subcategory = data.get("expense_subcategory", row.expense_subcategory)
+        if category != "other" and "expense_subcategory" not in data:
+            subcategory = None
+        data["expense_subcategory"] = _normalize_expense_subcategory(subcategory, category)
     if "payment_status" in data:
         data["payment_status"] = _validate_payment_status(data.get("payment_status"))
     if "invoice_status" in data:
