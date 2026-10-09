@@ -1,15 +1,11 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useAppState } from '@/app/AppStateContext.jsx'
 import PageContainer from '@/components/layout/PageContainer.jsx'
 import { VIEWS } from '@/app/routes.js'
 import { getProfitAnalysis } from '@/lib/api/profitAnalysis.ts'
 import ProjectProfitOverview from './ProjectProfitOverview.jsx'
-import {
-  createOperatingExpense,
-  deleteOperatingExpense,
-  listOperatingExpenses,
-  updateOperatingExpense
-} from '@/lib/api/operatingExpenses.ts'
+import { listAllOperatingExpenses } from '@/lib/api/operatingExpenses.ts'
+import { ledgerViewForExpense } from '@/domain/profit/expenseNavigation.js'
 import './ProfitAnalysisPage.css'
 import './AnnualProfitOverview.css'
 
@@ -24,17 +20,6 @@ const CATEGORY_OPTIONS = [
 ]
 
 const CATEGORY_LABELS = Object.fromEntries(CATEGORY_OPTIONS)
-
-function emptyForm() {
-  return {
-    category: 'marketing',
-    amount: '',
-    expenseDate: '',
-    gameName: '',
-    vendorName: '',
-    remark: ''
-  }
-}
 
 function money(value) {
   const n = Number(value || 0)
@@ -251,10 +236,6 @@ export default function ProfitAnalysisPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [revision, setRevision] = useState(0)
-  const [editorOpen, setEditorOpen] = useState(false)
-  const [editingId, setEditingId] = useState('')
-  const [form, setForm] = useState(emptyForm)
-  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     if (viewMode === 'project') {
@@ -281,11 +262,7 @@ export default function ProfitAnalysisPage() {
           setExpenseTotal(0)
           return
         }
-        const expenseResponse = await listOperatingExpenses({
-          month: profit.month,
-          limit: 500,
-          offset: 0
-        })
+        const expenseResponse = await listAllOperatingExpenses({ month: profit.month })
         if (cancelled) return
         setData(profit)
         setExpenses(expenseResponse.items || [])
@@ -293,6 +270,9 @@ export default function ProfitAnalysisPage() {
       } catch (loadError) {
         if (cancelled) return
         const message = loadError instanceof Error ? loadError.message : '利润分析读取失败'
+        setData(null)
+        setExpenses([])
+        setExpenseTotal(0)
         setError(message)
         showToast?.('利润分析读取失败，请稍后重试', 'error')
       } finally {
@@ -305,11 +285,6 @@ export default function ProfitAnalysisPage() {
   const month = selectedMonth || data?.month || ''
   const profitPositive = Number(data?.operating_profit?.value || 0) >= 0
   const categoryMax = Math.max(1, ...(data?.expense_categories || []).map((row) => Number(row.amount || 0)))
-  const gameNames = useMemo(
-    () => [...new Set((data?.games || []).map((row) => row.game_name).filter((name) => name && name !== '未填写产品'))],
-    [data?.games]
-  )
-
   const switchView = (next) => {
     if (next === viewMode) return
     if (next === 'annual') {
@@ -319,50 +294,8 @@ export default function ProfitAnalysisPage() {
     setViewMode(next)
   }
 
-  const openCreate = () => {
-    if (viewMode === 'annual') {
-      setViewMode('monthly')
-      return
-    }
-    setEditingId('')
-    setForm(emptyForm())
-    setEditorOpen(true)
-  }
-
-  const openEdit = (expense) => {
-    setEditingId(expense.id)
-    setForm({ category: expense.category || 'other', amount: String(expense.amount ?? ''), expenseDate: expense.expense_date || '', gameName: expense.game_name || '', vendorName: expense.vendor_name || '', remark: expense.remark || '' })
-    setEditorOpen(true)
-  }
-
-  const closeEditor = () => {
-    if (saving) return
-    setEditorOpen(false)
-    setEditingId('')
-    setForm(emptyForm())
-  }
-
-  const saveExpense = async (event) => {
-    event.preventDefault()
-    const amount = Number(form.amount)
-    if (!Number.isFinite(amount) || amount <= 0) return showToast?.('费用金额必须大于 0', 'error')
-    if (!data?.month) return showToast?.('请先选择经营月份', 'error')
-    const payload = { expense_month: data.month, expense_date: form.expenseDate || null, category: form.category, amount, game_name: form.gameName.trim() || null, vendor_name: form.vendorName.trim() || null, remark: form.remark.trim() || null, source: 'manual' }
-    setSaving(true)
-    try {
-      if (editingId) { await updateOperatingExpense(editingId, payload); showToast?.('经营费用已更新', 'success') }
-      else { await createOperatingExpense(payload); showToast?.('经营费用已录入', 'success') }
-      closeEditor(); setRevision((value) => value + 1)
-    } catch (saveError) { showToast?.(saveError instanceof Error ? saveError.message : '费用保存失败', 'error') }
-    finally { setSaving(false) }
-  }
-
-  const removeExpense = async (expense) => {
-    const confirmed = window.confirm(`确定删除 ${monthLabel(expense.expense_month)} 的“${CATEGORY_LABELS[expense.category] || expense.category}”费用 ${money(expense.amount)} 吗？`)
-    if (!confirmed) return
-    try { await deleteOperatingExpense(expense.id); showToast?.('经营费用已删除', 'success'); setRevision((value) => value + 1) }
-    catch (deleteError) { showToast?.(deleteError instanceof Error ? deleteError.message : '费用删除失败', 'error') }
-  }
+  // Financial mutations are exclusive to the dedicated audited expense ledgers.
+  const openExpenseLedger = () => setActiveView(VIEWS.OPERATING_EXPENSES)
 
   return (
     <PageContainer hideHeader className="profit-analysis-page">
@@ -380,7 +313,7 @@ export default function ProfitAnalysisPage() {
         {viewMode === 'monthly' ? <div className="profit-head-actions">
           <label><span>经营月份</span><select value={month} onChange={(event) => setSelectedMonth(event.target.value)}>{(data?.available_months || []).map((item) => <option value={item} key={item}>{monthLabel(item)}</option>)}{month && !(data?.available_months || []).includes(month) ? <option value={month}>{monthLabel(month)}</option> : null}</select></label>
           <button type="button" onClick={() => setRevision((value) => value + 1)} disabled={loading}>{loading ? '刷新中…' : '刷新'}</button>
-          <button type="button" className="is-primary" onClick={openCreate}>+ 录入费用</button>
+          <button type="button" className="is-primary" onClick={openExpenseLedger}>去费用台账 →</button>
         </div> : null}
       </section>
 
@@ -399,7 +332,7 @@ export default function ProfitAnalysisPage() {
           <MetricCard label="渠道结算" value={data.channel_settlement?.value} note={`${data.channel_bill_count || 0} 笔账单 · ${deltaText(data.channel_settlement)}`} tone="revenue" onClick={() => setActiveView(VIEWS.RECON_CHANNEL)} />
           <MetricCard label="研发成本" value={data.rd_cost?.value} note={`${data.rd_bill_count || 0} 笔账单 · ${deltaText(data.rd_cost)}`} tone="rd" onClick={() => setActiveView(VIEWS.RECON_RD)} />
           <MetricCard label="服务器成本" value={data.server_cost?.value} note={deltaText(data.server_cost)} tone="server" />
-          <MetricCard label="经营费用" value={data.operating_expense?.value} note={`${data.expense_count || 0} 笔 · 台账合计 ${compactMoney(expenseTotal)}`} tone="expense" onClick={openCreate} />
+          <MetricCard label="经营费用" value={data.operating_expense?.value} note={`${data.expense_count || 0} 笔 · 台账合计 ${compactMoney(expenseTotal)}`} tone="expense" onClick={openExpenseLedger} />
         </section>
 
         <section className="profit-grid">
@@ -422,14 +355,13 @@ export default function ProfitAnalysisPage() {
         </section>
 
         <section className="profit-card profit-card--ledger">
-          <div className="profit-card-head"><div><span>OPERATING EXPENSE LEDGER</span><h2>经营费用台账</h2><p>{monthLabel(data.month)} · 共 {expenses.length} 笔 · {money(expenseTotal)}</p></div><button type="button" onClick={openCreate}>+ 录入费用</button></div>
-          <div className="profit-table-wrap"><table><thead><tr><th>日期</th><th>分类</th><th>归属游戏</th><th>往来方 / 平台</th><th>备注</th><th>金额</th><th>操作</th></tr></thead><tbody>{expenses.length === 0 ? <tr><td colSpan={7} className="profit-empty-cell">本月尚未录入经营费用。</td></tr> : null}{expenses.map((expense) => <tr key={expense.id}><td>{expense.expense_date || '-'}</td><td>{CATEGORY_LABELS[expense.category] || expense.category}</td><td>{expense.game_name || <span className="profit-shared-tag">公共费用</span>}</td><td>{expense.vendor_name || '-'}</td><td className="profit-remark">{expense.remark || '-'}</td><td><strong>{money(expense.amount)}</strong></td><td><div className="profit-row-actions"><button type="button" onClick={() => openEdit(expense)}>编辑</button><button type="button" className="is-danger" onClick={() => removeExpense(expense)}>删除</button></div></td></tr>)}</tbody></table></div>
+          <div className="profit-card-head"><div><span>OPERATING EXPENSE LEDGER</span><h2>经营费用台账</h2><p>{monthLabel(data.month)} · 共 {expenses.length} 笔 · {money(expenseTotal)}</p></div><button type="button" onClick={openExpenseLedger}>去费用台账 →</button></div>
+          <div className="profit-table-wrap"><table><thead><tr><th>日期</th><th>分类</th><th>归属游戏</th><th>往来方 / 平台</th><th>备注</th><th>金额</th><th>操作</th></tr></thead><tbody>{expenses.length === 0 ? <tr><td colSpan={7} className="profit-empty-cell">本月尚未录入经营费用。</td></tr> : null}{expenses.map((expense) => <tr key={expense.id}><td>{expense.expense_date || '-'}</td><td>{CATEGORY_LABELS[expense.category] || expense.category}{expense.category === 'payroll' ? '（工资批次）' : ''}</td><td>{expense.game_name || <span className="profit-shared-tag">公共费用</span>}</td><td>{expense.vendor_name || '-'}</td><td className="profit-remark">{expense.remark || '-'}</td><td><strong>{money(expense.amount)}</strong></td><td><div className="profit-row-actions"><button type="button" onClick={() => setActiveView(ledgerViewForExpense(expense))}>查看台账</button></div></td></tr>)}</tbody></table></div>
         </section>
 
         <section className="profit-methodology"><strong>口径说明</strong><div>{(data.notes || []).map((note, index) => <p key={`${index}-${note}`}>{index + 1}. {note}</p>)}</div></section>
       </> : null}
 
-      {editorOpen ? <div className="profit-editor-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeEditor() }}><section className="profit-editor" role="dialog" aria-modal="true" aria-label={editingId ? '编辑经营费用' : '录入经营费用'}><header><div><span>{monthLabel(data?.month)}</span><h2>{editingId ? '编辑经营费用' : '录入经营费用'}</h2></div><button type="button" onClick={closeEditor} aria-label="关闭">×</button></header><form onSubmit={saveExpense}><div className="profit-editor-grid"><label><span>费用分类 *</span><select value={form.category} onChange={(event) => setForm((current) => ({ ...current, category: event.target.value }))}>{CATEGORY_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label><span>金额 *</span><input type="number" min="0.01" step="0.01" value={form.amount} onChange={(event) => setForm((current) => ({ ...current, amount: event.target.value }))} placeholder="0.00" required /></label><label><span>发生日期</span><input type="date" value={form.expenseDate} onChange={(event) => setForm((current) => ({ ...current, expenseDate: event.target.value }))} /></label><label><span>归属游戏</span><input list="profit-game-options" value={form.gameName} onChange={(event) => setForm((current) => ({ ...current, gameName: event.target.value }))} placeholder="留空 = 公司公共费用" /><datalist id="profit-game-options">{gameNames.map((name) => <option value={name} key={name} />)}</datalist></label><label className="is-wide"><span>往来方 / 平台</span><input value={form.vendorName} onChange={(event) => setForm((current) => ({ ...current, vendorName: event.target.value }))} placeholder="例如 Meta、办公室物业、银行等" /></label><label className="is-wide"><span>备注</span><textarea rows={3} value={form.remark} onChange={(event) => setForm((current) => ({ ...current, remark: event.target.value }))} placeholder="记录费用用途、对应项目或核对说明" /></label></div><div className="profit-editor-note">归属游戏留空时计入公司公共费用；公共费用会扣减公司经营利润，但不会强行分摊到游戏利润。</div><footer><button type="button" onClick={closeEditor}>取消</button><button type="submit" className="is-primary" disabled={saving}>{saving ? '保存中…' : editingId ? '保存修改' : '确认录入'}</button></footer></form></section></div> : null}
     </PageContainer>
   )
 }
