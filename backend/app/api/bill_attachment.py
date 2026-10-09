@@ -10,8 +10,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.blob_storage import (
-    MAX_SERVER_UPLOAD_BYTES,
     delete_private_blob,
+    read_limited_attachment,
     private_blob_response,
     upload_private_blob,
 )
@@ -96,11 +96,7 @@ async def upload_attachment(
     _require_parent(db, bill_type, bill_id)
     original_name, suffix, content_type = _upload_metadata(file)
 
-    body = await file.read()
-    if not body:
-        raise HTTPException(status_code=400, detail="附件内容为空")
-    if len(body) > MAX_SERVER_UPLOAD_BYTES:
-        raise HTTPException(status_code=413, detail="单个附件不能超过 4 MB")
+    body = await read_limited_attachment(file)
 
     attachment_id = uuid.uuid4().hex
     pathname = f"bill-scans/{bill_type}/{bill_id}/{attachment_id}{suffix}"
