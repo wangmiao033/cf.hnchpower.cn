@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 from app.api.operating_expense import (
     _payroll_workflow_status,
+    _normalize_expense_subcategory,
     _validate_category,
     _validate_month,
     _validate_payroll_review_status,
@@ -32,6 +33,17 @@ class OperatingExpenseRulesTest(unittest.TestCase):
             _validate_category("random-cost")
         self.assertEqual(context.exception.status_code, 422)
         self.assertEqual(context.exception.detail["error"], "invalid_expense_category")
+
+    def test_other_expense_subcategories(self):
+        self.assertEqual(_normalize_expense_subcategory("COURIER_LOGISTICS", "other"), "courier_logistics")
+        self.assertEqual(_normalize_expense_subcategory(" office_supplies ", "other"), "office_supplies")
+        self.assertIsNone(_normalize_expense_subcategory(None, "other"))
+        self.assertIsNone(_normalize_expense_subcategory("", "office"))
+        with self.assertRaises(HTTPException) as invalid:
+            _normalize_expense_subcategory("unknown", "other")
+        self.assertEqual(invalid.exception.detail["error"], "invalid_expense_subcategory")
+        with self.assertRaises(HTTPException):
+            _normalize_expense_subcategory("courier_logistics", "office")
 
     def test_payroll_review_statuses(self):
         self.assertEqual(_validate_payroll_review_status("pending_review"), "pending_review")
