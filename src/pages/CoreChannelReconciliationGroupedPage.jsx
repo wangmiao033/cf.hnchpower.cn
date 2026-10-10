@@ -10,6 +10,8 @@ import {
   sharedBillMonthOptions
 } from '@/domain/reconciliation/sharedBillMonthOptions.js'
 import ChannelReceiptDrawer from '@/components/channel/ChannelReceiptDrawer.jsx'
+import ChannelCumulativeLedgerPanel from '@/components/channel/ChannelCumulativeLedgerPanel.jsx'
+import { cumulativeRowCondition } from '@/domain/channel/channelCumulativeLedgerSummary.js'
 import { VIEWS } from '@/app/routes.js'
 import {
   buildChannelBillFromSingleGameForm,
@@ -209,10 +211,28 @@ function CoreChannelReconciliationGroupedPage() {
   const [archiveState, setArchiveState] = useState({ archived_ids: [], eligible_ids: [], items: [], auto_archive_days: 7 })
   const [archiveLoading, setArchiveLoading] = useState(true)
   const [archiveWorkingId, setArchiveWorkingId] = useState('')
+  const [cumulativeByChannel, setCumulativeByChannel] = useState({})
 
   const archivedIds = useMemo(() => new Set((archiveState.archived_ids || []).map(String)), [archiveState])
   const eligibleIds = useMemo(() => new Set((archiveState.eligible_ids || []).map(String)), [archiveState])
   const expandedChannels = useMemo(() => new Set(expandedKeys), [expandedKeys])
+  // Use all loaded records, not the current month/status filters, for the
+  // cumulative unpaid preview. Authoritative eligibility comes from the API.
+  const allChannelRows = useMemo(() => {
+    const indexed = new Map()
+    for (const row of recon.channelRecords || []) {
+      const key = groupKeyForRow(row)
+      if (!indexed.has(key)) indexed.set(key, [])
+      indexed.get(key).push(row)
+    }
+    return indexed
+  }, [recon.channelRecords])
+
+  const updateCumulativeSnapshot = (key, snapshot) => {
+    setCumulativeByChannel((current) => current[key] === snapshot
+      ? current
+      : { ...current, [key]: snapshot })
+  }
 
   const refreshArchiveState = async (announceAuto = false) => {
     setArchiveLoading(true)
@@ -864,6 +884,16 @@ function CoreChannelReconciliationGroupedPage() {
 
                 {expanded ? (
                   <div className="channel-group-details">
+                    {quickFilter !== 'archived' && quickFilter !== 'trash' ? (
+                      <ChannelCumulativeLedgerPanel
+                        groupKey={group.key}
+                        channelName={group.channelName}
+                        records={allChannelRows.get(group.key) || []}
+                        archivedIds={archivedIds}
+                        apiEnabled={recon.channelApiEnabled}
+                        onSnapshot={updateCumulativeSnapshot}
+                      />
+                    ) : null}
                     <table className="core-recon-table channel-group-detail-table">
                       <colgroup>
                         <col className="channel-detail-col-period" />
@@ -900,11 +930,14 @@ function CoreChannelReconciliationGroupedPage() {
                           const archived = archivedIds.has(String(row.id))
                           const canArchive = eligibleIds.has(String(row.id))
                           const paymentStatus = channelPaymentStatus(row, { received, settled, cancelled, archived })
+                          const cumulative = cumulativeRowCondition(cumulativeByChannel[group.key], row.id)
+                          const poolDeferred = Boolean(cumulative && (cumulative.kind === 'accumulating' || cumulative.kind === 'ready') && !settled && !cancelled && !archived)
+                          const cumulativeStatusVisible = Boolean(cumulative && !settled && !cancelled && !archived && !channelHasDataDifference(row))
                           const gameText = games.join('、')
                           const periodText = channelPeriodLabel(row)
 
                           return (
-                            <tr key={row.id} className={selectedIds.includes(String(row.id)) ? 'is-selected' : ''}>
+                            <tr key={row.id} className={[selectedIds.includes(String(row.id)) ? 'is-selected' : '', cumulative ? 'is-cumulative-deferred' : ''].filter(Boolean).join(' ')}>
                               <td className="core-rd-month-cell">
                                 <input
                                   type="checkbox"
@@ -924,7 +957,7 @@ function CoreChannelReconciliationGroupedPage() {
                                 <strong>{unpaid > 0.01 ? `未收 ${money(unpaid)}` : `已收 ${money(received)}`}</strong>
                                 <small>{unpaid > 0.01 ? `已收 ${money(received)}` : '已结清'}</small>
                               </td>
-                              <td><span className={`core-channel-status-badge is-${paymentStatus.tone}`}>{paymentStatus.label}</span></td>
+                              <td><span className={cumulativeStatusVisible ? 'core-channel-status-badge is-cumulative' : `core-channel-status-badge is-${paymentStatus.tone}`} title={cumulative ? (cumulative.batchNo || cumulative.label) : ''}>{cumulativeStatusVisible ? cumulative.label : paymentStatus.label}</span></td>
                               <td>
                                 <div className="core-recon-row-actions">
                                   <button type="button" onMouseEnter={() => prefetchBill360?.('channel', String(row.id))} onFocus={() => prefetchBill360?.('channel', String(row.id))} onClick={() => openBill360('channel', String(row.id), row)}>360°</button>
@@ -937,7 +970,13 @@ function CoreChannelReconciliationGroupedPage() {
                                       {settled && canArchive ? (
                                         <button type="button" disabled={Boolean(archiveWorkingId)} onClick={() => void handleArchive(row)}>{archiveWorkingId === String(row.id) ? '归档中…' : '归档'}</button>
                                       ) : (
-                                        <button type="button" disabled={settled || !recon.channelApiEnabled} title={!recon.channelApiEnabled ? '渠道 API 不可用，暂不能登记收款' : settled ? '该账单已结清，完成核对后即可归档' : '登记渠道收款'} onClick={() => setReceiptRecord(row)}>{settled ? '已结清' : '收款'}</button>
+                                        <button
+                                          type="button"
+                                          className={poolDeferred ? 'is-cumulative-disabled' : ''}
+                                          disabled={settled || !recon.channelApiEnabled || poolDeferred}
+                                          title={!recon.channelApiEnabled ? '渠道 API 不可用，暂不能登记收款' : settled ? '该账单已结清' : poolDeferred ? '该账单已进入累计池，请等待达到结算门槛后统一处理' : '登记渠道收款'}
+                                          onClick={() => setReceiptRecord(row)}
+                                        >{settled ? '已结清' : poolDeferred ? '累计中' : '收款'}</button>
                                       )}
                                       <button type="button" onClick={() => openChannelReconciliationEdit(String(row.id))}>编辑</button>
                                       <button type="button" className="danger" disabled={isWorking} title="作废后账单会移入垃圾桶，历史、关联关系和操作日志仍保留" onClick={() => void handleSingleVoid(row)}>作废</button>
