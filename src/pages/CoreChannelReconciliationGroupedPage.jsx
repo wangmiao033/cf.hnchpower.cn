@@ -202,7 +202,7 @@ function CoreChannelReconciliationGroupedPage() {
   const fileRef = useRef(null)
   const [month, setMonth] = useState('')
   const [channel, setChannel] = useState('')
-  const [channelDraft, setChannelDraft] = useState('')
+  const [showMoreFilters, setShowMoreFilters] = useState(false)
   const [status, setStatus] = useState('')
   const [query, setQuery] = useState('')
   const [quickFilter, setQuickFilter] = useState('all')
@@ -305,7 +305,6 @@ function CoreChannelReconciliationGroupedPage() {
     setToMonth('')
     setGameQuery('')
     setChannel(channelName)
-    setChannelDraft(channelName)
     setStatus('')
     setQuery('')
     setQuickFilter(onlyArchived ? 'archived' : 'all')
@@ -693,6 +692,24 @@ function CoreChannelReconciliationGroupedPage() {
     }
   }
 
+  const resetFilters = () => {
+    setMonth(''); setFromMonth(''); setToMonth(''); setGameQuery('')
+    setSortMode('month-desc'); setChannel(''); setStatus(''); setQuery('')
+    setQuickFilter('all'); setSelectedIds([]); setExpandedKeys([]); setInspectedGap(null)
+    setShowMoreFilters(false)
+  }
+  const sortLabels = { 'month-asc': '最早月份优先', 'unpaid-desc': '未收金额最高', 'settlement-desc': '渠道应收最高', 'channel-asc': '渠道名称排序' }
+  const moreFilterCount = [gameQuery, fromMonth || toMonth, status, sortLabels[sortMode]].filter(Boolean).length
+  const activeFilters = [
+    channel && { key: 'channel', label: '渠道', value: channel, clear: () => setChannel('') },
+    month && { key: 'month', label: '账期', value: monthLabel(month), clear: () => setMonth('') },
+    query && { key: 'query', label: '搜索', value: query, clear: () => setQuery('') },
+    gameQuery && { key: 'game', label: '游戏', value: gameQuery, clear: () => setGameQuery('') },
+    (fromMonth || toMonth) && { key: 'range', label: '日期范围', value: `${fromMonth || '不限'} 至 ${toMonth || '不限'}`, clear: () => { setFromMonth(''); setToMonth('') } },
+    status && { key: 'status', label: '账单状态', value: STATUS_LABELS[status], clear: () => { setStatus(''); if (quickFilter === 'trash') setQuickFilter('all') } },
+    sortLabels[sortMode] && { key: 'sort', label: '排序', value: sortLabels[sortMode], clear: () => setSortMode('month-desc') }
+  ].filter(Boolean)
+
   return (
     <PageContainer hideHeader className="core-recon-page core-channel-recon-page">
       <section className="core-recon-workbar">
@@ -708,78 +725,84 @@ function CoreChannelReconciliationGroupedPage() {
             <input ref={fileRef} type="file" accept=".xlsx,.xls" onChange={handleImportFile} hidden />
           </div>
         </div>
-        <div className="core-recon-filters">
-          <label className="core-recon-filter-control">
-            <span>月份</span>
-            <select value={month} aria-label="筛选明细结算月份" onChange={(event) => {
-              setMonth(event.target.value); setFromMonth(''); setToMonth(''); setExpandedKeys([])
-            }}>
-              <option value="">全部月份</option>
-              {monthOptions.map((value) => (
-                <option key={value} value={value}>
-                  {monthLabel(value)}{channelRecordedMonths.has(value) ? '' : '（暂无渠道账单）'}
-                </option>
-              ))}
-            </select>
-          </label>
-          <div className="core-recon-filter-control core-recon-partner-filter">
-            <span>渠道</span>
-            <input
-              type="search"
-              list="core-channel-options"
-              value={channelDraft}
-              onChange={(event) => setChannelDraft(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  event.preventDefault()
-                  setChannel(channelDraft.trim())
-                  setSelectedIds([])
-                  setExpandedKeys([])
-                }
-              }}
-              placeholder="输入渠道名称"
-              aria-label="搜索渠道"
-            />
-            <datalist id="core-channel-options">{channelOptions.map((name) => <option key={name} value={name} />)}</datalist>
-            <button type="button" className="core-recon-partner-submit" onClick={() => { setChannel(channelDraft.trim()); setSelectedIds([]); setExpandedKeys([]) }}>搜索</button>
-          </div>
-          <label className="core-recon-filter-control">
-            <span>状态</span>
-            <select
-              value={status}
-              aria-label="筛选渠道账单状态"
-              onChange={(event) => {
-                const next = event.target.value
-                setStatus(next)
-                if (next === 'cancelled') setQuickFilter('trash')
-                else if (quickFilter === 'trash') setQuickFilter('all')
+        <section className="channel-ledger-filters" aria-label="渠道账单筛选">
+          <div className="channel-ledger-filters__main">
+            <label><span>渠道</span>
+              <select value={channel} aria-label="筛选明细渠道" onChange={event => {
+                setChannel(event.target.value)
                 setSelectedIds([])
                 setExpandedKeys([])
-              }}
-            >
-              <option value="">全部状态</option>
-              {Object.entries(STATUS_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-            </select>
-          </label>
-          <label className="core-recon-filter-control core-recon-filter-search">
-            <span>关键词</span>
-            <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="渠道、合作方、产品或月份" />
-          </label>
-          <button type="button" className="core-recon-reset" onClick={() => {
-            setMonth('')
-            setFromMonth('')
-            setToMonth('')
-            setGameQuery('')
-            setSortMode('month-desc')
-            setChannel('')
-            setChannelDraft('')
-            setStatus('')
-            setQuery('')
-            setQuickFilter('all')
-            setSelectedIds([])
-            setExpandedKeys([])
-          }}>重置</button>
-        </div>
+              }}>
+                <option value="">全部渠道</option>
+                {channel && !channelOptions.includes(channel) ? <option value={channel}>{channel}</option> : null}
+                {channelOptions.map(name => <option key={name} value={name}>{name}</option>)}
+              </select>
+            </label>
+            <label><span>账期</span>
+              <select value={month} aria-label="筛选明细结算月份" onChange={event => {
+                setMonth(event.target.value); setFromMonth(''); setToMonth(''); setExpandedKeys([])
+              }}>
+                <option value="">{fromMonth || toMonth ? '自定义范围（见下方）' : '全部月份'}</option>
+                {monthOptions.map(value => <option key={value} value={value}>
+                  {monthLabel(value)}{channelRecordedMonths.has(value) ? '' : '（暂无渠道账单）'}
+                </option>)}
+              </select>
+            </label>
+            <label className="channel-ledger-filters__search"><span>搜索</span>
+              <input type="search" value={query} onChange={event => setQuery(event.target.value)}
+                aria-label="搜索渠道账单" placeholder="渠道、合作方、游戏或账单编号" />
+            </label>
+            <button type="button" aria-expanded={showMoreFilters} aria-controls="channel-ledger-more-filters"
+              onClick={() => setShowMoreFilters(value => !value)}>
+              {showMoreFilters ? '收起筛选' : '更多筛选'}{moreFilterCount ? `（${moreFilterCount}）` : ''}
+            </button>
+            <button type="button" onClick={resetFilters}>重置</button>
+          </div>
+          {showMoreFilters ? (
+            <div id="channel-ledger-more-filters" className="channel-ledger-filters__more">
+              <label><span>游戏名称</span>
+                <input type="search" list="channel-ledger-games" value={gameQuery}
+                  onChange={event => setGameQuery(event.target.value)} placeholder="搜索游戏" />
+                <datalist id="channel-ledger-games">{gameOptions.map(name => <option key={name} value={name} />)}</datalist>
+              </label>
+              <label><span>起始月份</span>
+                <input type="month" value={fromMonth} onChange={event => { setMonth(''); setFromMonth(event.target.value) }} />
+              </label>
+              <label><span>结束月份</span>
+                <input type="month" value={toMonth} onChange={event => { setMonth(''); setToMonth(event.target.value) }} />
+              </label>
+              <label><span>账单状态</span>
+                <select value={status} aria-label="筛选渠道账单状态" onChange={event => {
+                  const next = event.target.value
+                  setStatus(next)
+                  if (next === 'cancelled') setQuickFilter('trash')
+                  else if (quickFilter === 'trash') setQuickFilter('all')
+                  setSelectedIds([]); setExpandedKeys([])
+                }}>
+                  <option value="">全部状态</option>
+                  {Object.entries(STATUS_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                </select>
+              </label>
+              <label><span>排序方式</span>
+                <select value={sortMode} aria-label="排序方式" onChange={event => setSortMode(event.target.value)}>
+                  <option value="month-desc">最新月份优先</option>
+                  <option value="month-asc">最早月份优先</option>
+                  <option value="unpaid-desc">未收金额最高</option>
+                  <option value="settlement-desc">渠道应收最高</option>
+                  <option value="channel-asc">渠道名称排序</option>
+                </select>
+              </label>
+            </div>
+          ) : null}
+          {activeFilters.length ? <div className="channel-ledger-filters__active" aria-label="已选筛选条件">
+            <span>已选条件</span>
+            {activeFilters.map(filter => <button type="button" key={filter.key}
+              aria-label={`清除${filter.label}筛选`} onClick={filter.clear}>
+              {filter.label}：{filter.value}<span aria-hidden="true">×</span>
+            </button>)}
+          </div> : null}
+          {fromMonth && toMonth && fromMonth > toMonth ? <p className="channel-ledger-filters__warning" role="status">起始月份不能晚于结束月份</p> : null}
+        </section>
       </section>
 
       <BillQuickFilters value={quickFilter} items={quickItems} onChange={handleQuickFilter} />
@@ -819,44 +842,6 @@ function CoreChannelReconciliationGroupedPage() {
         <span>切换视图不会改变原始账单和结算金额</span>
       </nav>
 
-      {ledgerView === 'detail' ? (
-        <section className="channel-ledger-extra-filters" aria-label="渠道账单明细筛选">
-          <label><span>游戏名称</span>
-            <input type="search" list="channel-ledger-games" value={gameQuery}
-              onChange={event => setGameQuery(event.target.value)} placeholder="搜索游戏" />
-            <datalist id="channel-ledger-games">{gameOptions.map(name => <option key={name} value={name} />)}</datalist>
-          </label>
-          <label><span>渠道筛选</span>
-            <select value={channel} aria-label="筛选明细渠道" onChange={event => {
-              setChannel(event.target.value)
-              setChannelDraft(event.target.value)
-              setSelectedIds([])
-              setExpandedKeys([])
-            }}>
-              <option value="">全部渠道</option>
-              {channel && !channelOptions.includes(channel) ? <option value={channel}>搜索：{channel}</option> : null}
-              {channelOptions.map(name => <option key={name} value={name}>{name}</option>)}
-            </select>
-          </label>
-          <label><span>起始月份</span>
-            <input type="month" value={fromMonth} onChange={event => { setMonth(''); setFromMonth(event.target.value) }} />
-          </label>
-          <label><span>结束月份</span>
-            <input type="month" value={toMonth} onChange={event => { setMonth(''); setToMonth(event.target.value) }} />
-          </label>
-          <label><span>排序方式</span>
-            <select value={sortMode} onChange={event => setSortMode(event.target.value)}>
-              <option value="month-desc">最新月份优先</option>
-              <option value="month-asc">最早月份优先</option>
-              <option value="unpaid-desc">未收金额最高</option>
-              <option value="settlement-desc">渠道应收最高</option>
-              <option value="channel-asc">渠道名称排序</option>
-            </select>
-          </label>
-          {(fromMonth && toMonth && fromMonth > toMonth) ? <small className="is-warning">起始月份不能晚于结束月份</small> : null}
-        </section>
-      ) : null}
-
       {ledgerView === 'audit' ? (
         <ChannelMonthCoveragePanel
           initialExpanded
@@ -866,7 +851,6 @@ function CoreChannelReconciliationGroupedPage() {
           focusKeyword={query}
           onClearFocus={() => {
             setChannel('')
-            setChannelDraft('')
             setQuery('')
             setInspectedGap(null)
           }}
@@ -887,7 +871,6 @@ function CoreChannelReconciliationGroupedPage() {
           <button type="button" onClick={() => {
             setMonth('')
             setChannel('')
-            setChannelDraft('')
             setInspectedGap(null)
           }}>退出排查</button>
         </section>
