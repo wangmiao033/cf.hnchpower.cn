@@ -10,7 +10,8 @@
     "vercel-build": "bash scripts/vercel-production-build-v2.sh",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:ui": "playwright test"
   },
   "dependencies": {
     "dayjs": "^1.11.10",
@@ -20,6 +21,7 @@
     "xlsx-js-style": "^1.2.0"
   },
   "devDependencies": {
+    "@playwright/test": "1.64.0",
     "@vitejs/plugin-react": "^4.2.1",
     "https-proxy-agent": "^9.1.0",
     "vite": "^5.0.8",

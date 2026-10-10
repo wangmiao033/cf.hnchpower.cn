@@ -51,6 +51,7 @@ describe('channel ledger compact overview', () => {
     expect(style).toContain('.core-channel-recon-page .core-recon-stats.core-channel-stats-compact')
     expect(style).toContain('height: auto;')
     expect(style).toContain('overflow: visible;')
-    expect(style).toContain('max-height: min(250px, 36vh)')
+    expect(style).toContain('max-height: 600px;')
+    expect(style).not.toContain('max-height: min(250px, 36vh)')
   })
 })
