@@ -8,9 +8,11 @@ export default function BankAutoReconciliationPage() {
   const refresh = () => setRevision((value) => value + 1)
   return (
     <>
+      <div className="bank-match-tools">
+        <RdPrepaymentWorkbenchDock onChanged={refresh} />
+        <BankCustomerMatchDock onChanged={refresh} />
+      </div>
       <BankCenterPageV2 key={revision} />
-      <RdPrepaymentWorkbenchDock onChanged={refresh} />
-      <BankCustomerMatchDock onChanged={refresh} />
     </>
   )
 }
