@@ -4,6 +4,8 @@
  * Internal holes and months after the last recorded bill are intentionally distinct.
  */
 import { channelBillMonths } from '@/domain/reconciliation/sharedBillMonthOptions.js'
+import { getChannelLineItems } from '@/domain/channel/channelAggregates.js'
+import { getChannelBillNumber } from '@/utils/channelBillNumber.js'
 
 const MONTH_PATTERN = /^20\d{2}-(0[1-9]|1[0-2])$/
 
@@ -43,6 +45,38 @@ function channelKey(record) {
   return String(record?.channelName || record?.channel_name || '').trim().toLocaleLowerCase('zh-CN')
 }
 
+function searchText(value) {
+  return String(value || '').trim().toLocaleLowerCase('zh-CN')
+}
+
+/** Resolve channel identities before assessing months: do not exclude a
+ * channel's earlier bills just because the keyword matched one game/month. */
+export function filterScopedChannelAuditRows(records = [], options = {}) {
+  const name = searchText(options.channelFilter)
+  const keyword = searchText(options.keyword)
+  const local = searchText(options.localChannelSearch)
+  if (!name && !keyword && !local) return records || []
+  const identities = new Set()
+  for (const row of records || []) {
+    if (!row || cancelled(row)) continue
+    const key = channelKey(row)
+    if (!key || (name && !key.includes(name))) continue
+    const partner = searchText(row.partnerName || row.partner_name)
+    if (local && !key.includes(local) && !partner.includes(local)) continue
+    if (keyword) {
+      const indexed = searchText([
+        row.channelName, row.partnerName, row.gameName, row.remark,
+        getChannelBillNumber(row), row.statementNo,
+        ...getChannelLineItems(row).map(item => item.gameName),
+        ...channelBillMonths(row)
+      ].filter(Boolean).join(' '))
+      if (!indexed.includes(keyword)) continue
+    }
+    identities.add(key)
+  }
+  return (records || []).filter(row => row && identities.has(channelKey(row)))
+}
+
 /**
  * Only channels with at least one recorded bill in the selected window are shown.
  * A gap is a month between two recorded months; a trailing month is after the
@@ -54,8 +88,12 @@ export function auditChannelBillMonths(records = [], options = {}) {
   const months = channelAuditMonths(options)
   const endMonth = months[months.length - 1]
   const map = new Map()
+  const sourceRows = filterScopedChannelAuditRows(records, options)
+  const matchingChannelCount = new Set(
+    sourceRows.filter(row => row && !cancelled(row)).map(channelKey).filter(Boolean)
+  ).size
 
-  for (const record of records || []) {
+  for (const record of sourceRows) {
     if (!record || cancelled(record)) continue
     const key = channelKey(record)
     if (!key) continue
@@ -113,6 +151,7 @@ export function auditChannelBillMonths(records = [], options = {}) {
     gapChannelCount: channels.filter((group) => group.gaps.length).length,
     gapMonthCount: channels.reduce((sum, group) => sum + group.gaps.length, 0),
     trailingChannelCount: channels.filter((group) => group.trailing.length).length,
-    recordedBillCount: channels.reduce((sum, group) => sum + group.recordedBills, 0)
+    recordedBillCount: channels.reduce((sum, group) => sum + group.recordedBills, 0),
+    matchingChannelCount
   }
 }
