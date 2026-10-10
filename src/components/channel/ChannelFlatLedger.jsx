@@ -58,7 +58,13 @@ export default function ChannelFlatLedger({
   const effectivePage = Math.min(Math.max(1, page), totalPages)
   const offset = (effectivePage - 1) * pageSize
   const visibleRows = useMemo(() => rows.slice(offset, offset + pageSize), [rows, offset, pageSize])
-  const idsKey = visibleRows.map(row => String(row.id)).join(',')
+  // Fully paid, archived and cancelled bills cannot enter a new cumulative
+  // pool. Querying only unpaid active rows keeps the first flat view fast.
+  const idsKey = visibleRows
+    .filter(row => !isChannelReceiptSettled(row) &&
+      !archivedIds.has(String(row.id)) &&
+      !['cancelled', 'canceled'].includes(String(row.status || '').toLowerCase()))
+    .map(row => String(row.id)).join(',')
   const [conditions, setConditions] = useState({})
   const [statusLoading, setStatusLoading] = useState(false)
   const [statusError, setStatusError] = useState(false)
