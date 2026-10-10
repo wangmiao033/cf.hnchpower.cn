@@ -826,6 +826,18 @@ function CoreChannelReconciliationGroupedPage() {
               onChange={event => setGameQuery(event.target.value)} placeholder="搜索游戏" />
             <datalist id="channel-ledger-games">{gameOptions.map(name => <option key={name} value={name} />)}</datalist>
           </label>
+          <label><span>渠道筛选</span>
+            <select value={channel} aria-label="筛选明细渠道" onChange={event => {
+              setChannel(event.target.value)
+              setChannelDraft(event.target.value)
+              setSelectedIds([])
+              setExpandedKeys([])
+            }}>
+              <option value="">全部渠道</option>
+              {channel && !channelOptions.includes(channel) ? <option value={channel}>搜索：{channel}</option> : null}
+              {channelOptions.map(name => <option key={name} value={name}>{name}</option>)}
+            </select>
+          </label>
           <label><span>起始月份</span>
             <input type="month" value={fromMonth} onChange={event => { setMonth(''); setFromMonth(event.target.value) }} />
           </label>
