@@ -16,7 +16,7 @@ export function channelPartnerNames(records = [], channelName = '') {
   const unique = new Map()
   for (const row of records || []) {
     if (!row || ['cancelled', 'canceled'].includes(String(row.status || '').toLowerCase())) continue
-    if (channelName && String(row.channelName || '').trim() !== String(channelName).trim()) continue
+    if (channelName && String(row.channelName || '').trim().toLocaleLowerCase('zh-CN') !== String(channelName).trim().toLocaleLowerCase('zh-CN')) continue
     const name = String(row.partnerName || row.channelName || '').trim()
     if (name && !unique.has(name)) unique.set(name, true)
   }
