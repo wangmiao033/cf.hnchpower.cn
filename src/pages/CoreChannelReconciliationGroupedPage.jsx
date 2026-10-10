@@ -1,5 +1,6 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAppState } from '@/app/AppStateContext.jsx'
+import ConfirmDialog from '@/components/ConfirmDialog.jsx'
 import PageContainer from '@/components/layout/PageContainer.jsx'
 import BillQuickFilters from '@/components/reconciliation/BillQuickFilters.jsx'
 import ChannelMonthCoveragePanel from '@/components/channel/ChannelMonthCoveragePanel.jsx'
@@ -217,6 +218,16 @@ function CoreChannelReconciliationGroupedPage() {
   const [selectedIds, setSelectedIds] = useState([])
   const [expandedKeys, setExpandedKeys] = useState([])
   const [isWorking, setIsWorking] = useState(false)
+  const [voidTargets, setVoidTargets] = useState([])
+  const [voidReason, setVoidReason] = useState('')
+  const [voidError, setVoidError] = useState('')
+  const voidSubmitting = useRef(false)
+  const closeVoidDialog = useCallback(() => {
+    if (voidSubmitting.current) return
+    setVoidTargets([])
+    setVoidReason('')
+    setVoidError('')
+  }, [])
   const [receiptRecord, setReceiptRecord] = useState(null)
   const [archiveState, setArchiveState] = useState({ archived_ids: [], eligible_ids: [], items: [], auto_archive_days: 7 })
   const [archiveLoading, setArchiveLoading] = useState(true)
@@ -566,56 +577,50 @@ function CoreChannelReconciliationGroupedPage() {
     }
   }
 
-  const handleBulkVoid = async () => {
-    const targets = selectedRows.filter((row) => !isCancelledRow(row))
+  const openVoidDialog = (targets) => {
     if (!targets.length || isWorking) return
-    const reason = window.prompt(`请输入作废所选 ${targets.length} 张渠道账单的原因：`, '')
-    if (reason === null) return
-    if (!reason.trim()) {
-      showToast('批量作废必须填写原因', 'error')
-      return
-    }
-    setIsWorking(true)
-    try {
-      const results = await Promise.allSettled(
-        targets.map((row) => transitionBillLifecycle('channel', String(row.id), 'cancelled', reason.trim()))
-      )
-      await recon.refetchChannelFromApi?.()
-      const successCount = results.filter((item) => item.status === 'fulfilled').length
-      const failedCount = results.length - successCount
-      setSelectedIds([])
-      showToast(
-        failedCount
-          ? `已将 ${successCount} 张移入垃圾桶，${failedCount} 张未满足作废条件`
-          : `已将 ${successCount} 张渠道账单移入垃圾桶，主列表不再显示`,
-        failedCount ? 'info' : 'success'
-      )
-    } catch (error) {
-      console.error(error)
-      showToast(error instanceof Error ? error.message : '批量作废失败', 'error')
-    } finally {
-      setIsWorking(false)
-    }
+    setVoidTargets(targets)
+    setVoidReason('')
+    setVoidError('')
+  }
+  const handleBulkVoid = () => openVoidDialog(selectedRows.filter((row) => !isCancelledRow(row)))
+  const handleSingleVoid = (row) => {
+    if (!isCancelledRow(row)) openVoidDialog([row])
   }
 
-  const handleSingleVoid = async (row) => {
-    if (isCancelledRow(row) || isWorking) return
-    const reason = window.prompt(`请输入作废账单“${getChannelBillNumber(row)}”的原因：`, '')
-    if (reason === null) return
-    if (!reason.trim()) {
-      showToast('作废账单必须填写原因', 'error')
+  const submitVoid = async () => {
+    if (voidSubmitting.current || !voidTargets.length) return
+    if (!voidReason.trim()) {
+      setVoidError('请填写作废原因')
       return
     }
+    voidSubmitting.current = true
     setIsWorking(true)
+    setVoidError('')
     try {
-      await transitionBillLifecycle('channel', String(row.id), 'cancelled', reason.trim())
-      await recon.refetchChannelFromApi?.()
-      setSelectedIds((prev) => prev.filter((id) => id !== String(row.id)))
-      showToast('渠道账单已移入垃圾桶，主列表不再显示', 'success')
+      const results = await Promise.allSettled(voidTargets.map((row) =>
+        transitionBillLifecycle('channel', String(row.id), 'cancelled', voidReason.trim())
+      ))
+      const succeeded = voidTargets.filter((_, i) => results[i].status === 'fulfilled')
+      const failed = voidTargets.filter((_, i) => results[i].status === 'rejected')
+      const successfulIds = new Set(succeeded.map(row => String(row.id)))
+      setSelectedIds(prev => prev.filter(id => !successfulIds.has(String(id))))
+      setVoidTargets(failed)
+      if (failed.length) {
+        setVoidError(results.flatMap((result, i) => result.status === 'rejected'
+          ? [`${getChannelBillNumber(voidTargets[i])}：${result.reason?.message || '作废失败，请重试'}`]
+          : []).join('；'))
+      } else {
+        setVoidReason('')
+      }
+      if (succeeded.length) {
+        showToast(`已将 ${succeeded.length} 张渠道账单移入垃圾桶`, 'success')
+        await recon.refetchChannelFromApi?.()
+      }
     } catch (error) {
-      console.error(error)
-      showToast(error instanceof Error ? error.message : '账单作废失败', 'error')
+      showToast(error instanceof Error ? error.message : '列表刷新失败，请刷新页面核对结果', 'error')
     } finally {
+      voidSubmitting.current = false
       setIsWorking(false)
     }
   }
@@ -1110,6 +1115,24 @@ function CoreChannelReconciliationGroupedPage() {
           })}
         </div>
       </section>
+
+      <ConfirmDialog
+        isOpen={voidTargets.length > 0}
+        title="作废渠道账单"
+        busy={isWorking}
+        onCancel={closeVoidDialog}
+        onConfirm={submitVoid}
+        confirmText="确认作废"
+        message={<>
+          <p>作废后移入垃圾桶，不再计入有效账单；可在垃圾桶恢复。</p>
+          <ul>{voidTargets.map(row => <li key={row.id}>{getChannelBillNumber(row)} · {row.channelName || row.partnerName} · {channelPeriodLabel(row)} · {money(getChannelTotals(row).settlementAmount)}</li>)}</ul>
+          <label htmlFor="channel-void-reason">作废原因（必填）</label>
+          <textarea id="channel-void-reason" rows={3} value={voidReason} disabled={isWorking}
+            onChange={event => setVoidReason(event.target.value)}
+            style={{ width: '100%', boxSizing: 'border-box', marginTop: 8 }} />
+          {voidError && <p role="alert" style={{ color: 'var(--admin-danger)', marginTop: 8 }}>{voidError}</p>}
+        </>}
+      />
 
       <ChannelReceiptDrawer
         open={Boolean(receiptRecord)}
