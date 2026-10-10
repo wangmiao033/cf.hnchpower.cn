@@ -10,6 +10,9 @@ import {
   sharedBillMonthOptions
 } from '@/domain/reconciliation/sharedBillMonthOptions.js'
 import ChannelReceiptDrawer from '@/components/channel/ChannelReceiptDrawer.jsx'
+import ChannelFlatLedger from '@/components/channel/ChannelFlatLedger.jsx'
+import { matchesChannelLedgerFilters, ledgerBillGames, sortChannelLedgerRows } from '@/domain/channel/channelFlatLedgerFilters.js'
+import './ChannelLedgerView.css'
 import ChannelCumulativeLedgerPanel from '@/components/channel/ChannelCumulativeLedgerPanel.jsx'
 import { cumulativeRowCondition } from '@/domain/channel/channelCumulativeLedgerSummary.js'
 import { VIEWS } from '@/app/routes.js'
@@ -203,6 +206,13 @@ function CoreChannelReconciliationGroupedPage() {
   const [status, setStatus] = useState('')
   const [query, setQuery] = useState('')
   const [quickFilter, setQuickFilter] = useState('all')
+  const [ledgerView, setLedgerView] = useState('detail')
+  const [fromMonth, setFromMonth] = useState('')
+  const [toMonth, setToMonth] = useState('')
+  const [gameQuery, setGameQuery] = useState('')
+  const [sortMode, setSortMode] = useState('month-desc')
+  const [flatPage, setFlatPage] = useState(1)
+  const [flatPageSize, setFlatPageSize] = useState(100)
   const [inspectedGap, setInspectedGap] = useState(null)
   const [selectedIds, setSelectedIds] = useState([])
   const [expandedKeys, setExpandedKeys] = useState([])
@@ -274,9 +284,19 @@ function CoreChannelReconciliationGroupedPage() {
       .sort((a, b) => a.localeCompare(b, 'zh-CN')),
     [recon.channelRecords]
   )
+  const gameOptions = useMemo(
+    () => [...new Set((recon.channelRecords || []).flatMap(ledgerBillGames))].sort((a, b) => a.localeCompare(b, 'zh-CN')),
+    [recon.channelRecords]
+  )
+  useEffect(() => { setFlatPage(1) }, [month, fromMonth, toMonth, gameQuery, channel, status, query, quickFilter, sortMode])
+  useEffect(() => { setSelectedIds([]) }, [month, fromMonth, toMonth, gameQuery, channel, status, query, quickFilter])
 
   const inspectCoverageMonth = (channelName, period) => {
+    setLedgerView('detail')
     setMonth(period)
+    setFromMonth('')
+    setToMonth('')
+    setGameQuery('')
     setChannel(channelName)
     setChannelDraft(channelName)
     setStatus('')
@@ -286,7 +306,7 @@ function CoreChannelReconciliationGroupedPage() {
     setSelectedIds([])
     setInspectedGap({ channelName, month: period })
     window.requestAnimationFrame(() => {
-      document.querySelector('.core-channel-recon-page .channel-group-panel')?.scrollIntoView({
+      document.querySelector('.core-channel-recon-page .channel-flat-ledger')?.scrollIntoView({
         behavior: 'smooth',
         block: 'start'
       })
@@ -294,21 +314,9 @@ function CoreChannelReconciliationGroupedPage() {
   }
   const inspectingCurrentGap = inspectedGap && inspectedGap.month === month && inspectedGap.channelName === channel
 
-  const scopedRows = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    const channelQuery = channel.trim().toLowerCase()
-    return (recon.channelRecords || []).filter((row) => {
-      const rowMonths = channelMonths(row)
-      const matchesMonth = !month || rowMonths.includes(month)
-      const matchesChannel = !channelQuery || text(row.channelName, '').toLowerCase().includes(channelQuery)
-      const matchesStatus = !status || String(row.status || 'pending') === status
-      const haystack = [
-        getChannelBillNumber(row), row.channelName, row.partnerName,
-        ...channelGames(row), ...rowMonths, row.remark
-      ].filter(Boolean).join(' ').toLowerCase()
-      return matchesMonth && matchesChannel && matchesStatus && (!q || haystack.includes(q))
-    })
-  }, [recon.channelRecords, month, channel, status, query])
+  const scopedRows = useMemo(() => (recon.channelRecords || []).filter(row =>
+    matchesChannelLedgerFilters(row, { month, fromMonth, toMonth, channel, game: gameQuery, status, query })
+  ), [recon.channelRecords, month, fromMonth, toMonth, channel, gameQuery, status, query])
 
   const trashRows = useMemo(() => scopedRows.filter(isCancelledRow), [scopedRows])
   const archivedRows = useMemo(
@@ -334,6 +342,7 @@ function CoreChannelReconciliationGroupedPage() {
     })
   }, [activeRows, archivedRows, trashRows, quickFilter, eligibleIds])
 
+  const sortedFlatRows = useMemo(() => sortChannelLedgerRows(rows, sortMode), [rows, sortMode])
   const selectableRows = useMemo(
     () => rows.filter((row) => !archivedIds.has(String(row.id)) && !isCancelledRow(row)),
     [rows, archivedIds]
@@ -457,6 +466,15 @@ function CoreChannelReconciliationGroupedPage() {
       const next = new Set(prev)
       if (allVisibleSelected) visibleIds.forEach((id) => next.delete(id))
       else visibleIds.forEach((id) => next.add(id))
+      return [...next]
+    })
+  }
+
+  const selectFlatPage = (pageRows, checked) => {
+    const ids = (pageRows || []).map(row => String(row.id))
+    setSelectedIds((current) => {
+      const next = new Set(current.map(String))
+      ids.forEach(id => { if (checked) next.add(id); else next.delete(id) })
       return [...next]
     })
   }
@@ -686,7 +704,9 @@ function CoreChannelReconciliationGroupedPage() {
         <div className="core-recon-filters">
           <label className="core-recon-filter-control">
             <span>月份</span>
-            <select value={month} aria-label="筛选明细结算月份" onChange={(event) => { setMonth(event.target.value); setExpandedKeys([]) }}>
+            <select value={month} aria-label="筛选明细结算月份" onChange={(event) => {
+              setMonth(event.target.value); setFromMonth(''); setToMonth(''); setExpandedKeys([])
+            }}>
               <option value="">全部月份</option>
               {monthOptions.map((value) => (
                 <option key={value} value={value}>
@@ -740,6 +760,10 @@ function CoreChannelReconciliationGroupedPage() {
           </label>
           <button type="button" className="core-recon-reset" onClick={() => {
             setMonth('')
+            setFromMonth('')
+            setToMonth('')
+            setGameQuery('')
+            setSortMode('month-desc')
             setChannel('')
             setChannelDraft('')
             setStatus('')
@@ -765,12 +789,64 @@ function CoreChannelReconciliationGroupedPage() {
         ))}
       </section>
 
-      <ChannelMonthCoveragePanel
-        records={recon.channelRecords || []}
-        enabled={recon.channelApiEnabled}
-        onInspectMonth={inspectCoverageMonth}
-        onCreateBill={() => setActiveView(VIEWS.CHANNEL_RECON_CREATE)}
-      />
+      <nav className="channel-ledger-view-switch" role="tablist" aria-label="渠道账单查看方式">
+        {[
+          { key: 'detail', label: '账单明细', hint: '直接显示每张账单' },
+          { key: 'group', label: '按渠道汇总', hint: '按合作渠道归集' },
+          { key: 'audit', label: '账期巡检', hint: '查找缺失月份' }
+        ].map(option => (
+          <button
+            key={option.key}
+            type="button"
+            role="tab"
+            aria-selected={ledgerView === option.key}
+            className={ledgerView === option.key ? 'is-active' : ''}
+            onClick={() => {
+              setLedgerView(option.key)
+              setSelectedIds([])
+              setExpandedKeys([])
+            }}
+            title={option.hint}
+          >{option.label}</button>
+        ))}
+        <span>切换视图不会改变原始账单和结算金额</span>
+      </nav>
+
+      {ledgerView === 'detail' ? (
+        <section className="channel-ledger-extra-filters" aria-label="渠道账单明细筛选">
+          <label><span>游戏名称</span>
+            <input type="search" list="channel-ledger-games" value={gameQuery}
+              onChange={event => setGameQuery(event.target.value)} placeholder="搜索游戏" />
+            <datalist id="channel-ledger-games">{gameOptions.map(name => <option key={name} value={name} />)}</datalist>
+          </label>
+          <label><span>起始月份</span>
+            <input type="month" value={fromMonth} onChange={event => { setMonth(''); setFromMonth(event.target.value) }} />
+          </label>
+          <label><span>结束月份</span>
+            <input type="month" value={toMonth} onChange={event => { setMonth(''); setToMonth(event.target.value) }} />
+          </label>
+          <label><span>排序方式</span>
+            <select value={sortMode} onChange={event => setSortMode(event.target.value)}>
+              <option value="month-desc">最新月份优先</option>
+              <option value="month-asc">最早月份优先</option>
+              <option value="unpaid-desc">未收金额最高</option>
+              <option value="settlement-desc">渠道应收最高</option>
+              <option value="channel-asc">渠道名称排序</option>
+            </select>
+          </label>
+          {(fromMonth && toMonth && fromMonth > toMonth) ? <small className="is-warning">起始月份不能晚于结束月份</small> : null}
+        </section>
+      ) : null}
+
+      {ledgerView === 'audit' ? (
+        <ChannelMonthCoveragePanel
+          initialExpanded
+          records={recon.channelRecords || []}
+          enabled={recon.channelApiEnabled}
+          onInspectMonth={inspectCoverageMonth}
+          onCreateBill={() => setActiveView(VIEWS.CHANNEL_RECON_CREATE)}
+        />
+      ) : null}
 
       {inspectingCurrentGap ? (
         <section className="channel-month-audit-target" role="status">
@@ -788,7 +864,33 @@ function CoreChannelReconciliationGroupedPage() {
         </section>
       ) : null}
 
-      <section className="core-recon-panel channel-group-panel">
+      {ledgerView === 'detail' ? (
+        <ChannelFlatLedger
+          rows={sortedFlatRows}
+          selectedIds={selectedIds}
+          archivedIds={archivedIds}
+          eligibleIds={eligibleIds}
+          apiEnabled={recon.channelApiEnabled}
+          busy={isWorking}
+          archiveWorkingId={archiveWorkingId}
+          pageSize={flatPageSize}
+          page={flatPage}
+          onPageChange={setFlatPage}
+          onPageSizeChange={value => { setFlatPageSize(value); setFlatPage(1) }}
+          onSelectPage={selectFlatPage}
+          onToggleSelected={toggleSelected}
+          onDetail={row => openBill360('channel', String(row.id), row)}
+          onPrefetch={row => prefetchBill360?.('channel', String(row.id))}
+          onReceipt={setReceiptRecord}
+          onEdit={row => openChannelReconciliationEdit(String(row.id))}
+          onVoid={handleSingleVoid}
+          onArchive={handleArchive}
+          onUnarchive={handleUnarchive}
+          onRestore={handleRestoreCancelled}
+        />
+      ) : null}
+
+      <section className="core-recon-panel channel-group-panel" style={{ display: ledgerView === 'group' ? undefined : 'none' }}>
         <div className="core-recon-panel-head">
           <div className="channel-group-panel-title">
             <h2>{quickFilter === 'trash' ? '垃圾桶' : quickFilter === 'archived' ? '归档账单' : '按渠道汇总'}</h2>

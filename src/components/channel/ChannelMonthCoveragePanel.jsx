@@ -23,11 +23,12 @@ export default function ChannelMonthCoveragePanel({
   records = [],
   onInspectMonth,
   onCreateBill,
-  enabled = true
+  enabled = true,
+  initialExpanded = false
 }) {
   const [windowSize, setWindowSize] = useState(6)
   const [endMonth, setEndMonth] = useState(() => lastCompletedChannelMonth())
-  const [expanded, setExpanded] = useState(false)
+  const [expanded, setExpanded] = useState(initialExpanded)
   const [onlyGaps, setOnlyGaps] = useState(true)
   const [search, setSearch] = useState('')
   const latestFullMonth = lastCompletedChannelMonth()

@@ -1,0 +1,52 @@
+/* Single-row-per-bill channel ledger. Legacy grouped ledger is untouched. */
+.core-channel-recon-page .channel-flat-ledger{min-width:0;overflow:hidden;background:#fff;border:1px solid #dfe6ee;border-radius:10px}
+.channel-flat-ledger__head{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:11px 14px;border-bottom:1px solid #e5ebf2}
+.channel-flat-ledger__head h2{font-size:14px;line-height:1.4;color:#293e56;font-weight:800;margin:0}
+.channel-flat-ledger__head span{font-size:10px;color:#8492a3}
+.channel-flat-ledger__head-actions{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.channel-flat-ledger__head-actions .is-warning{color:#995f27}
+.channel-flat-ledger__head-actions label{display:flex;align-items:center;gap:7px;font-size:11px;color:#68788a}
+.channel-flat-ledger__head-actions select{height:30px;padding:0 8px;background:#fff;border:1px solid #d1deeb;border-radius:6px;color:#3a516a;font-size:11px}
+.channel-flat-ledger__scroll{max-height:min(68vh,740px);overflow:auto;scrollbar-gutter:stable}
+.channel-flat-ledger__table{border-collapse:separate;border-spacing:0;width:100%;min-width:1120px;table-layout:fixed}
+.channel-flat-ledger__table th,.channel-flat-ledger__table td{border-bottom:1px solid #e9eef4;padding:11px 9px;text-align:left;font-size:11px;line-height:1.4;vertical-align:middle}
+.channel-flat-ledger__table thead th{position:sticky;top:0;z-index:3;background:#f3f7fb;color:#6b7b8e;font-size:10px;font-weight:800;white-space:nowrap}
+.channel-flat-ledger__table tr:last-child td{border-bottom:0}
+.channel-flat-ledger__table tbody tr:nth-child(even){background:#fbfcff}
+.channel-flat-ledger__table tbody tr:hover{background:#f1f7ff}
+.channel-flat-ledger__table tbody tr.is-selected{background:#edf4ff}
+.channel-flat-ledger__table th:nth-child(1){width:30px}
+.channel-flat-ledger__table th:nth-child(2){width:115px}
+.channel-flat-ledger__table th:nth-child(3){width:160px}
+.channel-flat-ledger__table th:nth-child(4){width:220px}
+.channel-flat-ledger__table th:nth-child(5){width:108px}
+.channel-flat-ledger__table th:nth-child(6){width:98px}
+.channel-flat-ledger__table th:nth-child(7){width:108px}
+.channel-flat-ledger__table th:nth-child(8){width:90px}
+.channel-flat-ledger__table th:nth-child(9){width:215px}
+.channel-flat-ledger__check{text-align:center!important}
+.channel-flat-ledger__check input{width:14px;height:14px;accent-color:#306fba;cursor:pointer}
+.channel-flat-ledger__period{font-variant-numeric:tabular-nums;white-space:nowrap;color:#3d516b;font-weight:700}
+.channel-flat-ledger__period small{display:block;margin-top:3px;color:#8397ad;font-weight:500;font-size:9px}
+.channel-flat-ledger__partner strong,.channel-flat-ledger__game strong{display:block;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;color:#2b4764;font-size:11px;font-weight:750}
+.channel-flat-ledger__partner small,.channel-flat-ledger__game small{display:block;margin-top:4px;color:#8191a4;font-size:9px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.channel-flat-ledger__table .is-numeric{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;color:#394d66}
+.channel-flat-ledger__table .is-numeric.has-unpaid{color:#ad651f;font-weight:800}
+.channel-flat-ledger__status{display:inline-flex;align-items:center;justify-content:center;padding:4px 7px;min-width:42px;border-radius:99px;white-space:nowrap;font-size:10px;font-weight:800;border:1px solid #e0e6ed;color:#607284;background:#f4f6f9}
+.channel-flat-ledger__status.is-unpaid{border-color:#f0dfbd;color:#976524;background:#fff7eb}
+.channel-flat-ledger__status.is-anomaly{border-color:#f1c0c0;color:#af4747;background:#fff1f0}
+.channel-flat-ledger__status.is-cumulative{border-color:#b7dfc8;color:#267950;background:#edf9f2}
+.channel-flat-ledger__status.is-paid{border-color:#c1e7d4;color:#28815a;background:#eefaf3}
+.channel-flat-ledger__row-actions{display:flex;align-items:center;gap:4px;white-space:nowrap}
+.channel-flat-ledger__row-actions button{height:26px!important;padding:0 7px!important;border:1px solid #d8e3ee!important;border-radius:6px!important;background:#fff!important;color:#396597!important;font-size:10px!important;font-weight:650!important;cursor:pointer!important}
+.channel-flat-ledger__row-actions button:hover{background:#ecf4ff!important;border-color:#adc8e4!important}
+.channel-flat-ledger__row-actions button.is-danger{color:#af5151!important;border-color:#f0d3d3!important}
+.channel-flat-ledger__row-actions button:disabled{opacity:.52;cursor:default!important;background:#f4f6f9!important}
+.channel-flat-ledger__row-actions button.is-disabled{color:#4d886e!important}
+.channel-flat-ledger__empty{text-align:center!important;color:#73849a!important;padding:46px 12px!important}
+.channel-flat-ledger__footer{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:11px 14px;border-top:1px solid #e7edf3;color:#6d7f92;font-size:11px;flex-wrap:wrap}
+.channel-flat-ledger__footer>div{display:flex;align-items:center;gap:12px}
+.channel-flat-ledger__footer button{height:28px;padding:0 10px;border:1px solid #d2e0ed;border-radius:6px;background:#fff;color:#426d99;font-size:11px;cursor:pointer}
+.channel-flat-ledger__footer button:disabled{opacity:.4;cursor:default}
+.channel-flat-ledger__footer strong{font-variant-numeric:tabular-nums;color:#3d5268;font-size:11px}
+@media(max-width:760px){.channel-flat-ledger__head{align-items:start;flex-direction:column}.channel-flat-ledger__scroll{max-height:62vh}}
