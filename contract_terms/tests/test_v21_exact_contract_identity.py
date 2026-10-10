@@ -84,11 +84,59 @@ class V21ExactContractIdentityTests(unittest.TestCase):
             [{"game_name": "帝国雄师", "settlement_cycle": "2026-08"}], [candidate],
         )["lines"][0]
 
+    def test_registry_rename_cannot_hide_exact_original_contract(self):
+        candidate = self.candidate(product_name="帝国雄师", share_rate=50, channel_fee_rate=5)
+        result = channel_rule_recommender.recommend_channel_rules(
+            candidate["partner_name"], candidate["channel_name"],
+            [{"game_name": "帝国雄狮", "input_game_name": "帝国雄师",
+              "settlement_cycle": "2026-08"}], [candidate],
+        )["lines"][0]
+        self.assertTrue(result["auto_apply"])
+        self.assertEqual(result["recommended"]["share_rate"], 50)
+        self.assertEqual(result["recommended"]["channel_fee_rate"], 5)
+        self.assertEqual(result["game_name"], "帝国雄师")
+
     def test_exact_game_accepts_channel_alias_from_linked_partner_short_name(self):
         row = self.jiuyou_result()
         self.assertTrue(row["auto_apply"])
         self.assertEqual(row["recommended"]["share_rate"], 50)
         self.assertEqual(row["recommended"]["channel_fee_rate"], 5)
+
+    def original_name_result(self, candidates, cycle="2026-08"):
+        return channel_rule_recommender.recommend_channel_rules(
+            "昆山爱趣网络科技有限公司", "爱趣",
+            [{"game_name": "Registry Lion", "input_game_name": "Contract Lion",
+              "settlement_cycle": cycle}], candidates,
+        )["lines"][0]
+
+    def test_original_contract_names_survive_different_registry_links(self):
+        candidate = self.candidate(product_name="Linked Lion", original_product_name="Contract Lion")
+        row = self.original_name_result([candidate])
+        self.assertTrue(row["auto_apply"])
+        self.assertEqual(row["match"]["product_name"], "Contract Lion")
+        self.assertEqual(candidate["product_name"], "Linked Lion")
+
+    def test_original_name_still_checks_period_channel_status_and_fields(self):
+        for changes in ({"authorization_end": "2026-07-31"}, {"channel_name": "Other"},
+                        {"share_rate": None}, {"access_status": "作废"},
+                        {"partner_name": "Other", "partner_short_name": "Other", "counterparty": "Other"}):
+            with self.subTest(changes=changes):
+                candidate = self.candidate(product_name="Contract Lion", **changes)
+                self.assertFalse(self.original_name_result([candidate])["auto_apply"])
+
+    def test_original_name_conflicting_contracts_remain_blocked(self):
+        candidates = [self.candidate(product_name="Contract Lion", share_rate=rate,
+                                     access_item_id=str(rate)) for rate in (20, 50)]
+        self.assertFalse(self.original_name_result(candidates)["auto_apply"])
+
+    def test_original_name_does_not_override_linked_discount_sku(self):
+        candidate = self.candidate(product_name="Contract Lion（0.05折）", original_product_name="Contract Lion")
+        self.assertFalse(self.original_name_result([candidate])["auto_apply"])
+
+    def test_registry_alias_still_works_without_original_contract_match(self):
+        row = self.original_name_result([self.candidate(product_name="Registry Lion")])
+        self.assertTrue(row["auto_apply"])
+        self.assertEqual(row["game_name"], "Contract Lion")
 
     def test_channel_alias_never_bridges_an_unlisted_channel(self):
         row = self.jiuyou_result(channel_name="百分")
