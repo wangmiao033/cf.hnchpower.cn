@@ -17,6 +17,7 @@ import {
 import './BankAutoReconciliationPage.css'
 import './BankCenterPage.css'
 import './BankCenterV2.css'
+import BankMatchRow from '@/components/bank/BankMatchRow.jsx'
 
 const TABS = [
   { key: 'pending', label: '待处理' },
@@ -598,7 +599,7 @@ export default function BankCenterPageV2() {
             <header className="bank-v2-card-head">
               <div>
                 <h2>待核销流水</h2>
-                <p>优先处理高置信流水；低置信只给建议，不自动写入资金事实。</p>
+                <p>先核对单位与账期，再比较金额；展开对照可查看完整匹配依据。</p>
               </div>
               <div className="bank-v2-card-actions">
                 <span>已筛选 <strong>{filteredQueue.length}</strong> / {suggestions.length} 笔</span>
@@ -607,60 +608,17 @@ export default function BankCenterPageV2() {
             </header>
 
             <div className="bank-center-table-wrap">
-              <table className="bank-center-table bank-center-table--queue bank-v2-table">
-                <thead><tr><th>日期</th><th>收 / 支</th><th>对方单位</th><th>摘要</th><th className="is-right">金额</th><th>推荐账单</th><th>匹配度</th><th>操作</th></tr></thead>
+              <table className="bank-center-table bank-center-table--queue bank-v2-table bank-match-table">
+                <colgroup><col style={{ width: '25%' }} /><col style={{ width: '13%' }} /><col style={{ width: '30%' }} /><col style={{ width: '22%' }} /><col style={{ width: '10%' }} /></colgroup>
+                <thead><tr><th>银行流水 / 对方单位</th><th className="is-right">流水金额</th><th>候选账单 / 账期</th><th>金额对照 / 匹配度</th><th>操作</th></tr></thead>
                 <tbody>
-                  {!dashboardLoading && pagedQueue.length === 0 ? <tr><td colSpan={8} className="bank-center-empty">当前筛选下没有待处理流水。</td></tr> : null}
-                  {pagedQueue.map((item) => {
-                    const selectedKey = selection[item.transaction_id] || candidateKey(item.candidates?.[0])
-                    const candidate = item.candidates?.find((row) => candidateKey(row) === selectedKey) || item.candidates?.[0]
-                    const expanded = expandedId === item.transaction_id
-                    return (
-                      <React.Fragment key={item.transaction_id}>
-                        <tr className={`is-confidence-${item.confidence_level}`}>
-                          <td className="bank-v2-date">{item.trade_date || '-'}</td>
-                          <td><span className={`bank-center-direction is-${item.direction}`}>{item.direction === 'collection' ? '收入' : item.direction === 'payment' ? '支出' : '待判定'}</span></td>
-                          <td className="bank-center-strong bank-v2-counterparty">{item.counterparty_name || '-'}</td>
-                          <td className="bank-center-summary" title={item.summary || ''}>{item.summary || '-'}</td>
-                          <td className="is-right"><strong className={item.direction === 'collection' ? 'is-income' : item.direction === 'payment' ? 'is-expense' : ''}>{item.direction === 'payment' ? '-' : '+'}{money(item.amount)}</strong></td>
-                          <td>
-                            {item.candidates?.length ? (
-                              <select className="bank-center-candidate-select bank-v2-candidate" value={selectedKey} onChange={(event) => setSelection((current) => ({ ...current, [item.transaction_id]: event.target.value }))}>
-                                {item.candidates.map((row) => <option key={candidateKey(row)} value={candidateKey(row)}>{row.bill_number} · {row.partner_name || '未填合作方'} · {Number(row.score || 0).toFixed(0)}分</option>)}
-                              </select>
-                            ) : <span className="bank-center-muted">暂无候选</span>}
-                          </td>
-                          <td><span className={`bank-center-confidence is-${item.confidence_level}`}>{confidenceLabel(item.confidence_level)}{item.top_score ? ` ${Number(item.top_score).toFixed(0)}` : ''}</span></td>
-                          <td>
-                            <div className="bank-center-row-actions">
-                              <button type="button" onClick={() => setExpandedId(expanded ? '' : item.transaction_id)}>{expanded ? '收起' : '详情'}</button>
-                              {canManage ? <button type="button" className={item.auto_ready ? 'is-primary' : ''} disabled={!candidate || busyId === item.transaction_id} onClick={() => confirmSelected(item)}>{busyId === item.transaction_id ? '处理中…' : item.auto_ready ? '确认核销' : '人工确认'}</button> : null}
-                            </div>
-                          </td>
-                        </tr>
-                        {expanded ? (
-                          <tr className="bank-center-expand-row">
-                            <td colSpan={8}>
-                              <div className="bank-center-expand bank-v2-expand">
-                                <div><span>银行流水号</span><strong>{item.transaction_no || '-'}</strong></div>
-                                <div><span>币种</span><strong>{item.currency || 'CNY'}</strong></div>
-                                <div><span>匹配状态</span><strong>{confidenceLabel(item.confidence_level)}置信</strong></div>
-                                <div><span>阻断原因</span><strong>{item.blocked_reason || '无'}</strong></div>
-                                {candidate ? (
-                                  <div className="bank-center-expand__candidate">
-                                    <span>当前推荐账单</span>
-                                    <button type="button" onClick={() => openBill360(candidate.bill_type, candidate.bill_id)}>{candidate.bill_number}</button>
-                                    <small>{billTypeLabel(candidate.bill_type)} · {candidate.partner_name || '-'} · {candidate.settlement_month || '-'} · {candidate.game_name || '未填游戏'} · 应结 {money(candidate.bill_amount)} · 未结 {money(candidate.outstanding_amount)}</small>
-                                    <div>{(candidate.reasons || []).map((reason) => <em key={reason}>✓ {reason}</em>)}</div>
-                                  </div>
-                                ) : null}
-                              </div>
-                            </td>
-                          </tr>
-                        ) : null}
-                      </React.Fragment>
-                    )
-                  })}
+                  {!dashboardLoading && pagedQueue.length === 0 ? <tr><td colSpan={5} className="bank-center-empty">当前筛选下没有待处理流水。</td></tr> : null}
+                  {pagedQueue.map((item) => <BankMatchRow key={item.transaction_id} item={item}
+                    selectedKey={selection[item.transaction_id] || candidateKey(item.candidates?.[0])}
+                    expanded={expandedId === item.transaction_id} busy={busyId === item.transaction_id} canManage={canManage}
+                    onSelect={key => setSelection(current => ({ ...current, [item.transaction_id]: key }))}
+                    onExpand={() => setExpandedId(expandedId === item.transaction_id ? '' : item.transaction_id)}
+                    onConfirm={() => confirmSelected(item)} onOpenBill={openBill360} />)}
                 </tbody>
               </table>
             </div>

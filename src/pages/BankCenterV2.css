@@ -681,3 +681,38 @@
 .bank-center-v2 .bank-center-table--history .bank-center-more-action:disabled::after {
   content: '处理中…';
 }
+
+/* Matching queue: keep transaction, selected bill and amount comparison together. */
+.bank-center-v2 .bank-match-table { table-layout: fixed; min-width: 1060px; }
+.bank-center-v2 .bank-match-table td { white-space: normal; overflow-wrap: anywhere; padding: 16px 14px; vertical-align: top; font-size: 13px; line-height: 1.5; }
+.bank-center-v2 .bank-match-table th { padding: 10px 14px; font-size: 12px; }
+.bank-match-row:nth-of-type(even) { background: #fbfcfe; }
+.bank-match-meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; color: #63758b; font-size: 12px; margin-bottom: 5px; }
+.bank-match-meta b { color: #244c78; }
+.bank-match-name { display: block; color: #253b55; }
+.bank-match-summary { display: block; color: #68798b; margin-top: 4px; }
+.bank-match-amount { display: block; font-size: 17px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.bank-match-secondary { display: block; color: #6e7f92; font-size: 11px; margin-top: 6px; }
+.bank-match-bill { padding: 0; border: 0; background: transparent; color: #275d99; font: inherit; font-weight: 700; text-align: left; cursor: pointer; }
+.bank-match-bill:hover { text-decoration: underline; }
+.bank-match-choice { display: block; margin-top: 9px; font-size: 11px; color: #63758b; }
+.bank-match-choice select { display: block; width: 100%; min-width: 0; height: 34px; margin-top: 4px; border: 1px solid #cedbed; border-radius: 6px; background: white; color: #365575; font: inherit; padding: 0 6px; }
+.bank-match-outstanding { color: #52677e; font-size: 12px; }
+.bank-match-outstanding strong { color: #263f5c; font-size: 15px; font-variant-numeric: tabular-nums; }
+.bank-match-difference { display: block; margin: 5px 0 7px; font-size: 13px; }
+.bank-match-difference.is-equal { color: #24704e; }
+.bank-match-difference.is-different,.bank-match-warning { color: #9b5a12; }
+.bank-match-warning { display: block; margin-top: 6px; font-size: 12px; }
+.bank-match-actions { flex-direction: column; align-items: stretch; gap: 8px; }
+.bank-center-v2 .bank-match-actions button { height: 34px; font-size: 12px; padding: 0 6px; white-space: nowrap; }
+.bank-match-detail { background: #f3f7fc; }
+.bank-match-comparison { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 12px; }
+.bank-match-comparison section { padding: 14px; background: white; border: 1px solid #dfe7f1; border-radius: 8px; }
+.bank-match-comparison h3 { margin: 0 0 9px; color: #3c5b7a; font-size: 12px; }
+.bank-match-comparison p { margin: 5px 0; }
+.bank-match-comparison ul { margin: 0; padding-left: 18px; }
+.bank-match-comparison li { margin-bottom: 5px; }
+.bank-match-bill:focus-visible,.bank-match-choice select:focus-visible { outline: 2px solid #3478c7; outline-offset: 3px; }
+.bank-match-tools { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; padding: 10px 24px 0; background: #f5f7fa; }
+.bank-match-tools .bank-customer-launcher,.bank-match-tools .rd-prepay-workbench-launcher { position: static; min-width: 180px; padding: 7px 11px; box-shadow: none; z-index: auto; }
+@media(max-width:720px) { .bank-match-tools { padding: 10px 14px 0; justify-content: flex-start; } }
