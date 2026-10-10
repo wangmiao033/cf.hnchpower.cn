@@ -69,8 +69,11 @@ export default function ChannelCumulativeLedgerPanel({
     let cancelled = false
     setSnapshot(null)
     setError('')
+    // Invalidate stale row statuses immediately when switching partners or
+    // reloading a policy. Only the server snapshot can mark a bill cumulative.
+    onSnapshot?.(groupKey, null)
     if (!selectedPartner || !apiEnabled) {
-      onSnapshot?.(groupKey, null)
+      setLoading(false)
       return undefined
     }
     setLoading(true)
