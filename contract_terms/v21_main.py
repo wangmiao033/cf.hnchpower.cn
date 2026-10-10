@@ -23,10 +23,12 @@ try:
     from . import v20_main as _v20
     from . import channel_rule_recommender as _channel
     from . import matcher as _matcher
+    from .game_identity import normalize_registry_game
 except ImportError:  # Vercel imports modules from the service root.
     import v20_main as _v20
     import channel_rule_recommender as _channel
     import matcher as _matcher
+    from game_identity import normalize_registry_game
 
 app = _v20.app
 
@@ -80,7 +82,24 @@ def _direct_exact_rank(
     if not partner_name or not game_name:
         return None
 
-    identity_candidates = [
+    # Registry aliases must not erase an exact name present in the actual
+    # contract. Compare original names without stripping version/marketing
+    # suffixes, and retain commercial-SKU constraints on both enriched names.
+    input_name = str(line.get("input_game_name") or game_name).strip()
+    original_candidates = []
+    for candidate in candidates:
+        original_name = candidate.get("original_product_name") or candidate.get("product_name")
+        if normalize_registry_game(input_name) != normalize_registry_game(original_name):
+            continue
+        variant = _matcher.commercial_game_variant(input_name)
+        if any(_matcher.commercial_game_variant(name) != variant
+               for name in (game_name, candidate.get("product_name"))):
+            continue
+        restored = dict(candidate, product_name=original_name)
+        if _exact_identity_candidate(partner_name, input_name, restored):
+            original_candidates.append(restored)
+
+    identity_candidates = original_candidates or [
         candidate
         for candidate in candidates
         if _exact_identity_candidate(partner_name, game_name, candidate)

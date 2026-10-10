@@ -355,15 +355,17 @@ def recommend_channel_rules(
         line = {
             "line_id": str(raw.get("line_id") or raw.get("id") or f"draft-{source_index}"),
             "game_name": game_name,
+            "input_game_name": raw.get("input_game_name"),
             "settlement_cycle": cycle,
         }
         ranked = _rank_candidates(bill, line, candidates)
         pool = _selection_pool(ranked, game_name)
+        display_game_name = str(raw.get("input_game_name") or game_name).strip()
         if not pool:
             results.append(
                 {
                     "line_index": source_index,
-                    "game_name": game_name,
+                    "game_name": display_game_name,
                     "settlement_cycle": cycle,
                     "auto_apply": False,
                     "confidence": "none",
@@ -440,7 +442,7 @@ def recommend_channel_rules(
         results.append(
             {
                 "line_index": source_index,
-                "game_name": game_name,
+                "game_name": display_game_name,
                 "settlement_cycle": cycle,
                 "auto_apply": auto_apply,
                 "confidence": scored.get("confidence"),
