@@ -331,3 +331,8 @@
 .channel-month-audit__filters > label:not(.channel-month-audit__only) { min-width: 0; }
 .channel-month-audit__filters select,
 .channel-month-audit__filters input:not([type=checkbox]) { width: 100%; }
+
+/* On phones a pinned 280px channel would cover most of the scroll viewport. */
+@media (max-width: 720px) {
+  .channel-month-audit__matrix th:first-child { position: static; }
+}

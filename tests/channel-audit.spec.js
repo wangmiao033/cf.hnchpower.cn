@@ -71,6 +71,11 @@ test('small screens wrap filters and scroll the table without widening the page'
     await page.locator(scroll).evaluate(el => { el.scrollLeft = el.scrollWidth })
     const summary = await page.locator(`${matrix} thead th`).last().boundingBox()
     expect(summary.x + summary.width).toBeLessThanOrEqual(390)
+    // Verify the summary is actually exposed, not covered by the pinned channel.
+    expect(await page.locator(`${matrix} thead th`).last().evaluate(cell => {
+      const rect = cell.getBoundingClientRect()
+      return cell.contains(document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2))
+    })).toBe(true)
   }
 })
 
