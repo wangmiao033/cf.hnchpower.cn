@@ -43,7 +43,7 @@ describe('channel cumulative ledger read-only summary', () => {
       bill('2026-07', 11.91, 0, 'confirmed'),
       bill('2026-08', 12.92, 0, 'cancelled')
     ])
-    expect(result.unpaid).toBe(3.88 + 3.91 + 11.91)
+    expect(result.unpaid).toBe(19.7)
     expect(result.confirmedUnpaid).toBe(11.91)
     expect(result.notReviewedCount).toBe(2)
   })
