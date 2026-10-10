@@ -142,7 +142,12 @@ export default function ChannelMonthCoveragePanel({
 
           {listed.length ? (
             <div className="channel-month-audit__scroll">
-              <table className="channel-month-audit__matrix">
+              <table className="channel-month-audit__matrix" style={{ '--audit-month-count': audit.months.length }}>
+                <colgroup>
+                  <col className="channel-month-audit__channel-col" />
+                  {audit.months.map(month => <col key={month} />)}
+                  <col className="channel-month-audit__summary-col" />
+                </colgroup>
                 <thead>
                   <tr>
                     <th scope="col">渠道 / 查看账单</th>

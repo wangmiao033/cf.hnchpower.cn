@@ -35,6 +35,12 @@ jobs:
       - name: Run unit tests
         run: npm test
 
+      - name: Install browser for layout regression tests
+        run: npx playwright install --with-deps chromium
+
+      - name: Run browser regression tests
+        run: npm run test:ui
+
       - name: Build production bundle
         run: npm run build
 

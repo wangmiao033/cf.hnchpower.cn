@@ -46,3 +46,6 @@ backend/uploads/
 
 .vercel
 .env*
+
+/playwright-report/
+/test-results/
