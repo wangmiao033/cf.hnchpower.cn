@@ -301,3 +301,12 @@
     flex-direction: column;
   }
 }
+
+.channel-cumulative-card__scope-note{
+  margin:9px 0 4px;padding:8px 10px;border:1px solid #e5dcbd;border-radius:7px;
+  background:#fffbf2;color:#7d692e;font-size:11px;line-height:1.55;
+}
+.channel-cumulative-card__settings input[type="number"]:focus,
+.channel-cumulative-card__settings select:focus{
+  outline:2px solid #b0d4f3;outline-offset:1px;
+}
