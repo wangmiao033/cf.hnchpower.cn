@@ -212,7 +212,7 @@ function CoreChannelReconciliationGroupedPage() {
   const [gameQuery, setGameQuery] = useState('')
   const [sortMode, setSortMode] = useState('month-desc')
   const [flatPage, setFlatPage] = useState(1)
-  const [flatPageSize, setFlatPageSize] = useState(50)
+  const [flatPageSize, setFlatPageSize] = useState(100)
   const [inspectedGap, setInspectedGap] = useState(null)
   const [selectedIds, setSelectedIds] = useState([])
   const [expandedKeys, setExpandedKeys] = useState([])
