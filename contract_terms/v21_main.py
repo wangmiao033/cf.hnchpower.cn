@@ -15,6 +15,8 @@ and out-of-range authorization still blocks automatic application.
 
 from __future__ import annotations
 
+import re
+import unicodedata
 from typing import Any
 
 try:
@@ -47,12 +49,25 @@ def _exact_identity_candidate(partner_name: str, game_name: str, candidate: dict
     return True
 
 
-def _channel_compatible(bill_channel: Any, candidate_channel: Any) -> bool:
+def _channel_compatible(bill_channel: Any, candidate_channel: Any, partner_short_name: Any = "") -> bool:
     bill_key = _matcher.normalize_channel(bill_channel)
     candidate_key = _matcher.normalize_channel(candidate_channel)
     # A blank contract channel is legacy/unspecified and remains usable.  When
     # both sides are explicit, do not cross-apply a rule from another channel.
-    return not (bill_key and candidate_key and bill_key != candidate_key)
+    if not (bill_key and candidate_key and bill_key != candidate_key):
+        return True
+
+    # Only the linked customer record can establish a decorated display name.
+    # Never strip arbitrary bill/contract suffixes: e.g. channel(Android) and
+    # channel(iOS) can be different agreements. Both names must be exactly the
+    # stored customer label or its leading name, after partner/game identity has
+    # already been checked by _direct_exact_rank.
+    label = unicodedata.normalize("NFKC", str(partner_short_name or "")).strip()
+    decorated = re.fullmatch(r"([^()]+)\([^()]+\)", label)
+    if not decorated:
+        return False
+    trusted_names = {_matcher.normalize_channel(label), _matcher.normalize_channel(decorated.group(1))}
+    return bill_key in trusted_names and candidate_key in trusted_names
 
 
 def _direct_exact_rank(
@@ -76,7 +91,7 @@ def _direct_exact_rank(
     compatible = [
         candidate
         for candidate in identity_candidates
-        if _channel_compatible(bill.get("channel_name"), candidate.get("channel_name"))
+        if _channel_compatible(bill.get("channel_name"), candidate.get("channel_name"), candidate.get("partner_short_name"))
     ]
     # An explicit channel mismatch is stronger evidence than fuzzy similarity.
     # Returning an empty exact pool prevents falling back to a wrong channel.
@@ -109,7 +124,10 @@ def _direct_exact_rank(
         else:
             reasons.append("账期不在授权期内")
         if _matcher.normalize_channel(candidate.get("channel_name")):
-            reasons.append("渠道一致")
+            reasons.append(
+                "渠道一致" if _matcher.normalize_channel(bill.get("channel_name")) == _matcher.normalize_channel(candidate.get("channel_name"))
+                else "渠道名称与客户库简称一致"
+            )
 
         ranked.append(
             (
