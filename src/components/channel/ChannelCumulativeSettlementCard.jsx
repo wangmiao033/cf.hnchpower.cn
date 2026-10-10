@@ -35,7 +35,9 @@ export default function ChannelCumulativeSettlementCard({
   recordId = '',
   billStatus = 'pending',
   draftBasisAmount = 0,
-  draftSettlementAmount = 0
+  draftSettlementAmount = 0,
+  onChanged,
+  expandSettings = false
 }) {
   const { can } = useAuth()
   const canManage = can('reconciliation.manage')
@@ -67,9 +69,9 @@ export default function ChannelCumulativeSettlementCard({
       setBatches(snapshot.batches?.items || [])
       setForm({
         settlement_mode: policyResult.settlement_mode || 'periodic',
-        threshold_basis: policyResult.threshold_basis || 'billing_flow',
-        threshold_amount: String(policyResult.threshold_amount || 2000),
-        enabled: policyResult.enabled !== false,
+        threshold_basis: policyResult.id ? (policyResult.threshold_basis || '') : '',
+        threshold_amount: Number(policyResult.threshold_amount) > 0 ? String(policyResult.threshold_amount) : '',
+        enabled: policyResult.id ? policyResult.enabled !== false : true,
         note: policyResult.note || ''
       })
     } catch (error) {
@@ -106,10 +108,20 @@ export default function ChannelCumulativeSettlementCard({
     if (!canManage || !form || working) return
     const mode = form.settlement_mode
     const amount = Number(form.threshold_amount || 0)
-    if (mode === 'threshold' && (!Number.isFinite(amount) || amount <= 0)) {
-      setMessage('累计结算门槛必须大于 0。')
+    if (mode === 'threshold' && !['billing_flow', 'settlement_amount'].includes(form.threshold_basis)) {
+      setMessage('请根据合同明确选择“累计流水”或“累计结算金额”，不能默认猜测累计口径。')
       return
     }
+    if (mode === 'threshold' && (!Number.isFinite(amount) || amount <= 0)) {
+      setMessage('请按与渠道确认的合同条款填写累计结算门槛（元），不能自动采用示例金额。')
+      return
+    }
+    if (mode === 'threshold' && !window.confirm(
+      '确认对合作方“' + String(partnerName || '').trim() + '”启用累计达标结算？\n\n'
+      + '口径：' + (form.threshold_basis === 'settlement_amount' ? '累计应收' : '累计流水')
+      + '；门槛：' + money(amount) + '\n'
+      + '该规则适用于同合作方的全部游戏。已收款、已开票账单不会再进入新累计池；尚未核对的账单需先核对。'
+    )) return
     setWorking('policy')
     setMessage('')
     try {
@@ -123,6 +135,7 @@ export default function ChannelCumulativeSettlementCard({
         note: form.note
       })
       await load()
+      onChanged?.()
       setMessage('结算策略已保存。')
     } catch (error) {
       setMessage(error instanceof Error ? error.message : '结算策略保存失败')
@@ -139,6 +152,7 @@ export default function ChannelCumulativeSettlementCard({
     try {
       const result = await createChannelCumulativeBatch(String(partnerName || '').trim())
       await load()
+      onChanged?.()
       setMessage(`已生成累计结算批次 ${result.batch_no}。`)
     } catch (error) {
       setMessage(error instanceof Error ? error.message : '累计结算批次生成失败')
@@ -154,6 +168,7 @@ export default function ChannelCumulativeSettlementCard({
     try {
       const result = await submitChannelCumulativeBatchInvoice(recentBatch.id)
       await load()
+      onChanged?.()
       setMessage(`累计开票任务 ${result.task_no} 已提交财务工作台。`)
     } catch (error) {
       setMessage(error instanceof Error ? error.message : '累计开票任务提交失败')
@@ -175,6 +190,7 @@ export default function ChannelCumulativeSettlementCard({
     try {
       await cancelChannelCumulativeBatch(recentBatch.id, reason.trim())
       await load()
+      onChanged?.()
       setMessage('累计结算批次已取消，账单已重新回到累计池。')
     } catch (error) {
       setMessage(error instanceof Error ? error.message : '取消批次失败')
@@ -244,12 +260,13 @@ export default function ChannelCumulativeSettlementCard({
       ) : null}
 
       {canManage && form ? (
-        <details className="channel-cumulative-card__settings">
+        <details className="channel-cumulative-card__settings" open={expandSettings ? true : undefined}>
           <summary>结算策略设置</summary>
+          <p className="channel-cumulative-card__scope-note">按合作方生效，包含该合作方所有游戏。请严格依据合同填写累计口径和门槛；已收、已开票的历史账单不会重复进入累计池。</p>
           <div className="channel-cumulative-card__settings-grid">
             <label><span>结算方式</span><select value={form.settlement_mode} onChange={(event) => setForm((current) => ({ ...current, settlement_mode: event.target.value }))}><option value="periodic">按月结算</option><option value="threshold">累计达标结算</option></select></label>
-            <label><span>累计口径</span><select value={form.threshold_basis} disabled={form.settlement_mode !== 'threshold'} onChange={(event) => setForm((current) => ({ ...current, threshold_basis: event.target.value }))}><option value="billing_flow">累计流水</option><option value="settlement_amount">累计结算金额</option></select></label>
-            <label><span>结算门槛（元）</span><input type="number" min="0" step="0.01" disabled={form.settlement_mode !== 'threshold'} value={form.threshold_amount} onChange={(event) => setForm((current) => ({ ...current, threshold_amount: event.target.value }))} /></label>
+            <label><span>累计口径</span><select value={form.threshold_basis} disabled={form.settlement_mode !== 'threshold'} onChange={(event) => setForm((current) => ({ ...current, threshold_basis: event.target.value }))}><option value="">请选择合同约定口径</option><option value="billing_flow">累计流水</option><option value="settlement_amount">累计结算金额</option></select></label>
+            <label><span>结算门槛（元）</span><input type="number" min="0" step="0.01" disabled={form.settlement_mode !== 'threshold'} value={form.threshold_amount} placeholder="按合同填写，不能默认2000" onChange={(event) => setForm((current) => ({ ...current, threshold_amount: event.target.value }))} /></label>
             <label className="is-wide"><span>规则说明</span><input type="text" value={form.note} onChange={(event) => setForm((current) => ({ ...current, note: event.target.value }))} placeholder="例如：累计流水总金额达到2000元后结算" /></label>
           </div>
           <button type="button" onClick={savePolicy} disabled={!!working}>{working === 'policy' ? '保存中…' : '保存结算策略'}</button>
