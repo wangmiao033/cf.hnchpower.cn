@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { useAppState } from '@/app/AppStateContext.jsx'
 import PageContainer from '@/components/layout/PageContainer.jsx'
 import { VIEWS } from '@/app/routes.js'
@@ -70,7 +70,7 @@ function MetricCard({ label, value, note, tone = '', onClick }) {
   )
 }
 
-function ProfitTrend({ rows }) {
+export function ProfitTrend({ rows }) {
   const max = useMemo(() => {
     const values = (rows || []).flatMap((row) => [
       Math.abs(Number(row.channel_settlement || 0)),
@@ -140,7 +140,7 @@ function buildAnnualSummary(rows, year) {
   }
 }
 
-function AnnualProfitOverview({ data, selectedYear, setSelectedYear, onRefresh, loading }) {
+export function AnnualProfitOverview({ data, selectedYear, setSelectedYear, onRefresh, loading }) {
   const years = useMemo(() => {
     const values = [...new Set((data?.available_months || []).map((item) => String(item).slice(0, 4)).filter(Boolean))]
     if (selectedYear && !values.includes(selectedYear)) values.push(selectedYear)
@@ -317,7 +317,17 @@ export default function ProfitAnalysisPage() {
         </div> : null}
       </section>
 
-      {error && !data ? <section className="profit-error"><strong>利润分析读取失败</strong><span>{error}</span><button type="button" onClick={() => setRevision((value) => value + 1)}>重新读取</button></section> : null}
+      {loading && !data && viewMode !== 'project' ? (
+        <section className="profit-loading-state" role="status" aria-live="polite">
+          <span className="profit-loading-state__spinner" aria-hidden="true" />
+          <div>
+            <strong>正在读取利润分析</strong>
+            <p>正在汇总渠道结算、研发成本及经营费用，请稍候。</p>
+          </div>
+        </section>
+      ) : null}
+
+      {error && !data ? <section className="profit-error" role="alert"><strong>利润分析读取失败</strong><span>{error}</span><button type="button" onClick={() => setRevision((value) => value + 1)}>重新读取</button></section> : null}
 
       {data && viewMode === 'annual' ? <AnnualProfitOverview data={data} selectedYear={selectedYear} setSelectedYear={setSelectedYear} onRefresh={() => setRevision((value) => value + 1)} loading={loading} /> : null}
       {viewMode === 'project' ? <ProjectProfitOverview /> : null}
