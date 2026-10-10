@@ -4,6 +4,11 @@
 @media(max-width:1100px){.channel-rule-grid{grid-template-columns:1fr 1fr 1fr}.channel-rule-summary{grid-template-columns:1fr 1fr 1fr}.channel-contract-rule-override{grid-template-columns:1fr}}@media(max-width:720px){.channel-rule-panel__head{display:block}.channel-rule-panel__head small{display:block;margin-top:6px;text-align:left}.channel-contract-rule-status{align-items:flex-start}.channel-rule-grid,.channel-rule-summary{grid-template-columns:1fr 1fr}}
 
 /* Channel-vs-platform review is explanatory: the platform amount is already included. */
+.channel-contract-rule-issues{list-style:none;margin:0 0 11px;padding:10px 12px;border:1px solid #ead7a8;border-radius:8px;background:#fffaf0;color:#77551b;font-size:12px;line-height:1.6;overflow-wrap:anywhere}
+.channel-contract-rule-issues li+li{margin-top:8px;padding-top:8px;border-top:1px solid #ead7a8}
+.channel-contract-rule-issues strong{display:block;font-size:12px}
+.channel-contract-rule-issues p{margin:3px 0}
+.channel-contract-rule-issues small{display:block;color:#7d6b48;font-size:11px}
 .channel-difference-review{margin-top:12px;padding:12px 14px;border:1px solid #c5daee;border-radius:10px;background:#f6faff;color:#37536e}
 .channel-difference-review.is-lower{border-color:#e7c5c3;background:#fff9f8}
 .channel-difference-review.is-offsetting,.channel-difference-review.is-partial{border-color:#efdea9;background:#fffcf3}

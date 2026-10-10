@@ -92,7 +92,7 @@ function validationText(status) {
 function contractRuleLabel(state) {
   if (state.loading) return '正在读取合同清单…'
   if (state.tone === 'applied') return '合同规则已应用'
-  if (state.tone === 'review') return '合同规则已匹配 · 待确认'
+  if (state.tone === 'review') return '合同规则待确认'
   if (state.tone === 'error') return '技术异常 · 合同规则读取失败'
   return '合同规则自动匹配'
 }
@@ -464,7 +464,7 @@ function ChannelBillingForm({
                   : '已按当前游戏和账期自动套用合同规则并重新计算。'
               : allPreciseLinesApplied
                 ? '本账单存在多套合同结算规则，已按每个游戏明细对应的合同分别计算；不会再把账单头部的统一通道费套到所有游戏。'
-                : result.partner_rule_message || result.message || '待补规则：合同规则存在歧义，请按具体游戏和账期确认。',
+                : result.message || result.partner_rule_message || '待补规则：合同规则存在歧义，请按具体游戏和账期确认。',
             contracts: contractNames,
             recommendation: result,
             fingerprint
@@ -727,6 +727,24 @@ function ChannelBillingForm({
               </div>
               <button type="button" onClick={() => { setLastContractRuleKey(''); setContractRuleRevision((value) => value + 1) }} disabled={contractRuleState.loading || (mode === 'add' && !partnerId)}>重新匹配</button>
             </div>
+          ) : null}
+          {contractAwareMode && !contractRuleState.loading && contractRuleState.fingerprint === recommendationFingerprint(header.partnerName, header.channelName, lines) && (
+            (contractRuleState.recommendation?.lines || []).some(item => !item.auto_apply)
+          ) ? (
+            <ul className="channel-contract-rule-issues" aria-label="未自动带入的合同规则">
+              {contractRuleState.recommendation.lines.filter(item => !item.auto_apply).map(item => (
+                <li key={item.line_index}>
+                  <strong>第 {Number(item.line_index) + 1} 行 · {item.game_name} · {item.settlement_cycle}</strong>
+                  <p>{item.message || (item.match ? '已找到合同，自动套用条件尚未满足，请核对具体合同与账期。' : '未找到匹配的合同合作项，请核对游戏、渠道名称与账期。')}</p>
+                  {item.match ? <small>
+                    合同：{item.match.contract_no || item.match.contract_name || '已匹配合作项'}
+                    {' · 分成：'}{item.recommended?.share_rate == null ? '未填写' : `${item.recommended.share_rate}%`}
+                    {' · 通道费：'}{item.recommended?.channel_fee_rate == null ? '未填写' : `${item.recommended.channel_fee_rate}%`}
+                    {' · 授权期：'}{item.match.authorization_start || '未注明'} 至 {item.match.authorization_end || '未注明'}
+                  </small> : null}
+                </li>
+              ))}
+            </ul>
           ) : null}
           {contractAwareMode && contractRuleNeedsOverride && !targetedRuleLocked ? (
             <div className="channel-contract-rule-override">
