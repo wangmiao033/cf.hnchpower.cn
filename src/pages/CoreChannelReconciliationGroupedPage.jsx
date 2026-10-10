@@ -291,7 +291,14 @@ function CoreChannelReconciliationGroupedPage() {
   useEffect(() => { setFlatPage(1) }, [month, fromMonth, toMonth, gameQuery, channel, status, query, quickFilter, sortMode])
   useEffect(() => { setSelectedIds([]) }, [month, fromMonth, toMonth, gameQuery, channel, status, query, quickFilter])
 
-  const inspectCoverageMonth = (channelName, period) => {
+  const inspectCoverageMonth = (channelName, period, { kind = 'gap' } = {}) => {
+    const relevant = (recon.channelRecords || []).filter(row =>
+      !isCancelledRow(row) &&
+      String(row.channelName || '').trim().toLocaleLowerCase('zh-CN') === String(channelName).trim().toLocaleLowerCase('zh-CN') &&
+      channelMonths(row).includes(period)
+    )
+    const onlyArchived = kind === 'recorded' && relevant.length > 0 &&
+      relevant.every(row => archivedIds.has(String(row.id)))
     setLedgerView('detail')
     setMonth(period)
     setFromMonth('')
@@ -301,10 +308,10 @@ function CoreChannelReconciliationGroupedPage() {
     setChannelDraft(channelName)
     setStatus('')
     setQuery('')
-    setQuickFilter('all')
+    setQuickFilter(onlyArchived ? 'archived' : 'all')
     setExpandedKeys([])
     setSelectedIds([])
-    setInspectedGap({ channelName, month: period })
+    setInspectedGap({ channelName, month: period, kind })
     window.requestAnimationFrame(() => {
       document.querySelector('.core-channel-recon-page .channel-flat-ledger')?.scrollIntoView({
         behavior: 'smooth',
@@ -843,6 +850,14 @@ function CoreChannelReconciliationGroupedPage() {
           initialExpanded
           records={recon.channelRecords || []}
           enabled={recon.channelApiEnabled}
+          focusChannel={channel}
+          focusKeyword={query}
+          onClearFocus={() => {
+            setChannel('')
+            setChannelDraft('')
+            setQuery('')
+            setInspectedGap(null)
+          }}
           onInspectMonth={inspectCoverageMonth}
           onCreateBill={() => setActiveView(VIEWS.CHANNEL_RECON_CREATE)}
         />
@@ -851,8 +866,10 @@ function CoreChannelReconciliationGroupedPage() {
       {inspectingCurrentGap ? (
         <section className="channel-month-audit-target" role="status">
           <div>
-            <strong>{'正在排查：' + inspectedGap.channelName + ' · ' + monthLabel(inspectedGap.month)}</strong>
-            <span>下方按该渠道与月份定位；若列表为空，请先核实是否有应结算流水，再决定是否补录。</span>
+            <strong>{(inspectedGap.kind === 'recorded' ? '查看已录账单：' : '正在排查：') + inspectedGap.channelName + ' · ' + monthLabel(inspectedGap.month)}</strong>
+            <span>{inspectedGap.kind === 'recorded'
+              ? '已按渠道和月份定位。巡检包含归档账单，明细数量不一致时可查看归档账单。'
+              : '没有账单不代表一定有流水，请先核对渠道订单明细，再决定是否补录。'}</span>
           </div>
           <button type="button" onClick={() => setActiveView(VIEWS.CHANNEL_RECON_CREATE)}>新增账单</button>
           <button type="button" onClick={() => {

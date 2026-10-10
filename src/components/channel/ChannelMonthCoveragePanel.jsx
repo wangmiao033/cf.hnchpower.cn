@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import {
   auditChannelBillMonths,
   lastCompletedChannelMonth
@@ -24,23 +24,35 @@ export default function ChannelMonthCoveragePanel({
   onInspectMonth,
   onCreateBill,
   enabled = true,
-  initialExpanded = false
+  initialExpanded = false,
+  focusChannel = '',
+  focusKeyword = '',
+  onClearFocus
 }) {
   const [windowSize, setWindowSize] = useState(6)
   const [endMonth, setEndMonth] = useState(() => lastCompletedChannelMonth())
   const [expanded, setExpanded] = useState(initialExpanded)
-  const [onlyGaps, setOnlyGaps] = useState(true)
+  const isFocused = Boolean(String(focusChannel || '').trim() || String(focusKeyword || '').trim())
+  const [onlyGaps, setOnlyGaps] = useState(!isFocused)
   const [search, setSearch] = useState('')
   const latestFullMonth = lastCompletedChannelMonth()
 
+  useEffect(() => {
+    if (isFocused) setOnlyGaps(false)
+  }, [isFocused, focusChannel, focusKeyword])
+
   const audit = useMemo(
-    () => auditChannelBillMonths(records, { endingMonth: endMonth, windowSize }),
-    [records, endMonth, windowSize]
+    () => auditChannelBillMonths(records, {
+      endingMonth: endMonth, windowSize,
+      channelFilter: focusChannel, keyword: focusKeyword,
+      localChannelSearch: search
+    }),
+    [records, endMonth, windowSize, focusChannel, focusKeyword, search]
   )
-  const listed = useMemo(() => audit.channels.filter((row) => {
-    if (onlyGaps && row.gaps.length === 0) return false
-    return row.name.toLocaleLowerCase('zh-CN').includes(search.trim().toLocaleLowerCase('zh-CN'))
-  }), [audit.channels, onlyGaps, search])
+  const listed = useMemo(
+    () => audit.channels.filter(row => !onlyGaps || row.gaps.length > 0),
+    [audit.channels, onlyGaps]
+  )
 
   return (
     <section className="channel-month-audit" aria-label="渠道账期巡检">
@@ -66,6 +78,17 @@ export default function ChannelMonthCoveragePanel({
           <span aria-hidden="true">{expanded ? '⌃' : '⌄'}</span>
         </button>
       </header>
+      {isFocused ? (
+        <div className="channel-month-audit__scope" role="status">
+          <span>
+            本次巡检范围：
+            {focusChannel ? <strong>渠道「{focusChannel}」</strong> : null}
+            {focusKeyword ? <strong>关键词「{focusKeyword}」</strong> : null}
+            <em>按匹配渠道的完整历史账期检查，不受上方单月/状态筛选影响</em>
+          </span>
+          {onClearFocus ? <button type="button" onClick={() => { setSearch(''); onClearFocus() }}>查看全部渠道</button> : null}
+        </div>
+      ) : null}
       {!enabled || records.length >= 500 ? (
         <div className="channel-month-audit__data-note" role="status">
           {!enabled
@@ -104,7 +127,10 @@ export default function ChannelMonthCoveragePanel({
                 type="search"
                 placeholder="输入渠道名称"
                 value={search}
-                onChange={(event) => setSearch(event.target.value)}
+                onChange={(event) => {
+                  setSearch(event.target.value)
+                  if (event.target.value.trim()) setOnlyGaps(false)
+                }}
                 aria-label="在巡检中搜索渠道"
               />
             </label>
@@ -119,28 +145,35 @@ export default function ChannelMonthCoveragePanel({
               <table className="channel-month-audit__matrix">
                 <thead>
                   <tr>
-                    <th scope="col">渠道</th>
+                    <th scope="col">渠道 / 查看账单</th>
                     {audit.months.map((month) => (
                       <th key={month} scope="col" title={fullMonth(month)}>
                         {shortMonth(month)}
                       </th>
                     ))}
-                    <th scope="col">待核实断档</th>
+                    <th scope="col">已录月份 / 待核查</th>
                   </tr>
                 </thead>
                 <tbody>
                   {listed.map((row) => (
                     <tr key={row.key}>
                       <th scope="row" title={row.name}>
-                        <strong>{row.name}</strong>
+                        <button type="button" className="channel-month-audit__channel-name"
+                          title={'查看' + row.name + '最近有账单的月份'}
+                          onClick={() => onInspectMonth?.(row.name, row.lastRecorded, { kind: 'recorded' })}>
+                          <strong>{row.name}</strong>
+                        </button>
                         <small>{fullMonth(row.firstRecorded)}至{fullMonth(row.lastRecorded)}</small>
                       </th>
                       {row.cells.map((cell) => (
                         <td key={cell.month} className={'channel-month-audit__cell is-' + cell.kind}>
                           {cell.kind === 'recorded' ? (
-                            <span title={fullMonth(cell.month) + ' 已有 ' + cell.count + ' 张账单（含归档）'}>
+                            <button type="button" className="channel-month-audit__recorded-button"
+                              title={fullMonth(cell.month) + ' 已录 ' + cell.count + ' 张账单（含归档）；点击查看'}
+                              aria-label={'查看' + row.name + fullMonth(cell.month) + '已录账单'}
+                              onClick={() => onInspectMonth?.(row.name, cell.month, { kind: 'recorded' })}>
                               {cell.count}张
-                            </span>
+                            </button>
                           ) : cell.kind === 'before' ? (
                             <span title="该月早于本渠道首个已观察到账期，不判定是否漏账">—</span>
                           ) : (
@@ -148,7 +181,7 @@ export default function ChannelMonthCoveragePanel({
                               type="button"
                               title={cell.kind === 'gap' ? '两笔已录账期之间无账单，点击排查' : '最后已录账期之后暂无账单，点击排查'}
                               aria-label={'排查' + row.name + fullMonth(cell.month) + (cell.kind === 'gap' ? '账期断档' : '未出账')}
-                              onClick={() => onInspectMonth?.(row.name, cell.month)}
+                              onClick={() => onInspectMonth?.(row.name, cell.month, { kind: cell.kind })}
                             >
                               {cell.kind === 'gap' ? '断档' : '未出'}
                             </button>
@@ -156,11 +189,8 @@ export default function ChannelMonthCoveragePanel({
                         </td>
                       ))}
                       <td className="channel-month-audit__gaps">
-                        {row.gaps.length ? (
-                          <span>{row.gaps.map(shortMonth).join('、')}</span>
-                        ) : (
-                          <span className="is-none">无内部断档</span>
-                        )}
+                        <strong>{row.covered}/{audit.months.length}个月有账单</strong>
+                        {row.gaps.length ? <small>待核：{row.gaps.map(shortMonth).join('、')}</small> : <small className="is-none">无内部断档</small>}
                       </td>
                     </tr>
                   ))}
@@ -169,8 +199,12 @@ export default function ChannelMonthCoveragePanel({
             </div>
           ) : (
             <div className="channel-month-audit__empty">
-              <strong>{audit.gapChannelCount === 0 ? '当前检查范围内未发现内部账期断档' : '当前筛选条件下没有符合的渠道'}</strong>
-              <span>可以切换为“显示全部渠道”，继续检查各渠道最后一张之后是否未出账。</span>
+              <strong>{audit.matchingChannelCount === 0
+                ? '未找到匹配的渠道'
+                : audit.coveredChannelCount === 0 ? '匹配渠道在当前检查期没有账单'
+                  : audit.gapChannelCount === 0 ? '当前范围内未发现内部账期断档'
+                    : '当前筛选条件下没有符合的渠道'}</strong>
+              <span>取消“只显示断档渠道”可以查看其他渠道；没有账单不等于一定有漏账。</span>
               {onlyGaps ? (
                 <button type="button" onClick={() => setOnlyGaps(false)}>查看全部渠道</button>
               ) : null}
@@ -178,7 +212,7 @@ export default function ChannelMonthCoveragePanel({
           )}
 
           <div className="channel-month-audit__foot">
-            <p><strong>标识：</strong>已录 = 有账单 · 断档 = 前后有记录但本月无账单 · 未出 = 最后一张之后暂无记录。仅供核查，不代表必有流水。</p>
+            <p><strong>标识：</strong>绿色“已录”可点击查看账单（含归档）· 断档 = 前后有账单但本月缺失 · 未出 = 最后一张之后暂无记录。仅供核查，不代表一定有流水。</p>
             <div>
               <span>已归档计入 · 已作废不计 · 根据已加载账单统计</span>
               <button type="button" onClick={() => onCreateBill?.()}>新增渠道账单</button>
