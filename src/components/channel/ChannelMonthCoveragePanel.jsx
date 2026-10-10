@@ -130,7 +130,7 @@ export default function ChannelMonthCoveragePanel({
                 onChange={(event) => {
                   setSearch(event.target.value)
                   if (event.target.value.trim()) setOnlyGaps(false)
-                }
+                }}
                 aria-label="在巡检中搜索渠道"
               />
             </label>
