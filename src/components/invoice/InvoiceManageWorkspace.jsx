@@ -581,11 +581,8 @@ function InvoiceManageWorkspace({ variant = 'manage', direction = 'output' }) {
   }
 
   const wrapImport = (event) => {
-    const file = event.target.files?.[0]
     void handleImportInvoiceFile(event)
-    if (file?.name?.toLowerCase().endsWith('.pdf')) {
-      setActiveViewRaw?.(VIEWS.INVOICE_CREATE)
-    }
+
   }
 
   const runAutoMatch = async (dryRun) => {
@@ -802,9 +799,9 @@ function InvoiceManageWorkspace({ variant = 'manage', direction = 'output' }) {
                 ) : null}
                 <button type="button" className="rec-btn rec-btn--secondary" onClick={handleExportInvoiceCSV}>导出 CSV</button>
                 <button type="button" className="rec-btn rec-btn--secondary" onClick={() => invoiceFileInputRef.current?.click()}>
-                  导入税务 Excel / JSON / PDF
+                  导入税务 Excel / JSON
                 </button>
-                <input ref={invoiceFileInputRef} type="file" accept=".xlsx,.xls,.json,.pdf" className="channel-rd__file" style={{ display: 'none' }} onChange={wrapImport} />
+                <input ref={invoiceFileInputRef} type="file" accept=".xlsx,.xls,.json" className="channel-rd__file" style={{ display: 'none' }} onChange={wrapImport} />
                 <button
                   type="button"
                   className="rec-btn rec-btn--secondary"

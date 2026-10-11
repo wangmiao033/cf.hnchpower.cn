@@ -43,12 +43,6 @@ const PATH = '/api/contracts/smart-scan'
 const SMART_SCAN_TIMEOUT_MS = 150_000
 const DIRECT_SCAN_MAX_BYTES = Math.floor(3.2 * 1024 * 1024)
 export const CONTRACT_SMART_SCAN_MAX_FILE_BYTES = 50 * 1024 * 1024
-const MAX_PDF_PAGES = 120
-const PDF_LIB_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js'
-const PDF_LIB_INTEGRITY = 'sha512-z8IYLHO8bTgFqj+yrPyIJnzBDf7DDhWwiEsk4sY+Oe6J2M+WQequeGS7qioI5vT6rXgVRb4K1UVQC5ER7MKzKQ=='
-
-let pdfLibPromise: Promise<any> | null = null
-
 function emitProgress(
   callback: ((progress: SmartScanProgress) => void) | undefined,
   progress: SmartScanProgress
@@ -67,121 +61,6 @@ function normalizeKey(value: unknown) {
     .replace(/[（(]/g, '(')
     .replace(/[）)]/g, ')')
     .replace(/\s+/g, '')
-}
-
-async function loadPdfLib() {
-  const existing = (window as any).PDFLib
-  if (existing?.PDFDocument) return existing
-  if (pdfLibPromise) return pdfLibPromise
-
-  pdfLibPromise = new Promise((resolve, reject) => {
-    const current = document.querySelector<HTMLScriptElement>('script[data-contract-pdf-lib="1"]')
-    const finish = () => {
-      const lib = (window as any).PDFLib
-      if (lib?.PDFDocument) resolve(lib)
-      else reject(new Error('PDF 分页组件加载失败，请检查网络后重试。'))
-    }
-    if (current) {
-      if ((window as any).PDFLib?.PDFDocument) finish()
-      else {
-        current.addEventListener('load', finish, { once: true })
-        current.addEventListener('error', () => reject(new Error('PDF 分页组件加载失败，请稍后重试。')), { once: true })
-      }
-      return
-    }
-
-    const script = document.createElement('script')
-    script.src = PDF_LIB_URL
-    script.async = true
-    script.crossOrigin = 'anonymous'
-    script.referrerPolicy = 'no-referrer'
-    script.integrity = PDF_LIB_INTEGRITY
-    script.dataset.contractPdfLib = '1'
-    script.addEventListener('load', finish, { once: true })
-    script.addEventListener('error', () => reject(new Error('PDF 分页组件加载失败，请稍后重试。')), { once: true })
-    document.head.appendChild(script)
-  }).catch((error) => {
-    pdfLibPromise = null
-    throw error
-  })
-
-  return pdfLibPromise
-}
-
-async function buildPdfChunk(sourceDocument: any, indexes: number[], originalName: string) {
-  const { PDFDocument } = await loadPdfLib()
-  const target = await PDFDocument.create()
-  const pages = await target.copyPages(sourceDocument, indexes)
-  pages.forEach((page: any) => target.addPage(page))
-  const bytes = await target.save({ useObjectStreams: true })
-  const firstPage = indexes[0] + 1
-  const lastPage = indexes[indexes.length - 1] + 1
-  const name = `${basenameWithoutExtension(originalName)}_第${firstPage}-${lastPage}页.pdf`
-  return new File([bytes], name, { type: 'application/pdf' })
-}
-
-async function splitPdfForScan(
-  file: File,
-  onProgress?: (progress: SmartScanProgress) => void
-): Promise<File[]> {
-  emitProgress(onProgress, {
-    phase: 'preparing',
-    current: 0,
-    total: 0,
-    message: '文件较大，正在按页自动拆分…'
-  })
-
-  const { PDFDocument } = await loadPdfLib()
-  let source: any
-  try {
-    source = await PDFDocument.load(await file.arrayBuffer(), { ignoreEncryption: true })
-  } catch (error) {
-    console.error(error)
-    throw new Error('PDF 无法读取或已加密，请先解除密码后再识别。')
-  }
-
-  const pageCount = source.getPageCount()
-  if (!pageCount) throw new Error('PDF 中没有可识别页面。')
-  if (pageCount > MAX_PDF_PAGES) {
-    throw new Error(`合同页数过多（${pageCount} 页），单次智能识别最多支持 ${MAX_PDF_PAGES} 页。`)
-  }
-
-  const chunks: File[] = []
-  let currentIndexes: number[] = []
-  let currentFile: File | null = null
-
-  for (let pageIndex = 0; pageIndex < pageCount; pageIndex += 1) {
-    emitProgress(onProgress, {
-      phase: 'preparing',
-      current: pageIndex + 1,
-      total: pageCount,
-      message: `正在整理 PDF 第 ${pageIndex + 1}/${pageCount} 页…`
-    })
-
-    const candidateIndexes = [...currentIndexes, pageIndex]
-    const candidate = await buildPdfChunk(source, candidateIndexes, file.name)
-    if (candidate.size <= DIRECT_SCAN_MAX_BYTES) {
-      currentIndexes = candidateIndexes
-      currentFile = candidate
-      continue
-    }
-
-    if (currentIndexes.length && currentFile) {
-      chunks.push(currentFile)
-      currentIndexes = [pageIndex]
-      currentFile = await buildPdfChunk(source, currentIndexes, file.name)
-    } else {
-      currentIndexes = [pageIndex]
-      currentFile = candidate
-    }
-
-    if (currentFile.size > DIRECT_SCAN_MAX_BYTES) {
-      throw new Error(`PDF 第 ${pageIndex + 1} 页单页超过识别上限，请先降低该页扫描分辨率后再试。`)
-    }
-  }
-
-  if (currentFile) chunks.push(currentFile)
-  return chunks
 }
 
 async function compressImageForScan(file: File): Promise<File> {
@@ -362,6 +241,9 @@ export async function scanContractFile(
   file: File,
   onProgress?: (progress: SmartScanProgress) => void
 ): Promise<SmartContractScanResult> {
+  if (/\.pdf$/i.test(file.name) || file.type.split(';')[0].trim().toLowerCase() === 'application/pdf') {
+    throw new Error('已停用 PDF 自动解析，请上传 JPG、PNG、WEBP 图片或手工录入。')
+  }
   if (file.size > CONTRACT_SMART_SCAN_MAX_FILE_BYTES) {
     throw new Error('智能识别单个合同最大支持 50MB。')
   }
@@ -370,10 +252,7 @@ export async function scanContractFile(
   let archiveMode: SmartContractScanResult['archive_mode'] = 'original'
 
   if (file.size > DIRECT_SCAN_MAX_BYTES) {
-    if (/\.pdf$/i.test(file.name) || file.type === 'application/pdf') {
-      scanFiles = await splitPdfForScan(file, onProgress)
-      archiveMode = 'split'
-    } else if (/^image\//.test(file.type) || /\.(jpe?g|png|webp)$/i.test(file.name)) {
+    if (/^image\//.test(file.type) || /\.(jpe?g|png|webp)$/i.test(file.name)) {
       emitProgress(onProgress, {
         phase: 'preparing',
         current: 0,
