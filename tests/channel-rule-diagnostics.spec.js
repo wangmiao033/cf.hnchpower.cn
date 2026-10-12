@@ -24,7 +24,16 @@ test('shows the precise blocked rule instead of the partner baseline; rematch fi
     if (route.request().url().endsWith('/api/contract-terms/channel-rule-recommendation')) {
       return route.fulfill({ json: response(reason) })
     }
-    writes.push(route.request().method() + ' ' + new URL(route.request().url()).pathname)
+    // Legal-entity references are read-only metadata. The fixture does not
+    // need real customer identities, but still forbids unexpected API writes.
+    const pathname = new URL(route.request().url()).pathname
+    if (route.request().method() === 'GET' && pathname === '/api/legal-entities/own-accounts') {
+      return route.fulfill({ json: { items: [] } })
+    }
+    if (route.request().method() === 'GET' && pathname === '/api/legal-entities/partners/fixture-partner') {
+      return route.fulfill({ json: { partner: { id: 'fixture-partner' }, links: [] } })
+    }
+    writes.push(route.request().method() + ' ' + pathname)
     return route.abort()
   })
   await page.goto('/tests/fixtures/channel-rule.html')
