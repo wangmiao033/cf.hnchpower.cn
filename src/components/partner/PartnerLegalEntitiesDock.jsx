@@ -10,8 +10,12 @@ const ROLES = [
   { id: 'payer', label: '对方付款主体' },
   { id: 'invoice', label: '开票抬头（独立确认）' }
 ]
+const defaultMonth = (() => {
+  const now = new Date()
+  return String(now.getFullYear()) + '-' + String(now.getMonth() + 1).padStart(2, '0')
+})()
 const emptyForm = {
-  legal_name: '', role: 'payer', effective_month: '2026-08',
+  legal_name: '', role: 'payer', effective_month: defaultMonth,
   end_month: '', tax_registration_no: '', note: ''
 }
 const overlay = {
@@ -34,7 +38,7 @@ export default function PartnerLegalEntitiesDock({ partner, onClose }) {
   const canManage = can('partners.manage')
   const [data, setData] = useState(null)
   const [form, setForm] = useState(emptyForm)
-  const [month, setMonth] = useState('2026-08')
+  const [month, setMonth] = useState(defaultMonth)
   const [resolution, setResolution] = useState(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
