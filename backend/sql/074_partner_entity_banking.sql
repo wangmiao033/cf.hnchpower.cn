@@ -57,7 +57,7 @@ CREATE INDEX IF NOT EXISTS idx_cf_entity_bank_accounts_entity
 -- Snapshot of the contractual and expected cash identities on each channel bill.
 -- Historic rows deliberately stay NULL: no speculative backfill of settled bills.
 ALTER TABLE channel_records
-  ADD COLUMN IF NOT EXISTS partner_id TEXT REFERENCES cf_partner_records(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS partner_id TEXT REFERENCES cf_partner_records(id) ON DELETE RESTRICT,
   ADD COLUMN IF NOT EXISTS contract_entity_id TEXT REFERENCES cf_legal_entities(id) ON DELETE RESTRICT,
   ADD COLUMN IF NOT EXISTS contract_entity_snapshot TEXT,
   ADD COLUMN IF NOT EXISTS expected_payer_entity_id TEXT REFERENCES cf_legal_entities(id) ON DELETE RESTRICT,
