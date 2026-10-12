@@ -20,6 +20,7 @@ import {
   upsertContractAccessTerms
 } from '@/lib/api/contractTerms.ts'
 import { getCustomerContractSource } from '@/lib/api/legalEntities.ts'
+import PartnerLegalEntitiesDock from '@/components/partner/PartnerLegalEntitiesDock.jsx'
 import './ChannelSmartEntryBar.css'
 
 const textKey = normalizeInlineKey
@@ -178,6 +179,8 @@ export default function ChannelSmartEntryBar({
   const contractMatchName = !sourcePending && contractSource.name ? contractSource.name : partnerName
   const partnerKey = `${textKey(contractMatchName)}|${textKey(canonicalChannelName)}`
   const [contractState, setContractState] = useState({ key: '', loading: false, items: [], error: '' })
+  const [linkOriginalContractOpen, setLinkOriginalContractOpen] = useState(false)
+  const [contractSourceRevision, setContractSourceRevision] = useState(0)
 
   const [quickOpen, setQuickOpen] = useState(false)
   const [quickSaving, setQuickSaving] = useState(false)
@@ -247,7 +250,7 @@ export default function ChannelSmartEntryBar({
       })
     })
     return () => { alive = false }
-  }, [businessPartnerId, sourceMonth, expectedSourceKey])
+  }, [businessPartnerId, sourceMonth, expectedSourceKey, contractSourceRevision])
 
   const loadContracts = useCallback(async () => {
     if (sourcePending) return []
@@ -733,7 +736,9 @@ export default function ChannelSmartEntryBar({
             {contractSource.error ? <small>主体查询异常：{contractSource.error}</small> : null}
           </div>
           <div>
-            {!businessPartnerId ? <button type="button" className="is-primary" onClick={() => openQuickContract()}>全新合作才新建合同</button> : null}
+            {businessPartnerId
+              ? <button type="button" className="is-primary" onClick={() => setLinkOriginalContractOpen(true)}>关联原合同主体</button>
+              : <button type="button" className="is-primary" onClick={() => openQuickContract()}>全新合作才新建合同</button>}
             <button type="button" onClick={() => openPendingEditor('合作方合同')}>暂时挂起</button>
           </div>
         </div>
@@ -854,6 +859,18 @@ export default function ChannelSmartEntryBar({
             <footer><span>不会修改历史账单，只处理当前及以后录入。</span><div><button type="button" onClick={() => setAliasOpen(false)}>取消</button><button type="button" className="is-primary" disabled={!aliasSource || !aliasTarget} onClick={saveGameAlias}>确认映射</button></div></footer>
           </div>
         </div>
+      ) : null}
+
+      {linkOriginalContractOpen && businessPartnerId ? (
+        <PartnerLegalEntitiesDock
+          partner={{ id: businessPartnerId, name: partnerName, shortName: channelName }}
+          initialRole="contract"
+          initialMonth={sourceMonth}
+          onClose={() => {
+            setLinkOriginalContractOpen(false)
+            setContractSourceRevision((current) => current + 1)
+          }}
+        />
       ) : null}
 
       {pendingOpen ? (
