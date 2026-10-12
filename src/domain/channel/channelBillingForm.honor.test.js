@@ -37,7 +37,12 @@ describe('荣耀账单通道费先扣、代金券再扣、最后分成', () => {
     expect(detectChannelRulePreset('普通渠道')).toBe('')
     expect(detectChannelRulePreset('小米应用商店')).toBe('xiaomi_percent_fee')
     expect(applyTargetedChannelRule(honorHeader).settlementRuleCode).toBe(HONOR_UPFRONT_PERCENT_FEE_RULE)
+    expect(applyTargetedChannelRule({ ...initialHeaderForm, partnerName: '普通合作方', channelName: '荣耀' }).settlementRuleCode).toBe(HONOR_UPFRONT_PERCENT_FEE_RULE)
     expect(applyTargetedChannelRule({ ...initialHeaderForm, channelName: '普通渠道' }).settlementRuleCode).toBe('legacy_fixed_fee_tax')
+    // Before this change a non-matching partnerName prevents fallback to channelName
+    // for the other targeted rules; preserve their existing behavior exactly.
+    expect(applyTargetedChannelRule({ ...initialHeaderForm, partnerName: '普通合作方', channelName: '西安维真视界' }).settlementRuleCode).toBe('legacy_fixed_fee_tax')
+    expect(applyTargetedChannelRule({ ...initialHeaderForm, partnerName: '普通合作方', channelName: '广东安久科技有限公司' }).settlementRuleCode).toBe('legacy_fixed_fee_tax')
   })
 
   it('代金券存在时，荣耀按总流水 5% 扣通道费，不在分成后重复扣除', () => {
