@@ -1,5 +1,6 @@
 /* R&D uses the same compact, one-row-per-bill reading order as the channel ledger. */
 .core-rd-ledger-page { min-width: 0; }
+.core-rd-ledger-page .page-container-body > :not(.rd-ledger-panel) { flex-shrink: 0; }
 .rd-ledger-actions { display: flex; align-items: center; gap: 6px; }
 #rd-ledger-header-actions { margin-left: 8px; padding-left: 12px; border-left: 1px solid #e0e7ef; }
 .rd-ledger-actions button { height: 30px; padding: 0 10px; border: 1px solid #d4e0ee; border-radius: 7px; background: #fff; color: #354e69; font-size: 12px; font-weight: 650; white-space: nowrap; cursor: pointer; }
@@ -28,14 +29,15 @@
 .rd-ledger-stats strong { font-size: 20px; line-height: 1.25; font-weight: 700; color: #243b55; font-variant-numeric: tabular-nums; }
 .rd-ledger-stats > div:last-child strong { color: #a45b16; }
 .rd-ledger-stats small { color: #8493a6; font-size: 9px; }
-.core-rd-ledger-page .rd-ledger-panel { overflow: hidden; border: 1px solid #dfe6ee; border-radius: 10px; background: #fff; box-shadow: none; }
+.core-rd-ledger-page .rd-ledger-panel { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 260px; overflow: hidden; border: 1px solid #dfe6ee; border-radius: 10px; background: #fff; box-shadow: none; }
+.rd-ledger-panel__head, .rd-ledger-footer { flex-shrink: 0; }
 .rd-ledger-panel__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 14px; border-bottom: 1px solid #e5ebf2; }
 .rd-ledger-panel__head h2 { margin: 0; color: #293e56; font-size: 14px; line-height: 1.4; font-weight: 800; }
 .rd-ledger-panel__head span { color: #8492a3; font-size: 10px; }
 .rd-ledger-panel__controls { display: flex; align-items: center; gap: 12px; }
 .rd-ledger-panel__controls label { display: flex; align-items: center; gap: 7px; font-size: 11px; color: #68788a; white-space: nowrap; }
 .rd-ledger-panel__controls select { height: 30px; padding: 0 8px; border: 1px solid #d1deeb; border-radius: 6px; background: #fff; color: #3a516a; font-size: 11px; }
-.rd-ledger-scroll { max-height: min(68vh, 740px); overflow: auto; scrollbar-gutter: stable; }
+.rd-ledger-scroll { flex: 1 1 auto; min-height: 0; overflow: auto; scrollbar-gutter: stable; }
 .rd-finance-table { border-collapse: separate; border-spacing: 0; width: 100%; min-width: 1220px; table-layout: fixed; }
 .rd-finance-col-check { width: 34px; }
 .rd-finance-col-period { width: 150px; }
@@ -88,7 +90,6 @@
 @media (max-width: 600px) {
   .rd-ledger-filters__main { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .rd-ledger-panel__head { align-items: flex-start; flex-direction: column; }
-  .rd-ledger-scroll { max-height: 62vh; }
   #rd-ledger-header-actions { margin-left: 0; padding-left: 5px; }
   .rd-ledger-actions { gap: 3px; }
   .rd-ledger-actions button { font-size: 10px; padding: 0 5px; }
