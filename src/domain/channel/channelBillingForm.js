@@ -57,12 +57,16 @@ export function applyChannelRulePreset(header, code) {
 }
 
 export function applyTargetedChannelRule(header = initialHeaderForm) {
-  const targetedCodes = [XIAN_WEIZHEN_9917_RULE, HONOR_UPFRONT_PERCENT_FEE_RULE, ANJIU_PRE_DISCOUNT_DEDUCTION_RULE]
-  const preset = [header.partnerName, header.channelName]
-    .map((name) => detectChannelRulePreset(name))
-    .find((code) => targetedCodes.includes(code))
-  if (!preset) return header
-  return applyChannelRulePreset(header, preset)
+  // Keep legacy recognition unchanged for all non-Honor channels.
+  const preset = detectChannelRulePreset(header.partnerName || header.channelName)
+  if ([XIAN_WEIZHEN_9917_RULE, ANJIU_PRE_DISCOUNT_DEDUCTION_RULE].includes(preset)) {
+    return applyChannelRulePreset(header, preset)
+  }
+  // A channel explicitly named 荣耀 must match even if partnerName is a different legal entity.
+  if (preset === HONOR_UPFRONT_PERCENT_FEE_RULE || detectChannelRulePreset(header.channelName) === HONOR_UPFRONT_PERCENT_FEE_RULE) {
+    return applyChannelRulePreset(header, HONOR_UPFRONT_PERCENT_FEE_RULE)
+  }
+  return header
 }
 
 export function resolveChannelLineRuleHeader(data = {}, header = initialHeaderForm) {
