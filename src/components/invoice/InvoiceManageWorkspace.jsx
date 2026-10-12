@@ -6,6 +6,7 @@ import AdminActionBar from '@/components/admin/AdminActionBar.jsx'
 import AdminStatsRow from '@/components/admin/AdminStatsRow.jsx'
 import AdminTableCard from '@/components/admin/AdminTableCard.jsx'
 import InvoiceLightDrawer from '@/components/invoice/InvoiceLightDrawer.jsx'
+import InvoiceMatchPreview from '@/components/invoice/InvoiceMatchPreview.jsx'
 import '@/components/reconciliation/reconciliation-admin.css'
 import '@/components/invoice/invoice-advanced-filters.css'
 import { deleteInvoiceRecord, getInvoiceRecordId } from '@/lib/api/invoice.ts'
@@ -400,9 +401,6 @@ function InvoiceManageWorkspace({ variant = 'manage', direction = 'output' }) {
     }
   }, [allocationRevision, invoiceApiEnabled, invoiceIdsKey])
 
-  useEffect(() => {
-    setAutoMatchPreview(null)
-  }, [direction, invoiceIdsKey])
 
   const stats = useMemo(() => {
     return visibleInvoices.reduce(
@@ -588,7 +586,7 @@ function InvoiceManageWorkspace({ variant = 'manage', direction = 'output' }) {
     }
   }
 
-  const runAutoMatch = async (dryRun) => {
+  const runAutoMatch = async () => {
     const invoiceIds = visibleInvoices.map((item) => getInvoiceRecordId(item)).filter(Boolean)
     if (!invoiceApiEnabled || invoiceIds.length === 0) {
       showToast('当前筛选范围没有可智能关联的线上发票', 'info')
@@ -596,32 +594,10 @@ function InvoiceManageWorkspace({ variant = 'manage', direction = 'output' }) {
     }
     setAutoMatchBusy(true)
     try {
-      const result = await autoMatchInvoices({
-        invoice_direction: direction,
-        invoice_ids: invoiceIds,
-        threshold: 0.8,
-        unique_margin: 0.1,
-        dry_run: dryRun
-      })
-      if (dryRun) {
-        setAutoMatchPreview(result)
-        showToast(
-          result.matched > 0
-            ? `扫描完成：可自动关联 ${result.matched} 张，需人工确认 ${result.ambiguous + result.unmatched} 张`
-            : '扫描完成：暂无达到自动关联标准的唯一匹配',
-          result.matched > 0 ? 'success' : 'info'
-        )
-      } else {
-        setAutoMatchPreview(null)
-        setAllocationRevision((value) => value + 1)
-        showToast(
-          `智能关联完成：已关联 ${result.matched} 张，金额 ¥${Number(result.matched_amount || 0).toFixed(2)}`,
-          'success'
-        )
-      }
+      const result = await autoMatchInvoices({ invoice_direction: direction, invoice_ids: invoiceIds, threshold: 0.8, unique_margin: 0.1, dry_run: true })
+      setAutoMatchPreview({ ...result, invoices: [...visibleInvoices] })
     } catch (error) {
-      console.error(error)
-      showToast('智能关联失败，请刷新后重试', 'error')
+      showToast('扫描失败，请重试；尚未关联任何账单', 'error')
     } finally {
       setAutoMatchBusy(false)
     }
@@ -809,15 +785,11 @@ function InvoiceManageWorkspace({ variant = 'manage', direction = 'output' }) {
                   type="button"
                   className="rec-btn rec-btn--secondary"
                   disabled={autoMatchBusy || !invoiceApiEnabled || visibleInvoices.length === 0}
-                  onClick={() => void runAutoMatch(true)}
+                  onClick={() => void runAutoMatch()}
                 >
                   {autoMatchBusy ? '智能匹配中…' : '扫描智能匹配'}
                 </button>
-                {autoMatchPreview?.matched > 0 ? (
-                  <button type="button" className="rec-btn rec-btn--primary" disabled={autoMatchBusy} onClick={() => void runAutoMatch(false)} title={`高置信度 ${autoMatchPreview.matched} 张，模糊 ${autoMatchPreview.ambiguous} 张`}>
-                    确认关联 {autoMatchPreview.matched} 张
-                  </button>
-                ) : null}
+
               </>
             ) : (
               <span className="rec-toolbar__batch-label">发票台账查询</span>
@@ -968,6 +940,10 @@ function InvoiceManageWorkspace({ variant = 'manage', direction = 'output' }) {
         </div>
       </AdminTableCard>
 
+      {autoMatchPreview ? <InvoiceMatchPreview
+        preview={autoMatchPreview}
+        onClose={() => { setAutoMatchPreview(null); setAllocationRevision((value) => value + 1) }}
+      /> : null}
       <InvoiceLightDrawer
         open={Boolean(drawerRecord)}
         record={drawerRecord}
