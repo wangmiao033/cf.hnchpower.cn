@@ -43,7 +43,7 @@ function InvoicePage({ section }) {
   const loadStatus = invoice?.invoiceLoadStatus || 'idle'
 
   return (
-    <PageContainer hideHeader className="page-container--recon-rd">
+    <PageContainer hideHeader className="page-container--recon-rd invoice-center">
       {loadStatus === 'idle' || loadStatus === 'loading' ? (
         <InvoiceLoadingState direction={direction} />
       ) : (

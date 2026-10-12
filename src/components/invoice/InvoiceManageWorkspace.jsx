@@ -54,7 +54,7 @@ const DEFAULT_VISIBLE_COLUMNS = {
   source: false,
   issuer: false,
   allocation: true,
-  remark: true
+  remark: false
 }
 
 const COLUMN_LABELS = {
@@ -459,7 +459,7 @@ function InvoiceManageWorkspace({ variant = 'manage', direction = 'output' }) {
     const columns = [
       '36px',
       '44px',
-      'minmax(170px, 1.25fr)',
+      'minmax(220px, 1.4fr)',
       'minmax(170px, 1.25fr)'
     ]
     if (visibleColumns.taxNo) columns.push('minmax(150px, 1fr)')
@@ -864,7 +864,7 @@ function InvoiceManageWorkspace({ variant = 'manage', direction = 'output' }) {
             <span>发票信息</span>
             <span>{direction === 'output' ? '购买方' : '销售方'}</span>
             {visibleColumns.taxNo ? <span>对方税号</span> : null}
-            <span>金额 / 税额</span>
+            <span>不含税金额 / 税额</span>
             <span>价税合计</span>
             <span>开票日期</span>
             {visibleColumns.issuer ? <span>开票人</span> : null}
