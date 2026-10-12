@@ -7,6 +7,8 @@ export type BankPartnerSuggestion = {
   partner_match_method: string
   partner_match_explicit: boolean
   score: number
+  legal_entity_id?: string | null
+  legal_entity_name?: string | null
 }
 
 export type BankCounterpartyMatchRow = {
@@ -25,6 +27,8 @@ export type BankCounterpartyMatchRow = {
   partner_name?: string | null
   partner_short_name?: string | null
   match_method?: string | null
+  legal_entity_id?: string | null
+  legal_entity_name?: string | null
   suggested_partner?: BankPartnerSuggestion | null
 }
 
