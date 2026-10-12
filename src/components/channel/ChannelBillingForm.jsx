@@ -32,7 +32,7 @@ import '@/components/ChannelBilling.css'
 import './ChannelSettlementRule.css'
 import LineItemsTable from '@/components/shared/LineItemsTable.jsx'
 import PartnerPicker, { findExactPartner } from '@/components/shared/PartnerPicker.jsx'
-import { getPartnerEntities, getOwnBankAccounts } from '@/lib/api/legalEntities.ts'
+import { getPartnerEntities, getOwnBankAccounts, getCustomerContractSource } from '@/lib/api/legalEntities.ts'
 
 function formatMoney(amount) {
   const value = Number(amount || 0)
@@ -192,6 +192,7 @@ function ChannelBillingForm({
   const [partyLinks, setPartyLinks] = useState([])
   const [ownReceivers, setOwnReceivers] = useState([])
   const [partyLoading, setPartyLoading] = useState(false)
+  const [contractSource, setContractSource] = useState({ key: '', name: '', source: '', error: '' })
   const [contractRuleState, setContractRuleState] = useState(emptyContractRuleState)
   const [contractRuleRevision, setContractRuleRevision] = useState(0)
   const [lastContractRuleKey, setLastContractRuleKey] = useState('')
@@ -221,6 +222,12 @@ function ChannelBillingForm({
   const ownReceiverOptions = [...new Map(ownReceivers.filter((row) => row.is_active).map(
     (row) => [row.entity_id, row]
   )).values()]
+  const contractMonth = activeMonths[activeMonths.length - 1] || currentMonthKey
+  const contractSourceKey = partnerId ? partnerId + ':' + contractMonth : ''
+  const contractSourcePending = Boolean(contractSourceKey && contractSource.key !== contractSourceKey)
+  const contractMatchName = activeContract?.legal_name ||
+    (!contractSourcePending && contractSource.name) ||
+    String(header.partnerName || '').trim()
   const totals = useMemo(() => ({
     rawFlow: Number(fullRecord.rawFlowTotal || 0),
     effectiveFlow: Number(fullRecord.flow || 0),
@@ -343,6 +350,27 @@ function ChannelBillingForm({
   }, [partnerId])
 
   useEffect(() => {
+    if (!contractSourceKey) {
+      setContractSource({ key: '', name: '', source: '', error: '' })
+      return undefined
+    }
+    let alive = true
+    setContractSource({ key: '', name: '', source: '', error: '' })
+    getCustomerContractSource(partnerId, contractMonth).then((result) => {
+      if (!alive) return
+      setContractSource({ key: contractSourceKey,
+        name: String(result.contract_party_name || '').trim(),
+        source: result.source || 'unresolved',
+        error: '' })
+    }).catch((error) => {
+      if (!alive) return
+      setContractSource({ key: contractSourceKey, name: '', source: 'unresolved',
+        error: error instanceof Error ? error.message : '合同主体读取异常' })
+    })
+    return () => { alive = false }
+  }, [partnerId, contractMonth, contractSourceKey])
+
+  useEffect(() => {
     let alive = true
     getOwnBankAccounts().then((result) => {
       if (alive) setOwnReceivers(result.items || [])
@@ -351,8 +379,8 @@ function ChannelBillingForm({
   }, [])
 
   useEffect(() => {
-    if (!contractAwareMode) return undefined
-    const partnerName = String(header.partnerName || '').trim()
+    if (!contractAwareMode || contractSourcePending) return undefined
+    const partnerName = contractMatchName
     if (!partnerName) return undefined
     if (mode === 'add' && !partnerId) {
       setContractRuleState({
@@ -525,7 +553,7 @@ function ChannelBillingForm({
       cancelled = true
       window.clearTimeout(timer)
     }
-  }, [contractAwareMode, mode, partnerId, header.partnerName, header.channelName, header.status, lines, contractRuleRevision, lastContractRuleKey, autoApplyContractRules])
+  }, [contractAwareMode, mode, partnerId, contractMatchName, contractSourcePending, header.channelName, header.status, lines, contractRuleRevision, lastContractRuleKey, autoApplyContractRules])
 
   const handleHeaderChange = (field, value) => setHeader((current) => ({ ...current, [field]: value }))
   const clearAllLineContractRules = () => setLines((current) => current.map(clearLineContractRule))
@@ -680,7 +708,7 @@ function ChannelBillingForm({
     }
 
     if (contractAwareMode && !targetedRuleLocked) {
-      const currentFingerprint = recommendationFingerprint(header.partnerName, header.channelName, lines)
+      const currentFingerprint = recommendationFingerprint(contractMatchName, header.channelName, lines)
       if (contractRuleState.loading || contractRuleState.fingerprint !== currentFingerprint) {
         const msg = '合同清单正在按当前合作方、游戏和账期重新匹配，请完成本轮匹配后再保存。'
         onError?.(msg) ?? window.alert(msg); return
@@ -755,8 +783,10 @@ function ChannelBillingForm({
               ) : null}
             </select>
             <small>合作客户及合同主体不变，银行实际汇款方以流水为准。
-              {activeContract ? ' 合同主体：' + activeContract.legal_name : ''}
+              {contractMatchName && contractMatchName !== header.partnerName
+                ? ' 合同匹配主体：' + contractMatchName : ''}
             </small>
+            {contractSource.error ? <small style={{ color: '#b42318' }}>合同主体读取异常：{contractSource.error}</small> : null}
           </div>
           {header.expectedPayerEntityId && (mixedPayerPeriod || !autoPayer ||
             header.expectedPayerEntityId !== autoPayer.entity_id) ? (
@@ -815,7 +845,7 @@ function ChannelBillingForm({
               <button type="button" onClick={() => { setLastContractRuleKey(''); setContractRuleRevision((value) => value + 1) }} disabled={contractRuleState.loading || (mode === 'add' && !partnerId)}>重新匹配</button>
             </div>
           ) : null}
-          {contractAwareMode && !contractRuleState.loading && contractRuleState.fingerprint === recommendationFingerprint(header.partnerName, header.channelName, lines) && (
+          {contractAwareMode && !contractRuleState.loading && contractRuleState.fingerprint === recommendationFingerprint(contractMatchName, header.channelName, lines) && (
             (contractRuleState.recommendation?.lines || []).some(item => !item.auto_apply)
           ) ? (
             <ul className="channel-contract-rule-issues" aria-label="未自动带入的合同规则">
