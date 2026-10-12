@@ -21,6 +21,8 @@ export default function BankMatchRow({ item, selectedKey, expanded, busy, canMan
         <div className="bank-match-meta"><span className={`bank-center-direction is-${item.direction}`}>{income ? '收入' : item.direction === 'payment' ? '支出' : '待判定'}</span><span>{item.trade_date || '日期未提供'}</span></div>
         <strong className="bank-match-name">{item.counterparty_name || '对方单位未识别'}</strong>
         <span className="bank-match-summary">{item.summary || '无摘要'}</span>
+         {income ? <span className="bank-match-secondary">实际汇款公司：{item.legal_entity_name || item.counterparty_raw_name || '未关联主体'}</span> : null}
+         {income ? <span className="bank-match-secondary">实际收款公司：{item.bank_receiving_entity_name || '待核对银行收款账户'}</span> : null}
       </td>
       <td className="is-right">
         <strong className={`bank-match-amount ${income ? 'is-income' : item.direction === 'payment' ? 'is-expense' : ''}`}>{money(amount)}</strong>
@@ -31,6 +33,7 @@ export default function BankMatchRow({ item, selectedKey, expanded, busy, canMan
           <div className="bank-match-meta"><b>{candidate.settlement_month || '账期未填'}</b><span>{candidate.bill_type === 'rd' ? '研发账单' : '渠道账单'}</span></div>
           <button type="button" className="bank-match-bill" onClick={() => onOpenBill(candidate.bill_type, candidate.bill_id)}>{candidate.partner_name || '合作方未填'}</button>
           <span className="bank-match-summary">{candidate.game_name || '游戏未填'}</span>
+           {candidate.expected_payer_snapshot ? <span className="bank-match-secondary">本期预计付款方：{candidate.expected_payer_snapshot}</span> : null}
           <label className="bank-match-choice">候选账单（{item.candidates.length}）
             <select aria-label={`选择账单 ${item.transaction_id}`} value={keyOf(candidate)} onChange={event => onSelect(event.target.value)}>
               {item.candidates.map(row => <option key={keyOf(row)} value={keyOf(row)}>{row.settlement_month || '账期未填'} · {row.partner_name || '合作方未填'} · 未结 {money(row.outstanding_amount)} · {row.bill_number}</option>)}
@@ -44,6 +47,8 @@ export default function BankMatchRow({ item, selectedKey, expanded, busy, canMan
           <strong className={`bank-match-difference ${difference === 0 ? 'is-equal' : 'is-different'}`}>{difference == null ? '差额待核实' : difference === 0 ? '金额一致' : `流水${difference > 0 ? '多' : '少'} ${money(Math.abs(difference) / 100)}`}</strong>
           <span className={`bank-center-confidence is-${confidence}`}>{confidenceText} · {Number(candidate.score || 0).toFixed(0)}分</span>
           <span className="bank-match-secondary">金额一致仍需核对单位与账期</span>
+           {candidate.payer_identity_mismatch || candidate.receiver_identity_mismatch
+             ? <span className="bank-match-warning">实际付款/收款主体与账单预期不同，必须人工复核</span> : null}
         </> : <span className="bank-center-confidence is-none">未匹配</span>}
         {item.blocked_reason ? <span className="bank-match-warning">{item.blocked_reason}</span> : null}
       </td>
