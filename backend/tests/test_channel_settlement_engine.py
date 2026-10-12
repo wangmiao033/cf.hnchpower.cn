@@ -3,6 +3,7 @@ import unittest
 
 from app.services.channel_settlement_engine import (
     ANJIU_PRE_DISCOUNT_DEDUCTION_RULE,
+    HONOR_UPFRONT_PERCENT_FEE_RULE,
     apply_bill_adjustment,
     calculate_channel_line,
 )
@@ -125,6 +126,45 @@ class ChannelSettlementEngineTests(unittest.TestCase):
             system_total += float(result["system_settlement_amount"])
 
         self.assertAlmostEqual(system_total, 5113.88, places=2)
+
+    def test_honor_gateway_fee_is_deducted_from_gross_before_vouchers(self):
+        honor = SimpleNamespace(
+            settlement_rule_code=HONOR_UPFRONT_PERCENT_FEE_RULE,
+            channel_fee_mode="percent",
+            channel_fee_rate=5,
+            tax_mode="none",
+            validation_tolerance=0.05,
+        )
+        line = self.line(6428, 522.56, 2792.02, tax=0)
+        result = calculate_channel_line(line, honor)
+
+        self.assertEqual(float(result["billing_amount"]), 5584.04)
+        self.assertEqual(float(result["share_amount"]), 2792.02)
+        self.assertEqual(float(result["system_settlement_amount"]), 2792.02)
+        self.assertEqual(float(result["settlement_difference"]), 0.0)
+        self.assertEqual(result["validation_status"], "pass")
+
+        # Without verified vouchers the real-world bill still has a discrepancy.
+        no_voucher = calculate_channel_line(self.line(6428, 0, 2792.02, tax=0), honor)
+        self.assertEqual(float(no_voucher["system_settlement_amount"]), 3053.30)
+        self.assertEqual(no_voucher["validation_status"], "fail")
+
+        # Other channels retain fee-after-share behavior.
+        other = calculate_channel_line(line, self.record)
+        self.assertEqual(float(other["system_settlement_amount"]), 2805.08)
+        self.assertEqual(other["validation_status"], "fail")
+
+    def test_existing_honor_voucher_example_is_preserved(self):
+        honor = SimpleNamespace(
+            settlement_rule_code=HONOR_UPFRONT_PERCENT_FEE_RULE,
+            channel_fee_mode="percent",
+            channel_fee_rate=5,
+            tax_mode="none",
+            validation_tolerance=0.05,
+        )
+        result = calculate_channel_line(self.line(822, 74.82, 353.04, tax=0), honor)
+        self.assertEqual(float(result["system_settlement_amount"]), 353.04)
+        self.assertEqual(result["validation_status"], "pass")
 
     def test_bill_level_adjustment_preserves_reference_and_explicit_tail(self):
         result = apply_bill_adjustment(874.60, -498.64, 376.00)
