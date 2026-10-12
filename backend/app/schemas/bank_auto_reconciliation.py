@@ -12,6 +12,12 @@ class BankMatchCandidate(BaseModel):
     bill_id: str
     bill_number: str
     partner_name: str
+    partner_id: str | None = None
+    expected_payer_entity_id: str | None = None
+    expected_payer_snapshot: str | None = None
+    expected_receiving_entity_id: str | None = None
+    payer_identity_mismatch: bool = False
+    receiver_identity_mismatch: bool = False
     settlement_month: str | None = None
     game_name: str | None = None
     bill_amount: float = 0
@@ -36,6 +42,10 @@ class BankMatchSuggestion(BaseModel):
     partner_short_name: str | None = None
     partner_match_method: str | None = None
     partner_match_explicit: bool = False
+    legal_entity_id: str | None = None
+    legal_entity_name: str | None = None
+    bank_receiving_entity_id: str | None = None
+    bank_receiving_entity_name: str | None = None
     summary: str | None = None
     auto_ready: bool = False
     confidence_level: str = "none"
