@@ -69,3 +69,18 @@ export function getBankTransactionIdentities(id: string) {
     warning: string | null
   }>(PATH + '/bank-transactions/' + encodeURIComponent(id) + '/identities')
 }
+
+
+export type CustomerContractSource = {
+  partner_id: string
+  month: string
+  contract_party_name: string | null
+  source: 'configured_contract_entity' | 'existing_customer_contract' | 'unresolved'
+  message: string
+}
+
+export function getCustomerContractSource(partnerId: string, month: string) {
+  return apiGet<CustomerContractSource>(
+    customer(partnerId) + '/contract-source?month=' + encodeURIComponent(month)
+  )
+}
