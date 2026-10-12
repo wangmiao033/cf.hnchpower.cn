@@ -227,18 +227,20 @@ export default function InvoiceBillAllocationPanel({ invoiceId, onChanged, onOpe
                       <span className={`invoice-bill-card__type is-${item.bill.bill_type}`}>
                         {billTypeLabel(item.bill.bill_type)}
                       </span>
-                      <strong>{item.bill.number}</strong>
+                      <strong>{item.bill.partner_name || '未填往来单位'}</strong>
                       <span className={`invoice-match-score is-${confidence.level}`}>
                         {confidence.label} {Math.round(Number(item.match_score || 0) * 100)}%
                       </span>
                     </div>
-                    <p>
-                      {item.bill.partner_name} · {item.bill.settlement_month || '未填账期'} · {item.bill.status}
-                    </p>
-                    <small>
-                      待覆盖 {money(item.available_amount)}
-                      {item.match_reasons.length ? ` · ${item.match_reasons.join(' / ')}` : ' · 手工匹配'}
-                    </small>
+                    <div className="invoice-match-facts">
+                      <div><span>账期</span><strong>{item.bill.settlement_month || '未填账期'}</strong></div>
+                      <div><span>游戏</span><strong>{item.bill.game_name || '未填游戏'}</strong></div>
+                      <div><span>账单待覆盖</span><strong>{money(item.available_amount)}</strong></div>
+                    </div>
+                    <p className="invoice-match-reference">{item.bill.number} · {item.bill.status}</p>
+                    <div className="invoice-match-reasons" aria-label="匹配依据">
+                      {item.match_reasons.length ? item.match_reasons.map((reason, index) => <span key={index}>{reason}</span>) : <span>手工匹配，请核对往来单位和账期</span>}
+                    </div>
                   </div>
                   <div className="invoice-bill-card__link">
                     <label>
