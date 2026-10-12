@@ -61,6 +61,8 @@ class PartnerResolution:
     short_name: str
     match_method: str
     explicit: bool = False
+    legal_entity_id: str | None = None
+    legal_entity_name: str | None = None
 
     def payload(self) -> dict[str, Any]:
         return {
@@ -69,6 +71,8 @@ class PartnerResolution:
             "partner_short_name": self.short_name,
             "partner_match_method": self.match_method,
             "partner_match_explicit": self.explicit,
+            "legal_entity_id": self.legal_entity_id,
+            "legal_entity_name": self.legal_entity_name,
         }
 
 
@@ -77,6 +81,16 @@ class BankPartnerResolver:
         self.db = db
         self.partners = self._load_partners()
         self.links = self._load_links()
+        self.legal_entities = self._load_legal_entities()
+        self.by_legal_name: dict[str, list[dict]] = defaultdict(list)
+        self.by_legal_account: dict[str, list[dict]] = defaultdict(list)
+        for row in self.legal_entities:
+            key = normalize_party(row["legal_name"])
+            if key:
+                self.by_legal_name[key].append(row)
+            key = normalize_account(row.get("account_no"))
+            if key:
+                self.by_legal_account[key].append(row)
         self.by_name: dict[str, dict] = {}
         self.by_company: dict[str, list[dict]] = defaultdict(list)
         self.by_account: dict[str, list[dict]] = defaultdict(list)
@@ -101,6 +115,25 @@ class BankPartnerResolver:
                 """
             )
         ).mappings().all()
+        return [dict(row) for row in rows]
+
+    def _load_legal_entities(self) -> list[dict]:
+        """Only explicitly linked legal payers belong to a business customer.
+
+        An own-bank-account owner does not become a customer by coincidence.
+        """
+        rows = self.db.execute(text("""
+            SELECT DISTINCT partner.id AS partner_id, partner.name AS partner_name,
+                   partner.short_name AS partner_short_name,
+                   entity.id AS legal_entity_id, entity.legal_name,
+                   account.account_no
+              FROM cf_partner_legal_entity_links AS link
+              JOIN cf_partner_records AS partner ON partner.id = link.partner_id
+              JOIN cf_legal_entities AS entity ON entity.id = link.entity_id
+              LEFT JOIN cf_entity_bank_accounts AS account
+                ON account.entity_id = entity.id AND account.is_active = TRUE
+             WHERE link.role IN ('contract', 'payer')
+        """)).mappings().all()
         return [dict(row) for row in rows]
 
     def _load_links(self) -> dict[str, dict]:
@@ -141,8 +174,18 @@ class BankPartnerResolver:
         if direct:
             return self._resolution(direct, "exact_name")
 
+        # A payer's new corporate name maps to the existing BUSINESS customer,
+        # not to another customer created with the new legal company name.
+        legal_matches = self.by_legal_name.get(name_key, [])
+        legal_partner_ids = {item["partner_id"] for item in legal_matches}
+        if len(legal_partner_ids) == 1:
+            return self._legal_resolution(legal_matches[0], "legal_entity")
+
         account_key = normalize_account(counterparty_account)
         if account_key:
+            legal_account_matches = self.by_legal_account.get(account_key, [])
+            if len({item["partner_id"] for item in legal_account_matches}) == 1 and legal_account_matches:
+                return self._legal_resolution(legal_account_matches[0], "legal_bank_account")
             account_matches = self.by_account.get(account_key, [])
             if len(account_matches) == 1:
                 return self._resolution(account_matches[0], "bank_account")
@@ -156,7 +199,7 @@ class BankPartnerResolver:
     def suggest(self, counterparty_name: object, counterparty_account: object = None) -> dict | None:
         resolved = self.resolve(counterparty_name, counterparty_account)
         if resolved:
-            return {**resolved.payload(), "score": 100 if resolved.explicit or resolved.match_method in {"exact_name", "bank_account"} else 92}
+            return {**resolved.payload(), "score": 100 if resolved.explicit or resolved.match_method in {"exact_name", "bank_account", "legal_bank_account", "legal_entity"} else 92}
 
         raw_key = normalize_company(counterparty_name)
         if not raw_key:
@@ -186,6 +229,18 @@ class BankPartnerResolver:
             "partner_match_explicit": False,
             "score": top_score,
         }
+
+    @staticmethod
+    def _legal_resolution(row: dict, method: str) -> PartnerResolution:
+        return PartnerResolution(
+            partner_id=str(row["partner_id"]),
+            partner_name=str(row.get("partner_name") or ""),
+            short_name=str(row.get("partner_short_name") or ""),
+            match_method=method,
+            explicit=False,
+            legal_entity_id=str(row["legal_entity_id"]),
+            legal_entity_name=str(row.get("legal_name") or ""),
+        )
 
     @staticmethod
     def _resolution(partner: dict, method: str) -> PartnerResolution:
@@ -247,13 +302,13 @@ def enrich_reconciliation_dashboard(db: Session, result: dict) -> dict:
         item["counterparty_name"] = f"{label} · {raw_name}" if raw_name and normalize_party(label) != normalize_party(raw_name) else (label or raw_name)
 
         # 只有人工固定映射/银行账号唯一命中才额外改变推荐顺序；名称本来一致时原引擎已计分。
-        if resolution.explicit or resolution.match_method == "bank_account":
+        if resolution.explicit or resolution.match_method in {"bank_account", "legal_entity", "legal_bank_account"}:
             candidates = list(item.get("candidates") or [])
             changed = False
             for candidate in candidates:
                 if not _candidate_matches_partner(candidate, resolution):
                     continue
-                candidate["score"] = min(100.0, round(float(candidate.get("score") or 0) + 30.0, 2))
+                candidate["score"] = min(100.0, round(float(candidate.get("score") or 0) + (25.0 if resolution.match_method == "legal_entity" else 30.0), 2))
                 reasons = list(candidate.get("reasons") or [])
                 reason = f"客户匹配中心已确认：{label}"
                 if reason not in reasons:
@@ -272,7 +327,7 @@ def enrich_reconciliation_dashboard(db: Session, result: dict) -> dict:
                 item["top_score"] = float(top.get("score") or 0)
                 item["ambiguity_margin"] = round(margin, 2)
                 item["confidence_level"] = level
-                item["auto_ready"] = level == "high"
+                item["auto_ready"] = level == "high" and resolution.match_method != "legal_entity"
                 if level != "low":
                     item["blocked_reason"] = None
 
