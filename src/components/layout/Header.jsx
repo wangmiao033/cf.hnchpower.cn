@@ -75,9 +75,10 @@ function Header({ activeView, onNavigate, onSettingsChange }) {
           </div>
           <div className="app-admin-header__title-block">
             <strong>{pageMeta.title}</strong>
-            {activeView !== VIEWS.RECON_CHANNEL ? <span>{pageMeta.description}</span> : null}
+            {![VIEWS.RECON_CHANNEL, VIEWS.RECON_RD].includes(activeView) ? <span>{pageMeta.description}</span> : null}
           </div>
           <ChannelLedgerHeaderActions activeView={activeView} onNavigate={onNavigate} />
+          {activeView === VIEWS.RECON_RD ? <div id="rd-ledger-header-actions" /> : null}
         </div>
         <div className="app-admin-header__right">
           <GlobalSearch />

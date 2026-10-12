@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useAppState } from '@/app/AppStateContext.jsx'
 import PageContainer from '@/components/layout/PageContainer.jsx'
 import BillQuickFilters from '@/components/reconciliation/BillQuickFilters.jsx'
@@ -109,12 +110,17 @@ function CoreReconciliationPage() {
     settings,
     showToast,
     setActiveView,
-    openReconciliationEdit
+    openReconciliationEdit,
+    openBill360,
+    prefetchBill360
   } = useAppState()
   const fileRef = useRef(null)
   const [month, setMonth] = useState('')
   const [partner, setPartner] = useState('')
-  const [partnerDraft, setPartnerDraft] = useState('')
+  const [showMoreFilters, setShowMoreFilters] = useState(false)
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(100)
+  const [headerActionsTarget, setHeaderActionsTarget] = useState(null)
   const [status, setStatus] = useState('')
   const [query, setQuery] = useState('')
   const [quickFilter, setQuickFilter] = useState('all')
@@ -129,6 +135,15 @@ function CoreReconciliationPage() {
 
   const archivedIds = useMemo(() => new Set((archiveState.archived_ids || []).map(String)), [archiveState])
   const eligibleIds = useMemo(() => new Set((archiveState.eligible_ids || []).map(String)), [archiveState])
+
+  useEffect(() => {
+    setHeaderActionsTarget(document.getElementById('rd-ledger-header-actions'))
+  }, [])
+
+  useEffect(() => {
+    setPage(1)
+    setSelectedIds([])
+  }, [month, partner, status, query, quickFilter, pageSize])
 
   const refreshArchiveState = async (announceAuto = false) => {
     setArchiveLoading(true)
@@ -231,6 +246,25 @@ function CoreReconciliationPage() {
       return true
     })
   }, [activeRows, archivedRows, trashRows, quickFilter, dataDiffIds, eligibleIds])
+
+  const orderedRows = useMemo(() => [...rows].sort((left, right) => {
+    const latestMonth = row => getRdRecordSettlementPeriods(row).map(monthKey).sort().at(-1) || ''
+    return latestMonth(right).localeCompare(latestMonth(left)) ||
+      String(right.settlementNumber || '').localeCompare(String(left.settlementNumber || ''))
+  }), [rows])
+  const totalPages = Math.max(1, Math.ceil(orderedRows.length / pageSize))
+  const currentPage = Math.min(page, totalPages)
+  const offset = (currentPage - 1) * pageSize
+  const visibleRows = orderedRows.slice(offset, offset + pageSize)
+  const selectableRows = visibleRows.filter(row => !isCancelledRow(row) && !archivedIds.has(String(row.id)))
+  const selectedPageCount = selectableRows.filter(row => selectedIds.includes(String(row.id))).length
+  const allPageSelected = selectableRows.length > 0 && selectedPageCount === selectableRows.length
+  const selectPage = checked => {
+    const pageIds = new Set(selectableRows.map(row => String(row.id)))
+    setSelectedIds(previous => checked
+      ? [...new Set([...previous, ...pageIds])]
+      : previous.filter(id => !pageIds.has(id)))
+  }
 
   const selectedRows = useMemo(
     () => rows.filter((row) => !archivedIds.has(String(row.id)) && !isCancelledRow(row) && selectedIds.includes(String(row.id))),
@@ -468,120 +502,63 @@ function CoreReconciliationPage() {
     }
   }
 
+  const ledgerActions = (
+    <div className="rd-ledger-actions" role="group" aria-label="研发账单操作">
+      <button type="button" onClick={() => fileRef.current?.click()}>导入 Excel</button>
+      <button type="button" onClick={exportSelected} disabled={isExporting}>
+        {isExporting ? '正在读取…' : '导出'}
+      </button>
+      <button type="button" className="primary" onClick={() => {
+        recon.setQuickFillData(null)
+        setActiveView(VIEWS.RECON_CREATE)
+      }}>新增账单</button>
+    </div>
+  )
+
   return (
-    <PageContainer hideHeader className="core-recon-page">
-      <section className="core-recon-workbar">
-        <div className="core-recon-head">
-          <div className="core-recon-title">
-            <span className="core-recon-title-mark" aria-hidden="true">研</span>
-            <div>
-              <h1>研发账单</h1>
-              <span>{rows.length} 笔账单</span>
-            </div>
-          </div>
-          <div className="core-recon-actions">
-            <button type="button" onClick={() => fileRef.current?.click()}>导入 Excel</button>
-            <button type="button" onClick={exportSelected} disabled={isExporting}>
-              {isExporting ? '正在读取…' : '导出'}
-            </button>
-            <button
-              type="button"
-              className="primary"
-              onClick={() => {
-                recon.setQuickFillData(null)
-                setActiveView(VIEWS.RECON_CREATE)
-              }}
-            >
-              新增账单
-            </button>
-            <input ref={fileRef} type="file" accept=".xlsx,.xls" onChange={handleImportFile} hidden />
-          </div>
-        </div>
-        <div className="core-recon-filters">
-          <label className="core-recon-filter-control">
-            <span>月份</span>
-            <select
-              value={month}
-              aria-label="筛选账单月份"
-              onChange={(event) => setMonth(event.target.value)}
-            >
+    <PageContainer hideHeader className="core-recon-page core-rd-ledger-page">
+      <input ref={fileRef} type="file" accept=".xlsx,.xls" onChange={handleImportFile} hidden />
+      {headerActionsTarget ? createPortal(ledgerActions, headerActionsTarget) : ledgerActions}
+      <section className="rd-ledger-filters" aria-label="研发账单筛选">
+        <div className="rd-ledger-filters__main">
+          <label><span>合作方</span>
+            <select value={partner} aria-label="筛选研发合作方" onChange={event => setPartner(event.target.value)}>
+              <option value="">全部合作方</option>
+              {partnerOptions.map(name => <option key={name} value={name}>{name}</option>)}
+            </select>
+          </label>
+          <label><span>账期</span>
+            <select value={month} aria-label="筛选账单月份" onChange={event => setMonth(event.target.value)}>
               <option value="">全部月份</option>
-              {monthOptions.map((value) => (
-                <option key={value} value={value}>{monthLabel(value)}</option>
-              ))}
+              {monthOptions.map(value => <option key={value} value={value}>{monthLabel(value)}</option>)}
             </select>
           </label>
-          <div className="core-recon-filter-control core-recon-partner-filter">
-            <span>客户</span>
-            <input
-              type="search"
-              list="core-recon-partner-options"
-              value={partnerDraft}
-              onChange={(event) => setPartnerDraft(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  event.preventDefault()
-                  setPartner(partnerDraft.trim())
-                  setSelectedIds([])
-                }
-              }}
-              placeholder="输入名称或简称"
-              aria-label="搜索合作方"
-            />
-            <datalist id="core-recon-partner-options">
-              {partnerOptions.map((name) => <option key={name} value={name} />)}
-            </datalist>
-            <button
-              type="button"
-              className="core-recon-partner-submit"
-              onClick={() => {
-                setPartner(partnerDraft.trim())
-                setSelectedIds([])
-              }}
-            >
-              搜索
-            </button>
-          </div>
-          <label className="core-recon-filter-control">
-            <span>状态</span>
-            <select
-              value={status}
-              aria-label="筛选账单状态"
-              onChange={(event) => {
-                const next = event.target.value
-                setStatus(next)
-                if (next === 'cancelled') setQuickFilter('trash')
-                else if (quickFilter === 'trash') setQuickFilter('all')
-                setSelectedIds([])
-              }}
-            >
-              <option value="">全部状态</option>
-              {Object.entries(STATUS_LABELS).map(([value, label]) => (
-                <option key={value} value={value}>{label}</option>
-              ))}
-            </select>
+          <label className="rd-ledger-filters__search"><span>搜索</span>
+            <input type="search" value={query} onChange={event => setQuery(event.target.value)}
+              aria-label="搜索研发账单" placeholder="合作方、游戏或账单编号" />
           </label>
-          <label className="core-recon-filter-control core-recon-filter-search">
-            <span>关键词</span>
-            <input
-              type="search"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="编号、客户或产品"
-            />
-          </label>
-          <button type="button" className="core-recon-reset" onClick={() => {
-            setMonth('')
-            setPartner('')
-            setPartnerDraft('')
-            setStatus('')
-            setQuery('')
-            setQuickFilter('all')
-            setSelectedIds([])
-          }}>
-            重置
+          <button type="button" aria-expanded={showMoreFilters} aria-controls="rd-ledger-more-filters"
+            onClick={() => setShowMoreFilters(value => !value)}>
+            {showMoreFilters ? '收起筛选' : '更多筛选'}{status ? '（1）' : ''}
           </button>
+          <button type="button" onClick={() => {
+            setMonth(''); setPartner(''); setStatus(''); setQuery(''); setQuickFilter('all')
+            setSelectedIds([]); setPage(1)
+          }}>重置</button>
         </div>
+        {showMoreFilters ? <div id="rd-ledger-more-filters" className="rd-ledger-filters__more">
+          <label><span>账单状态</span>
+            <select value={status} aria-label="筛选账单状态" onChange={event => {
+              const next = event.target.value
+              setStatus(next)
+              if (next === 'cancelled') setQuickFilter('trash')
+              else if (quickFilter === 'trash') setQuickFilter('all')
+            }}>
+              <option value="">全部状态</option>
+              {Object.entries(STATUS_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </select>
+          </label>
+        </div> : null}
       </section>
 
       <BillQuickFilters
@@ -591,47 +568,61 @@ function CoreReconciliationPage() {
         busyKey={dataDiffLoading ? 'data-diff' : ''}
       />
 
-      <section className="core-recon-stats">
+      <section className="rd-ledger-stats" aria-label="研发账单概览">
         {stats.map((item) => (
           <div key={item.label}>
             <span>{item.label}</span>
-            <strong>{item.value}</strong>
-            {item.note && <small>{item.note}</small>}
+            <div className="rd-ledger-stats__value"><strong>{item.value}</strong>
+              {item.note && <small>{item.note}</small>}
+            </div>
           </div>
         ))}
       </section>
 
-      <section className="core-recon-panel">
-        <div className="core-recon-panel-head">
-          <h2>{quickFilter === 'trash' ? '垃圾桶' : quickFilter === 'archived' ? '归档账单' : '账单列表'}</h2>
-          <span>{selectedRows.length > 0 ? `已选 ${selectedRows.length} 条` : `${rows.length} 条`}</span>
+      <section className="core-recon-panel rd-ledger-panel">
+        <div className="rd-ledger-panel__head">
+          <div>
+            <h2>{quickFilter === 'trash' ? '垃圾桶' : quickFilter === 'archived' ? '归档账单' : '账单明细'}</h2>
+            <span>筛选后 {rows.length} 张账单 · 每张原始账单只计一次</span>
+          </div>
+          <div className="rd-ledger-panel__controls">
+            {selectedRows.length > 0 ? <span>已选 {selectedRows.length} 条</span> : null}
+            <label>每页<select aria-label="每页研发账单数量" value={pageSize} onChange={event => setPageSize(Number(event.target.value))}>
+              <option value={25}>25</option><option value={50}>50</option><option value={100}>100</option>
+            </select></label>
+          </div>
         </div>
-        <div className="core-recon-table-wrap">
+        <div className="rd-ledger-scroll">
           <table className="rd-finance-table" aria-label="研发账单">
             <colgroup>
-              <col className="rd-finance-col-info" />
-              <col className="rd-finance-col-flow" />
-              <col className="rd-finance-col-share" />
+              <col className="rd-finance-col-check" />
+              <col className="rd-finance-col-period" />
+              <col className="rd-finance-col-partner" />
+              <col className="rd-finance-col-game" />
               <col className="rd-finance-col-settlement" />
-              <col className="rd-finance-col-payment" />
+              <col className="rd-finance-col-paid" />
+              <col className="rd-finance-col-unpaid" />
               <col className="rd-finance-col-status" />
               <col className="rd-finance-col-actions" />
             </colgroup>
-            <thead>
-              <tr>
-                <th scope="col">账单信息</th>
-                <th className="core-recon-align-right">流水</th>
-                <th className="core-recon-align-right">分成比例</th>
-                <th className="core-recon-align-right">研发应结</th>
-                <th className="core-recon-align-right">已付 / 未付</th>
-                <th>闭环状态</th>
-                <th>操作</th>
-              </tr>
-            </thead>
+            <thead><tr>
+              <th className="rd-ledger-check"><input type="checkbox" aria-label="选择当前页全部可操作账单"
+                ref={element => { if (element) element.indeterminate = selectedPageCount > 0 && !allPageSelected }}
+                checked={allPageSelected} disabled={!selectableRows.length}
+                onChange={event => selectPage(event.target.checked)} /></th>
+              <th scope="col">结算月份</th>
+              <th scope="col">研发 / 合作方</th>
+              <th scope="col">游戏 / 账单编号</th>
+              <th scope="col" className="is-numeric">研发应结</th>
+              <th scope="col" className="is-numeric">已付</th>
+              <th scope="col" className="is-numeric">未付</th>
+              <th scope="col">核对 / 付款</th>
+              <th scope="col">操作</th>
+            </tr></thead>
             <tbody>
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="core-recon-empty">
+                  <td colSpan={9} className="core-recon-empty">
                     {quickFilter === 'data-diff' && dataDiffLoading
                       ? '正在批量核对 QuickSDK 数据差异…'
                       : quickFilter === 'trash'
@@ -642,9 +633,11 @@ function CoreReconciliationPage() {
                   </td>
                 </tr>
               ) : (
-                rows.map((row) => {
+                visibleRows.map((row) => {
                   const periodLabel = rdRecordSettlementPeriodLabel(row)
                   const periodCount = getRdRecordSettlementPeriods(row).length
+                  const games = gameText(row).split('、').filter(Boolean)
+                  const prepayment = recordPrepaymentDeduction(row)
                   const { paid, unpaid } = paymentAmounts(row)
                   const isCancelled = isCancelledRow(row)
                   const archived = archivedIds.has(String(row.id))
@@ -660,49 +653,33 @@ function CoreReconciliationPage() {
                       key={row.id}
                       className={selectedIds.includes(String(row.id)) ? 'is-selected' : ''}
                     >
-                      <td>
-                        <div className="rd-finance-info">
-                        <input
-                          type="checkbox"
-                          aria-label={`选择账单 ${text(row.settlementNumber)}`}
-                          checked={selectedIds.includes(String(row.id))}
-                          disabled={archived || isCancelled}
-                          onChange={() => toggleSelected(row.id)}
-                        />
-                        <div className="rd-finance-identity">
-                        <strong
-                          className="rd-finance-customer"
-                          title={text(row.partner || row.partyBName)}
-                        >
+                      <td className="rd-ledger-check">
+                        <input type="checkbox" aria-label={`选择账单 ${text(row.settlementNumber)}`}
+                          checked={selectedIds.includes(String(row.id))} disabled={archived || isCancelled}
+                          onChange={() => toggleSelected(row.id)} />
+                      </td>
+                      <td className="rd-ledger-period" title={periodLabel}>
+                        {periodLabel.replace(/(\d{4})年(\d{1,2})月/g, (_, year, value) => `${year}-${value.padStart(2, '0')}`)}
+                        {periodCount > 1 ? <small>跨月账单</small> : null}
+                      </td>
+                      <td className="rd-ledger-partner">
+                        <strong title={text(row.partnerShortName || row.partner || row.partyBName)}>
                           {text(row.partnerShortName || row.partner || row.partyBName)}
                         </strong>
-                        <span className="rd-finance-product" title={text(gameText(row))}>
-                          {text(gameText(row))}
-                        </span>
-                        <div className="rd-finance-meta">
-                          <span title={periodLabel}>{periodLabel}</span>
-                          {periodCount > 1 ? <em>多周期</em> : null}
-                          <span title={text(row.settlementNumber)}>{text(row.settlementNumber)}</span>
-                        </div>
-                        </div>
-                        </div>
+                        <small title={text(row.partner || row.partyBName)}>{text(row.partner || row.partyBName)}</small>
                       </td>
-                      <td className="core-recon-money">
-                        {money(row.gameFlow || sumItems(row, 'revenue'))}
+                      <td className="rd-ledger-game">
+                        <strong title={text(gameText(row))}>
+                          {games.slice(0, 2).join('、') || '—'}{games.length > 2 ? ` +${games.length - 2}` : ''}
+                        </strong>
+                        <small title={text(row.settlementNumber)}>{text(row.settlementNumber)}</small>
                       </td>
-                      <td className="core-recon-rate">
-                        {text(row.revenueShareRatio != null ? `${row.revenueShareRatio}%` : '')}
-                      </td>
-                      <td className="core-recon-money core-recon-money--settlement">
+                      <td className="is-numeric" title={prepayment > 0.01 ? `预付款抵扣 ${money(prepayment)} · 实际应付 ${money(recordActualPayable(row))}` : undefined}>
                         {money(recordSettlementAmount(row))}
+                        {prepayment > 0.01 ? <small className="rd-ledger-deduction">抵扣 {money(prepayment)}</small> : null}
                       </td>
-                      <td
-                        className="core-recon-money rd-finance-payment"
-                        title={row.paymentStatus || '未付款'}
-                      >
-                        <span className="rd-finance-paid">已付 {money(paid)}</span>
-                        <strong className={unpaid > 0.01 ? 'rd-finance-unpaid' : 'rd-finance-cleared'}>未付 {money(unpaid)}</strong>
-                      </td>
+                      <td className="is-numeric">{money(paid)}</td>
+                      <td className={`is-numeric ${unpaid > 0.01 ? 'has-unpaid' : ''}`}>{money(unpaid)}</td>
                       <td>
                         <span className={`rd-finance-status is-${closure.tone}`} title={`${closure.detail} · ${STATUS_LABELS[row.status] || row.status || '待处理'}`}>
                           <strong>{closure.label}</strong>
@@ -710,6 +687,9 @@ function CoreReconciliationPage() {
                       </td>
                       <td>
                         <div className="rd-finance-actions">
+                          <button type="button" onMouseEnter={() => prefetchBill360?.('rd', String(row.id))}
+                            onFocus={() => prefetchBill360?.('rd', String(row.id))}
+                            onClick={() => openBill360?.('rd', String(row.id), row)}>详情</button>
                           {isCancelled ? (
                             <button type="button" disabled={voidingId === String(row.id)} onClick={() => void handleRestoreCancelled(row)}>
                               {voidingId === String(row.id) ? '处理中…' : '恢复账单'}
@@ -726,7 +706,6 @@ function CoreReconciliationPage() {
                                 </button>
                               ) : null}
                               <button type="button" onClick={() => openReconciliationEdit(String(row.id))}>
-                                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="m12 4 4 4M4 16l4-1L17 6a2.1 2.1 0 0 0-3-3l-9 9-1 4Z" /></svg>
                                 编辑
                               </button>
                               <button
@@ -736,7 +715,6 @@ function CoreReconciliationPage() {
                                 title="删除需两次确认；删除后移入垃圾桶，历史、关联关系和操作日志保留，可恢复"
                                 onClick={() => void voidBill(row)}
                               >
-                                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="M3 5h14M7 5V3h6v2M5 5l1 12h8l1-12M8 8v6m4-6v6" /></svg>
                                 {voidingId === String(row.id) ? '删除中…' : '删除'}
                               </button>
                             </>
@@ -750,15 +728,19 @@ function CoreReconciliationPage() {
             </tbody>
           </table>
         </div>
+        <footer className="rd-ledger-footer">
+          <span>{rows.length ? `显示第 ${offset + 1}–${offset + visibleRows.length} 条，共 ${rows.length} 条` : '0 条账单'} · 金额按全部筛选结果统计</span>
+          <div>
+            <button type="button" disabled={currentPage <= 1} onClick={() => setPage(currentPage - 1)}>上一页</button>
+            <strong>{currentPage} / {totalPages}</strong>
+            <button type="button" disabled={currentPage >= totalPages} onClick={() => setPage(currentPage + 1)}>下一页</button>
+          </div>
+        </footer>
       </section>
     </PageContainer>
   )
 }
 
-function sumItems(row, field) {
-  if (!Array.isArray(row.items)) return 0
-  return row.items.reduce((sum, item) => sum + Number(item[field] || 0), 0)
-}
 
 function readAny(row, names) {
   for (const name of names) {
