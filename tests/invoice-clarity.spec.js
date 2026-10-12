@@ -29,6 +29,7 @@ for(const width of [1440,390]) test(`matching layout readable at ${width}`,async
  expect(new Set(fonts).size).toBe(1)
  const box=await page.locator('.invoice-bill-card--candidate').boundingBox()
  expect(box.x+box.width).toBeLessThanOrEqual(width+1)
+ await page.getByRole('button',{name:'确认关联'}).scrollIntoViewIfNeeded()
  await expect(page.getByRole('button',{name:'确认关联'})).toBeInViewport()
  await page.screenshot({path:testInfo.outputPath(`invoice-${width}.png`),fullPage:true})
 })

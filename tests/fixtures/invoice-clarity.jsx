@@ -2,6 +2,7 @@ import React from 'react'
 import { createRoot } from 'react-dom/client'
 import '/src/App.jsx'
 import InvoiceLightDrawer from '/src/components/invoice/InvoiceLightDrawer.jsx'
+import '/src/components/reconciliation/reconciliation-admin.css'
 import '/src/components/invoice/invoice-admin.css'
 import mainSource from '/src/main.jsx?raw'
 for (const [, path] of mainSource.matchAll(/import ['"](.+\.css)['"]/g)) {
