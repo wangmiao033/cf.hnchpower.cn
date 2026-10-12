@@ -6,6 +6,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from typing import Any
 
 XIAN_WEIZHEN_9917_RULE = "xian_weizhen_9917"
+HONOR_UPFRONT_PERCENT_FEE_RULE = "honor_upfront_percent_fee"
 ANJIU_PRE_DISCOUNT_DEDUCTION_RULE = "anjiu_pre_discount_deduction"
 ROUNDING_TAIL = Decimal("0.01")
 VALID_RULES = {
@@ -15,6 +16,7 @@ VALID_RULES = {
     "percent_fee_after_tax",
     "share_only",
     XIAN_WEIZHEN_9917_RULE,
+    HONOR_UPFRONT_PERCENT_FEE_RULE,
     ANJIU_PRE_DISCOUNT_DEDUCTION_RULE,
     "custom",
 }
@@ -101,6 +103,12 @@ def resolve_rule_settings(record: Any, fallback: Any = None) -> dict[str, Any]:
         # 代金券、福利币仅记录，不从可分成金额扣减；
         # 其余原扣减项仍参与；分成后统一扣 5% 通道费；税率仅记录。
         fee_mode, tax_mode, fee_rate = "percent", "none", Decimal("5")
+    elif code == HONOR_UPFRONT_PERCENT_FEE_RULE:
+        # 荣耀账单手续费按原始总流水计提，代金券等扣减发生在通道费之后、分成之前。
+        # 不在分成后再次扣通道费；仅显式选择本规则的荣耀账单使用。
+        fee_mode, tax_mode = "percent", "none"
+        if _value(record, "channel_fee_rate", fallback) in (None, ""):
+            fee_rate = Decimal("5")
     elif code == ANJIU_PRE_DISCOUNT_DEDUCTION_RULE:
         # 广东安久 / 游戏fan：扣减项必须先从后台流水扣除，再乘折扣系数。
         # 该专属规则的税处理固定为“按分成额扣税”；渠道费模式/费率仍以合同明细为准。
@@ -147,6 +155,8 @@ def _calculate_channel_line_raw(item: Any, record: Any) -> tuple[dict[str, Any],
     )
     if settings["rule_code"] == ANJIU_PRE_DISCOUNT_DEDUCTION_RULE:
         billing_amount = (flow - deduction_total) * discount
+    elif settings["rule_code"] == HONOR_UPFRONT_PERCENT_FEE_RULE:
+        billing_amount = effective_flow * (Decimal("1") - settings["fee_rate"] / Decimal("100")) - deduction_total
     else:
         billing_amount = effective_flow - deduction_total
 
@@ -154,7 +164,7 @@ def _calculate_channel_line_raw(item: Any, record: Any) -> tuple[dict[str, Any],
     share_amount = billing_amount * share_rate
 
     after_fee = share_amount
-    if settings["fee_mode"] == "percent":
+    if settings["fee_mode"] == "percent" and settings["rule_code"] != HONOR_UPFRONT_PERCENT_FEE_RULE:
         after_fee = share_amount * (Decimal("1") - settings["fee_rate"] / Decimal("100"))
     elif settings["fee_mode"] == "fixed":
         after_fee = share_amount - _d(getattr(item, "gateway_cost", None))
