@@ -31,6 +31,7 @@ from app.schemas.channel import (
 from app.services.channel_cumulative_batch import refresh_batches_for_bill
 from app.services.channel_cumulative_invoice import assert_single_bill_collection_allowed
 from app.services.channel_settlement_engine import apply_bill_adjustment, aggregate_validation, calculate_channel_line
+from app.services.channel_party_identity import apply_channel_bill_parties, resolve_channel_bill_parties
 
 router = APIRouter()
 RECEIPT_EPS = 0.01
@@ -371,7 +372,18 @@ def create_channel_record(payload: ChannelRecordCreate, db: Session = Depends(ge
         payload.settlement_adjustment_reason,
     )
     if not payload.items: raise HTTPException(status_code=422, detail={"error": "items_required", "message": "至少录入一行游戏明细"})
-    row = ChannelRecord(id=str(uuid4()), **payload.model_dump(exclude={"items"}))
+    identity_inputs = {"partner_id", "expected_payer_entity_id", "expected_receiving_entity_id", "invoice_entity_id", "payer_override_reason"}
+    row = ChannelRecord(id=str(uuid4()), **payload.model_dump(exclude={"items", *identity_inputs}))
+    identities = resolve_channel_bill_parties(
+        db,
+        partner_id=payload.partner_id,
+        settlement_months=[item.settlement_cycle or payload.settlement_month for item in payload.items],
+        requested_payer_id=payload.expected_payer_entity_id,
+        payer_override_reason=payload.payer_override_reason,
+        requested_receiving_id=payload.expected_receiving_entity_id,
+        requested_invoice_id=payload.invoice_entity_id,
+    )
+    apply_channel_bill_parties(row, identities)
     db.add(row); db.flush(); _replace_line_items(db, row, payload.items); _sync_denormalized_totals(row, db); _recompute_receipt_rollup(db, row)
     try: db.commit()
     except IntegrityError:
@@ -387,6 +399,14 @@ def update_channel_record(record_id: str, payload: ChannelRecordUpdate, db: Sess
     ).scalar_one_or_none()
     if row is None: raise HTTPException(status_code=404, detail={"error": "not_found", "id": record_id})
     data = payload.model_dump(exclude_unset=True); items_payload = data.pop("items", None)
+    identity_keys = {"partner_id", "expected_payer_entity_id", "expected_receiving_entity_id", "invoice_entity_id", "payer_override_reason"}
+    identity_data = {key: data.pop(key) for key in list(data) if key in identity_keys}
+    before_months = sorted(set(db.execute(
+        select(ChannelRecordLineItem.settlement_cycle).where(ChannelRecordLineItem.channel_record_id == record_id)
+    ).scalars().all()) - {None, ""})
+    after_months = sorted({item.get("settlement_cycle") for item in items_payload if item.get("settlement_cycle")}) if items_payload is not None else before_months
+    original_settlement_month = row.settlement_month
+    locked_identity = str(row.status or "").lower() in {"confirmed", "archived"} or float(row.received_amount or 0) > 0
     adjustment_touched = bool(SETTLEMENT_ADJUSTMENT_FIELDS.intersection(data))
     for key, value in data.items(): setattr(row, key, value)
     _validate_settlement_adjustment_row(row)
@@ -396,6 +416,19 @@ def update_channel_record(record_id: str, payload: ChannelRecordUpdate, db: Sess
         _replace_line_items(db, row, [ChannelLineItemCreate(**x) for x in items_payload]); _sync_denormalized_totals(row, db)
     elif adjustment_touched:
         _sync_denormalized_totals(row, db)
+    period_changed = before_months != after_months or original_settlement_month != row.settlement_month
+    if identity_data or (period_changed and row.partner_id):
+        payer_id = identity_data.get("expected_payer_entity_id", row.expected_payer_entity_id if not period_changed else None)
+        identities = resolve_channel_bill_parties(
+            db,
+            partner_id=identity_data.get("partner_id", row.partner_id),
+            settlement_months=after_months or [row.settlement_month],
+            requested_payer_id=payer_id,
+            payer_override_reason=identity_data.get("payer_override_reason", row.payer_override_reason),
+            requested_receiving_id=identity_data.get("expected_receiving_entity_id", row.expected_receiving_entity_id),
+            requested_invoice_id=identity_data.get("invoice_entity_id", row.invoice_entity_id),
+        )
+        apply_channel_bill_parties(row, identities, locked=locked_identity)
     received = max(0.0, _receipt_total(db, record_id))
     projected_settlement = max(0.0, float(row.settlement_amount or 0))
     if received > projected_settlement + RECEIPT_EPS:
