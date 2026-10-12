@@ -33,6 +33,12 @@ test('shows the precise blocked rule instead of the partner baseline; rematch fi
     if (route.request().method() === 'GET' && pathname === '/api/legal-entities/partners/fixture-partner') {
       return route.fulfill({ json: { partner: { id: 'fixture-partner' }, links: [] } })
     }
+    if (route.request().method() === 'GET' && pathname === '/api/legal-entities/partners/fixture-partner/contract-source') {
+      return route.fulfill({ json: {
+        partner_id: 'fixture-partner', month: '2026-08',
+        contract_party_name: null, source: 'unresolved', message: 'Fixture has no linked contract signer'
+      } })
+    }
     writes.push(route.request().method() + ' ' + pathname)
     return route.abort()
   })
