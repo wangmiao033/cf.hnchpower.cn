@@ -417,7 +417,13 @@ def update_channel_record(record_id: str, payload: ChannelRecordUpdate, db: Sess
     elif adjustment_touched:
         _sync_denormalized_totals(row, db)
     period_changed = before_months != after_months or original_settlement_month != row.settlement_month
-    if identity_data or (period_changed and row.partner_id):
+    identity_request_changed = any(
+        str(value or "").strip() != str(getattr(row, key) or "").strip()
+        for key, value in identity_data.items()
+    )
+    # Keep historical identity snapshots immutable on unrelated bill edits.
+    # New default rules must not retroactively rewrite confirmed/open statements.
+    if identity_request_changed or (period_changed and row.partner_id):
         payer_id = identity_data.get("expected_payer_entity_id", row.expected_payer_entity_id if not period_changed else None)
         identities = resolve_channel_bill_parties(
             db,
