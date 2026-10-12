@@ -40,6 +40,7 @@ function hasLineRuleValue(value) { return value !== undefined && value !== null 
 export function detectChannelRulePreset(name) {
   const text = String(name || '').replace(/\s/g, '').toLowerCase()
   if (text.includes('西安维真') || text.includes('维真视界')) return XIAN_WEIZHEN_9917_RULE
+  if (text === '荣耀' || /^荣耀(渠道|软件|游戏|应用|商店|公司)/.test(text) || text.includes('深圳市荣耀软件技术') || text === 'honor' || text.startsWith('honor(') || text.startsWith('honor（')) return HONOR_UPFRONT_PERCENT_FEE_RULE
   if (text.includes('广东安久科技有限公司') || text.includes('游戏fan（安久）') || text.includes('游戏fan(安久)')) return ANJIU_PRE_DISCOUNT_DEDUCTION_RULE
   return text.includes('小米') || text.includes('xiaomi') || text.includes('瓦力') ? 'xiaomi_percent_fee' : ''
 }
@@ -56,8 +57,11 @@ export function applyChannelRulePreset(header, code) {
 }
 
 export function applyTargetedChannelRule(header = initialHeaderForm) {
-  const preset = detectChannelRulePreset(header.partnerName || header.channelName)
-  if (![XIAN_WEIZHEN_9917_RULE, ANJIU_PRE_DISCOUNT_DEDUCTION_RULE].includes(preset)) return header
+  const targetedCodes = [XIAN_WEIZHEN_9917_RULE, HONOR_UPFRONT_PERCENT_FEE_RULE, ANJIU_PRE_DISCOUNT_DEDUCTION_RULE]
+  const preset = [header.partnerName, header.channelName]
+    .map((name) => detectChannelRulePreset(name))
+    .find((code) => targetedCodes.includes(code))
+  if (!preset) return header
   return applyChannelRulePreset(header, preset)
 }
 
