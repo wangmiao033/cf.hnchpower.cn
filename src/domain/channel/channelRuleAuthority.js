@@ -1,4 +1,5 @@
 import { recommendChannelContractRules } from '@/lib/api/contractTerms.ts'
+import { getCustomerContractSource } from '@/lib/api/legalEntities.ts'
 
 function hasValue(value) {
   return value !== undefined && value !== null && String(value).trim() !== ''
@@ -172,7 +173,8 @@ async function retryUnmatchedGameAliases({ partnerName, channelName, lines, reco
 }
 
 export async function resolveChannelContractAuthority(record, { generated = false } = {}) {
-  const partnerName = String(record?.partnerName || '').trim()
+  const businessPartnerName = String(record?.partnerName || '').trim()
+  const businessPartnerId = String(record?.partnerId || '').trim()
   const channelName = String(record?.channelName || '').trim()
   const lines = (Array.isArray(record?.items) ? record.items : [])
     .map((line, originalIndex) => ({
@@ -182,10 +184,20 @@ export async function resolveChannelContractAuthority(record, { generated = fals
     }))
     .filter((line) => line.game_name)
 
-  if (!partnerName || !lines.length) {
+  if (!businessPartnerName || !lines.length) {
     return {
       record: generated ? sanitizeGeneratedHistoryRules(record) : record,
       summary: { total: lines.length, matched: 0, unmatched: lines.length, needsConfirmation: 0, skipped: true }
+    }
+  }
+
+  let partnerName = String(record?.contractEntitySnapshot || '').trim() || businessPartnerName
+  if (businessPartnerId && !record?.contractEntitySnapshot) {
+    const month = lines.map((row) => row.settlement_cycle).filter(Boolean).sort().at(-1) ||
+      String(record?.settlementMonth || '').trim()
+    if (month) {
+      const signer = await getCustomerContractSource(businessPartnerId, month)
+      partnerName = String(signer.contract_party_name || '').trim() || businessPartnerName
     }
   }
 
