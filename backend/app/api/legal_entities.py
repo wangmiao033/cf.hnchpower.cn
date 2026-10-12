@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 from app.core.deps import get_db
 from app.models.bank_transaction import BankTransaction
 from app.services.bank_partner_match import BankPartnerResolver
+from app.services.contract_party_source import resolve_contract_source
 from app.services.legal_entities import (
     entity_links,
     normalized_bank_account,
@@ -305,3 +306,19 @@ def resolve_bank_transaction_identities(
         "own_receiver_verified_by_account": bool(own),
         "warning": None if own or not is_income else "到账收款账号尚未登记或未能匹配，请人工复核",
     }
+
+
+@router.get("/partners/{partner_id}/contract-source")
+def get_partner_contract_source(
+    partner_id: str,
+    month: str = Query(...),
+    db: Session = Depends(get_db),
+    _partner_view=Depends(require_permission("partners.view")),
+    _contract_view=Depends(require_permission("contracts.view")),
+) -> dict:
+    """Read the original contract signer independently of the bill's bank payer."""
+    _partner(db, partner_id)
+    try:
+        return resolve_contract_source(db, partner_id, month)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
