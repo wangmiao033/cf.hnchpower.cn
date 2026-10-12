@@ -33,12 +33,16 @@ function roleText(role) {
   return ROLES.find((item) => item.id === role)?.label || role
 }
 
-export default function PartnerLegalEntitiesDock({ partner, onClose }) {
+export default function PartnerLegalEntitiesDock({ partner, onClose, initialRole = 'payer', initialMonth = '' }) {
   const { can } = useAuth()
   const canManage = can('partners.manage')
   const [data, setData] = useState(null)
-  const [form, setForm] = useState(emptyForm)
-  const [month, setMonth] = useState(defaultMonth)
+  const firstMonth = /^20\d{2}-(0[1-9]|1[0-2])$/.test(initialMonth) ? initialMonth : defaultMonth
+  const firstRole = ROLES.some((item) => item.id === initialRole) ? initialRole : 'payer'
+  const [form, setForm] = useState(() => ({
+    ...emptyForm, role: firstRole, effective_month: firstMonth
+  }))
+  const [month, setMonth] = useState(firstMonth)
   const [resolution, setResolution] = useState(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -80,7 +84,7 @@ export default function PartnerLegalEntitiesDock({ partner, onClose }) {
         end_month: form.end_month || null
       })
       setData(result)
-      setForm(emptyForm)
+      setForm({ ...emptyForm, role: firstRole, effective_month: firstMonth })
       setNotice('主体关联已保存。历史账单及已核销流水没有变动。')
     } catch (err) {
       setError(err instanceof Error ? err.message : '主体关联保存失败')
