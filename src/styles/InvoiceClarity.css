@@ -69,3 +69,14 @@
   .invoice-link-drawer .invoice-bill-panel__section-head--search { align-items: stretch; flex-direction: column; }
   .invoice-link-drawer .invoice-bill-panel__search { width: 100%; min-width: 0; }
 }
+/* Drawer chrome is explicitly scoped so lazy-loaded page CSS cannot change it. */
+.invoice-link-drawer .rec-drawer__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 20px; border-bottom: 1px solid #e4eaf2; }
+.invoice-link-drawer .rec-drawer__title { margin: 0; font-size: 18px; font-weight: 600; }
+.invoice-link-drawer .rec-drawer__close { width: 32px; height: 32px; border: 1px solid #dce4ed; background: #fff; border-radius: 6px; font-size: 20px; color: #64748b; cursor: pointer; }
+.invoice-link-drawer .rec-light-dl { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 8px 16px; margin: 16px 0; }
+.invoice-link-drawer .rec-light-dl dt { color: #64748b; }
+.invoice-link-drawer .rec-light-dl dd { margin: 0; overflow-wrap: anywhere; }
+.invoice-link-drawer .rec-btn { padding: 7px 12px; border: 1px solid #dce4ed; border-radius: 6px; background: #fff; color: #334155; font-size: 13px; cursor: pointer; }
+.invoice-link-drawer .rec-btn--primary { color: #fff; background: #2459a6; border-color: #2459a6; }
+.invoice-link-drawer .rec-btn:disabled { opacity: .55; cursor: wait; }
+.invoice-link-drawer .rec-drawer__footer { padding: 12px 20px; gap: 8px; }
