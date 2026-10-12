@@ -254,6 +254,9 @@ class BankPartnerResolver:
 
 
 def _candidate_matches_partner(candidate: dict, resolution: PartnerResolution) -> bool:
+    stable_id = str(candidate.get("partner_id") or "").strip()
+    if stable_id:
+        return stable_id == resolution.partner_id
     candidate_name = str(candidate.get("partner_name") or "")
     candidate_keys = {normalize_party(candidate_name), normalize_company(candidate_name)} - {""}
     partner_keys = {
@@ -262,6 +265,27 @@ def _candidate_matches_partner(candidate: dict, resolution: PartnerResolution) -
         normalize_party(resolution.short_name),
     } - {""}
     return bool(candidate_keys & partner_keys)
+
+
+def _guard_mismatched_cash_entities(item: dict, actual_payer_id: str | None, own_receiver_id: str | None) -> None:
+    """Missing evidence is neutral; a confirmed identity mismatch blocks automatic receipt."""
+    mismatches = []
+    for candidate in item.get("candidates") or []:
+        if candidate.get("bill_type") != "channel":
+            continue
+        expected_payer = str(candidate.get("expected_payer_entity_id") or "")
+        expected_receiver = str(candidate.get("expected_receiving_entity_id") or "")
+        if actual_payer_id and expected_payer and actual_payer_id != expected_payer:
+            candidate["payer_identity_mismatch"] = True
+            candidate.setdefault("reasons", []).append("银行实际汇款公司与账单预计付款方不同")
+            mismatches.append("付款")
+        if own_receiver_id and expected_receiver and own_receiver_id != expected_receiver:
+            candidate["receiver_identity_mismatch"] = True
+            candidate.setdefault("reasons", []).append("银行到账公司与账单预计收款方不同")
+            mismatches.append("收款")
+    if mismatches:
+        item["auto_ready"] = False
+        item["blocked_reason"] = "主体与账单预期不符（" + "、".join(sorted(set(mismatches))) + "），需人工确认后才能核销"
 
 
 def enrich_reconciliation_dashboard(db: Session, result: dict) -> dict:
@@ -275,6 +299,15 @@ def enrich_reconciliation_dashboard(db: Session, result: dict) -> dict:
         str(row.id): row
         for row in db.execute(select(BankTransaction).where(BankTransaction.id.in_(tx_ids))).scalars().all()
     } if tx_ids else {}
+    own_accounts = {
+        str(row["normalized_account"]): dict(row)
+        for row in db.execute(text("""
+            SELECT account.normalized_account, entity.id AS entity_id, entity.legal_name
+              FROM cf_entity_bank_accounts AS account
+              JOIN cf_legal_entities AS entity ON account.entity_id = entity.id
+             WHERE account.is_active = TRUE
+        """)).mappings().all()
+    }
 
     for item in suggestions:
         tx = tx_map.get(str(item.get("transaction_id") or ""))
@@ -283,6 +316,10 @@ def enrich_reconciliation_dashboard(db: Session, result: dict) -> dict:
         raw_account = ""
         if tx is not None:
             raw_name, raw_account = _counterparty(tx, direction)
+        receiving = (own_accounts.get(normalize_account(tx.payee_account or tx.bank_account))
+                     if tx is not None and direction == "collection" else None)
+        item["bank_receiving_entity_id"] = receiving["entity_id"] if receiving else None
+        item["bank_receiving_entity_name"] = receiving["legal_name"] if receiving else None
         item["counterparty_raw_name"] = raw_name or None
         resolution = resolver.resolve(raw_name, raw_account)
         if not resolution:
@@ -293,8 +330,11 @@ def enrich_reconciliation_dashboard(db: Session, result: dict) -> dict:
                     "partner_short_name": None,
                     "partner_match_method": None,
                     "partner_match_explicit": False,
+                    "legal_entity_id": None,
+                    "legal_entity_name": None,
                 }
             )
+            _guard_mismatched_cash_entities(item, None, receiving["entity_id"] if receiving else None)
             continue
 
         item.update(resolution.payload())
@@ -310,7 +350,8 @@ def enrich_reconciliation_dashboard(db: Session, result: dict) -> dict:
                     continue
                 candidate["score"] = min(100.0, round(float(candidate.get("score") or 0) + (25.0 if resolution.match_method == "legal_entity" else 30.0), 2))
                 reasons = list(candidate.get("reasons") or [])
-                reason = f"客户匹配中心已确认：{label}"
+                reason = (f"客户主体关系识别：{label}" if resolution.match_method in {"legal_entity", "legal_bank_account"}
+                          else f"客户匹配中心已确认：{label}")
                 if reason not in reasons:
                     reasons.append(reason)
                 candidate["reasons"] = reasons
@@ -330,6 +371,12 @@ def enrich_reconciliation_dashboard(db: Session, result: dict) -> dict:
                 item["auto_ready"] = level == "high" and resolution.match_method != "legal_entity"
                 if level != "low":
                     item["blocked_reason"] = None
+
+        _guard_mismatched_cash_entities(
+            item,
+            resolution.legal_entity_id,
+            receiving["entity_id"] if receiving else None,
+        )
 
     stats = result.setdefault("stats", {})
     stats["high_confidence"] = sum(1 for item in suggestions if item.get("confidence_level") == "high")
@@ -398,6 +445,8 @@ def customer_match_center(db: Session) -> dict:
             "partner_name": resolution.partner_name if resolution else None,
             "partner_short_name": resolution.short_name if resolution else None,
             "match_method": resolution.match_method if resolution else None,
+            "legal_entity_id": resolution.legal_entity_id if resolution else None,
+            "legal_entity_name": resolution.legal_entity_name if resolution else None,
             "suggested_partner": suggestion,
         }
         items.append(item)
