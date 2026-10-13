@@ -12,6 +12,9 @@ export const BILL_STATUS_LABELS = {
 }
 
 export const EDITABLE_BILL_STATUSES = new Set(['draft', 'pending'])
+export const REVIEWED_BILL_AMENDABLE_STATUSES = new Set([
+  'confirmed', 'invoiced', 'completed', 'settled', 'reconciled', 'verified'
+])
 
 export function normalizeBillStatus(value) {
   return String(value || 'pending').trim().toLowerCase() || 'pending'
@@ -21,6 +24,18 @@ export function billStatusLabel(value) {
   const status = normalizeBillStatus(value)
   return BILL_STATUS_LABELS[status] || status
 }
+
+/** Reading remains allowed for all states, but changing reviewed financial data
+ * must start with an audited amendment note (the server enforces the transition).
+ */
+export function canRequestReviewedBillAmendment(status) {
+  return REVIEWED_BILL_AMENDABLE_STATUSES.has(normalizeBillStatus(status))
+}
+
+export function isValidReviewedBillAmendmentNote(value) {
+  return String(value || '').trim().length >= 2
+}
+
 
 export function isBillLockedStatus(value) {
   return !EDITABLE_BILL_STATUSES.has(normalizeBillStatus(value))
