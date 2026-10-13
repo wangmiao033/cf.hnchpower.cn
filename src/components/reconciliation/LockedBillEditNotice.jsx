@@ -1,14 +1,14 @@
 import React, { useState } from 'react'
 import PageContainer from '@/components/layout/PageContainer.jsx'
 import { useAppState } from '@/app/AppStateContext.jsx'
-import { billStatusLabel, normalizeBillStatus } from '@/domain/reconciliation/billLifecycle.js'
+import {
+  billStatusLabel,
+  canRequestReviewedBillAmendment,
+  isValidReviewedBillAmendmentNote
+} from '@/domain/reconciliation/billLifecycle.js'
 import { invalidateEditRecord } from '@/lib/api/editRecordCache.js'
 import { transitionBillLifecycle } from '@/lib/api/billLifecycle.ts'
 import './LockedBillEditNotice.css'
-
-const MODIFIABLE_STATUSES = new Set([
-  'confirmed', 'invoiced', 'completed', 'settled', 'reconciled', 'verified'
-])
 
 /**
  * Reviewed bills always show their contents. Only entering business-data editing
@@ -30,13 +30,12 @@ export default function LockedBillEditNotice({
 
   const billId = String(record?.id || '')
   const billName = billType === 'rd' ? '研发账单' : '渠道账单'
-  const statusValue = normalizeBillStatus(record?.status)
-  const canEdit = MODIFIABLE_STATUSES.has(statusValue)
-  const noteValid = note.trim().length >= 2
+  const canEdit = canRequestReviewedBillAmendment(record?.status)
+  const noteValid = isValidReviewedBillAmendmentNote(note)
 
   const enterEditWithNote = async () => {
     const normalizedNote = note.trim()
-    if (normalizedNote.length < 2) {
+    if (!isValidReviewedBillAmendmentNote(normalizedNote)) {
       showToast('请填写修改备注，至少 2 个字', 'error')
       return
     }
