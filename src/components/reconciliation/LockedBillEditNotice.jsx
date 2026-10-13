@@ -101,12 +101,13 @@ export default function LockedBillEditNotice({
           ) : null}
 
           <div className="locked-bill-edit-actions">
+            {children ? <button type="button" className="primary" onClick={onOpen360}>查看核对结果</button> : null}
             {!showReturnForm ? (
-              <button type="button" className="primary" onClick={() => setShowReturnForm(true)}>
+              <button type="button" className={children ? '' : 'primary'} onClick={() => setShowReturnForm(true)}>
                 退回修改
               </button>
             ) : null}
-            <button type="button" onClick={onOpen360}>查看核对结果</button>
+            {!children ? <button type="button" onClick={onOpen360}>查看核对结果</button> : null}
             <button type="button" onClick={onBack}>返回列表</button>
           </div>
           <small>{billName} · 退回原因和再次核对都会自动写入操作日志。</small>
