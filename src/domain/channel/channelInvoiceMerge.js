@@ -1,3 +1,5 @@
+import { channelBillMonths } from '@/domain/reconciliation/sharedBillMonthOptions.js'
+
 /**
  * Channel invoice merge selection safety. "Unreceived" is NOT "uninvoiced":
  * getBillInvoiceSummary is the only source for remaining invoice coverage.
@@ -41,7 +43,10 @@ export function prepareChannelInvoiceMerge(rows, summaries) {
   const items = rows.map((row, i) => ({
     id: ids[i],
     number: row.billNumber || row.statementNo || ids[i],
-    period: String(row.settlementMonth || ''),
+    period: (() => {
+      const months = channelBillMonths(row)
+      return months.length > 1 ? months[0] + ' — ' + months[months.length - 1] : months[0] || String(row.settlementMonth || '')
+    })(),
     game: String(row.gameName || ''),
     settlementCents: asCents(row.settlementAmount),
     receivedCents: asCents(row.receivedAmount),
