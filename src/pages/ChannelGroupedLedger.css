@@ -440,3 +440,21 @@
     padding-left: 34px;
   }
 }
+
+/* Keep invoice actions legible in both grouped and flat ledgers. */
+.core-channel-recon-page .channel-group-detail-table .core-recon-row-actions button.channel-group-single-invoice {
+  background: #eff6ff;
+  border-color: #c2d9f3;
+  color: #2f639d;
+  font-weight: 750;
+}
+.core-channel-recon-page .core-recon-selection-actions button.channel-group-merge-invoice {
+  border: 1px solid #3976bc;
+  background: #3976bc;
+  color: #fff;
+  font-weight: 750;
+}
+.core-channel-recon-page .core-recon-selection-actions button.channel-group-merge-invoice:disabled {
+  opacity: .55;
+  cursor: not-allowed;
+}
