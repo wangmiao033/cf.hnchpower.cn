@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { useAppState } from '@/app/AppStateContext.jsx'
 import PageContainer from '@/components/layout/PageContainer.jsx'
 import BillQuickFilters from '@/components/reconciliation/BillQuickFilters.jsx'
+import RdInvoiceMergeDialog from '@/components/reconciliation/RdInvoiceMergeDialog.jsx'
 import { VIEWS } from '@/app/routes.js'
 import {
   buildRdSettlementPeriodOptions,
@@ -22,6 +23,7 @@ import { listFundingClosureStatus } from '@/domain/reconciliation/closureStatus.
 import { confirmRdBillDeletion } from '@/domain/reconciliation/confirmRdBillDeletion.js'
 import { archiveBill, getBillArchiveSnapshot, unarchiveBill } from '@/lib/api/billArchive.ts'
 import './CoreReconciliationPages.css'
+import './RdInvoiceMergeActions.css'
 import '@/components/reconciliation/reconciliation-admin.css'
 
 const STATUS_LABELS = {
@@ -107,6 +109,7 @@ function isCancelledRow(row) {
 function CoreReconciliationPage() {
   const {
     recon,
+    invoice,
     settings,
     showToast,
     setActiveView,
@@ -127,6 +130,7 @@ function CoreReconciliationPage() {
   const [dataDiffIds, setDataDiffIds] = useState(null)
   const [dataDiffLoading, setDataDiffLoading] = useState(false)
   const [selectedIds, setSelectedIds] = useState([])
+  const [invoiceTargets, setInvoiceTargets] = useState(null)
   const [isExporting, setIsExporting] = useState(false)
   const [voidingId, setVoidingId] = useState('')
   const [archiveState, setArchiveState] = useState({ archived_ids: [], eligible_ids: [], items: [], auto_archive_days: 7 })
@@ -270,6 +274,18 @@ function CoreReconciliationPage() {
     () => rows.filter((row) => !archivedIds.has(String(row.id)) && !isCancelledRow(row) && selectedIds.includes(String(row.id))),
     [rows, selectedIds, archivedIds]
   )
+
+  const openRdInvoiceMerge = targetRows => {
+    if (!recon.reconciliationApiEnabled) {
+      showToast('研发账单服务不可用，暂不能核对进项发票余额', 'error')
+      return
+    }
+    if (!Array.isArray(targetRows) || !targetRows.length) {
+      showToast('请先选择需要收票的研发账单', 'info')
+      return
+    }
+    setInvoiceTargets([...targetRows])
+  }
 
   const quickItems = useMemo(() => [
     { key: 'all', label: '全部', count: activeRows.length },
@@ -586,7 +602,16 @@ function CoreReconciliationPage() {
             <span>筛选后 {rows.length} 张账单 · 每张原始账单只计一次</span>
           </div>
           <div className="rd-ledger-panel__controls">
-            {selectedRows.length > 0 ? <span>已选 {selectedRows.length} 条</span> : null}
+            {selectedRows.length > 0 ? (
+              <>
+                <span>已选 {selectedRows.length} 条</span>
+                <button type="button" className="rd-invoice-merge-action"
+                  disabled={!recon.reconciliationApiEnabled}
+                  onClick={() => openRdInvoiceMerge(selectedRows)}>
+                  {selectedRows.length > 1 ? '合并收票（' + selectedRows.length + '）' : '选中账单收票'}
+                </button>
+              </>
+            ) : null}
             <label>每页<select aria-label="每页研发账单数量" value={pageSize} onChange={event => setPageSize(Number(event.target.value))}>
               <option value={25}>25</option><option value={50}>50</option><option value={100}>100</option>
             </select></label>
@@ -705,6 +730,12 @@ function CoreReconciliationPage() {
                                   {archiveWorkingId === String(row.id) ? '归档中…' : '归档'}
                                 </button>
                               ) : null}
+                              <button type="button" className="rd-invoice-single-action"
+                                disabled={!recon.reconciliationApiEnabled}
+                                onClick={() => openRdInvoiceMerge([row])}
+                                title="核对研发进项发票关联金额，支持收票清单和正式发票登记">
+                                发票
+                              </button>
                               <button type="button" onClick={() => openReconciliationEdit(String(row.id))}>
                                 编辑
                               </button>
@@ -737,6 +768,26 @@ function CoreReconciliationPage() {
           </div>
         </footer>
       </section>
+
+      {invoiceTargets ? (
+        <RdInvoiceMergeDialog
+          rows={invoiceTargets}
+          showToast={showToast}
+          onClose={() => setInvoiceTargets(null)}
+          onOpenExisting={() => {
+            setInvoiceTargets(null)
+            setActiveView(VIEWS.INVOICE_INPUT)
+          }}
+          onReceived={async () => {
+            setInvoiceTargets(null)
+            setSelectedIds([])
+            await Promise.all([
+              recon.refetchReconciliationFromApi?.(),
+              invoice?.refetchInvoiceFromApi?.()
+            ])
+          }}
+        />
+      ) : null}
     </PageContainer>
   )
 }

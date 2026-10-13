@@ -105,11 +105,11 @@ def prepare_issued_invoice(payload: IssuedChannelInvoiceRequest):
     return ids, number_data, identity, gross, net, tax
 
 
-def _effective_coverage_cents(db: Session, bill_ids: list[str]) -> dict[str, int]:
+def _effective_coverage_cents(db: Session, bill_ids: list[str], bill_type: str = "channel") -> dict[str, int]:
     """Mirror bill-summary red-invoice treatment when computing remaining coverage."""
     allocations = db.execute(
         select(BillInvoiceAllocation).where(
-            BillInvoiceAllocation.bill_type == "channel",
+            BillInvoiceAllocation.bill_type == bill_type,
             BillInvoiceAllocation.bill_id.in_(bill_ids),
             BillInvoiceAllocation.status.in_(ACTIVE_ALLOCATION_STATUSES),
         )
@@ -139,7 +139,12 @@ def _effective_coverage_cents(db: Session, bill_ids: list[str]) -> dict[str, int
     amounts: dict[str, Decimal] = {}
     for allocation in allocations:
         invoice = invoices.get(allocation.invoice_id)
-        if invoice is None:
+        if (
+            invoice is None
+            or (invoice.invoice_direction or "output") != ("input" if bill_type == "rd" else "output")
+            or invoice.tax_status in {"red", "void"}
+            or invoice.status == "作废"
+        ):
             continue
         gross = Decimal(str(invoice.amount_with_tax or 0))
         if gross == 0:
