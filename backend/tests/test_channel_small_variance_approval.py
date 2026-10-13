@@ -66,6 +66,15 @@ class ChannelSmallVarianceApprovalTests(TestCase):
         self.assertEqual(len(result["approved_lines"]), 1)
         self.assertEqual(result["approved_lines"][0]["actual_amount"], 0.65)
 
+    def test_historical_fee_rate_inherited_from_parent_bill_is_acceptable(self):
+        item = line()
+        item.channel_fee_rate = None
+        valid = assess_channel_small_variance_approval(
+            BILL, [item], [case()], header_fee_rate=Decimal("5")
+        )
+        self.assertEqual(valid["difference_cents"], 4)
+        self.assert_blocked([item], [case()], "difference_evidence_stale")
+
     def test_blocks_unapproved_or_processing_case_on_current_line(self):
         self.assert_blocked([line()], [case(status="pending", line_id="line-current")],
                             "difference_not_approved")
