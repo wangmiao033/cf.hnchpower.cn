@@ -1,0 +1,50 @@
+/* Keep new input-invoice actions readable without changing ledger calculations. */
+.core-rd-ledger-page .rd-ledger-panel__controls {
+  flex-wrap: wrap;
+}
+
+.core-rd-ledger-page .rd-ledger-panel__controls button.rd-invoice-merge-action {
+  min-height: 30px;
+  padding: 0 12px;
+  border: 1px solid #3273b7;
+  border-radius: 7px;
+  background: #3273b7;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.core-rd-ledger-page .rd-ledger-panel__controls button.rd-invoice-merge-action:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
+
+.core-rd-ledger-page .rd-finance-table {
+  min-width: 1300px;
+}
+
+.core-rd-ledger-page .rd-finance-col-actions {
+  width: 262px;
+}
+
+.core-rd-ledger-page .rd-finance-actions {
+  flex-wrap: nowrap;
+}
+
+.core-rd-ledger-page .rd-finance-actions button.rd-invoice-single-action {
+  border-color: #c5dbf3;
+  background: #eff6ff;
+  color: #285d9c;
+  font-weight: 750;
+}
+
+.core-rd-ledger-page .rd-finance-actions button.rd-invoice-single-action:disabled {
+  background: #f4f6f9;
+}
+
+@media (max-width: 780px) {
+  .core-rd-ledger-page .rd-ledger-panel__controls {
+    gap: 8px;
+  }
+}
