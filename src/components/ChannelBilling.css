@@ -1473,6 +1473,23 @@
   color: var(--admin-success, #16a34a);
 }
 
+.rd-prepayment-balance-input {
+  width: 100%;
+  height: 32px;
+  margin-top: 2px;
+  box-sizing: border-box;
+  text-align: right;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.rd-prepayment-balance-note {
+  margin: 8px 0 0;
+  color: var(--admin-text-sub, #4d5f7a);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .channel-line-items-summary--channel {
   grid-template-columns: repeat(5, minmax(150px, 1fr));
 }

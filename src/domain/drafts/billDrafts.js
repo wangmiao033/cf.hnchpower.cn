@@ -24,7 +24,8 @@ function normalizeChannelLine(line = {}, parentMonth = '') {
 }
 
 export function normalizeRdDraft(record = {}) {
-  return { settlementMonth: text(record.settlementMonth), settlementNumber: text(record.settlementNumber), partnerId: text(record.partnerId), partner: text(record.partner), channelFeeRate: number(record.channelFeeRate), memo: text(record.memo), status: text(record.status) || 'pending', items: Array.isArray(record.items) ? record.items.map(normalizeRdLine) : [] }
+  const statementTouched = record.statementPrepaymentTouched === true
+  return { settlementMonth: text(record.settlementMonth), settlementNumber: text(record.settlementNumber), partnerId: text(record.partnerId), partner: text(record.partner), channelFeeRate: number(record.channelFeeRate), memo: text(record.memo), status: text(record.status) || 'pending', statementPrepaymentTouched: statementTouched, statementPrepaymentDeduction: statementTouched ? number(record.statementPrepaymentDeduction) : 0, items: Array.isArray(record.items) ? record.items.map(normalizeRdLine) : [] }
 }
 
 export function normalizeChannelDraft(record = {}) {
@@ -36,7 +37,7 @@ export function normalizeChannelDraft(record = {}) {
 
 export function isMeaningfulRdDraft(record = {}) {
   const normalized = normalizeRdDraft(record)
-  if (normalized.settlementNumber || normalized.partnerId || normalized.partner || normalized.memo || normalized.channelFeeRate !== 0) return true
+  if (normalized.settlementNumber || normalized.partnerId || normalized.partner || normalized.memo || normalized.channelFeeRate !== 0 || normalized.statementPrepaymentDeduction !== 0) return true
   return normalized.items.some((line) => line.gameName || line.revenue !== 0 || line.couponAmount !== 0 || line.testFee !== 0 || line.extraFee !== 0 || line.shareRatio !== 15 || line.taxRate !== 0 || line.discountRate !== 1)
 }
 
