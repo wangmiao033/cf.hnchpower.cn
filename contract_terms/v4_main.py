@@ -25,6 +25,7 @@ try:
         _require_permission,
     )
     from .matcher import summarize_results
+    from .channel_line_verification import apply_channel_line_fee_authority
 except ImportError:  # Vercel imports modules from the service root.
     from v3_main import (
         app as _v3_app,
@@ -33,6 +34,7 @@ except ImportError:  # Vercel imports modules from the service root.
         _require_permission,
     )
     from matcher import summarize_results
+    from channel_line_verification import apply_channel_line_fee_authority
 
 
 app = FastAPI(
@@ -46,6 +48,28 @@ app.router.routes.extend(list(_v3_app.router.routes))
 CASE_STATUSES = {"pending", "processing", "resolved"}
 HANDLING_TYPES = {"edit_bill", "accept_difference", "adjustment", "carry_forward"}
 REASON_TYPES = {"商务协商", "四舍五入", "历史遗留", "特殊活动", "其他"}
+
+# A genuine line-level financial term mismatch needs a disposition even when a
+# tiny amount (e.g. ¥0.65) happens to fall within the ¥0.05 rounding tolerance.
+# Identity and authorization checks are deliberately never covered by this set.
+CHANNEL_FINANCIAL_CHECKS = frozenset({"share_rate", "channel_fee_rate", "tax_rate"})
+
+
+def _financial_field_failures(bill_type: str, line: dict) -> list[dict]:
+    if bill_type != "channel":
+        return []
+    return [
+        check for check in (line.get("checks") or [])
+        if check.get("key") in CHANNEL_FINANCIAL_CHECKS and check.get("status") == "fail"
+    ]
+
+
+def _requires_difference_case(bill_type: str, line: dict) -> bool:
+    amount = line.get("contract_amount") or {}
+    if amount.get("status") == "fail" and amount.get("expected_amount") is not None:
+        return True
+    return bool(_financial_field_failures(bill_type, line))
+
 
 
 def _now_iso() -> str:
@@ -302,7 +326,7 @@ def _sync_difference_cases(
         amount = line.get("contract_amount") or {}
         line_id = str(line.get("line_id") or "legacy")
         existing = _case_for_line(conn, bill_type, bill_id, line_id)
-        if amount.get("status") != "fail" or amount.get("expected_amount") is None:
+        if not _requires_difference_case(bill_type, line):
             if (
                 existing
                 and existing.get("status") in {"pending", "processing"}
@@ -395,12 +419,21 @@ def _sync_difference_cases(
                 ],
             )
             direction = "少结" if values["variance_direction"] == "under" else "多结"
+            field_failures = _financial_field_failures(bill_type, line)
+            detail = (
+                "；".join(
+                    f"{check.get('label') or check.get('key')}：账单 {check.get('bill_value')} / 合同 {check.get('contract_value')}"
+                    for check in field_failures
+                )
+                if field_failures else
+                f"合同应结 ¥{values['expected_amount']:.2f}，账单实际 ¥{values['actual_amount']:.2f}，{direction} ¥{abs(values['difference_amount']):.2f}。"
+            )
             _event(
                 conn,
                 case_id,
                 "detected",
-                "发现合同金额差异",
-                f"合同应结 ¥{values['expected_amount']:.2f}，账单实际 ¥{values['actual_amount']:.2f}，{direction} ¥{abs(values['difference_amount']):.2f}。",
+                "发现合同结算规则差异" if field_failures else "发现合同金额差异",
+                detail,
                 actor,
                 snapshot,
             )
@@ -464,22 +497,27 @@ def _apply_case_dispositions(reconciliation: dict, case_map: dict[str, dict]) ->
             line["difference_case"] = _case_payload(case)
 
         amount = line.get("contract_amount") or {}
-        if amount.get("status") == "fail":
-            if case and case.get("status") in {"processing", "resolved"} and case.get("handling_type"):
+        field_failures = _financial_field_failures(bill_type, line)
+        if amount.get("status") == "fail" or field_failures:
+            allowed_failure_keys = {"contract_standard_settlement"} | CHANNEL_FINANCIAL_CHECKS
+            other_fail = any(
+                check.get("status") == "fail" and check.get("key") not in allowed_failure_keys
+                for check in (line.get("checks") or [])
+            )
+            if (
+                case
+                and case.get("status") in {"processing", "resolved"}
+                and case.get("handling_type") in {"accept_difference", "adjustment", "carry_forward"}
+                and not other_fail
+            ):
                 handled_count += 1
-                non_amount_fail = any(
-                    check.get("status") == "fail" and check.get("key") != "contract_standard_settlement"
-                    for check in (line.get("checks") or [])
-                )
-                if not non_amount_fail:
-                    line["status"] = "warning" if case.get("status") == "processing" else "pass"
-                    handling_label = {
-                        "edit_bill": "待修改账单",
-                        "accept_difference": "已接受差异",
-                        "adjustment": "已生成补差项",
-                        "carry_forward": "待下月冲抵",
-                    }.get(case.get("handling_type"), "差异处理中")
-                    line["message"] = f"{handling_label} · ¥{abs(_float(case.get('difference_amount'))):.2f}"
+                line["status"] = "warning" if case.get("status") == "processing" else "pass"
+                handling_label = {
+                    "accept_difference": "已接受差异",
+                    "adjustment": "已生成补差项",
+                    "carry_forward": "待下月冲抵",
+                }.get(case.get("handling_type"), "差异处理中")
+                line["message"] = f"{handling_label} · 原合同规则保留，实际结算不改动"
             else:
                 unresolved_count += 1
         lines.append(line)
@@ -519,6 +557,9 @@ def _reconcile_data_v4(
     actor: str = "system",
 ) -> dict:
     base = _reconcile_data_v3(conn, bill_type, bill_id)
+    # Correct per-game channel fees before recording a discrepancy: otherwise a
+    # legitimate line rule is mistaken for the header's unrelated fee rate.
+    base = apply_channel_line_fee_authority(conn, bill_type, bill_id, base)
     cases = _sync_difference_cases(conn, bill_type, bill_id, base, actor)
     return _apply_case_dispositions(base, cases)
 
