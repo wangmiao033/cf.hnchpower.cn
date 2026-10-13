@@ -151,3 +151,29 @@
     display: grid;
   }
 }
+
+
+/* Locked channel bills keep the compact status controls, but always display detail below. */
+.locked-bill-edit-page.has-readonly-details {
+  display: block;
+  min-height: 0;
+}
+
+.locked-bill-edit-page.has-readonly-details .locked-bill-edit-card {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 18px 22px;
+  box-shadow: none;
+}
+
+.locked-bill-readonly-content {
+  width: 100%;
+  min-width: 0;
+  margin-top: 14px;
+}
+
+@media (max-width: 640px) {
+  .locked-bill-edit-page.has-readonly-details .locked-bill-edit-card {
+    padding: 14px;
+  }
+}

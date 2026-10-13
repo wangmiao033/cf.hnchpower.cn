@@ -3,12 +3,15 @@ import { useAppState } from '@/app/AppStateContext.jsx'
 import PageContainer from '@/components/layout/PageContainer.jsx'
 import BillScanAttachments from '@/components/billing/BillScanAttachments.jsx'
 import ChannelBillingForm from '@/components/channel/ChannelBillingForm.jsx'
+import ChannelBillReadonlyView from '@/components/channel/ChannelBillReadonlyView.jsx'
+import LockedBillEditNotice from '@/components/reconciliation/LockedBillEditNotice.jsx'
 import ChannelCumulativeSettlementCard from '@/components/channel/ChannelCumulativeSettlementCard.jsx'
 import ContractDifferenceActionPanel from '@/components/reconciliation/ContractDifferenceActionPanel.jsx'
 import ChannelSmartEntryBar from '@/components/channel/ChannelSmartEntryBar.jsx'
 import { findExactPartner } from '@/components/shared/PartnerPicker.jsx'
 import { CoreBillLoadingState } from '@/pages/CoreBillLoadingState.jsx'
 import { VIEWS } from '@/app/routes.js'
+import { isBillLockedStatus } from '@/domain/reconciliation/billLifecycle.js'
 import { apiChannelRowToFrontend, getChannelRecord } from '@/lib/api/channel.ts'
 import { ContractDifferenceBlockedError, transitionBillLifecycle } from '@/lib/api/billLifecycle.ts'
 import { getRecentApiErrorMessage } from '@/lib/api/client.ts'
@@ -113,6 +116,7 @@ function CoreChannelBillFormPage({ mode }) {
     setActiveView,
     setNavigationBlocker,
     clearNavigationBlocker,
+    openBill360,
     channelEditRecordId,
     channelReturnView
   } = useAppState()
@@ -509,6 +513,24 @@ function CoreChannelBillFormPage({ mode }) {
 
   if (isEdit && !stableRecord) {
     return <EmptyState title="未找到渠道账单" onBack={goList} />
+  }
+
+  // The record detail API is authoritative even when the list snapshot is absent or stale.
+  // Never render the editable form for a confirmed/settled channel bill.
+  if (isEdit && stableRecord && isBillLockedStatus(stableRecord.status)) {
+    return (
+      <LockedBillEditNotice
+        billType="channel"
+        record={stableRecord}
+        onOpen360={() => {
+          goList()
+          openBill360('channel', String(stableRecord.id), stableRecord)
+        }}
+        onBack={goList}
+      >
+        <ChannelBillReadonlyView recordId={String(stableRecord.id)} fallbackRecord={stableRecord} />
+      </LockedBillEditNotice>
+    )
   }
 
   const zeroSettlementPreview = isZeroSettlement(previewAmount)
