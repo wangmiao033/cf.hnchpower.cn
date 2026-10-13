@@ -48,6 +48,8 @@ export default function ChannelFlatLedger({
   onDetail,
   onPrefetch,
   onReceipt,
+  onInvoice,
+  onMergeInvoice,
   onEdit,
   onVoid,
   onArchive,
@@ -114,6 +116,11 @@ export default function ChannelFlatLedger({
           <span>筛选后 {rows.length} 张账单 · 无需展开渠道 · 每张原始账单只计一次</span>
         </div>
         <div className="channel-flat-ledger__head-actions">
+          {selectedIds.length > 0 ? (
+            <button type="button" className="channel-flat-ledger__merge-button" disabled={busy || !apiEnabled} onClick={onMergeInvoice}>
+              {selectedIds.length > 1 ? '合并开票（' + selectedIds.length + '）' : '选中账单开票（1）'}
+            </button>
+          ) : null}
           {statusLoading ? <span>核对累计状态中…</span> : null}
           {statusError ? <span className="is-warning">累计状态读取失败，收款仍由后台校验</span> : null}
           <label>
@@ -205,6 +212,7 @@ export default function ChannelFlatLedger({
                               title={cumulative ? '已进入累计结算池，不能按单月收款' : statusLoading ? '正在核对累计结算状态' : '登记渠道收款'}
                               onClick={() => onReceipt?.(row)}>{settled ? '已结清' : cumulative ? '累计中' : '收款'}</button>
                           )}
+                          <button type="button" className="is-invoice" disabled={busy || !apiEnabled} onClick={() => onInvoice?.(row)} title="核对剩余可开票金额并登记正式发票">发票</button>
                           <button type="button" onClick={() => onEdit?.(row)}>编辑</button>
                           <button type="button" className="is-danger" disabled={busy} onClick={() => onVoid?.(row)}>作废</button>
                         </>
