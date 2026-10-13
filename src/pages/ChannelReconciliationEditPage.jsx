@@ -2,6 +2,7 @@ import React from 'react'
 import { useAppState } from '@/app/AppStateContext.jsx'
 import { VIEWS } from '@/app/routes.js'
 import LockedBillEditNotice from '@/components/reconciliation/LockedBillEditNotice.jsx'
+import ChannelBillReadonlyView from '@/components/channel/ChannelBillReadonlyView.jsx'
 import { isBillLockedStatus } from '@/domain/reconciliation/billLifecycle.js'
 import CoreChannelBillFormPage from './CoreChannelBillFormPage.jsx'
 import './ChannelBillInputColumns.css'
@@ -28,7 +29,9 @@ function ChannelReconciliationEditPage() {
           openBill360('channel', String(record.id), record)
         }}
         onBack={() => setActiveView(channelReturnView || VIEWS.RECON_CHANNEL)}
-      />
+      >
+        <ChannelBillReadonlyView recordId={String(record.id)} fallbackRecord={record} />
+      </LockedBillEditNotice>
     )
   }
 
