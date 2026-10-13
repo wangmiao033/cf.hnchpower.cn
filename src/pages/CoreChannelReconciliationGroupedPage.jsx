@@ -12,6 +12,7 @@ import {
 } from '@/domain/reconciliation/sharedBillMonthOptions.js'
 import ChannelReceiptDrawer from '@/components/channel/ChannelReceiptDrawer.jsx'
 import ChannelFlatLedger from '@/components/channel/ChannelFlatLedger.jsx'
+import ChannelInvoiceMergeDialog from '@/components/channel/ChannelInvoiceMergeDialog.jsx'
 import { matchesChannelLedgerFilters, ledgerBillGames, sortChannelLedgerRows } from '@/domain/channel/channelFlatLedgerFilters.js'
 import './ChannelLedgerView.css'
 import ChannelCumulativeLedgerPanel from '@/components/channel/ChannelCumulativeLedgerPanel.jsx'
@@ -192,6 +193,7 @@ function mapChannelImportRow(row) {
 function CoreChannelReconciliationGroupedPage() {
   const {
     recon,
+    invoice,
     settings,
     showToast,
     setActiveView,
@@ -229,6 +231,7 @@ function CoreChannelReconciliationGroupedPage() {
     setVoidError('')
   }, [])
   const [receiptRecord, setReceiptRecord] = useState(null)
+  const [invoiceTargets, setInvoiceTargets] = useState(null)
   const [archiveState, setArchiveState] = useState({ archived_ids: [], eligible_ids: [], items: [], auto_archive_days: 7 })
   const [archiveLoading, setArchiveLoading] = useState(true)
   const [archiveWorkingId, setArchiveWorkingId] = useState('')
@@ -583,6 +586,18 @@ function CoreChannelReconciliationGroupedPage() {
     setVoidReason('')
     setVoidError('')
   }
+  const openInvoiceMerge = (targets) => {
+    if (!recon.channelApiEnabled) {
+      showToast('渠道账单服务暂不可用，无法核对发票关联余额', 'error')
+      return
+    }
+    if (!Array.isArray(targets) || !targets.length) {
+      showToast('请先勾选需要开票的账单', 'info')
+      return
+    }
+    setInvoiceTargets([...targets])
+  }
+
   const handleBulkVoid = () => openVoidDialog(selectedRows.filter((row) => !isCancelledRow(row)))
   const handleSingleVoid = (row) => {
     if (!isCancelledRow(row)) openVoidDialog([row])
@@ -899,6 +914,8 @@ function CoreChannelReconciliationGroupedPage() {
           onDetail={row => openBill360('channel', String(row.id), row)}
           onPrefetch={row => prefetchBill360?.('channel', String(row.id))}
           onReceipt={setReceiptRecord}
+          onInvoice={row => openInvoiceMerge([row])}
+          onMergeInvoice={() => openInvoiceMerge(selectedRows)}
           onEdit={row => openChannelReconciliationEdit(String(row.id))}
           onVoid={handleSingleVoid}
           onArchive={handleArchive}
@@ -923,6 +940,9 @@ function CoreChannelReconciliationGroupedPage() {
             {selectedRows.length > 0 ? (
               <div className="core-recon-selection-actions">
                 <button type="button" onClick={() => setSelectedIds([])} disabled={isWorking}>取消选择</button>
+                 <button type="button" className="channel-group-merge-invoice" onClick={() => openInvoiceMerge(selectedRows)} disabled={isWorking || !recon.channelApiEnabled}>
+                   {selectedRows.length > 1 ? '合并开票（' + selectedRows.length + '）' : '选中账单开票'}
+                 </button>
                 <button type="button" className="danger" onClick={() => void handleBulkVoid()} disabled={isWorking}>
                   {isWorking ? '处理中…' : `作废所选（${selectedRows.length}）`}
                 </button>
@@ -1097,7 +1117,8 @@ function CoreChannelReconciliationGroupedPage() {
                                           onClick={() => setReceiptRecord(row)}
                                         >{settled ? '已结清' : poolDeferred ? '累计中' : '收款'}</button>
                                       )}
-                                      <button type="button" onClick={() => openChannelReconciliationEdit(String(row.id))}>编辑</button>
+                                      <button type="button" className="channel-group-single-invoice" disabled={isWorking || !recon.channelApiEnabled} onClick={() => openInvoiceMerge([row])}>发票</button>
+                                       <button type="button" onClick={() => openChannelReconciliationEdit(String(row.id))}>编辑</button>
                                       <button type="button" className="danger" disabled={isWorking} title="作废后账单会移入垃圾桶，历史、关联关系和操作日志仍保留" onClick={() => void handleSingleVoid(row)}>作废</button>
                                     </>
                                   )}
@@ -1133,6 +1154,22 @@ function CoreChannelReconciliationGroupedPage() {
           {voidError && <p role="alert" style={{ color: 'var(--admin-danger)', marginTop: 8 }}>{voidError}</p>}
         </>}
       />
+
+      {invoiceTargets ? (
+        <ChannelInvoiceMergeDialog
+          rows={invoiceTargets}
+          showToast={showToast}
+          onClose={() => setInvoiceTargets(null)}
+          onIssued={async () => {
+            setInvoiceTargets(null)
+            setSelectedIds([])
+            await Promise.all([
+              recon.refetchChannelFromApi?.(),
+              invoice?.refetchInvoiceFromApi?.()
+            ])
+          }}
+        />
+      ) : null}
 
       <ChannelReceiptDrawer
         open={Boolean(receiptRecord)}
