@@ -46,6 +46,23 @@ export function getBillLifecycle(
   return apiGet(`/api/bill-lifecycle/${encodeURIComponent(billType)}/${encodeURIComponent(billId)}`)
 }
 
+/**
+ * Explicit ADMIN action for a previously recorded <= ¥0.50 channel contract
+ * difference. Server validates settled identity/authorization, actual saved
+ * amounts, and approved cases; it atomically logs the reason and locks the bill.
+ * Never call the normal transition's optimistic preflight bypass for this.
+ */
+export function confirmApprovedChannelSmallVariance(
+  billId: string,
+  reason: string
+): Promise<BillLifecycle> {
+  return apiPost<BillLifecycle>(
+    '/api/bill-lifecycle/channel/' + encodeURIComponent(billId) + '/confirm-small-variance',
+    { reason }
+  )
+}
+
+
 type ContractDifferenceApproval = {
   approved: boolean
   items: ContractDifferenceCase[]
