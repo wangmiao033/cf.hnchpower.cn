@@ -483,7 +483,7 @@ def _sync_difference_cases(
     return case_map
 
 
-def _apply_case_dispositions(reconciliation: dict, case_map: dict[str, dict]) -> dict:
+def _apply_case_dispositions(reconciliation: dict, case_map: dict[str, dict], bill_type: str = 'rd') -> dict:
     result = dict(reconciliation)
     lines: list[dict] = []
     handled_count = 0
@@ -561,7 +561,7 @@ def _reconcile_data_v4(
     # legitimate line rule is mistaken for the header's unrelated fee rate.
     base = apply_channel_line_fee_authority(conn, bill_type, bill_id, base)
     cases = _sync_difference_cases(conn, bill_type, bill_id, base, actor)
-    return _apply_case_dispositions(base, cases)
+    return _apply_case_dispositions(base, cases, bill_type)
 
 
 def _next_adjustment_no(conn: psycopg.Connection) -> str:
