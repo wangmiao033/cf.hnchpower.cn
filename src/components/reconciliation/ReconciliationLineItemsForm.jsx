@@ -608,7 +608,6 @@ function ReconciliationLineItemsForm({
         })}`
       })
     } catch (error) {
-      if (!autoFlowReadRef.current || autoFlowRevisionRef.current !== requestRevision) return
       setFlowStatus(lineId, {
         type: 'error',
         label: '读取失败',
