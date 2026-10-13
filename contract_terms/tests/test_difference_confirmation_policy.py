@@ -1,6 +1,7 @@
 import unittest
 
 from v8_main import _apply_confirmation_policy
+from v4_main import _requires_difference_case
 
 
 class DifferenceConfirmationPolicyTests(unittest.TestCase):
@@ -60,6 +61,48 @@ class DifferenceConfirmationPolicyTests(unittest.TestCase):
         )
         self.assertEqual(updated["summary"]["fail_count"], 1)
         self.assertEqual(updated["summary"]["unresolved_difference_lines"], 1)
+
+    def rate_only_result(self, handling_type=None, status="pending", authorization="pass"):
+        result = self.result(handling_type, case_status=status, authorization_status=authorization)
+        line = result["lines"][0]
+        line["contract_amount"] = {
+            "status": "pass", "actual_amount": 0.65, "expected_amount": 0.61
+        }
+        line["checks"][1]["status"] = "pass"
+        line["checks"].extend([
+            {"key": "share_rate", "status": "fail", "bill_value": 28, "contract_value": 25},
+            {"key": "channel_fee_rate", "status": "fail", "bill_value": 5, "contract_value": 0},
+        ])
+        return result
+
+    def test_channel_rate_only_mismatch_gets_a_case_even_if_amount_is_within_tolerance(self):
+        result = self.rate_only_result()
+        self.assertTrue(_requires_difference_case("channel", result["lines"][0]))
+        self.assertFalse(_requires_difference_case("rd", result["lines"][0]))
+
+    def test_rate_only_mismatch_still_blocks_before_explicit_confirmation(self):
+        result = self.rate_only_result()
+        updated = _apply_confirmation_policy(result)
+        self.assertEqual(updated["summary"]["fail_count"], 1)
+        self.assertEqual(updated["summary"]["unresolved_difference_lines"], 1)
+
+    def test_explicit_special_settlement_accepts_28_percent_share_and_5_percent_fee(self):
+        result = self.rate_only_result("accept_difference", status="resolved")
+        updated = _apply_confirmation_policy(result)
+        self.assertEqual(updated["summary"]["fail_count"], 0)
+        self.assertEqual(updated["summary"]["handled_difference_lines"], 1)
+        self.assertEqual(updated["lines"][0]["status"], "pass")
+
+    def test_special_settlement_cannot_override_contract_authorization_failure(self):
+        result = self.rate_only_result("accept_difference", status="resolved", authorization="fail")
+        updated = _apply_confirmation_policy(result)
+        self.assertEqual(updated["summary"]["fail_count"], 1)
+
+    def test_special_settlement_cannot_override_unrelated_identity_failure(self):
+        result = self.rate_only_result("accept_difference", status="resolved")
+        result["lines"][0]["checks"].append({"key": "partner_identity", "status": "fail"})
+        updated = _apply_confirmation_policy(result)
+        self.assertEqual(updated["summary"]["fail_count"], 1)
 
 
 if __name__ == "__main__":

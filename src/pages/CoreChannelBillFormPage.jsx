@@ -14,6 +14,9 @@ import { VIEWS } from '@/app/routes.js'
 import { isBillLockedStatus } from '@/domain/reconciliation/billLifecycle.js'
 import { apiChannelRowToFrontend, getChannelRecord } from '@/lib/api/channel.ts'
 import { ContractDifferenceBlockedError, transitionBillLifecycle } from '@/lib/api/billLifecycle.ts'
+import { getContractBillReconciliation } from '@/lib/api/contractTerms.ts'
+import { listContractDifferenceCases, handleContractDifferenceCase } from '@/lib/api/contractDifferences.ts'
+import { prepareChannelSpecialSettlement } from '@/domain/channel/channelSpecialSettlement.js'
 import { getRecentApiErrorMessage } from '@/lib/api/client.ts'
 import {
   getCachedEditRecord,
@@ -484,6 +487,83 @@ function CoreChannelBillFormPage({ mode }) {
     }
   }
 
+  // One explicit finance approval replaces the multi-screen special-settlement
+  // workflow. It acts on already-persisted values: no PUT, no fee/share rewrite.
+  const confirmSavedSpecialSettlement = async () => {
+    if (!isEdit || !channelEditRecordId || reviewing) return
+    if (safety.dirty) {
+      reportIssue('当前还有未保存的表单修改，请先点击“保存修改”，再按结算确认函核对。', {
+        kind: 'form',
+        title: '请先保存账单金额',
+        saved: false
+      })
+      return
+    }
+    setReviewing(true)
+    const billId = String(channelEditRecordId)
+    try {
+      const persisted = apiChannelRowToFrontend(await getChannelRecord(billId))
+      // A fresh preflight also creates rate-only difference cases on the server,
+      // even for a ¥0.04 monetary variance within the rounding tolerance.
+      await getContractBillReconciliation('channel', billId)
+      const latest = await listContractDifferenceCases({ billType: 'channel', billId, limit: 100 })
+      const plan = prepareChannelSpecialSettlement({
+        billId,
+        record: persisted,
+        cases: latest.items || []
+      })
+      if (plan.error) throw new Error(plan.error)
+
+      const details = plan.actions.map((item) => item.description).join('\n')
+      const approval = window.confirm(
+        '请确认已核对本期渠道分成结算确认函。\n\n' +
+        (details || '相关合同差异已人工处理。') + '\n\n' +
+        '本次账单结算金额：' + money(persisted.settlementAmount) + '\n' +
+        '确认后将登记本期特殊结算依据并完成核对。\n' +
+        '不会修改原合同、分成、通道费、结算金额或收款数据。'
+      )
+      if (!approval) return
+
+      for (const item of plan.actions) {
+        await handleContractDifferenceCase(item.caseId, {
+          action: 'accept_difference',
+          reason_type: item.reasonType,
+          description: item.description,
+          evidence: item.evidence
+        })
+      }
+      const zeroSettlement = isZeroSettlement(persisted.settlementAmount)
+      await transitionBillLifecycle('channel', billId, 'confirmed', '按本期渠道结算确认函进行特殊结算')
+      if (zeroSettlement) {
+        await transitionBillLifecycle('channel', billId, 'completed', '')
+      }
+      setInlineIssue(null)
+      setDifferenceSeedItems([])
+      invalidateEditRecord('channel', billId)
+      try {
+        await recon.refetchChannelFromApi?.()
+      } catch (refreshError) {
+        console.warn('特殊结算核对已完成，但账单列表刷新失败', refreshError)
+      }
+      showToast('账单已按本期结算确认函核对完成，结算金额未修改', 'success')
+      goList()
+    } catch (error) {
+      const message = error instanceof Error && error.message
+        ? error.message
+        : '特殊结算核对失败，账单金额保持不变。'
+      reportIssue(message, {
+        kind: 'contract',
+        title: '账单已保存，特殊结算核对未完成',
+        saved: true,
+        toast: false,
+        autoLocate: false
+      })
+      showToast('账单金额保持已保存状态；' + message, 'error')
+    } finally {
+      setReviewing(false)
+    }
+  }
+
   const discardDraft = () => {
     const confirmed = window.confirm('确定清除当前本机草稿并恢复为空白/服务器版本吗？')
     if (confirmed) {
@@ -602,17 +682,24 @@ function CoreChannelBillFormPage({ mode }) {
             <p>{inlineIssue.message}</p>
             <small>
               {inlineIssue.saved
-                ? '刚才的账单修改已经写入服务器，不需要重新录入。处理下面的核对问题后，再重新确认即可。'
+                ? inlineIssue.kind === 'contract'
+                  ? '账单金额已保存，无需改成合同默认费率。若本期结算确认函属实，可直接确认特殊结算并锁单。'
+                  : '刚才的账单修改已经写入服务器，不需要重新录入。处理下面的核对问题后，再重新确认即可。'
                 : '点击“定位问题”会直接跳到对应明细行、合同规则区或调整区，不需要自己逐项查找。'}
             </small>
           </div>
           <div className="core-bill-inline-issue__actions">
             <button type="button" onClick={() => locateIssue()}>定位问题</button>
+            {inlineIssue.kind === 'contract' && isEdit && inlineIssue.saved ? (
+              <button type="button" className="is-primary" disabled={reviewing} onClick={() => void confirmSavedSpecialSettlement()}>
+                {reviewing ? '正在核对本期结算…' : '按结算确认函保留金额并完成核对'}
+              </button>
+            ) : null}
             {inlineIssue.kind === 'contract' && isEdit ? (
-              <button type="button" className="is-primary" onClick={openContractDifferenceWorkbench}>打开合同差异处理</button>
+              <button type="button" onClick={openContractDifferenceWorkbench} disabled={reviewing}>查看合同差异详情</button>
             ) : null}
             {isEdit && inlineIssue.saved ? (
-              <button type="button" disabled={reviewing} onClick={() => void confirmReview()}>修正后重新确认</button>
+              <button type="button" disabled={reviewing} onClick={() => void confirmReview()}>重新检测合同</button>
             ) : null}
             <button type="button" className="is-quiet" onClick={() => setInlineIssue(null)}>关闭提示</button>
           </div>
