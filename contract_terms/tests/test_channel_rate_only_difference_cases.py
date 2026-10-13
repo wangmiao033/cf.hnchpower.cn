@@ -63,20 +63,20 @@ class ChannelRateOnlyDifferenceCasesTest(unittest.TestCase):
 
     def test_pending_field_mismatch_stays_blocked(self):
         base, case = result()
-        updated = _apply_case_dispositions(base, {"L-1": case})
+        updated = _apply_case_dispositions(base, {"L-1": case}, "channel")
         self.assertEqual(updated["summary"]["fail_count"], 1)
         self.assertEqual(updated["summary"]["unresolved_difference_lines"], 1)
 
     def test_accepted_special_settlement_closes_rate_only_mismatch(self):
         base, case = result(status="resolved", handling_type="accept_difference")
-        updated = _apply_case_dispositions(base, {"L-1": case})
+        updated = _apply_case_dispositions(base, {"L-1": case}, "channel")
         self.assertEqual(updated["summary"]["fail_count"], 0)
         self.assertEqual(updated["summary"]["handled_difference_lines"], 1)
 
     def test_authorization_failure_does_not_become_accepted(self):
         base, case = result(status="resolved", handling_type="accept_difference",
                             authorization_status="fail")
-        updated = _apply_case_dispositions(base, {"L-1": case})
+        updated = _apply_case_dispositions(base, {"L-1": case}, "channel")
         self.assertEqual(updated["summary"]["fail_count"], 1)
 
 
