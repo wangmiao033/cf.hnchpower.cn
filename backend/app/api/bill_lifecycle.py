@@ -140,7 +140,7 @@ def confirm_approved_channel_small_variance(
         ORDER BY updated_at DESC, id DESC
         LIMIT 300
     """), {"bill_id": bill_id}).mappings().all()]
-    assessment = assess_channel_small_variance_approval(bill_id, rows, cases)
+    assessment = assess_channel_small_variance_approval(bill_id, rows, cases, bill.channel_fee_rate)
 
     db.add(OperationLog(
         id=str(uuid4()),
