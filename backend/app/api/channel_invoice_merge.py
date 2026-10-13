@@ -41,20 +41,18 @@ def distribute_gross(amounts: list[int], net_cents: int, tax_cents: int) -> list
     gross = sum(amounts)
     if gross <= 0 or net_cents < 0 or tax_cents < 0 or net_cents + tax_cents != gross:
         raise ValueError("amount_mismatch")
-    remaining_net = net_cents
-    remaining_tax = tax_cents
     result = []
-    for index, amount in enumerate(amounts):
-        if index == len(amounts) - 1:
-            net, tax = remaining_net, remaining_tax
-        else:
-            net = (amount * net_cents + gross // 2) // gross
-            tax = amount - net
+    accumulated_gross = 0
+    assigned_net = 0
+    for amount in amounts:
+        accumulated_gross += amount
+        cumulative_net = (accumulated_gross * net_cents + gross // 2) // gross
+        net = cumulative_net - assigned_net
+        tax = amount - net
         if net < 0 or tax < 0 or net > amount:
             raise ValueError("invalid_tax_allocation")
         result.append((net, tax))
-        remaining_net -= net
-        remaining_tax -= tax
+        assigned_net += net
     return result
 
 
