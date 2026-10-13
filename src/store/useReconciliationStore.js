@@ -36,6 +36,7 @@ import {
   frontendChannelRecordToPayload
 } from '@/lib/api/channel.ts'
 import { buildChannelBillFromSingleGameForm, recordToFormData } from '@/domain/channel/channelBillingForm.js'
+import { unifyLegacyChannelNamesForSamePartner } from '@/domain/channel/channelAliasIdentity.js'
 
 function normalizeLocalChannelRecords(saved) {
   return (saved || []).map((r) => {
@@ -876,10 +877,15 @@ export function useReconciliationStore(settings, showToast, options = {}) {
     [settings]
   )
 
+  const displayChannelRecords = useMemo(
+    () => unifyLegacyChannelNamesForSamePartner(channelRecords),
+    [channelRecords]
+  )
+
   return {
     records,
     setRecords,
-    channelRecords,
+    channelRecords: displayChannelRecords,
     channelApiEnabled,
     reconciliationApiEnabled,
     searchTerm,

@@ -6,6 +6,7 @@
 import { channelBillMonths } from '@/domain/reconciliation/sharedBillMonthOptions.js'
 import { getChannelLineItems } from '@/domain/channel/channelAggregates.js'
 import { getChannelBillNumber } from '@/utils/channelBillNumber.js'
+import { unifyLegacyChannelNamesForSamePartner } from './channelAliasIdentity.js'
 
 const MONTH_PATTERN = /^20\d{2}-(0[1-9]|1[0-2])$/
 
@@ -88,7 +89,7 @@ export function auditChannelBillMonths(records = [], options = {}) {
   const months = channelAuditMonths(options)
   const endMonth = months[months.length - 1]
   const map = new Map()
-  const sourceRows = filterScopedChannelAuditRows(records, options)
+  const sourceRows = filterScopedChannelAuditRows(unifyLegacyChannelNamesForSamePartner(records), options)
   const matchingChannelCount = new Set(
     sourceRows.filter(row => row && !cancelled(row)).map(channelKey).filter(Boolean)
   ).size
