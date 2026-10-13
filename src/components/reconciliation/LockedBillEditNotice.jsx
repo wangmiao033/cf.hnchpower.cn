@@ -10,7 +10,8 @@ export default function LockedBillEditNotice({
   billType,
   record,
   onOpen360,
-  onBack
+  onBack,
+  children
 }) {
   const { recon, showToast } = useAppState()
   const [showReturnForm, setShowReturnForm] = useState(false)
@@ -49,15 +50,16 @@ export default function LockedBillEditNotice({
   }
 
   return (
-    <PageContainer hideHeader className="locked-bill-edit-page">
+    <PageContainer hideHeader className={'locked-bill-edit-page' + (children ? ' has-readonly-details' : '')}>
       <section className="locked-bill-edit-card">
         <span className="locked-bill-edit-mark">锁</span>
         <div>
           <span className="locked-bill-edit-eyebrow">账单已核对并锁定</span>
           <h1>当前状态：{billStatusLabel(record?.status)}</h1>
           <p>
-            这张账单已经核对，金额、分成、产品和账期等业务字段已锁定。
-            如果发现需要调整，点“退回修改”并填写原因即可，不需要理解其他状态流转。
+            {children
+              ? '这张账单已锁定业务字段，但可在下方查看完整历史明细。如确需修改，请退回并说明原因。'
+              : '这张账单已经核对，金额、分成、产品和账期等业务字段已锁定。如果发现需要调整，点“退回修改”并填写原因即可。'}
           </p>
 
           {showReturnForm ? (
@@ -110,6 +112,7 @@ export default function LockedBillEditNotice({
           <small>{billName} · 退回原因和再次核对都会自动写入操作日志。</small>
         </div>
       </section>
+      {children ? <div className="locked-bill-readonly-content">{children}</div> : null}
     </PageContainer>
   )
 }
