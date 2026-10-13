@@ -45,7 +45,7 @@ def _snapshot_checks(case: dict) -> list[dict]:
     return checks if isinstance(checks, list) else []
 
 
-def _approval_matches_line(case: dict, line: Any) -> bool:
+def _approval_matches_line(case: dict, line: Any, header_fee_rate: Any = None) -> bool:
     if (
         case.get("status") != "resolved"
         or case.get("handling_type") != "accept_difference"
@@ -74,7 +74,15 @@ def _approval_matches_line(case: dict, line: Any) -> bool:
             elif check.get("key") == "tax_rate":
                 latest = getattr(line, "tax_rate", None)
             else:
-                latest = getattr(line, "channel_fee_rate", None)
+                mode = str(getattr(line, "channel_fee_mode", None) or "").strip().lower()
+                if mode == "none" or str(getattr(line, "settlement_rule_code", None) or "") == "share_only":
+                    latest = 0
+                else:
+                    latest = getattr(line, "channel_fee_rate", None)
+                    if latest is None:
+                        # Historical percent-fee lines may inherit their fee
+                        # from the parent bill instead of persisting a rate.
+                        latest = header_fee_rate
             if latest is None:
                 if check.get("status") == "fail":
                     return False
@@ -97,6 +105,7 @@ def assess_channel_small_variance_approval(
     bill_id: str,
     lines: list[Any],
     cases: list[dict],
+    header_fee_rate: Any = None,
 ) -> dict:
     """Return unique approved cases and cents; fail closed for stale/risky cases."""
     if not lines:
@@ -136,7 +145,7 @@ def assess_channel_small_variance_approval(
             )
 
         valid = next(
-            (case for case in line_cases if _approval_matches_line(case, line)),
+            (case for case in line_cases if _approval_matches_line(case, line, header_fee_rate)),
             None,
         )
         if valid is None:
