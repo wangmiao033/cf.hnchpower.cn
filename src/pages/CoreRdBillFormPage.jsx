@@ -2,6 +2,9 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useAppState } from '@/app/AppStateContext.jsx'
 import PageContainer from '@/components/layout/PageContainer.jsx'
 import BillScanAttachments from '@/components/billing/BillScanAttachments.jsx'
+import LockedBillEditNotice from '@/components/reconciliation/LockedBillEditNotice.jsx'
+import RdBillReadonlyView from '@/components/reconciliation/RdBillReadonlyView.jsx'
+import { isBillLockedStatus } from '@/domain/reconciliation/billLifecycle.js'
 import ContractDrivenRdEntry from '@/components/reconciliation/ContractDrivenRdEntry.jsx'
 import RdContractSmartEntry from '@/components/reconciliation/RdContractSmartEntry.jsx'
 import ContractDifferenceActionPanel from '@/components/reconciliation/ContractDifferenceActionPanel.jsx'
@@ -50,6 +53,7 @@ function CoreRdBillFormPage({ mode }) {
     settings,
     showToast,
     setActiveView,
+    openBill360,
     setNavigationBlocker,
     clearNavigationBlocker,
     reconEditRecordId,
@@ -264,6 +268,26 @@ function CoreRdBillFormPage({ mode }) {
 
   if (isEdit && !stableEditRecord) {
     return <EmptyState title="未找到研发账单" onBack={goList} />
+  }
+
+  // Always render reviewed bills as their complete server-backed details.
+  // They only enter the editable form after the user supplies an audited note
+  // and the backend transitions their status to pending.
+  if (isEdit && stableEditRecord && isBillLockedStatus(stableEditRecord.status)) {
+    return (
+      <LockedBillEditNotice
+        billType="rd"
+        record={stableEditRecord}
+        onEditApproved={retryLoad}
+        onOpen360={() => {
+          goList()
+          openBill360?.('rd', String(stableEditRecord.id), stableEditRecord)
+        }}
+        onBack={goList}
+      >
+        <RdBillReadonlyView record={stableEditRecord} />
+      </LockedBillEditNotice>
+    )
   }
 
   const currentRdRecord = contractSmartRecord || safety.currentRecord || safety.draftRecord || stableEditRecord || {}
