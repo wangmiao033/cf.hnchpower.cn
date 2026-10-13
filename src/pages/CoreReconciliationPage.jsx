@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { isBillLockedStatus } from '@/domain/reconciliation/billLifecycle.js'
 import { createPortal } from 'react-dom'
 import { useAppState } from '@/app/AppStateContext.jsx'
 import PageContainer from '@/components/layout/PageContainer.jsx'
@@ -737,7 +738,7 @@ function CoreReconciliationPage() {
                                 发票
                               </button>
                               <button type="button" onClick={() => openReconciliationEdit(String(row.id))}>
-                                编辑
+                                {isBillLockedStatus(row.status) ? '查看/修改' : '编辑'}
                               </button>
                               <button
                                 type="button"
