@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
+import { isBillLockedStatus } from '@/domain/reconciliation/billLifecycle.js'
 import { getChannelCumulativeBillStatuses } from '@/lib/api/channelCumulativeSettlement.ts'
 import {
   getChannelTotals,
@@ -213,7 +214,7 @@ export default function ChannelFlatLedger({
                               onClick={() => onReceipt?.(row)}>{settled ? '已结清' : cumulative ? '累计中' : '收款'}</button>
                           )}
                           <button type="button" className="is-invoice" disabled={busy || !apiEnabled} onClick={() => onInvoice?.(row)} title="核对剩余可开票金额并登记正式发票">发票</button>
-                          <button type="button" onClick={() => onEdit?.(row)}>编辑</button>
+                          <button type="button" onClick={() => onEdit?.(row)}>{isBillLockedStatus(row.status) ? '查看/修改' : '编辑'}</button>
                           <button type="button" className="is-danger" disabled={busy} onClick={() => onVoid?.(row)}>作废</button>
                         </>
                       )}
