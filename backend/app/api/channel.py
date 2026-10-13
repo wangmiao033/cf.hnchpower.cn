@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from uuid import uuid4
 
@@ -197,6 +198,47 @@ def _to_read(row: ChannelRecord) -> ChannelRecordRead:
     return base.model_copy(update={"items": item_reads})
 
 
+# Contract difference cases are keyed by line ID. A redundant save must NOT
+# delete/reinsert identical rows, or every approved difference becomes orphaned.
+# Real changes still replace IDs, requiring fresh contract verification.
+_CHANNEL_COMPUTED_LINE_FIELDS = {
+    "billing_amount", "share_amount", "system_settlement_amount",
+    "settlement_difference", "validation_status", "settlement_amount",
+}
+_CHANNEL_RULE_CONTEXT_FIELDS = {
+    "channel_name", "partner_name", "settlement_month",
+    "settlement_rule_code", "channel_fee_mode", "tax_mode",
+    "validation_tolerance", "channel_fee_rate", "dev_share_rate", "profit_rate",
+}
+
+
+def _channel_inputs_equal(before, after) -> bool:
+    if before is None or after is None:
+        return before is None and after is None
+    if isinstance(before, str) or isinstance(after, str):
+        return str(before).strip() == str(after).strip()
+    try:
+        a, b = Decimal(str(before)), Decimal(str(after))
+        return a.is_finite() and b.is_finite() and a == b
+    except (TypeError, ValueError, InvalidOperation):
+        return before == after
+
+
+def _channel_line_inputs_match(
+    saved_lines: list[ChannelRecordLineItem],
+    submitted: list[ChannelLineItemCreate],
+) -> bool:
+    if len(saved_lines) != len(submitted):
+        return False
+    for idx, (saved, item) in enumerate(zip(saved_lines, submitted)):
+        if int(saved.sort_order) != idx:
+            return False
+        inputs = item.model_dump(exclude=_CHANNEL_COMPUTED_LINE_FIELDS)
+        if any(not _channel_inputs_equal(getattr(saved, key, None), value) for key, value in inputs.items()):
+            return False
+    return True
+
+
 def _replace_line_items(db: Session, parent: ChannelRecord, items: list[ChannelLineItemCreate]) -> None:
     db.execute(delete(ChannelRecordLineItem).where(ChannelRecordLineItem.channel_record_id == parent.id))
     db.flush()
@@ -388,12 +430,27 @@ def update_channel_record(record_id: str, payload: ChannelRecordUpdate, db: Sess
     if row is None: raise HTTPException(status_code=404, detail={"error": "not_found", "id": record_id})
     data = payload.model_dump(exclude_unset=True); items_payload = data.pop("items", None)
     adjustment_touched = bool(SETTLEMENT_ADJUSTMENT_FIELDS.intersection(data))
+    prior_rule_context = {field: getattr(row, field) for field in _CHANNEL_RULE_CONTEXT_FIELDS}
     for key, value in data.items(): setattr(row, key, value)
+    rule_context_changed = any(
+        not _channel_inputs_equal(prior_rule_context[field], getattr(row, field))
+        for field in _CHANNEL_RULE_CONTEXT_FIELDS
+    )
     _validate_settlement_adjustment_row(row)
     row.updated_at = datetime.now(timezone.utc)
     if items_payload is not None:
         if not items_payload: raise HTTPException(status_code=422, detail={"error": "items_required", "message": "至少保留一行游戏明细"})
-        _replace_line_items(db, row, [ChannelLineItemCreate(**x) for x in items_payload]); _sync_denormalized_totals(row, db)
+        parsed_items = [ChannelLineItemCreate(**x) for x in items_payload]
+        existing_lines = db.execute(
+            select(ChannelRecordLineItem).where(ChannelRecordLineItem.channel_record_id == record_id)
+            .order_by(ChannelRecordLineItem.sort_order, ChannelRecordLineItem.id)
+        ).scalars().all()
+        if rule_context_changed or not _channel_line_inputs_match(existing_lines, parsed_items):
+            _replace_line_items(db, row, parsed_items)
+            _sync_denormalized_totals(row, db)
+        elif adjustment_touched:
+            _sync_denormalized_totals(row, db)
+        # Identical line inputs: keep their IDs and accepted contract case links.
     elif adjustment_touched:
         _sync_denormalized_totals(row, db)
     received = max(0.0, _receipt_total(db, record_id))

@@ -46,6 +46,31 @@ export function getBillLifecycle(
   return apiGet(`/api/bill-lifecycle/${encodeURIComponent(billType)}/${encodeURIComponent(billId)}`)
 }
 
+/**
+ * Explicit ADMIN action for a previously recorded <= ¥0.50 channel contract
+ * difference. Server validates settled identity/authorization, actual saved
+ * amounts, and approved cases; it atomically logs the reason and locks the bill.
+ * Never call the normal transition's optimistic preflight bypass for this.
+ */
+export async function confirmApprovedChannelSmallVariance(
+  billId: string,
+  reason: string
+): Promise<BillLifecycle> {
+  const lifecycle = await apiPost<BillLifecycle>(
+    '/api/bill-lifecycle/channel/' + encodeURIComponent(billId) + '/confirm-small-variance',
+    { reason }
+  )
+  // Align with normal bill confirmation: retain historical contract evidence
+  // even if the independently audited small-variance confirmation succeeded.
+  try {
+    await createContractReconciliationSnapshot('channel', billId, 'confirmed')
+  } catch (snapshotError) {
+    console.warn('Small-variance contract snapshot could not be saved', snapshotError)
+  }
+  return lifecycle
+}
+
+
 type ContractDifferenceApproval = {
   approved: boolean
   items: ContractDifferenceCase[]
