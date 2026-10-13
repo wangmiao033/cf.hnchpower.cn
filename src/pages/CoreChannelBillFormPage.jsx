@@ -3,6 +3,7 @@ import { useAppState } from '@/app/AppStateContext.jsx'
 import PageContainer from '@/components/layout/PageContainer.jsx'
 import BillScanAttachments from '@/components/billing/BillScanAttachments.jsx'
 import ChannelBillingForm from '@/components/channel/ChannelBillingForm.jsx'
+import ChannelSmallVarianceApprovalPanel from '@/components/channel/ChannelSmallVarianceApprovalPanel.jsx'
 import ChannelBillReadonlyView from '@/components/channel/ChannelBillReadonlyView.jsx'
 import LockedBillEditNotice from '@/components/reconciliation/LockedBillEditNotice.jsx'
 import ChannelCumulativeSettlementCard from '@/components/channel/ChannelCumulativeSettlementCard.jsx'
@@ -13,10 +14,15 @@ import { CoreBillLoadingState } from '@/pages/CoreBillLoadingState.jsx'
 import { VIEWS } from '@/app/routes.js'
 import { isBillLockedStatus } from '@/domain/reconciliation/billLifecycle.js'
 import { apiChannelRowToFrontend, getChannelRecord } from '@/lib/api/channel.ts'
-import { ContractDifferenceBlockedError, transitionBillLifecycle } from '@/lib/api/billLifecycle.ts'
+import {
+  ContractDifferenceBlockedError,
+  transitionBillLifecycle,
+  confirmApprovedChannelSmallVariance
+} from '@/lib/api/billLifecycle.ts'
 import { getContractBillReconciliation } from '@/lib/api/contractTerms.ts'
 import { listContractDifferenceCases, handleContractDifferenceCase } from '@/lib/api/contractDifferences.ts'
 import { prepareChannelSpecialSettlement } from '@/domain/channel/channelSpecialSettlement.js'
+import { assessChannelSmallVariancePreflight } from '@/domain/channel/channelSmallVarianceReview.js'
 import { getRecentApiErrorMessage } from '@/lib/api/client.ts'
 import {
   getCachedEditRecord,
@@ -135,6 +141,8 @@ function CoreChannelBillFormPage({ mode }) {
   const [reviewing, setReviewing] = useState(false)
   const [inlineIssue, setInlineIssue] = useState(null)
   const [differenceSeedItems, setDifferenceSeedItems] = useState([])
+  const [showSmallVariancePanel, setShowSmallVariancePanel] = useState(false)
+  const [smallVarianceNote, setSmallVarianceNote] = useState('')
   const [smartRecord, setSmartRecord] = useState(null)
   const [smartRevision, setSmartRevision] = useState(0)
   const [compactMode, setCompactMode] = useState(true)
@@ -432,17 +440,24 @@ function CoreChannelBillFormPage({ mode }) {
     const billId = String(channelEditRecordId)
     let savedSuccessfully = false
     try {
-      const saved = await handleChannelUpdateRecord(billId, {
-        ...stableRecord,
-        ...candidate,
-        id: billId,
-        status: stableRecord?.status || 'pending'
-      })
-      if (saved === false) return
-      savedSuccessfully = true
-      safety.clearAfterSubmit()
-      setSmartRecord(null)
-      invalidateEditRecord('channel', billId)
+      if (safety.dirty) {
+        const saved = await handleChannelUpdateRecord(billId, {
+          ...stableRecord,
+          ...candidate,
+          id: billId,
+          status: stableRecord?.status || 'pending'
+        })
+        if (saved === false) return
+        savedSuccessfully = true
+        safety.clearAfterSubmit()
+        setSmartRecord(null)
+        invalidateEditRecord('channel', billId)
+      } else {
+        // An identical second save used to delete/reinsert all game lines, so
+        // previously approved contract differences were orphaned. Directly
+        // verify the server-persisted bill when there are no unsaved changes.
+        savedSuccessfully = true
+      }
 
       const lifecycle = await transitionBillLifecycle('channel', billId, 'confirmed', '')
       if (zeroSettlement) {
@@ -559,6 +574,113 @@ function CoreChannelBillFormPage({ mode }) {
         autoLocate: false
       })
       showToast('账单金额保持已保存状态；' + message, 'error')
+    } finally {
+      setReviewing(false)
+    }
+  }
+
+  const openSmallVariancePanel = () => {
+    setShowSmallVariancePanel(true)
+    window.setTimeout(() => {
+      document.getElementById('channel-small-variance-approval')?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center'
+      })
+    }, 35)
+  }
+
+  const confirmSmallApprovedVariance = async () => {
+    if (!isEdit || !channelEditRecordId || reviewing) return
+    const note = smallVarianceNote.trim()
+    if (note.length < 2) {
+      showToast('请先填写小额差异强制确认备注（至少2个字）', 'error')
+      return
+    }
+    if (safety.dirty && !window.confirm(
+      '本页仍有尚未提交到服务器的草稿。\n\n' +
+      '强制核对只会使用服务器已保存的账单内容，绝不会将当前草稿写入账单。' +
+      '\n确定以服务器保存值为准继续吗？'
+    )) return
+
+    if (!window.confirm(
+      '请再次确认：仅对已人工确认、合计不超过¥0.50的合同金额差异做核对确认。\n\n' +
+      '系统将保留当前服务器账单的金额、28%/5%等实际规则和合同原值；' +
+      '全部审批依据和备注会留在操作日志中。是否继续？'
+    )) return
+
+    setReviewing(true)
+    const billId = String(channelEditRecordId)
+    try {
+      const persisted = apiChannelRowToFrontend(await getChannelRecord(billId))
+      if (String(persisted.status || '').toLowerCase() !== 'pending') {
+        throw new Error('账单状态已变化，请刷新列表重新打开后再试')
+      }
+      const preflight = await getContractBillReconciliation('channel', billId)
+      const assessment = assessChannelSmallVariancePreflight(preflight)
+      if (assessment.error) throw new Error(assessment.error)
+
+      const latest = await listContractDifferenceCases({ billType: 'channel', billId, limit: 200 })
+      const cases = latest.items || []
+      const failedIds = new Set(assessment.affectedLineIds)
+      const unresolved = cases.filter(item =>
+        failedIds.has(String(item.line_id || '')) &&
+        item.status !== 'resolved'
+      )
+
+      if (unresolved.some(item =>
+        item.handling_type && item.handling_type !== 'edit_bill'
+      )) {
+        throw new Error('本期合同差异正在补差或结转处理中，不允许覆盖原处理流程')
+      }
+      if (unresolved.length > 20) {
+        throw new Error('合同差异数量过多，请在合同差异处理页面逐项核对')
+      }
+
+      // Each new case is approved through the existing audited contract action.
+      // A repeated confirmation is safe: resolved records are not submitted again.
+      for (const item of unresolved) {
+        const difference = Math.abs(Number(item.expected_amount) - Number(item.actual_amount))
+        if (!Number.isFinite(difference) || difference > 0.500001) {
+          throw new Error('存在超过¥0.50的合同差异，已停止强制确认')
+        }
+        await handleContractDifferenceCase(item.id, {
+          action: 'accept_difference',
+          reason_type: '商务特殊约定',
+          description: '管理员小额差异人工核准。' + note +
+            '。保留当前服务器账单的分成、通道费、原结算金额，合同原值不修改。',
+          evidence: ['账单修改记录及管理员本次人工确认备注']
+        })
+      }
+
+      // Independent backend validation checks stored line economics, legal
+      // authorization, accepted cases and 50-cent budget, then atomically logs
+      // reviewer + note + variance and performs the lifecycle transition.
+      await confirmApprovedChannelSmallVariance(billId, note)
+      safety.clearAfterSubmit()
+      invalidateEditRecord('channel', billId)
+      setInlineIssue(null)
+      setDifferenceSeedItems([])
+      setShowSmallVariancePanel(false)
+      setSmallVarianceNote('')
+      try {
+        await recon.refetchChannelFromApi?.()
+      } catch (refreshError) {
+        console.warn('小额差异核对已完成，刷新渠道列表暂时失败', refreshError)
+      }
+      showToast('小额合同差异已人工核准，账单已完成核对并保留原金额', 'success')
+      goList()
+    } catch (error) {
+      const message = error instanceof Error && error.message
+        ? error.message
+        : '小额合同差异确认失败，请稍后重试'
+      reportIssue(message, {
+        kind: 'contract',
+        title: '账单金额未改变，小额差异尚未确认完成',
+        saved: true,
+        toast: false,
+        autoLocate: false
+      })
+      showToast(message, 'error')
     } finally {
       setReviewing(false)
     }
@@ -794,6 +916,18 @@ function CoreChannelBillFormPage({ mode }) {
         billId={isEdit ? String(stableRecord?.id || channelEditRecordId || '') : ''}
       />
 
+      {isEdit ? (
+        <ChannelSmallVarianceApprovalPanel
+          open={showSmallVariancePanel}
+          note={smallVarianceNote}
+          onNoteChange={setSmallVarianceNote}
+          onConfirm={() => void confirmSmallApprovedVariance()}
+          onCancel={() => setShowSmallVariancePanel(false)}
+          busy={reviewing}
+          settlementAmount={stableRecord?.settlementAmount ?? previewAmount}
+        />
+      ) : null}
+
       <section className="core-bill-footer">
         <div className="core-bill-footer-summary">
           <span>{zeroSettlementPreview ? '零结算' : '当前结算'}</span>
@@ -829,9 +963,19 @@ function CoreChannelBillFormPage({ mode }) {
             {isEdit ? '保存修改' : '保存账单'}
           </button>
           {isEdit ? (
-            <button type="button" className="confirm-review" disabled={reviewing} onClick={() => void confirmReview()}>
-              {reviewing ? '正在确认…' : zeroSettlementPreview ? '确认核对并结清' : '保存并确认核对'}
-            </button>
+            <>
+              <button
+                type="button"
+                className="channel-small-variance-trigger"
+                disabled={reviewing}
+                onClick={openSmallVariancePanel}
+              >
+                小额差异强制核对
+              </button>
+              <button type="button" className="confirm-review" disabled={reviewing} onClick={() => void confirmReview()}>
+                {reviewing ? '正在确认…' : zeroSettlementPreview ? '确认核对并结清' : '保存并确认核对'}
+              </button>
+            </>
           ) : null}
         </div>
       </section>
