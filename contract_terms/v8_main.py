@@ -68,15 +68,24 @@ def _apply_confirmation_policy(result: dict) -> dict:
         line = dict(source)
         amount = line.get("contract_amount") or {}
         case = line.get("difference_case") or {}
-        if amount.get("status") != "fail":
+        checks = line.get("checks") or []
+        allowed_financial_checks = {"share_rate", "channel_fee_rate", "tax_rate"}
+        field_mismatch = any(
+            check.get("key") in allowed_financial_checks and check.get("status") == "fail"
+            for check in checks
+        )
+        # A financial-terms mismatch does not disappear simply because the
+        # monetary difference is less than ¥0.05. It needs explicit acceptance.
+        if amount.get("status") != "fail" and not field_mismatch:
             lines.append(line)
             continue
 
         handling = case.get("handling_type")
         case_status = case.get("status")
-        authorization_fail = any(
-            check.get("key") == "authorization" and check.get("status") == "fail"
-            for check in (line.get("checks") or [])
+        other_hard_failure = any(
+            check.get("status") == "fail"
+            and check.get("key") not in allowed_financial_checks | {"contract_standard_settlement"}
+            for check in checks
         )
 
         if handling == "edit_bill" and case_status == "processing":
@@ -84,12 +93,13 @@ def _apply_confirmation_policy(result: dict) -> dict:
             line["message"] = "已进入修改账单流程；修改并保存后需重新核验，差异消失前不能确认核对。"
             unresolved += 1
         elif handling in {"accept_difference", "adjustment", "carry_forward"} and case_status in {"processing", "resolved"}:
-            if authorization_fail:
+            if other_hard_failure:
                 line["status"] = "fail"
-                line["message"] = "金额差异已有处理动作，但账期不在合同授权期内，仍需先确认合同身份/授权期。"
+                line["message"] = "结算差异已处理，但合同身份、账期授权或其他不可豁免的核验仍未通过。"
                 unresolved += 1
             else:
                 line["status"] = "warning" if case_status == "processing" else "pass"
+                line["message"] = "特殊结算已记录；保留本期账单金额和原合同规则。"
                 handled += 1
         else:
             line["status"] = "fail"
