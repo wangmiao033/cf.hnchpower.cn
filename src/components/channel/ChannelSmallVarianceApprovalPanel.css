@@ -1,0 +1,128 @@
+.channel-small-variance-panel {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  border: 1px solid #bfd2e9;
+  border-radius: 12px;
+  padding: 17px 20px;
+  background: #f7fbff;
+  color: #263f5e;
+  box-shadow: 0 6px 18px rgba(34, 84, 149, .06);
+}
+
+.channel-small-variance-panel header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.channel-small-variance-eyebrow {
+  display: block;
+  color: #3f6c9f;
+  font-size: 11px;
+  font-weight: 800;
+  margin-bottom: 4px;
+}
+
+.channel-small-variance-panel h2 {
+  font-size: 16px;
+  margin: 0 0 5px;
+  color: #254a75;
+}
+
+.channel-small-variance-panel header p,
+.channel-small-variance-panel .channel-small-variance-explain {
+  max-width: 780px;
+  color: #6c7e95;
+  line-height: 1.65;
+  font-size: 12px;
+  margin: 0;
+}
+
+.channel-small-variance-panel header > strong {
+  flex-shrink: 0;
+  font-size: 13px;
+  padding: 8px 12px;
+  color: #2a629e;
+  border-radius: 8px;
+  background: #e6f1ff;
+  font-variant-numeric: tabular-nums;
+}
+
+.channel-small-variance-panel label {
+  display: grid;
+  gap: 7px;
+}
+
+.channel-small-variance-panel label span {
+  font-size: 12px;
+  font-weight: 750;
+  color: #365e87;
+}
+
+.channel-small-variance-panel textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 78px;
+  padding: 10px 12px;
+  border: 1px solid #bacfe4;
+  border-radius: 8px;
+  font-size: 12px;
+  font-family: inherit;
+  line-height: 1.6;
+  color: #334155;
+  background: #fff;
+  resize: vertical;
+}
+
+.channel-small-variance-panel textarea:focus-visible {
+  outline: 2px solid #4c88c5;
+  outline-offset: 1px;
+}
+
+.channel-small-variance-panel footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.channel-small-variance-panel footer button,
+.core-bill-footer .core-bill-footer-actions button.channel-small-variance-trigger {
+  padding: 8px 14px;
+  min-height: 34px;
+  border: 1px solid #b7cae1;
+  border-radius: 8px;
+  background: #fff;
+  color: #2d5988;
+  font-size: 12px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.channel-small-variance-panel footer button.is-primary {
+  color: #fff;
+  border-color: #276aa9;
+  background: #276aa9;
+}
+
+.channel-small-variance-panel footer button:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
+
+.core-bill-footer .core-bill-footer-actions button.channel-small-variance-trigger {
+  border-color: #b4cde9;
+  background: #eef6ff;
+}
+
+@media (max-width: 640px) {
+  .channel-small-variance-panel {
+    padding: 13px;
+  }
+  .channel-small-variance-panel footer button {
+    flex: 1;
+  }
+}
