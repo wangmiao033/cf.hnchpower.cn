@@ -84,11 +84,11 @@ class IssuedChannelInvoiceResult(BaseModel):
 def prepare_issued_invoice(payload: IssuedChannelInvoiceRequest):
     ids = [str(bill_id).strip() for bill_id in payload.bill_ids]
     if not all(ids) or len(set(ids)) != len(ids):
-        raise HTTPException(422, detail={"error": "invalid_or_duplicate_bill_ids"})
+        raise HTTPException(422, detail={"error": "invalid_or_duplicate_bill_ids", "message": "账单选择无效或存在重复，请重新勾选"})
     try:
         date.fromisoformat(payload.invoice_date)
     except (ValueError, TypeError):
-        raise HTTPException(422, detail={"error": "invalid_invoice_date"})
+        raise HTTPException(422, detail={"error": "invalid_invoice_date", "message": "请填写正式发票上的真实开票日期"})
     number_data = {
         "digital_invoice_no": (payload.digital_invoice_no or "").strip(),
         "invoice_code": (payload.invoice_code or "").strip(),
@@ -96,12 +96,12 @@ def prepare_issued_invoice(payload: IssuedChannelInvoiceRequest):
     }
     identity = _identity_key(number_data)
     if not identity:
-        raise HTTPException(422, detail={"error": "official_invoice_number_required"})
+        raise HTTPException(422, detail={"error": "official_invoice_number_required", "message": "必须填写真实的数电发票号码，或完整发票代码与号码"})
     gross = to_cents(payload.amount_with_tax)
     net = to_cents(payload.invoice_amount)
     tax = to_cents(payload.tax_amount)
     if net + tax != gross:
-        raise HTTPException(422, detail={"error": "invoice_net_tax_total_mismatch"})
+        raise HTTPException(422, detail={"error": "invoice_net_tax_total_mismatch", "message": "不含税金额加税额必须等于价税合计"})
     return ids, number_data, identity, gross, net, tax
 
 
@@ -165,7 +165,7 @@ def record_issued_merged_channel_invoice(
             .with_for_update()
         ).scalars().all()
         if len(rows) != len(ids):
-            raise HTTPException(404, detail={"error": "bill_not_found"})
+            raise HTTPException(404, detail={"error": "bill_not_found", "message": "账单已发生变化或被删除，请返回列表重试"})
         by_id = {row.id: row for row in rows}
         selected = [by_id[bill_id] for bill_id in ids]
         names = {" ".join(str(row.partner_name or "").split()) for row in selected}
@@ -190,7 +190,12 @@ def record_issued_merged_channel_invoice(
                 "message": "账单当前剩余可开票金额发生变化，请重新核对",
             })
         _lock_invoice_identity(db, identity)
-        _ensure_unique_identity(db, identity)
+        try:
+            _ensure_unique_identity(db, identity)
+        except HTTPException as error:
+            if error.status_code == 409:
+                raise HTTPException(409, detail={"error": "duplicate_invoice", "message": "该正式发票号码已录入，不能重复登记；请从发票中心关联已有发票"}) from error
+            raise
 
         invoice_id = str(uuid4())
         number = number_data["digital_invoice_no"] or number_data["invoice_no"]
