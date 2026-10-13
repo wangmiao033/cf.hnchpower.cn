@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { useAppState } from '@/app/AppStateContext.jsx'
 import PageContainer from '@/components/layout/PageContainer.jsx'
 import Customer360Drawer from '@/components/partner/Customer360Drawer.jsx'
+import PartnerLegalEntitiesDock from '@/components/partner/PartnerLegalEntitiesDock.jsx'
 import { partnerKey } from '@/components/shared/PartnerPicker.jsx'
 import {
   consumePartnerFocus,
@@ -42,6 +43,7 @@ function PartnerPage() {
   const [saving, setSaving] = useState(false)
   const [isFormOpen, setIsFormOpen] = useState(false)
   const [customer360Id, setCustomer360Id] = useState(null)
+  const [entityPartnerId, setEntityPartnerId] = useState(null)
   const [pendingGlobalFocus, setPendingGlobalFocus] = useState('')
 
   useEffect(() => {
@@ -203,6 +205,10 @@ function PartnerPage() {
     () => (partners || []).find((partner) => String(partner.id || '') === String(customer360Id || '')),
     [partners, customer360Id]
   )
+  const selectedEntityPartner = useMemo(
+    () => (partners || []).find((partner) => String(partner.id || '') === String(entityPartnerId || '')),
+    [partners, entityPartnerId]
+  )
 
   return (
     <PageContainer
@@ -345,6 +351,7 @@ function PartnerPage() {
                     <td><span className="customer-category-tag">{partner.category || '-'}</span></td>
                     <td>
                       <button type="button" className="customer-360-btn" onClick={() => openCustomer360(partner)}>360°</button>
+                      <button type="button" onClick={() => setEntityPartnerId(String(partner.id))}>结算主体</button>
                       <button type="button" onClick={() => editPartner(partner)}>编辑</button>
                       <button type="button" className="danger" onClick={() => deletePartner(partner)}>删除</button>
                     </td>
@@ -355,6 +362,13 @@ function PartnerPage() {
           </table>
         </div>
       </section>
+
+      {selectedEntityPartner ? (
+        <PartnerLegalEntitiesDock
+          partner={selectedEntityPartner}
+          onClose={() => setEntityPartnerId(null)}
+        />
+      ) : null}
 
       {customer360Id ? (
         <Customer360Drawer

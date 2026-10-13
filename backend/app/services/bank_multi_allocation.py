@@ -352,6 +352,10 @@ def _specific_bill(db: Session, direction: str, bill_type: str, bill_id: str) ->
             "bill_type": "channel", "bill_id": str(row.id),
             "bill_number": str(row.statement_no or f"CH-{str(row.id)[:8]}"),
             "partner_name": str(row.partner_name or row.channel_name or ""),
+            "partner_id": row.partner_id,
+            "expected_payer_entity_id": row.expected_payer_entity_id,
+            "expected_payer_snapshot": row.expected_payer_snapshot,
+            "expected_receiving_entity_id": row.expected_receiving_entity_id,
             "settlement_month": row.settlement_month, "game_name": row.game_name,
             "bill_amount": bill_amount, "outstanding_amount": outstanding,
         }

@@ -17,6 +17,8 @@ function money(value) {
 
 function methodLabel(value, explicit) {
   if (explicit || value === 'manual') return '人工固定'
+  if (value === 'legal_entity') return '关联法律主体'
+  if (value === 'legal_bank_account') return '关联公司银行账户'
   if (value === 'bank_account') return '银行账号'
   if (value === 'exact_name') return '全称一致'
   if (value === 'normalized_name') return '名称归一'

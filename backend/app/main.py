@@ -38,6 +38,7 @@ from app.api.profit_analysis import router as profit_analysis_router
 from app.api.payment import router as payment_router
 from app.api.bank_transaction import router as bank_transaction_router
 from app.api.bank_auto_reconciliation import router as bank_auto_reconciliation_router
+from app.api.legal_entities import router as legal_entities_router
 from app.api.reconciliation import router as reconciliation_router
 from app.api.rd_prepayment import router as rd_prepayment_router
 from app.api.rd_prepayment_workbench import router as rd_prepayment_workbench_router
@@ -253,6 +254,7 @@ app.include_router(anomaly_router, prefix="/api/anomaly-data", tags=["anomaly-da
 app.include_router(operation_log_router, prefix="/api/operation-logs", tags=["operation-logs"], dependencies=[audit_access])
 app.include_router(bank_transaction_router, prefix="/api/bank-transactions", tags=["bank-transactions"], dependencies=[funds_access])
 app.include_router(bank_auto_reconciliation_router, prefix="/api/bank-auto-reconciliation", tags=["bank-auto-reconciliation"], dependencies=[funds_access])
+app.include_router(legal_entities_router, prefix="/api/legal-entities", tags=["legal-entities"])
 app.include_router(rd_prepayment_router, prefix="/api/rd-prepayments", tags=["rd-prepayments"], dependencies=[funds_access])
 app.include_router(rd_prepayment_workbench_router, prefix="/api/rd-prepayments", tags=["rd-prepayment-workbench"], dependencies=[funds_access])
 app.include_router(rd_prepayment_lifecycle_router, prefix="/api/rd-prepayment-lifecycle", tags=["rd-prepayment-lifecycle"], dependencies=[funds_access])

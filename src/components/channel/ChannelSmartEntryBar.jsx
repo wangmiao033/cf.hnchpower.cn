@@ -19,6 +19,8 @@ import {
   listContractAccessTerms,
   upsertContractAccessTerms
 } from '@/lib/api/contractTerms.ts'
+import { getCustomerContractSource } from '@/lib/api/legalEntities.ts'
+import PartnerLegalEntitiesDock from '@/components/partner/PartnerLegalEntitiesDock.jsx'
 import './ChannelSmartEntryBar.css'
 
 const textKey = normalizeInlineKey
@@ -165,12 +167,20 @@ export default function ChannelSmartEntryBar({
   onNotice
 }) {
   const partnerName = String(record?.partnerName || '').trim()
+  const businessPartnerId = String(record?.partnerId || '').trim()
   const channelName = String(record?.channelName || '').trim()
   const [aliasMemory, setAliasMemory] = useState(() => loadAliasMemory())
   const canonicalChannelName = resolveAlias(aliasMemory, 'channel', channelName)
-  const partnerKey = `${textKey(partnerName)}|${textKey(canonicalChannelName)}`
   const [targetMonth, setTargetMonth] = useState(() => recordMonth(record))
+  const sourceMonth = targetMonth || recordMonth(record) || currentMonth()
+  const expectedSourceKey = businessPartnerId ? businessPartnerId + ':' + sourceMonth : ''
+  const [contractSource, setContractSource] = useState({ key: '', loading: false, name: '', source: '', error: '' })
+  const sourcePending = Boolean(businessPartnerId && contractSource.key !== expectedSourceKey)
+  const contractMatchName = !sourcePending && contractSource.name ? contractSource.name : partnerName
+  const partnerKey = `${textKey(contractMatchName)}|${textKey(canonicalChannelName)}`
   const [contractState, setContractState] = useState({ key: '', loading: false, items: [], error: '' })
+  const [linkOriginalContractOpen, setLinkOriginalContractOpen] = useState(false)
+  const [contractSourceRevision, setContractSourceRevision] = useState(0)
 
   const [quickOpen, setQuickOpen] = useState(false)
   const [quickSaving, setQuickSaving] = useState(false)
@@ -216,7 +226,34 @@ export default function ChannelSmartEntryBar({
     setTargetMonth(recordMonth(record))
   }, [record?.settlementMonth, record?.items])
 
+  useEffect(() => {
+    if (!expectedSourceKey) {
+      setContractSource({ key: '', loading: false, name: '', source: '', error: '' })
+      return undefined
+    }
+    let alive = true
+    setContractSource({ key: '', loading: true, name: '', source: '', error: '' })
+    getCustomerContractSource(businessPartnerId, sourceMonth).then((resolved) => {
+      if (!alive) return
+      setContractSource({
+        key: expectedSourceKey,
+        loading: false,
+        name: String(resolved?.contract_party_name || '').trim(),
+        source: resolved?.source || 'unresolved',
+        error: ''
+      })
+    }).catch((error) => {
+      if (!alive) return
+      setContractSource({
+        key: expectedSourceKey, loading: false, name: '', source: 'unresolved',
+        error: error instanceof Error ? error.message : '原签约主体读取失败'
+      })
+    })
+    return () => { alive = false }
+  }, [businessPartnerId, sourceMonth, expectedSourceKey, contractSourceRevision])
+
   const loadContracts = useCallback(async () => {
+    if (sourcePending) return []
     if (!partnerName) {
       setContractState({ key: '', loading: false, items: [], error: '' })
       return []
@@ -224,9 +261,9 @@ export default function ChannelSmartEntryBar({
     const loadKey = partnerKey
     setContractState((current) => ({ ...current, key: loadKey, loading: true, error: '' }))
     try {
-      const result = await listContracts({ q: partnerName, limit: 100, offset: 0 })
+      const result = await listContracts({ q: contractMatchName, limit: 100, offset: 0 })
       const rows = Array.isArray(result?.items) ? result.items : []
-      const exact = rows.filter((contract) => contractMatchesPartner(contract, partnerName, canonicalChannelName, aliasMemory))
+      const exact = rows.filter((contract) => contractMatchesPartner(contract, contractMatchName, canonicalChannelName, aliasMemory))
       // 不按“今天是否过期”提前丢掉历史合同；具体账期是否可用由合作项有效期判断。
       const selected = exact.length ? exact : rows
       setContractState({ key: loadKey, loading: false, items: selected, error: '' })
@@ -236,7 +273,7 @@ export default function ChannelSmartEntryBar({
       setContractState({ key: loadKey, loading: false, items: [], error: message })
       return []
     }
-  }, [partnerName, canonicalChannelName, partnerKey, aliasMemory])
+  }, [partnerName, contractMatchName, sourcePending, canonicalChannelName, partnerKey, aliasMemory])
 
   useEffect(() => {
     void loadContracts()
@@ -671,7 +708,10 @@ export default function ChannelSmartEntryBar({
         </div>
         <div className="channel-smart-entry__source">
           <strong>{partnerName || '先选择合作方'}</strong>
-          <span>{partnerName ? (contractState.loading ? '正在读取合同合作清单…' : sourceText) : '选择合作方后自动读取清单'}</span>
+          <span>{partnerName ? (sourcePending || contractState.loading ? '正在读取原签约主体的合同…' : sourceText) : '选择合作方后自动读取清单'}</span>
+          {contractMatchName && contractMatchName !== partnerName && !sourcePending ? (
+            <small>合同按原签约方匹配：{contractMatchName}；账单合作客户保持不变。</small>
+          ) : null}
           {channelName && partnerName && textKey(channelName) !== textKey(partnerName) ? (
             <button type="button" className="channel-smart-entry__text-action" disabled={channelAliasRemembered} onClick={rememberCurrentChannelAlias}>
               {channelAliasRemembered ? `已记住别名：${channelName}` : `记住渠道别名：${channelName}`}
@@ -689,11 +729,16 @@ export default function ChannelSmartEntryBar({
       {loaded && partnerName && contractState.items.length === 0 ? (
         <div className="channel-smart-entry__notice is-warning channel-smart-entry__notice--actions">
           <div>
-            <strong>当前合作方没有可用合同</strong>
-            <span>不用离开账单：可以在这里快速建最小合同，也可以先挂起待补资料继续做账。</span>
+            <strong>未找到当前客户的原签约合同</strong>
+            <span>{businessPartnerId
+              ? `请在「客户库 → 结算主体」关联原合同主体；新付款公司不用重建合同。${contractSource.name ? ' 当前原签约方：' + contractSource.name : ''}`
+              : '如果只是更换付款公司，请选择原合作客户，而非把新付款公司创建成另一名客户。'}</span>
+            {contractSource.error ? <small>主体查询异常：{contractSource.error}</small> : null}
           </div>
           <div>
-            <button type="button" className="is-primary" onClick={() => openQuickContract()}>当前页快速建合同</button>
+            {businessPartnerId
+              ? <button type="button" className="is-primary" onClick={() => setLinkOriginalContractOpen(true)}>关联原合同主体</button>
+              : <button type="button" className="is-primary" onClick={() => openQuickContract()}>全新合作才新建合同</button>}
             <button type="button" onClick={() => openPendingEditor('合作方合同')}>暂时挂起</button>
           </div>
         </div>
@@ -814,6 +859,18 @@ export default function ChannelSmartEntryBar({
             <footer><span>不会修改历史账单，只处理当前及以后录入。</span><div><button type="button" onClick={() => setAliasOpen(false)}>取消</button><button type="button" className="is-primary" disabled={!aliasSource || !aliasTarget} onClick={saveGameAlias}>确认映射</button></div></footer>
           </div>
         </div>
+      ) : null}
+
+      {linkOriginalContractOpen && businessPartnerId ? (
+        <PartnerLegalEntitiesDock
+          partner={{ id: businessPartnerId, name: partnerName, shortName: channelName }}
+          initialRole="contract"
+          initialMonth={sourceMonth}
+          onClose={() => {
+            setLinkOriginalContractOpen(false)
+            setContractSourceRevision((current) => current + 1)
+          }}
+        />
       ) : null}
 
       {pendingOpen ? (

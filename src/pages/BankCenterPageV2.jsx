@@ -3,6 +3,7 @@ import { useAppState } from '@/app/AppStateContext.jsx'
 import { VIEWS } from '@/app/routes.js'
 import PageContainer from '@/components/layout/PageContainer.jsx'
 import BankCenterImportModal from '@/components/bank/BankCenterImportModal.jsx'
+import OwnReceivingAccountsDock from '@/components/bank/OwnReceivingAccountsDock.jsx'
 import { useAuth } from '@/features/auth/AuthContext.jsx'
 import {
   confirmBankAutoReconciliation,
@@ -193,6 +194,7 @@ export default function BankCenterPageV2() {
   const [expandedId, setExpandedId] = useState('')
   const [historyMode, setHistoryMode] = useState('confirmed')
   const [importOpen, setImportOpen] = useState(false)
+  const [ownAccountsOpen, setOwnAccountsOpen] = useState(false)
 
   const [queueSearch, setQueueSearch] = useState('')
   const [queueAppliedSearch, setQueueAppliedSearch] = useState('')
@@ -540,6 +542,7 @@ export default function BankCenterPageV2() {
           ) : null}
         </div>
         <div className="bank-center-head__actions">
+          <button type="button" onClick={() => setOwnAccountsOpen(true)}>收款主体与账户</button>
           <button type="button" onClick={refreshDashboard} disabled={dashboardLoading}>{dashboardLoading ? '匹配中…' : '重新匹配'}</button>
           {canManage ? <button type="button" className="is-primary" onClick={() => setImportOpen(true)}>＋ 导入银行流水</button> : null}
         </div>
@@ -767,6 +770,7 @@ export default function BankCenterPageV2() {
         </div>
       ) : null}
 
+      {ownAccountsOpen ? <OwnReceivingAccountsDock onClose={() => setOwnAccountsOpen(false)} /> : null}
       <BankCenterImportModal
         open={importOpen}
         onClose={() => setImportOpen(false)}

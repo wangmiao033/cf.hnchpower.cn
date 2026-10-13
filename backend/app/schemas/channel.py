@@ -137,6 +137,11 @@ class ChannelRecordCreate(BaseModel):
     statement_no: str | None = None
     channel_name: str | None = None
     partner_name: str | None = None
+    partner_id: str | None = None
+    expected_payer_entity_id: str | None = None
+    expected_receiving_entity_id: str | None = None
+    invoice_entity_id: str | None = None
+    payer_override_reason: str | None = Field(default=None, max_length=1000)
     settlement_month: str | None = None
     start_date: str | None = None
     end_date: str | None = None
@@ -173,6 +178,11 @@ class ChannelRecordUpdate(BaseModel):
     statement_no: str | None = None
     channel_name: str | None = None
     partner_name: str | None = None
+    partner_id: str | None = None
+    expected_payer_entity_id: str | None = None
+    expected_receiving_entity_id: str | None = None
+    invoice_entity_id: str | None = None
+    payer_override_reason: str | None = Field(default=None, max_length=1000)
     settlement_month: str | None = None
     start_date: str | None = None
     end_date: str | None = None
@@ -211,6 +221,16 @@ class ChannelRecordRead(BaseModel):
     statement_no: str | None = None
     channel_name: str | None
     partner_name: str | None
+    partner_id: str | None = None
+    contract_entity_id: str | None = None
+    contract_entity_snapshot: str | None = None
+    expected_payer_entity_id: str | None = None
+    expected_payer_snapshot: str | None = None
+    expected_receiving_entity_id: str | None = None
+    expected_receiving_snapshot: str | None = None
+    invoice_entity_id: str | None = None
+    invoice_entity_snapshot: str | None = None
+    payer_override_reason: str | None = None
     game_name: str | None
     settlement_month: str | None
     start_date: str | None

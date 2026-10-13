@@ -1461,6 +1461,30 @@ async def delete_partner(partner_id: str, request: Request) -> Response:
                 status_code=409,
                 detail=f"该客户已关联 {linked_count} 张研发账单，请先调整账单合作方",
             )
+        channel_linked_count = int(
+            conn.execute(
+                "SELECT COUNT(*) FROM channel_records WHERE partner_id = %s",
+                [partner_id],
+            ).fetchone()["count"]
+            or 0
+        )
+        if channel_linked_count:
+            raise HTTPException(
+                status_code=409,
+                detail=f"该客户已关联 {channel_linked_count} 张渠道账单，不能删除历史客户",
+            )
+        legal_links = int(
+            conn.execute(
+                "SELECT COUNT(*) FROM cf_partner_legal_entity_links WHERE partner_id = %s",
+                [partner_id],
+            ).fetchone()["count"]
+            or 0
+        )
+        if legal_links:
+            raise HTTPException(
+                status_code=409,
+                detail=f"该客户已有 {legal_links} 条结算主体关联，不能直接删除",
+            )
         row = conn.execute(
             "DELETE FROM cf_partner_records WHERE id = %s RETURNING id",
             [partner_id],

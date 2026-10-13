@@ -5,6 +5,12 @@ export type BankMatchCandidate = {
   bill_id: string
   bill_number: string
   partner_name: string
+  partner_id?: string | null
+  expected_payer_entity_id?: string | null
+  expected_payer_snapshot?: string | null
+  expected_receiving_entity_id?: string | null
+  payer_identity_mismatch?: boolean
+  receiver_identity_mismatch?: boolean
   settlement_month?: string | null
   game_name?: string | null
   bill_amount: number
@@ -39,6 +45,10 @@ export type BankMatchSuggestion = {
   existing_allocations?: ExistingBankAllocation[]
   currency?: string | null
   counterparty_name?: string | null
+  legal_entity_id?: string | null
+  legal_entity_name?: string | null
+  bank_receiving_entity_id?: string | null
+  bank_receiving_entity_name?: string | null
   summary?: string | null
   auto_ready?: boolean
   confidence_level: 'high' | 'medium' | 'low' | 'none'
