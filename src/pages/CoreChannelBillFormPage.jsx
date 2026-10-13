@@ -595,8 +595,8 @@ function CoreChannelBillFormPage({ mode }) {
     return <EmptyState title="未找到渠道账单" onBack={goList} />
   }
 
-  // The record detail API is authoritative even when the list snapshot is absent or stale.
-  // Never render the editable form for a confirmed/settled channel bill.
+  // Use the authoritative server record to render the full, readable bill.
+  // Editing starts only after a required note is recorded and re-verification is enabled.
   if (isEdit && stableRecord && isBillLockedStatus(stableRecord.status)) {
     return (
       <LockedBillEditNotice
@@ -607,6 +607,7 @@ function CoreChannelBillFormPage({ mode }) {
           openBill360('channel', String(stableRecord.id), stableRecord)
         }}
         onBack={goList}
+        onEditApproved={retryLoad}
       >
         <ChannelBillReadonlyView recordId={String(stableRecord.id)} fallbackRecord={stableRecord} />
       </LockedBillEditNotice>

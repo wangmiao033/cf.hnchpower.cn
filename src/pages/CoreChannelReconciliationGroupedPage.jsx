@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { isBillLockedStatus } from '@/domain/reconciliation/billLifecycle.js'
 import { useAppState } from '@/app/AppStateContext.jsx'
 import ConfirmDialog from '@/components/ConfirmDialog.jsx'
 import PageContainer from '@/components/layout/PageContainer.jsx'
@@ -1118,7 +1119,7 @@ function CoreChannelReconciliationGroupedPage() {
                                         >{settled ? '已结清' : poolDeferred ? '累计中' : '收款'}</button>
                                       )}
                                       <button type="button" className="channel-group-single-invoice" disabled={isWorking || !recon.channelApiEnabled} onClick={() => openInvoiceMerge([row])}>发票</button>
-                                       <button type="button" onClick={() => openChannelReconciliationEdit(String(row.id))}>编辑</button>
+                                       <button type="button" onClick={() => openChannelReconciliationEdit(String(row.id))}>{isBillLockedStatus(row.status) ? '查看/修改' : '编辑'}</button>
                                       <button type="button" className="danger" disabled={isWorking} title="作废后账单会移入垃圾桶，历史、关联关系和操作日志仍保留" onClick={() => void handleSingleVoid(row)}>作废</button>
                                     </>
                                   )}

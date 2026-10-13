@@ -177,3 +177,61 @@
     padding: 14px;
   }
 }
+
+
+/* Reviewed details are the page, not a blocking full-screen lock card. */
+.locked-bill-edit-page.has-readonly-details .locked-bill-edit-card {
+  grid-template-columns: 35px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  padding: 14px 18px;
+  border-radius: 11px;
+}
+
+.locked-bill-edit-page.has-readonly-details .locked-bill-edit-mark {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.locked-bill-edit-page.has-readonly-details .locked-bill-edit-card h1 {
+  font-size: 16px;
+  margin: 3px 0 5px;
+}
+
+.locked-bill-edit-page.has-readonly-details .locked-bill-edit-card p {
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.locked-bill-edit-page.has-readonly-details .locked-bill-edit-card small {
+  margin-top: 8px;
+}
+
+.locked-bill-edit-page.has-readonly-details .locked-bill-edit-actions {
+  margin-top: 11px;
+}
+
+.locked-bill-return-form button.primary {
+  border-color: #3968a8;
+  background: #3968a8;
+  color: #fff;
+}
+
+.locked-bill-return-form p.locked-bill-note-explainer {
+  color: #716253;
+  font-size: 11px;
+}
+
+@media (max-width: 640px) {
+  .locked-bill-edit-page.has-readonly-details .locked-bill-edit-card {
+    grid-template-columns: 1fr;
+    padding: 14px;
+    gap: 7px;
+  }
+
+  .locked-bill-edit-page.has-readonly-details .locked-bill-edit-mark {
+    display: none;
+  }
+}
