@@ -19,6 +19,7 @@ from app.api.bill360_performance import router as bill360_performance_router
 from app.api.bill_lifecycle import router as bill_lifecycle_router
 from app.api.business_dashboard import router as business_dashboard_router
 from app.api.channel import router as channel_router
+from app.api.channel_invoice_merge import router as channel_invoice_merge_router
 from app.api.channel_cumulative_settlement import router as channel_cumulative_settlement_router
 from app.api.bill_attachment import router as bill_attachment_router
 from app.api.bill_invoice_allocation import router as bill_invoice_allocation_router
@@ -258,6 +259,7 @@ app.include_router(contract_router, prefix="/api/contracts", tags=["contracts"],
 app.include_router(quicksdk_router, prefix="/api/quicksdk", tags=["quicksdk"], dependencies=[data_access])
 app.include_router(bill_attachment_router, prefix="/api/bill-attachments", tags=["bill-attachments"], dependencies=[reconciliation_access])
 app.include_router(bill_invoice_allocation_router, prefix="/api/bill-invoice-allocations", tags=["bill-invoice-allocations"], dependencies=[invoice_access])
+app.include_router(channel_invoice_merge_router, prefix="/api/channel-invoice-merge", tags=["channel-invoice-merge"], dependencies=[invoice_access])
 app.include_router(product_source_router, prefix="/api/product-sources", tags=["product-sources"], dependencies=[data_access])
 
 _upload_root = ensure_upload_root()
