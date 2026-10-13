@@ -142,11 +142,7 @@ def assess_channel_small_variance_approval(
         if valid is None:
             # A line with only stale or unresolved exceptions must not silently
             # become approved. Clean lines with no case do not need an exception.
-            if any(
-                str(item.get("line_id")) == str(line.id)
-                or _cents(item.get("actual_amount")) == _cents(line.settlement_amount)
-                for item in line_cases
-            ):
+            if line_cases:
                 raise _conflict(
                     "difference_evidence_stale",
                     "合同差异没有匹配当前分成、通道费与实际金额的人工批准记录，不能强制核对",
