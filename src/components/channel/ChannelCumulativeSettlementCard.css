@@ -335,3 +335,11 @@
   cursor: pointer;
 }
 .channel-cumulative-card__preset button:disabled { opacity: .5; cursor: not-allowed; }
+
+/* Reviewed channel bills expose their own server-verified pool state. */
+.channel-cumulative-card__bill-status{display:grid;gap:5px;margin:12px 14px;padding:11px 13px;border:1px solid #d9e4ef;border-radius:9px;background:#f8fbff;color:#3b5672;font-size:12px}
+.channel-cumulative-card__bill-status strong{font-size:12px;color:#2a5275}
+.channel-cumulative-card__bill-status span{line-height:1.65}
+.channel-cumulative-card__bill-status.is-accumulating,.channel-cumulative-card__bill-status.is-ready{background:#f3fbf6;border-color:#c5e6d2}
+.channel-cumulative-card__bill-status.is-batched{background:#f3f7ff;border-color:#cbdff5}
+.channel-cumulative-card__bill-status.is-warning{background:#fff9ed;border-color:#f2dcaf}

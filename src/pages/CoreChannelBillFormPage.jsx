@@ -8,6 +8,7 @@ import ChannelSmallVarianceApprovalPanel from '@/components/channel/ChannelSmall
 import ChannelBillReadonlyView from '@/components/channel/ChannelBillReadonlyView.jsx'
 import LockedBillEditNotice from '@/components/reconciliation/LockedBillEditNotice.jsx'
 import ChannelCumulativeSettlementCard from '@/components/channel/ChannelCumulativeSettlementCard.jsx'
+import ReviewedChannelCumulativeSection from '@/components/channel/ReviewedChannelCumulativeSection.jsx'
 import ContractDifferenceActionPanel from '@/components/reconciliation/ContractDifferenceActionPanel.jsx'
 import ChannelSmartEntryBar from '@/components/channel/ChannelSmartEntryBar.jsx'
 import { findExactPartner } from '@/components/shared/PartnerPicker.jsx'
@@ -883,6 +884,7 @@ function CoreChannelBillFormPage({ mode }) {
         onBack={goList}
         onEditApproved={retryLoad}
       >
+        <ReviewedChannelCumulativeSection record={stableRecord} />
         <ChannelBillReadonlyView recordId={String(stableRecord.id)} fallbackRecord={stableRecord} />
       </LockedBillEditNotice>
     )

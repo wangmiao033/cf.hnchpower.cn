@@ -1,0 +1,8 @@
+.reviewed-channel-cumulative{display:grid;gap:10px;padding:14px 17px;border:1px solid #dfe6ee;border-radius:11px;background:#fff;margin-bottom:14px;min-width:0}
+.reviewed-channel-cumulative__head{display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px}
+.reviewed-channel-cumulative__head span{font-size:11px;font-weight:750;color:#718298}
+.reviewed-channel-cumulative__head h2{font-size:15px;color:#263f5a;margin:4px 0 5px}
+.reviewed-channel-cumulative__head p{font-size:12px;line-height:1.6;color:#697b91;margin:0;max-width:800px}
+.reviewed-channel-cumulative__head>strong{padding:8px 11px;background:#edf8f1;color:#247b51;border-radius:8px;font-size:13px;white-space:nowrap}
+.reviewed-channel-cumulative__missing{margin:0;padding:12px;color:#9a6a2a;font-size:12px;background:#fff9f1;border-radius:8px}
+.reviewed-channel-cumulative>.channel-cumulative-card{min-width:0;margin:0}

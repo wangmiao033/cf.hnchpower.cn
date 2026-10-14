@@ -4,10 +4,12 @@ import {
   cancelChannelCumulativeBatch,
   createChannelCumulativeBatch,
   getChannelCumulativeSnapshot,
+  getChannelCumulativeBillCondition,
   saveChannelCumulativePolicy,
   submitChannelCumulativeBatchInvoice
 } from '@/lib/api/channelCumulativeSettlement.ts'
 import { isXiaomiPlatform, xiaomiThousandYuanPreset } from '@/domain/channel/xiaomiCumulativePreset.js'
+import { describeReviewedChannelCumulative } from '@/domain/channel/reviewedChannelCumulative.js'
 import './ChannelCumulativeSettlementCard.css'
 
 function money(value) {
@@ -39,7 +41,8 @@ export default function ChannelCumulativeSettlementCard({
   draftBasisAmount = 0,
   draftSettlementAmount = 0,
   onChanged,
-  expandSettings = false
+  expandSettings = false,
+  showCurrentBillStatus = false
 }) {
   const { can } = useAuth()
   const canManage = can('reconciliation.manage')
@@ -47,6 +50,8 @@ export default function ChannelCumulativeSettlementCard({
   const [policy, setPolicy] = useState(null)
   const [pool, setPool] = useState(null)
   const [batches, setBatches] = useState([])
+  const [billCondition, setBillCondition] = useState(null)
+  const [billConditionError, setBillConditionError] = useState('')
   const [form, setForm] = useState(null)
   const [loading, setLoading] = useState(false)
   const [working, setWorking] = useState('')
@@ -58,13 +63,30 @@ export default function ChannelCumulativeSettlementCard({
       setPolicy(null)
       setPool(null)
       setBatches([])
+      setBillCondition(null)
+      setBillConditionError('')
       setForm(null)
       return
     }
     setLoading(true)
     setMessage('')
     try {
-      const snapshot = await getChannelCumulativeSnapshot(name, 8)
+      // The partner pool is not proof that this particular bill is included.
+      // Fetch the server's bill-specific status, including existing batches.
+      const billRequest = showCurrentBillStatus && recordId
+        ? getChannelCumulativeBillCondition(String(recordId))
+            .then(data => ({ data, error: '' }))
+            .catch(error => ({
+              data: null,
+              error: error instanceof Error ? error.message : '本单状态读取失败'
+            }))
+        : Promise.resolve({ data: null, error: '' })
+      const [snapshot, currentBill] = await Promise.all([
+        getChannelCumulativeSnapshot(name, 8),
+        billRequest
+      ])
+      setBillCondition(currentBill.data)
+      setBillConditionError(currentBill.error)
       const policyResult = snapshot.policy
       setPolicy(policyResult)
       setPool(snapshot.pool)
@@ -81,13 +103,14 @@ export default function ChannelCumulativeSettlementCard({
     } finally {
       setLoading(false)
     }
-  }, [partnerName])
+  }, [partnerName, recordId, showCurrentBillStatus])
 
   useEffect(() => {
     void load()
   }, [load])
 
   const thresholdMode = policy?.enabled && policy?.settlement_mode === 'threshold'
+  const currentBillSummary = describeReviewedChannelCumulative(billCondition, draftSettlementAmount)
   const xiaomiCandidate = isXiaomiPlatform(platformName, partnerName)
   const basisLabel = policy?.threshold_basis === 'settlement_amount' ? '累计结算金额' : '累计流水'
   const currentStatus = String(billStatus || 'pending').toLowerCase()
@@ -224,6 +247,13 @@ export default function ChannelCumulativeSettlementCard({
         </em>
       </div>
 
+      {showCurrentBillStatus && recordId ? (
+        <div className={`channel-cumulative-card__bill-status is-${currentBillSummary.tone}`} role="status">
+          <strong>{billConditionError ? '本单累计状态暂时无法读取' : loading ? '正在核实本单累计状态…' : currentBillSummary.title}</strong>
+          <span>{billConditionError || (loading ? '将根据服务器政策、开票及收款数据判定本单是否入池。' : currentBillSummary.description)}</span>
+        </div>
+      ) : null}
+
       {thresholdMode ? (
         <>
           <div className="channel-cumulative-card__metrics">
@@ -263,7 +293,7 @@ export default function ChannelCumulativeSettlementCard({
       ) : null}
 
       {canManage && form ? (
-        <details className="channel-cumulative-card__settings" open={expandSettings ? true : undefined}>
+        <details className="channel-cumulative-card__settings" open={expandSettings || (showCurrentBillStatus && !thresholdMode) ? true : undefined}>
           <summary>结算策略设置</summary>
           <p className="channel-cumulative-card__scope-note">按合作方生效，包含该合作方所有游戏。请严格依据合同填写累计口径和门槛；已收、已开票的历史账单不会重复进入累计池。若同一渠道对应多个独立结算账户，需分别管理结算主体，不能跨账户累计。</p>
           {xiaomiCandidate ? (
