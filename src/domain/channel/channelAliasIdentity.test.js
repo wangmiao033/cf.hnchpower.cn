@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { unifyLegacyChannelNamesForSamePartner } from './channelAliasIdentity.js'
+import { unifyLegacyChannelNamesForSamePartner, channelSearchAliasTerms, channelLedgerMatchesSearch } from './channelAliasIdentity.js'
 import { auditChannelBillMonths } from './channelMonthCoverage.js'
 
 const youhai = '西安游海网络科技有限公司'
@@ -53,5 +53,27 @@ describe('legacy channel names linked by legal customer identity', () => {
     expect(audit.channels[0].covered).toBe(6)
     expect(audit.channels[0].gaps).toEqual([])
     expect(audit.trailingChannelCount).toBe(0)
+  })
+})
+
+describe('search-only historical aliases preserve different legal parties', () => {
+  it('recognizes full and partial known alias keywords and a common swapped term', () => {
+    for (const input of ['游海', '麦游', '海游', '游海（麦游）', ' 游海(麦游) ']) {
+      const terms = channelSearchAliasTerms(input)
+      expect(terms).toContain('游海')
+      expect(terms).toContain('麦游')
+    }
+    expect(channelSearchAliasTerms('西安麦游网络科技有限公司')).toEqual([])
+    expect(channelSearchAliasTerms('游')).toEqual([])
+  })
+
+  it('never expands a game name into a different channel legal identity', () => {
+    const original = row('id', '游海', youhai, '2026-08')
+    const unrelated = { ...row('other', '百分', '四川百分网', '2026-08'), gameName: '麦游小游戏' }
+    expect(channelLedgerMatchesSearch(original, '麦游')).toBe(true)
+    expect(channelLedgerMatchesSearch(original, '海游')).toBe(true)
+    expect(channelLedgerMatchesSearch(unrelated, '游海', [unrelated.gameName])).toBe(false)
+    expect(channelLedgerMatchesSearch(original, '西安麦游网络科技有限公司')).toBe(false)
+    expect(channelLedgerMatchesSearch(original, '西安游海网络科技有限公司')).toBe(true)
   })
 })
