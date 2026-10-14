@@ -167,7 +167,7 @@ export function useBillFormSafety({
   }, [draftKey, clearNavigationBlocker, view])
 
   const statusText = useMemo(() => {
-    if (staleDraft && !dirty) return '服务器版本已更新，旧草稿已保留但未自动覆盖'
+    if (staleDraft) return '服务器版本已更新，旧草稿已保留但未自动覆盖'
     if (!dirty) {
       return mode === 'edit' ? '内容与服务器一致' : '尚未产生本机草稿'
     }
