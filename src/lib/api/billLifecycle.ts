@@ -77,6 +77,8 @@ type ContractDifferenceApproval = {
 }
 
 export type ChannelPlatformVarianceReview = {
+  reviewKind?: 'small' | 'documented'
+  absoluteLineDifferenceCents?: number
   systemAmount: number
   platformAmount: number
   settlementAmount: number
@@ -84,13 +86,15 @@ export type ChannelPlatformVarianceReview = {
   lineIds: string[]
 }
 
-/** Manual platform-tail approval: exact persisted amounts and line IDs are part of
+/** Audited platform-amount approval: exact persisted amounts and line IDs are part of
  * the request so a changed bill cannot be approved from a stale review screen.
  */
 export async function confirmReviewedChannelPlatformVariance(
   billId: string,
   reason: string,
-  review: ChannelPlatformVarianceReview
+  review: ChannelPlatformVarianceReview,
+  evidenceAttachmentId = '',
+  evidenceConfirmed = false
 ): Promise<BillLifecycle> {
   const lifecycle = await apiPost<BillLifecycle>(
     '/api/bill-lifecycle/channel/' + encodeURIComponent(billId) + '/confirm-platform-variance',
@@ -100,7 +104,9 @@ export async function confirmReviewedChannelPlatformVariance(
       expected_platform_amount: review.platformAmount,
       expected_settlement_amount: review.settlementAmount,
       expected_signed_difference_cents: review.differenceCents,
-      expected_line_ids: review.lineIds
+      expected_line_ids: review.lineIds,
+      evidence_attachment_id: evidenceAttachmentId || null,
+      evidence_confirmed: evidenceConfirmed
     }
   )
   try {
@@ -111,7 +117,7 @@ export async function confirmReviewedChannelPlatformVariance(
   return lifecycle
 }
 
-/** A manual platform exception does NOT override contract identity, authorization
+/** A manual platform-amount exception does NOT override contract identity, authorization
  * or unresolved approval. Unlike the normal flow, contract service unavailability
  * is a hard stop for this exceptional confirmation.
  */
