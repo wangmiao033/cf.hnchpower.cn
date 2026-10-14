@@ -39,6 +39,16 @@ const LINE_COLUMNS = [
   ['校验结果', 'validationStatus', 'validation']
 ]
 
+const BRIEF_COLUMNS = [
+  ['游戏', 'gameName'],
+  ['后台流水', 'flow', 'money'],
+  ['代金券', 'voucherCost', 'money'],
+  ['分成比例', 'shareRate', 'percent'],
+  ['通道费率', 'channelFeeRate', 'percent'],
+  ['平台实结', 'platformSettlementAmount', 'money'],
+  ['校验', 'validationStatus', 'validation']
+]
+
 const VALIDATION_LABELS = {
   pass: '一致',
   fail: '存在差异',
@@ -151,6 +161,81 @@ export default function ChannelBillReadonlyView({ recordId, fallbackRecord }) {
 
   return (
     <div className="channel-readonly-view" aria-label="渠道账单完整只读详情">
+      <div className="channel-readonly-identity" aria-label="账单基础身份">
+        <strong>{snapshot.partnerName || snapshot.channelName || '合作方未填写'}</strong>
+        <span>账期 {snapshot.settlementMonth || '-'}</span>
+        <span>单号 {snapshot.billNumber || snapshot.statementNo || '-'}</span>
+      </div>
+
+      {error ? (
+        <div className="channel-readonly-error" role="alert">
+          账单明细读取失败：{error}
+          <button type="button" onClick={() => setReload((value) => value + 1)}>重试读取</button>
+        </div>
+      ) : null}
+
+      <section className="channel-readonly-section is-brief-games">
+        <header className="channel-readonly-section-head">
+          <div>
+            <h2>游戏结算明细</h2>
+            <p>先看每款游戏的流水、代金券和实际结算，完整计算字段可展开。</p>
+          </div>
+          <span className="channel-readonly-count">{record ? `${lines.length} 条` : '读取中'}</span>
+        </header>
+        {record ? lines.length ? (
+          <div className="channel-readonly-table-wrap" role="region" aria-label="游戏结算简明表" tabIndex={0}>
+            <table className="channel-readonly-table channel-readonly-table--brief">
+              <thead><tr>{BRIEF_COLUMNS.map(([label, key]) => <th key={key}>{label}</th>)}</tr></thead>
+              <tbody>
+                {lines.map((line, index) => (
+                  <tr key={line.id || index}>
+                    {BRIEF_COLUMNS.map(([label, key, format]) => (
+                      <td key={key} className={format === 'money' || format === 'percent' ? 'is-numeric' : ''}>
+                        {display(key === 'channelFeeRate' ? line.channelFeeRate ?? snapshot.channelFeeRate : line[key], format)}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : <p className="channel-readonly-empty">服务器没有返回逐游戏结算明细。</p>
+        : <p className="channel-readonly-empty">{loading ? '正在读取服务器已保存的游戏明细…' : '暂无可显示的数据'}</p>}
+      </section>
+
+      <details className="channel-readonly-fold">
+        <summary>全部结算计算字段 <small>完整扣减、分成、税率、系统及平台金额</small></summary>
+      <section className="channel-readonly-section">
+        <div className="channel-readonly-section-head">
+          <div><h2>逐游戏结算明细</h2><p>可左右滚动查看所有扣减项、分成、通道费和系统/平台结算差异。</p></div>
+          {record ? <span className="channel-readonly-count">{lines.length} 条</span> : null}
+        </div>
+        {record ? (
+          lines.length ? (
+            <div className="channel-readonly-table-wrap" role="region" aria-label="渠道账单逐游戏明细" tabIndex={0}>
+              <table className="channel-readonly-table">
+                <thead><tr>{LINE_COLUMNS.map(([label, key]) => <th key={key}>{label}</th>)}</tr></thead>
+                <tbody>
+                  {lines.map((line, index) => (
+                    <tr key={line.id || index}>
+                      {LINE_COLUMNS.map(([label, key, format]) => (
+                        <td key={key} className={format === 'money' || format === 'percent' || format === 'number' ? 'is-numeric' : ''}>
+                          {display(line[key], format)}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : <p className="channel-readonly-empty">服务器未返回逐游戏明细。</p>
+        ) : <p className="channel-readonly-empty">{loading ? '明细加载中…' : '暂无可显示的明细，请重试读取。'}</p>}
+      </section>
+
+      </details>
+
+      <details className="channel-readonly-fold">
+        <summary>账单资料与金额构成 <small>流水、计费、分成、实结与已收款</small></summary>
       <section className="channel-readonly-section">
         <header className="channel-readonly-section-head">
           <div>
@@ -194,33 +279,10 @@ export default function ChannelBillReadonlyView({ recordId, fallbackRecord }) {
         </dl>
       </section>
 
-      <section className="channel-readonly-section">
-        <div className="channel-readonly-section-head">
-          <div><h2>逐游戏结算明细</h2><p>可左右滚动查看所有扣减项、分成、通道费和系统/平台结算差异。</p></div>
-          {record ? <span className="channel-readonly-count">{lines.length} 条</span> : null}
-        </div>
-        {record ? (
-          lines.length ? (
-            <div className="channel-readonly-table-wrap" role="region" aria-label="渠道账单逐游戏明细" tabIndex={0}>
-              <table className="channel-readonly-table">
-                <thead><tr>{LINE_COLUMNS.map(([label, key]) => <th key={key}>{label}</th>)}</tr></thead>
-                <tbody>
-                  {lines.map((line, index) => (
-                    <tr key={line.id || index}>
-                      {LINE_COLUMNS.map(([label, key, format]) => (
-                        <td key={key} className={format === 'money' || format === 'percent' || format === 'number' ? 'is-numeric' : ''}>
-                          {display(line[key], format)}
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : <p className="channel-readonly-empty">服务器未返回逐游戏明细。</p>
-        ) : <p className="channel-readonly-empty">{loading ? '明细加载中…' : '暂无可显示的明细，请重试读取。'}</p>}
-      </section>
+      </details>
 
+      <details className="channel-readonly-fold">
+        <summary>结算规则、历史备注与调整 <small>{hasAdjustment ? '有调整记录 · 可展开核查' : '审计备查 · 默认收起'}</small></summary>
       <section className="channel-readonly-section">
         <div className="channel-readonly-section-head"><div><h2>结算规则与调整</h2><p>保留账单确认时已记录的规则参数和调整依据。</p></div></div>
         <dl className="channel-readonly-info">
@@ -257,6 +319,10 @@ export default function ChannelBillReadonlyView({ recordId, fallbackRecord }) {
         ) : null}
       </section>
 
+      </details>
+
+      <details className="channel-readonly-fold">
+        <summary>原始账单附件 <small>{attachmentError ? '附件读取失败' : attachmentLoading ? '读取中' : `${attachments.length} 个`}</small></summary>
       <section className="channel-readonly-section">
         <div className="channel-readonly-section-head">
           <div><h2>原始账单附件</h2><p>仅支持查看与下载，不提供上传或删除操作。</p></div>
@@ -277,6 +343,7 @@ export default function ChannelBillReadonlyView({ recordId, fallbackRecord }) {
           </ul>
         ) : null}
       </section>
+      </details>
     </div>
   )
 }
