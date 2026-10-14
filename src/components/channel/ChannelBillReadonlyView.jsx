@@ -182,25 +182,28 @@ export default function ChannelBillReadonlyView({ recordId, fallbackRecord }) {
           </div>
           <span className="channel-readonly-count">{record ? `${lines.length} 条` : '读取中'}</span>
         </header>
-        {record ? lines.length ? (
-          <div className="channel-readonly-table-wrap" role="region" aria-label="游戏结算简明表" tabIndex={0}>
-            <table className="channel-readonly-table channel-readonly-table--brief">
-              <thead><tr>{BRIEF_COLUMNS.map(([label, key]) => <th key={key}>{label}</th>)}</tr></thead>
-              <tbody>
-                {lines.map((line, index) => (
-                  <tr key={line.id || index}>
-                    {BRIEF_COLUMNS.map(([label, key, format]) => (
-                      <td key={key} className={format === 'money' || format === 'percent' ? 'is-numeric' : ''}>
-                        {display(key === 'channelFeeRate' ? line.channelFeeRate ?? snapshot.channelFeeRate : line[key], format)}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : <p className="channel-readonly-empty">服务器没有返回逐游戏结算明细。</p>
-        : <p className="channel-readonly-empty">{loading ? '正在读取服务器已保存的游戏明细…' : '暂无可显示的数据'}</p>}
+        <div className="channel-readonly-table-wrap" role="region" aria-label="游戏结算简明表" tabIndex={0}>
+          <table className="channel-readonly-table channel-readonly-table--brief">
+            <thead><tr>{BRIEF_COLUMNS.map(([label, key]) => <th key={key}>{label}</th>)}</tr></thead>
+            <tbody>
+              {record && lines.length ? lines.map((line, index) => (
+                <tr key={line.id || index}>
+                  {BRIEF_COLUMNS.map(([label, key, format]) => (
+                    <td key={key} className={format === 'money' || format === 'percent' ? 'is-numeric' : ''}>
+                      {display(key === 'channelFeeRate' ? line.channelFeeRate ?? snapshot.channelFeeRate : line[key], format)}
+                    </td>
+                  ))}
+                </tr>
+              )) : (
+                <tr>
+                  <td colSpan={BRIEF_COLUMNS.length} className="channel-readonly-brief-empty">
+                    {loading ? '正在读取服务器的游戏明细…' : '暂无可显示的游戏结算明细'}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </section>
 
       <details className="channel-readonly-fold">
