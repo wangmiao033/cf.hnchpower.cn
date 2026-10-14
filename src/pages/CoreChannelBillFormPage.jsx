@@ -28,6 +28,7 @@ import { listContractDifferenceCases, handleContractDifferenceCase } from '@/lib
 import { prepareChannelSpecialSettlement } from '@/domain/channel/channelSpecialSettlement.js'
 import { assessChannelSmallVariancePreflight } from '@/domain/channel/channelSmallVarianceReview.js'
 import { assessSavedChannelPlatformDifference, buildChannelPlatformApprovalNote } from '@/domain/channel/channelPlatformVarianceReview.js'
+import { assessChannelSavePreflight } from '@/domain/channel/channelSavePreflight.js'
 import { getRecentApiErrorMessage } from '@/lib/api/client.ts'
 import {
   invalidateEditRecord,
@@ -465,14 +466,35 @@ function CoreChannelBillFormPage({ mode }) {
     const billId = String(channelEditRecordId)
     let savedSuccessfully = false
     try {
+      // One authoritative preflight BEFORE writing any amount. Previously
+      // confirmation saved first and discovered an already-locked status after
+      // the write had failed, trapping users between two contradictory views.
+      const currentBill = await getChannelRecord(billId)
+      const preflight = assessChannelSavePreflight(stableRecord, currentBill)
+      if (!preflight.allowed) {
+        reportIssue(preflight.message, {
+          kind: 'stale-status',
+          title: preflight.kind === 'locked' ? '服务器已锁单 · 不可覆盖金额' : '服务器版本已变化',
+          saved: false, autoLocate: false
+        })
+        retryLoad()
+        return
+      }
       if (safety.dirty) {
         const saved = await handleChannelUpdateRecord(billId, {
           ...stableRecord,
           ...candidate,
           id: billId,
-          status: stableRecord?.status || 'pending'
+          status: currentBill.status || 'pending',
+          // Keep the opened revision for backend optimistic concurrency.
+          updatedAt: stableRecord?.updatedAt || currentBill.updated_at
         })
-        if (saved === false) return
+        if (saved === false) {
+          // A concurrent update may have happened between preflight and PUT.
+          // Reload safely, keeping an incompatible local draft for recovery.
+          retryLoad()
+          return
+        }
         savedSuccessfully = true
         safety.clearAfterSubmit()
         setSmartRecord(null)
@@ -489,6 +511,7 @@ function CoreChannelBillFormPage({ mode }) {
       const savedBill = await getChannelRecord(billId)
       const savedStatus = String(savedBill.status || 'pending').trim().toLowerCase()
       if (savedStatus !== 'pending') {
+        retryLoad()
         reportIssue(
           `服务器账单现在是「${savedStatus === 'confirmed' ? '已核对' : savedStatus}」，不能再次从旧页面保存或核对。请重新读取服务器状态；需要改金额时，先使用已有的修改账单流程。`,
           { kind: 'stale-status', title: '服务器状态已变化 · 本次未覆盖账单', saved: savedSuccessfully, autoLocate: false }
