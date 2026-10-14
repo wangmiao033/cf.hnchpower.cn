@@ -38,6 +38,62 @@ describe('channel month coverage follows ledger identity search', () => {
     expect(auditChannelBillMonths(rows,{now,keyword:'未知渠道'}).matchingChannelCount).toBe(0)
   })
 
+  it('uses the bill-list search aliases in monthly audit and scans complete history', () => {
+    const legal = '西安游海网络科技有限公司'
+    const rows = ['2026-06', '2026-07', '2026-08', '2026-09'].map((month, index) => ({
+      ...bill(month, index === 0 ? '游海（麦游）' : '游海'),
+      partnerName: legal
+    }))
+    for (const keyword of ['游海', '麦游', '海游', '游海（麦游）', '游海(麦游)']) {
+      const result = auditChannelBillMonths(rows, { now, keyword, windowSize: 6 })
+      expect(result.matchingChannelCount, keyword).toBe(1)
+      expect(result.coveredChannelCount, keyword).toBe(1)
+      expect(result.channels[0].name, keyword).toBe('游海')
+      expect(result.channels[0].covered, keyword).toBe(4)
+      expect(result.channels[0].gaps, keyword).toEqual([])
+      expect(['2026-06', '2026-07', '2026-08', '2026-09']
+        .map(month => result.channels[0].cells.find(cell => cell.month === month)?.kind))
+        .toEqual(['recorded', 'recorded', 'recorded', 'recorded'])
+    }
+    expect(auditChannelBillMonths(rows, { now, localChannelSearch: '麦游' })
+      .matchingChannelCount).toBe(1)
+    expect(auditChannelBillMonths(rows, { now, channelFilter: '游海', keyword: '麦游' })
+      .coveredChannelCount).toBe(1)
+  })
+
+  it('keeps the two legal companies separate on precise company-name searches', () => {
+    const youhai = { ...bill('2026-08', '游海'), partnerName: '西安游海网络科技有限公司' }
+    const maiyou = { ...bill('2026-09', '麦游'), partnerName: '西安麦游网络科技有限公司' }
+    const other = { ...bill('2026-09', '百分', '游海小游戏'), partnerName: '四川百分网' }
+    const rows = [youhai, maiyou, other]
+    const first = auditChannelBillMonths(rows, { now, keyword: '西安游海网络科技有限公司' })
+    const second = auditChannelBillMonths(rows, { now, keyword: '西安麦游网络科技有限公司' })
+    expect(first.channels.map(channel => channel.name)).toEqual(['游海'])
+    expect(second.channels.map(channel => channel.name)).toEqual(['麦游'])
+    expect(auditChannelBillMonths(rows, { now, localChannelSearch: '游海' })
+      .channels.map(channel => channel.name)).toEqual(['游海', '麦游'])
+    expect(auditChannelBillMonths(rows, { now, keyword: '麦游' })
+      .channels.map(channel => channel.name)).toEqual(['游海', '麦游'])
+    // An alias keyword does not turn a game title into another channel.
+    expect(auditChannelBillMonths(rows, { now, keyword: '麦游' })
+      .channels.some(channel => channel.name === '百分')).toBe(false)
+  })
+
+  it('renders the audit table instead of a misleading zero-results message after searching 麦游', () => {
+    const rows = ['2026-06','2026-07','2026-08','2026-09'].map((month, i) => ({
+      ...bill(month, i === 0 ? '游海（麦游）' : '游海'),
+      partnerName: '西安游海网络科技有限公司'
+    }))
+    const html = renderToStaticMarkup(React.createElement(ChannelMonthCoveragePanel, {
+      initialExpanded: true, focusKeyword: '麦游', records: rows, enabled: true
+    }))
+    expect(html).not.toContain('渠道「')
+    expect(html).toContain('关键词「')
+    expect(html).toContain('游海')
+    expect(html).toContain('channel-month-audit__matrix')
+    expect(html).not.toContain('未找到匹配的渠道')
+  })
+
   it('shows a channel with no internal gaps when it is focused, with clickable recorded months', () => {
     const months=channelAuditMonths({now,windowSize:6})
     const rows=[...months.map(month=>bill(month,'百分')),bill(months[0],'八门'),bill(months[5],'八门')]

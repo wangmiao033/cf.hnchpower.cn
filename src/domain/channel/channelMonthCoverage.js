@@ -6,7 +6,7 @@
 import { channelBillMonths } from '@/domain/reconciliation/sharedBillMonthOptions.js'
 import { getChannelLineItems } from '@/domain/channel/channelAggregates.js'
 import { getChannelBillNumber } from '@/utils/channelBillNumber.js'
-import { unifyLegacyChannelNamesForSamePartner } from './channelAliasIdentity.js'
+import { unifyLegacyChannelNamesForSamePartner, channelLedgerMatchesSearch, channelIdentityMatchesSearch } from './channelAliasIdentity.js'
 
 const MONTH_PATTERN = /^20\d{2}-(0[1-9]|1[0-2])$/
 
@@ -62,17 +62,16 @@ export function filterScopedChannelAuditRows(records = [], options = {}) {
     if (!row || cancelled(row)) continue
     const key = channelKey(row)
     if (!key || (name && !key.includes(name))) continue
-    const partner = searchText(row.partnerName || row.partner_name)
-    if (local && !key.includes(local) && !partner.includes(local)) continue
-    if (keyword) {
-      const indexed = searchText([
-        row.channelName, row.partnerName, row.gameName, row.remark,
-        getChannelBillNumber(row), row.statementNo,
-        ...getChannelLineItems(row).map(item => item.gameName),
-        ...channelBillMonths(row)
-      ].filter(Boolean).join(' '))
-      if (!indexed.includes(keyword)) continue
-    }
+    // Reuse the exact alias-aware keyword rules from the bill list.
+    // "麦游" now locates historical "游海（麦游）" bills even when their
+    // current in-memory display name was normalized to "游海".
+    if (local && !channelIdentityMatchesSearch(row, local)) continue
+    if (keyword && !channelLedgerMatchesSearch(row, keyword, [
+      row.remark,
+      getChannelBillNumber(row),
+      ...getChannelLineItems(row).map(item => item.gameName),
+      ...channelBillMonths(row)
+    ])) continue
     identities.add(key)
   }
   return (records || []).filter(row => row && identities.has(channelKey(row)))

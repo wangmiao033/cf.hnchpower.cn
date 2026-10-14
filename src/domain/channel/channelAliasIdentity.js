@@ -85,3 +85,22 @@ export function channelLedgerMatchesSearch(row, query, otherFields = []) {
   return [row?.channelName, row?.originalChannelName, row?.partnerName]
     .map(key).some(field => synonyms.some(alias => field.includes(alias)))
 }
+
+
+/**
+ * Only channel/legal-partner display names may match this field. This is used
+ * by the audit panel's "查找渠道" field, so a game title or memo never creates
+ * a spurious matching channel.
+ */
+export function channelIdentityMatchesSearch(row, query) {
+  const needle = key(query)
+  if (!needle) return true
+  const identities = [
+    row?.channelName ?? row?.channel_name,
+    row?.originalChannelName, row?.partnerName ?? row?.partner_name
+  ].map(key).filter(Boolean)
+  if (identities.some(value => value.includes(needle))) return true
+  const aliases = channelSearchAliasTerms(query).map(key)
+  return aliases.length > 0 &&
+    identities.some(value => aliases.some(alias => value.includes(alias)))
+}
