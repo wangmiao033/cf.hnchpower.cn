@@ -17,6 +17,7 @@ from app.core.blob_storage import (
 )
 from app.core.deps import get_db
 from app.models.bill_attachment import BillAttachment
+from app.models.operation_log import OperationLog
 from app.models.channel import ChannelRecord
 from app.models.reconciliation import ReconciliationRecord
 
@@ -127,6 +128,25 @@ async def delete_attachment(
 ):
     _require_parent(db, bill_type, bill_id)
     item = _get_attachment(db, bill_type, bill_id, attachment_id)
+    # A formally approved platform settlement statement is immutable evidence;
+    # do not silently delete it while retaining an approval in audit logs.
+    if bill_type == "channel":
+        referenced = db.execute(
+            select(OperationLog.id).where(
+                OperationLog.entity_type == "channel",
+                OperationLog.entity_id == bill_id,
+                OperationLog.action == "platform_documented_variance_confirm",
+                OperationLog.metadata_json["evidence_attachment_id"].as_string() == attachment_id,
+            ).limit(1)
+        ).scalar_one_or_none()
+        if referenced is not None:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "error": "settlement_evidence_locked",
+                    "message": "此附件已用于已确认账单的平台差异审批，属于审计凭证，不能直接删除。",
+                },
+            )
     file_url = item.file_url
     db.delete(item)
     db.commit()
