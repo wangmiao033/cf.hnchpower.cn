@@ -1,0 +1,36 @@
+name: Cleanup old cf.hnchpower.cn deployments
+
+on:
+  schedule:
+    # Every day at 04:20 Beijing time (20:20 UTC).
+    - cron: '20 20 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Preview deletion plan only (no deployments removed)'
+        type: boolean
+        required: true
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cf-hnchpower-vercel-deployment-cleanup
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    name: Keep newest 3 and active deployment aliases
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check Vercel token and prune old deployments
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && 'true' || 'false' }}
+        run: python scripts/cleanup_vercel_deployments.py
