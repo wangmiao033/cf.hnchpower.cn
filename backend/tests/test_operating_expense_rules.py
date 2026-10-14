@@ -37,6 +37,8 @@ class OperatingExpenseRulesTest(unittest.TestCase):
     def test_other_expense_subcategories(self):
         self.assertEqual(_normalize_expense_subcategory("COURIER_LOGISTICS", "other"), "courier_logistics")
         self.assertEqual(_normalize_expense_subcategory(" office_supplies ", "other"), "office_supplies")
+        # Forum campaign and player-prize purchases must be accepted by the API.
+        self.assertEqual(_normalize_expense_subcategory("activity_promotion", "other"), "activity_promotion")
         self.assertIsNone(_normalize_expense_subcategory(None, "other"))
         self.assertIsNone(_normalize_expense_subcategory("", "office"))
         with self.assertRaises(HTTPException) as invalid:
