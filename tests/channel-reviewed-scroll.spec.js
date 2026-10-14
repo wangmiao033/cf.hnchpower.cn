@@ -30,6 +30,10 @@ const record = {
 test('read-only channel scroll has no ghosting or repeated attachment requests', async ({ page }) => {
   const requests = []
   const errors = []
+  const consoleErrors = []
+  page.on('console', item => {
+    if (item.type() === 'error') consoleErrors.push(item.text())
+  })
   await page.setViewportSize({ width: 1180, height: 520 })
   page.on('pageerror', error => errors.push(error.message))
   await page.route('**/api/**', route => {
@@ -47,6 +51,13 @@ test('read-only channel scroll has no ghosting or repeated attachment requests',
   await page.goto('/tests/fixtures/channel-reviewed-scroll.html')
   const panel = page.locator('.channel-readonly-view')
   const folds = panel.locator('details.channel-readonly-fold')
+  await page.waitForTimeout(600)
+  if (!(await panel.count())) {
+    throw new Error('Fixture failed to render: ' + JSON.stringify({
+      errors, consoleErrors, requests,
+      html: (await page.locator('#fixture').innerHTML()).slice(0, 600)
+    }))
+  }
   await expect(panel.locator('.is-brief-games tbody tr')).toHaveCount(4)
   await expect(folds).toHaveCount(4)
   expect(requests).toEqual(['GET /api/channel-records/XIAOMI-202609'])
