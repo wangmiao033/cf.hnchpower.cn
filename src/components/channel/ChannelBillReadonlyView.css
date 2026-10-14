@@ -361,3 +361,11 @@
   .channel-readonly-view .is-brief-games { padding: 12px; }
   .channel-readonly-fold > summary { padding: 12px; }
 }
+
+.channel-readonly-table--brief .channel-readonly-brief-empty {
+  text-align: center;
+  padding: 17px;
+  color: #8290a0;
+  font-weight: 400;
+  font-size: 12px;
+}
