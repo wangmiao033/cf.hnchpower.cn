@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """Safely prune old deployments for cf.hnchpower.cn only.
 
-Keeps the latest three deployments, the live production deployment, in-progress
-builds, and any deployment that still serves a production alias. Automatic git
-branch hostnames do not keep an older deployment. Uses the GitHub Actions
-VERCEL_TOKEN repository secret.
+Keeps the three newest production deployments and the live production domain.
+Preview, canceled, and in-progress preview builds are removed. An in-progress
+production build is kept. Uses the GitHub Actions VERCEL_TOKEN secret.
 """
 import json
 import os
@@ -155,17 +154,21 @@ def main():
     deployments = list_all_deployments()
     if original_live not in {deployment_id(item) for item in deployments}:
         raise RuntimeError("Live production deployment missing from full project listing")
-    protected = {deployment_id(item) for item in deployments[:KEEP_LATEST]}
+    production = [item for item in deployments if item.get("target") == "production"]
+    protected = {deployment_id(item) for item in production[:KEEP_LATEST]}
     protected.add(original_live)
     protected.update(
-        deployment_id(item) for item in deployments if status(item) in IN_PROGRESS
+        deployment_id(item)
+        for item in production
+        if status(item) in IN_PROGRESS
     )
     deleted = 0
     aliased = 0
     candidates = 0
     for item in deployments:
         dep_id = deployment_id(item)
-        if dep_id in protected or status(item) not in TERMINAL:
+        item_status = status(item)
+        if dep_id in protected or item_status not in TERMINAL | IN_PROGRESS:
             continue
         candidates += 1
         if deleted >= MAX_DELETE:
@@ -189,7 +192,7 @@ def main():
     summary([
         "### Vercel deployment cleanup",
         f"- Project: \u0060{PROJECT_NAME}\u0060 only",
-        f"- Policy: newest {KEEP_LATEST} + live production + in-progress builds + production aliases retained",
+        f"- Policy: newest {KEEP_LATEST} production deployments + live domain; previews removed",
         f"- Existing deployments examined: {len(deployments)}",
         f"- Older terminal-state candidates: {candidates}",
         f"- Skipped because aliased: {aliased}",

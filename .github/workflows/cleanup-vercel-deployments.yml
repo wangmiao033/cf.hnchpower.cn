@@ -2,8 +2,8 @@ name: Cleanup old cf.hnchpower.cn deployments
 
 on:
   schedule:
-    # Backstop at 04:20 Beijing time (20:20 UTC). Production deploys also prune immediately.
-    - cron: '20 20 * * *'
+    # Clear preview deployments left by Git pushes. Production deploys also prune immediately.
+    - cron: '*/15 * * * *'
   workflow_dispatch:
     inputs:
       dry_run:

@@ -5,10 +5,8 @@ const config = JSON.parse(readFileSync(new URL('../vercel.json', import.meta.url
 const githubWorkflow = readFileSync(new URL('../.github/workflows/production-deploy.yml', import.meta.url), 'utf8')
 
 describe('single production deployment policy', () => {
-  it('disables direct Vercel Git auto deploys on main only', () => {
-    expect(config.git.deploymentEnabled).toEqual({ main: false })
-    // Branches not matched by the rule keep Git preview deployments.
-    expect(config.git.deploymentEnabled['feat/*']).toBeUndefined()
+  it('disables Vercel Git auto deploys for every branch', () => {
+    expect(config.git.deploymentEnabled).toBe(false)
   })
 
   it('retains the gated GitHub Actions production deployment', () => {
