@@ -17,12 +17,15 @@ import { apiChannelRowToFrontend, getChannelRecord } from '@/lib/api/channel.ts'
 import {
   ContractDifferenceBlockedError,
   transitionBillLifecycle,
-  confirmApprovedChannelSmallVariance
+  confirmApprovedChannelSmallVariance,
+  confirmReviewedChannelPlatformVariance,
+  assertContractReadyForPlatformTail
 } from '@/lib/api/billLifecycle.ts'
 import { getContractBillReconciliation } from '@/lib/api/contractTerms.ts'
 import { listContractDifferenceCases, handleContractDifferenceCase } from '@/lib/api/contractDifferences.ts'
 import { prepareChannelSpecialSettlement } from '@/domain/channel/channelSpecialSettlement.js'
 import { assessChannelSmallVariancePreflight } from '@/domain/channel/channelSmallVarianceReview.js'
+import { assessSavedChannelPlatformVariance } from '@/domain/channel/channelPlatformVarianceReview.js'
 import { getRecentApiErrorMessage } from '@/lib/api/client.ts'
 import {
   getCachedEditRecord,
@@ -142,6 +145,8 @@ function CoreChannelBillFormPage({ mode }) {
   const [inlineIssue, setInlineIssue] = useState(null)
   const [differenceSeedItems, setDifferenceSeedItems] = useState([])
   const [showSmallVariancePanel, setShowSmallVariancePanel] = useState(false)
+  const [smallVarianceKind, setSmallVarianceKind] = useState('contract')
+  const [platformVarianceReview, setPlatformVarianceReview] = useState(null)
   const [smallVarianceNote, setSmallVarianceNote] = useState('')
   const [smartRecord, setSmartRecord] = useState(null)
   const [smartRevision, setSmartRevision] = useState(0)
@@ -160,6 +165,10 @@ function CoreChannelBillFormPage({ mode }) {
     setSmartRevision(0)
     setInlineIssue(null)
     setDifferenceSeedItems([])
+    setShowSmallVariancePanel(false)
+    setSmallVarianceKind('contract')
+    setPlatformVarianceReview(null)
+    setSmallVarianceNote('')
     setRuleAuthority({ status: 'idle', total: 0, matched: 0, unmatched: 0, needsConfirmation: 0 })
   }, [mode, channelEditRecordId])
 
@@ -428,7 +437,13 @@ function CoreChannelBillFormPage({ mode }) {
 
     const settlementAmount = normalizedAmount(candidate?.settlementAmount ?? previewAmount)
     const zeroSettlement = isZeroSettlement(settlementAmount)
-    const confirmed = window.confirm(
+    const possiblePlatformTail = String(candidate?.validationStatus ?? stableRecord?.validationStatus ?? '') === 'fail'
+      && Number.isFinite(Number(candidate?.settlementDifference ?? stableRecord?.settlementDifference))
+      && Math.abs(Number(candidate?.settlementDifference ?? stableRecord?.settlementDifference)) > 0.005
+      && Math.abs(Number(candidate?.settlementDifference ?? stableRecord?.settlementDifference)) <= 0.50
+    // A genuine small platform difference will require its own one-time written
+    // approval; do not ask for an additional redundant confirmation first.
+    const confirmed = possiblePlatformTail || window.confirm(
       zeroSettlement
         ? `确认核对并结清这张零结算账单吗？\n\n结算金额：${money(settlementAmount)}\n\n本期无需开票和收款，确认后账单将直接完成并锁定。`
         : `确认核对这张渠道账单吗？\n\n结算金额：${money(settlementAmount)}\n\n确认后账单会自动锁定；如合作方启用了累计结算，本期会进入累计池而不是立即催收/开票。`
@@ -482,6 +497,29 @@ function CoreChannelBillFormPage({ mode }) {
         : savedSuccessfully
           ? '账单修改已保存，但确认核对失败，请在当前页处理后重试。'
           : '保存并确认核对失败，请在当前页处理后重试。'
+      // Distinguish a platform rounding tail from a contract defect. The normal
+      // backend intentionally rejects any 'fail', so route a verified <=¥0.50
+      // *saved platform* difference into the explicit audited review instead
+      // of sending the user into more contract-difference screens.
+      if (savedSuccessfully && (
+        error?.errorCode === 'settlement_validation_failed' ||
+        /系统计算与平台账单存在差异/.test(message)
+      )) {
+        try {
+          const savedBill = await getChannelRecord(billId)
+          const review = assessSavedChannelPlatformVariance(savedBill)
+          if (review.eligible) {
+            setInlineIssue({
+              kind: 'platform', saved: true, title: '账单已保存 · 仅剩平台小额尾差',
+              message: `系统计算 ${money(review.systemAmount)}，平台结算 ${money(review.platformAmount)}，差额 ${money(Math.abs(review.differenceCents / 100))}。账单实际金额不变；请在下方填写一次人工核对依据即可确认。`
+            })
+            openSmallVariancePanel('platform', review)
+            return
+          }
+        } catch (lookupError) {
+          console.warn('读取平台尾差核对依据失败', lookupError)
+        }
+      }
       const contractRelated = /合同|差异|核验|特殊结算|匹配/.test(message)
       const contractDifferences = error instanceof ContractDifferenceBlockedError
         ? error.contractDifferences || []
@@ -579,7 +617,10 @@ function CoreChannelBillFormPage({ mode }) {
     }
   }
 
-  const openSmallVariancePanel = () => {
+  const openSmallVariancePanel = (kind = 'contract', review = null) => {
+    setSmallVarianceKind(kind)
+    setPlatformVarianceReview(review)
+    setSmallVarianceNote('')
     setShowSmallVariancePanel(true)
     window.setTimeout(() => {
       document.getElementById('channel-small-variance-approval')?.scrollIntoView({
@@ -592,6 +633,49 @@ function CoreChannelBillFormPage({ mode }) {
   const confirmSmallApprovedVariance = async () => {
     if (!isEdit || !channelEditRecordId || reviewing) return
     const note = smallVarianceNote.trim()
+    if (smallVarianceKind === 'platform') {
+      if (!platformVarianceReview || note.length < 6) {
+        showToast('请填写平台尾差核对依据（至少6个字）', 'error')
+        return
+      }
+      if (safety.dirty) {
+        showToast('有尚未保存的修改，请先保存后重新核对尾差', 'error')
+        return
+      }
+      setReviewing(true)
+      try {
+        // Strict contract preflight: neither unknown authorization nor
+        // unresolved contract deviations can be waived by platform approval.
+        await assertContractReadyForPlatformTail(String(channelEditRecordId))
+        await confirmReviewedChannelPlatformVariance(
+          String(channelEditRecordId), note, platformVarianceReview
+        )
+        safety.clearAfterSubmit()
+        invalidateEditRecord('channel', String(channelEditRecordId))
+        setInlineIssue(null)
+        setDifferenceSeedItems([])
+        setShowSmallVariancePanel(false)
+        setPlatformVarianceReview(null)
+        setSmallVarianceNote('')
+        try {
+          await recon.refetchChannelFromApi?.()
+        } catch (refreshError) {
+          console.warn('平台小额尾差核对已完成，渠道列表刷新暂不可用', refreshError)
+        }
+        showToast('平台小额尾差已记录人工核对依据并完成账单确认，实际应收金额未修改', 'success')
+        goList()
+      } catch (error) {
+        const message = error instanceof Error ? error.message : '平台尾差核对失败'
+        reportIssue(message, {
+          kind: 'platform', title: '金额已保存，平台尾差尚未确认',
+          saved: true, toast: false, autoLocate: false
+        })
+        showToast(message, 'error')
+      } finally {
+        setReviewing(false)
+      }
+      return
+    }
     if (note.length < 2) {
       showToast('请先填写小额差异强制确认备注（至少2个字）', 'error')
       return
@@ -807,7 +891,9 @@ function CoreChannelBillFormPage({ mode }) {
               {inlineIssue.saved
                 ? inlineIssue.kind === 'contract'
                   ? '账单金额已保存，无需改成合同默认费率。若本期结算确认函属实，可直接确认特殊结算并锁单。'
-                  : '刚才的账单修改已经写入服务器，不需要重新录入。处理下面的核对问题后，再重新确认即可。'
+                  : inlineIssue.kind === 'platform'
+                    ? '不需要修改真实流水、分成或增加结算调整。在下方填写核对依据并确认即可。'
+                    : '刚才的账单修改已经写入服务器，不需要重新录入。处理下面的核对问题后，再重新确认即可。'
                 : '点击“定位问题”会直接跳到对应明细行、合同规则区或调整区，不需要自己逐项查找。'}
             </small>
           </div>
@@ -925,6 +1011,8 @@ function CoreChannelBillFormPage({ mode }) {
           onCancel={() => setShowSmallVariancePanel(false)}
           busy={reviewing}
           settlementAmount={stableRecord?.settlementAmount ?? previewAmount}
+          kind={smallVarianceKind}
+          platformReview={platformVarianceReview}
         />
       ) : null}
 
@@ -964,14 +1052,6 @@ function CoreChannelBillFormPage({ mode }) {
           </button>
           {isEdit ? (
             <>
-              <button
-                type="button"
-                className="channel-small-variance-trigger"
-                disabled={reviewing}
-                onClick={openSmallVariancePanel}
-              >
-                小额差异强制核对
-              </button>
               <button type="button" className="confirm-review" disabled={reviewing} onClick={() => void confirmReview()}>
                 {reviewing ? '正在确认…' : zeroSettlementPreview ? '确认核对并结清' : '保存并确认核对'}
               </button>
