@@ -43,6 +43,19 @@ describe('channel bill flat list rendering', () => {
     expect(html).not.toContain('channel-group-toggle')
   })
 
+  it('removes the non-working detail action but retains receipt, invoice, editing and voiding', () => {
+    const html = renderToStaticMarkup(React.createElement(ChannelFlatLedger, {
+      rows: [bill('2026-09', 100)],
+      pageSize: 100,
+      apiEnabled: true
+    }))
+    expect(html).not.toContain('>详情</button>')
+    expect(html).toContain('>收款</button>')
+    expect(html).toContain('>发票</button>')
+    expect(html).toMatch(/>(?:编辑|查看\/修改)<\/button>/)
+    expect(html).toContain('>作废</button>')
+  })
+
   it('treats a multi-month record as one bill and labels its range', () => {
     const html = renderToStaticMarkup(React.createElement(ChannelFlatLedger, {
       rows: [bill('2026-08', 100, {

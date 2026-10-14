@@ -46,8 +46,6 @@ export default function ChannelFlatLedger({
   onPageSizeChange,
   onSelectPage,
   onToggleSelected,
-  onDetail,
-  onPrefetch,
   onReceipt,
   onInvoice,
   onMergeInvoice,
@@ -198,7 +196,6 @@ export default function ChannelFlatLedger({
                   </td>
                   <td>
                     <div className="channel-flat-ledger__row-actions">
-                      <button type="button" onMouseEnter={() => onPrefetch?.(row)} onFocus={() => onPrefetch?.(row)} onClick={() => onDetail?.(row)}>详情</button>
                       {isCancelled ? (
                         <button type="button" disabled={busy} onClick={() => onRestore?.(row)}>恢复</button>
                       ) : isArchived ? (

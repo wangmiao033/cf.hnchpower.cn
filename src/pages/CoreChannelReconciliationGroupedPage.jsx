@@ -912,8 +912,6 @@ function CoreChannelReconciliationGroupedPage() {
           onPageSizeChange={value => { setFlatPageSize(value); setFlatPage(1) }}
           onSelectPage={selectFlatPage}
           onToggleSelected={toggleSelected}
-          onDetail={row => openBill360('channel', String(row.id), row)}
-          onPrefetch={row => prefetchBill360?.('channel', String(row.id))}
           onReceipt={setReceiptRecord}
           onInvoice={row => openInvoiceMerge([row])}
           onMergeInvoice={() => openInvoiceMerge(selectedRows)}
