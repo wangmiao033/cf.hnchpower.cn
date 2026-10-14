@@ -34,7 +34,8 @@ describe('reconciliation customer linkage mapping', () => {
       partnerId: 'partner-1',
       partner: '广州示例网络科技有限公司',
       partnerShortName: '示例',
-      partnerLinkStatus: 'linked'
+      partnerLinkStatus: 'linked',
+      updatedAt: '2026-07-26T00:00:00Z'
     })
   })
 
