@@ -38,8 +38,10 @@ describe('reviewed channel bill detail density', () => {
     expect((html.match(/<details class="channel-readonly-fold"/g) || []).length).toBe(4)
     expect(html).not.toContain('<details open')
     expect(html).toContain('¥475.81') // saved record, not recalculated
-    expect(html).toContain('¥0.00')   // payment remains zero
-    expect(html).toContain('小米平台确认，累计满1000元后申请结算')
+    // Heavy detail DOM and secondary attachments load only on expansion.
+    expect(html).not.toContain('¥0.00')
+    expect(html).not.toContain('小米平台确认，累计满1000元后申请结算')
+    expect(html).toContain('按需查看')
     expect(html).not.toContain('保存修改')
   })
 })

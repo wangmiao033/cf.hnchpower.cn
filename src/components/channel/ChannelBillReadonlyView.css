@@ -142,9 +142,11 @@
 }
 
 .channel-readonly-table th {
-  position: sticky;
-  top: 0;
-  z-index: 1;
+  /* Four-line reviewed bills do not need a sticky table header. Keeping it
+     in the nested horizontal scroller creates unnecessary compositor layers
+     and can leave visual ghosts while scrolling/expanding accordions. */
+  position: static;
+  z-index: auto;
   color: #59687a;
   background: #f3f6fa;
   font-size: 11px;
@@ -302,7 +304,8 @@
 }
 .channel-readonly-fold {
   min-width: 0;
-  overflow: hidden;
+  /* Do not force a nested clipping/scroll layer around native <details>. */
+  overflow: visible;
   border: 1px solid #e2e9f0;
   border-radius: 10px;
   background: #fff;
@@ -368,4 +371,10 @@
   color: #8290a0;
   font-weight: 400;
   font-size: 12px;
+}
+
+/* Keep horizontal scrolling local to the table. Do not propagate wheel
+   overscroll to the whole detail while horizontally inspecting columns. */
+.channel-readonly-table-wrap {
+  overscroll-behavior-x: contain;
 }
