@@ -24,21 +24,35 @@ describe('single evidence-backed platform reconciliation UI', () => {
     expect(html).toContain('平台结算金额差异确认')
     expect(html).toContain('535.80')
     expect(html).toContain('475.81')
-    expect(html).toContain('上传原始结算凭证')
-    expect(html).toContain('请选择已上传的平台结算单')
-    expect(html).toContain('核准平台实结金额并完成核对')
-    expect(html).toMatch(/disabled=""[^>]*>核准平台实结金额并完成核对/)
+    expect(html).toContain('平台结算凭证')
+    expect(html).toContain('账单附件')
+    expect(html).toContain('补充说明（选填')
+    expect(html).toContain('按平台¥475.81确认账单')
+    expect(html).toMatch(/disabled=""[^>]*>我已核对凭证，按平台¥475.81确认账单/)
   })
 
-  it('enables documented confirmation only after file selection and checked acknowledgement', () => {
+  it('lets admin click once when a document is already linked, even with a blank note', () => {
     const html = renderToStaticMarkup(React.createElement(ChannelSmallVarianceApprovalPanel, {
       ...props,
-      attachments: [{ id: 'A1', file_name: '小米开发者平台2026-09.pdf' }],
-      selectedAttachmentId: 'A1',
-      acknowledgedSource: true
+      note: '',
+      attachments: [{ id: 'A1', file_name: '小米开发者平台2026-09.pdf' }]
     }))
+    expect(html).toContain('已自动关联')
     expect(html).toContain('小米开发者平台2026-09.pdf')
-    expect(html).not.toMatch(/disabled=""[^>]*>核准平台实结金额并完成核对/)
+    expect(html).toContain('补充说明（选填')
+    expect(html).toContain('我已核对凭证，按平台¥475.81确认账单')
+    expect(html).not.toMatch(/disabled=""[^>]*>我已核对凭证，按平台¥475.81确认账单/)
+    expect(html).not.toContain('我已核对小米（或对应平台）的原始分成明细')
+  })
+
+  it('only requires selecting a document when there is more than one', () => {
+    const html = renderToStaticMarkup(React.createElement(ChannelSmallVarianceApprovalPanel, {
+      ...props, note: '',
+      attachments: [{ id: 'A1', file_name: 'A.xlsx' }, { id: 'A2', file_name: 'B.pdf' }]
+    }))
+    expect(html).toContain('本单有 2 份附件')
+    expect(html).toContain('选择本次核对的原始凭证')
+    expect(html).toMatch(/disabled=""[^>]*>我已核对凭证，按平台¥475.81确认账单/)
   })
 
   it('keeps the tiny-variance path free of a mandatory upload', () => {
@@ -48,6 +62,7 @@ describe('single evidence-backed platform reconciliation UI', () => {
       note: '按平台分成表确认少量尾差'
     }))
     expect(html).toContain('平台小额尾差确认')
-    expect(html).not.toContain('上传原始结算凭证（必需）')
+    expect(html).not.toContain('平台结算凭证')
+    expect(html).not.toContain('已自动关联')
   })
 })

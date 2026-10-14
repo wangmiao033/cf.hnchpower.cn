@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { assessSavedChannelPlatformVariance, assessSavedChannelPlatformDifference } from './channelPlatformVarianceReview.js'
+import { assessSavedChannelPlatformVariance, assessSavedChannelPlatformDifference, buildChannelPlatformApprovalNote } from './channelPlatformVarianceReview.js'
 
 const bill = (overrides = {}) => ({
   status: 'pending', validation_status: 'fail',
@@ -74,5 +74,34 @@ describe('statement-backed Xiaomi platform difference', () => {
       ]
     }).eligible).toBe(false)
     expect(assessSavedChannelPlatformDifference({ ...base, status: 'confirmed' }).eligible).toBe(false)
+  })
+})
+
+describe('automated audit note for explicit human platform confirmation', () => {
+  const review = {
+    reviewKind: 'documented',
+    systemAmount: 7.33, platformAmount: 9.38,
+    settlementAmount: 9.38, differenceCents: -205
+  }
+  it('provides a complete 12+-character reason without requiring the user to retype the file or amount', () => {
+    const reason = buildChannelPlatformApprovalNote(review, '', '广州熊动科技有限公司9月份账单.xlsx')
+    expect(reason.length).toBeGreaterThanOrEqual(12)
+    expect(reason).toContain('广州熊动科技有限公司9月份账单.xlsx')
+    expect(reason).toContain('¥7.33')
+    expect(reason).toContain('¥9.38')
+    expect(reason).toContain('¥2.05')
+    expect(reason).toContain('不作修改')
+    expect(reason).not.toContain('已收款¥9.38')
+  })
+  it('preserves a supplementary comment, and never exceeds the backend 500-character limit', () => {
+    const reason = buildChannelPlatformApprovalNote(review, '补充原始对账单', '凭证.xlsx')
+    expect(reason).toContain('补充说明：补充原始对账单')
+    expect(buildChannelPlatformApprovalNote(review, 'A'.repeat(1000), '凭证.xlsx').length).toBe(500)
+  })
+  it('does not fabricate an uploaded source for small platform tails or approve anything', () => {
+    const reason = buildChannelPlatformApprovalNote({ ...review, reviewKind: 'small' })
+    expect(reason).toContain('已核对渠道平台账单')
+    expect(reason).not.toContain('原始结算凭证')
+    expect(buildChannelPlatformApprovalNote(null)).toBe('')
   })
 })

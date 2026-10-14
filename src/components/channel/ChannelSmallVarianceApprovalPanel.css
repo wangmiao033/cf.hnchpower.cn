@@ -159,3 +159,59 @@
   font-weight: 500;
   line-height: 1.65;
 }
+
+/* Approval is one explicit action; optional text and extra upload controls
+   stay out of the way once one verified source is already attached. */
+.channel-platform-optional-note {
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+.channel-platform-optional-note > summary {
+  width: fit-content;
+  color: #5a7895;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+  padding: 5px 0;
+}
+.channel-platform-optional-note > label,
+.channel-platform-optional-note > .bill-scan-attachments {
+  margin-top: 8px;
+}
+.channel-platform-evidence__linked {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  padding: 11px 12px;
+  background: #f1faf4;
+  border: 1px solid #c7e6d0;
+  border-radius: 8px;
+}
+.channel-platform-evidence__linked > span {
+  color: #287a50;
+  font-size: 11px;
+  font-weight: 650;
+}
+.channel-platform-evidence__linked > strong {
+  color: #285340;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.channel-platform-evidence .channel-platform-evidence__affirm {
+  margin: 0;
+  max-width: 100%;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #5f7084;
+}
+.channel-platform-evidence .channel-platform-evidence__warning {
+  color: #a65c2d;
+  font-size: 12px;
+}
+.channel-platform-evidence__status {
+  margin: 0;
+  color: #73869c;
+  font-size: 12px;
+}

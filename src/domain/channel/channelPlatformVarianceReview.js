@@ -76,3 +76,23 @@ export function assessSavedChannelPlatformVariance(row) {
 export function assessSavedChannelPlatformDifference(row) {
   return assess(row, true)
 }
+
+
+/**
+ * A real administrator's explicit confirmation can use a complete audit note
+ * derived from the already-saved amounts and selected source document.
+ * No invented coupon/fee corrections, no automatic confirmation.
+ */
+export function buildChannelPlatformApprovalNote(review, optionalNote = '', evidenceFilename = '') {
+  if (!review) return ''
+  const validMoney = value => {
+    const n = Number(value)
+    return Number.isFinite(n) ? n.toFixed(2) : '0.00'
+  }
+  const source = review.reviewKind === 'documented'
+    ? '已按所选平台原始结算凭证' + (evidenceFilename ? '《' + String(evidenceFilename).slice(0, 85) + '》' : '')
+    : '已核对渠道平台账单'
+  const base = `管理员在已保存账单上执行人工确认：${source}，同意本期按平台实际结算¥${validMoney(review.platformAmount)}入账；系统原计算¥${validMoney(review.systemAmount)}，系统与平台差额¥${validMoney(Math.abs(Number(review.differenceCents || 0) / 100))}保留备查。原合同、分成、流水及实际收款不作修改。`
+  const supplement = String(optionalNote || '').trim()
+  return (base + (supplement ? ' 补充说明：' + supplement : '')).slice(0, 500)
+}
