@@ -28,7 +28,7 @@ describe('compact cumulative settlement on confirmed channel bills', () => {
     expect(html).toContain('当前累计应收')
     expect(html).toContain('距离结算门槛')
     expect(html).toContain('¥475.81')
-    expect(html).toContain('正在核对本单入池情况')
+    expect(html).toContain('正在核实本单累计状态')
     expect(html).not.toContain('channel-cumulative-card__bill-status')
     expect(html).not.toContain('channel-cumulative-card__metrics')
     expect(html).not.toContain('月度账单照常核对并锁定')
