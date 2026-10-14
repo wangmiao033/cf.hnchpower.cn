@@ -76,6 +76,77 @@ type ContractDifferenceApproval = {
   items: ContractDifferenceCase[]
 }
 
+export type ChannelPlatformVarianceReview = {
+  systemAmount: number
+  platformAmount: number
+  settlementAmount: number
+  differenceCents: number
+  lineIds: string[]
+}
+
+/** Manual platform-tail approval: exact persisted amounts and line IDs are part of
+ * the request so a changed bill cannot be approved from a stale review screen.
+ */
+export async function confirmReviewedChannelPlatformVariance(
+  billId: string,
+  reason: string,
+  review: ChannelPlatformVarianceReview
+): Promise<BillLifecycle> {
+  const lifecycle = await apiPost<BillLifecycle>(
+    '/api/bill-lifecycle/channel/' + encodeURIComponent(billId) + '/confirm-platform-variance',
+    {
+      reason,
+      expected_system_amount: review.systemAmount,
+      expected_platform_amount: review.platformAmount,
+      expected_settlement_amount: review.settlementAmount,
+      expected_signed_difference_cents: review.differenceCents,
+      expected_line_ids: review.lineIds
+    }
+  )
+  try {
+    await createContractReconciliationSnapshot('channel', billId, 'confirmed')
+  } catch (error) {
+    console.warn('Confirmed platform-tail contract snapshot could not be saved', error)
+  }
+  return lifecycle
+}
+
+/** A manual platform exception does NOT override contract identity, authorization
+ * or unresolved approval. Unlike the normal flow, contract service unavailability
+ * is a hard stop for this exceptional confirmation.
+ */
+export async function assertContractReadyForPlatformTail(billId: string): Promise<void> {
+  let preflight: ContractBillReconciliation
+  try {
+    preflight = await getContractBillReconciliation('channel', billId)
+  } catch (error) {
+    throw new Error('合同核验服务暂时不可用，无法安全确认平台尾差，请稍后重试')
+  }
+  if (!Array.isArray(preflight?.lines) || preflight.lines.length === 0) {
+    throw new Error('合同核验未返回完整的游戏明细，暂不能确认平台尾差')
+  }
+  const allowed = new Set(['share_rate', 'channel_fee_rate', 'tax_rate', 'testing_fee', 'contract_standard_settlement'])
+  const hardBill = (preflight.bill_checks || []).find(check => check.status === 'fail')
+  const hardLine = preflight.lines.flatMap(line => line.checks || []).find(check =>
+    check.status === 'fail' && !allowed.has(String(check.key || ''))
+  )
+  if (hardBill || hardLine) {
+    throw new Error('仍存在合同身份、授权范围或账单级核验失败，不能按金额尾差放行')
+  }
+  const failCount = Number(preflight.summary?.fail_count || 0)
+  if (failCount > 0) {
+    const approval = await getContractDifferenceApproval('channel', billId, failCount)
+    if (!approval.approved) {
+      const unresolved = approval.items.filter(item => item.status !== 'resolved')
+      throw new ContractDifferenceBlockedError(
+        buildContractDifferenceBlockedMessage(failCount, unresolved, preflight),
+        unresolved.length ? unresolved : approval.items,
+        failCount
+      )
+    }
+  }
+}
+
 function finiteNumber(value: unknown): number | null {
   if (value === null || value === undefined || value === '') return null
   const parsed = Number(value)
