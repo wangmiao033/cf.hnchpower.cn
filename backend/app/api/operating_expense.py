@@ -50,6 +50,7 @@ OTHER_EXPENSE_SUBCATEGORIES = frozenset({
     "office_supplies",
     "travel_transport",
     "business_entertainment",
+    "activity_promotion",
     "miscellaneous",
 })
 
