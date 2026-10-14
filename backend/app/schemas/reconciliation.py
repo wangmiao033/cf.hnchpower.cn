@@ -69,6 +69,8 @@ class ReconciliationCreate(BaseModel):
 
 
 class ReconciliationUpdate(BaseModel):
+    # Optional optimistic concurrency token supplied by the edit page.
+    expected_updated_at: datetime | None = None
     statement_no: str | None = None
     settlement_month: str | None = None
     partner_id: str | None = None
