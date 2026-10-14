@@ -106,6 +106,17 @@ def assess_channel_platform_variance(
     platform_cents = _cents(recomputed["platform_total"])
     settlement_cents = _cents(getattr(bill, "settlement_amount", None))
     signed_difference = system_cents - platform_cents
+    # A large positive and negative deviation that almost cancels out needs a
+    # real line-rule correction, not a bundled one-click financial approval.
+    if (
+        allow_documented_variance
+        and total_abs_cents > MAX_PLATFORM_VARIANCE_CENTS
+        and total_abs_cents - abs(signed_difference) > 2
+    ):
+        raise _conflict(
+            "platform_variance_offsetting",
+            "游戏明细存在相互抵消的重大差异，请逐游戏核对计算规则，不能直接按合计数确认",
+        )
     if settlement_cents != platform_cents or settlement_cents < 0:
         raise _conflict("platform_variance_settlement_mismatch", "本期结算金额不是平台金额，不能作为纯尾差确认")
     if signed_difference == 0 or (
