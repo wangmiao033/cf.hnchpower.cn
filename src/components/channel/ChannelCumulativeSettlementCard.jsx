@@ -42,7 +42,8 @@ export default function ChannelCumulativeSettlementCard({
   draftSettlementAmount = 0,
   onChanged,
   expandSettings = false,
-  showCurrentBillStatus = false
+  showCurrentBillStatus = false,
+  compactReviewed = false
 }) {
   const { can } = useAuth()
   const canManage = can('reconciliation.manage')
@@ -235,19 +236,63 @@ export default function ChannelCumulativeSettlementCard({
   }
 
   return (
-    <section className={`channel-cumulative-card ${thresholdMode ? 'is-threshold' : 'is-periodic'}`}>
+    <section className={`channel-cumulative-card ${thresholdMode ? 'is-threshold' : 'is-periodic'} ${compactReviewed ? 'is-reviewed-compact' : ''}`}>
       <div className="channel-cumulative-card__head">
         <div>
-          <span>累计结算策略</span>
-          <strong>{loading ? '正在读取…' : thresholdMode ? `累计达标结算 · ${basisLabel}` : '按月正常结算'}</strong>
-          <small>{thresholdMode ? '月度账单照常核对并锁定，达到门槛前不进入开票、催收和银行匹配。' : '每张已核对账单按现有开票、收款与核销流程独立结算。'}</small>
+          <span>{compactReviewed ? '本单累计结算' : '累计结算策略'}</span>
+          <strong>{loading ? '正在读取…' : thresholdMode ? compactReviewed ? `按${basisLabel}累计` : `累计达标结算 · ${basisLabel}` : compactReviewed ? '尚未设置累计门槛' : '按月正常结算'}</strong>
+          {!compactReviewed ? <small>{thresholdMode ? '月度账单照常核对并锁定，达到门槛前不进入开票、催收和银行匹配。' : '每张已核对账单按现有开票、收款与核销流程独立结算。'}</small> : null}
         </div>
         <em className={thresholdMode ? (pool?.ready ? 'is-ready' : 'is-running') : 'is-normal'}>
-          {thresholdMode ? (pool?.ready ? '已达门槛' : '累计中') : '正常'}
+          {thresholdMode ? (pool?.ready ? '已达门槛' : '累计中') : compactReviewed ? '待配置' : '正常'}
         </em>
       </div>
 
-      {showCurrentBillStatus && recordId ? (
+      {compactReviewed ? (
+        <div className="channel-cumulative-card__reviewed-summary">
+          <div className="channel-cumulative-card__reviewed-metrics">
+            <div>
+              <span>本期已核对金额</span>
+              <strong>{money(draftSettlementAmount)}</strong>
+            </div>
+            <div>
+              <span>当前累计应收</span>
+              <strong>{thresholdMode && !loading ? money(pool?.basis_total || 0) : '—'}</strong>
+              <small>{thresholdMode && !loading ? `/ ${money(threshold)}` : '等待启用规则'}</small>
+            </div>
+            <div>
+              <span>距离结算门槛</span>
+              <strong>{thresholdMode && !loading ? (pool?.ready ? '已达标' : money(pool?.remaining_to_threshold ?? threshold)) : '—'}</strong>
+            </div>
+          </div>
+          {thresholdMode ? (
+            <div
+              className="channel-cumulative-card__progress"
+              aria-label="累计结算进度"
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={Math.max(0, Math.min(100, Number(pool?.progress_percent || 0)))}
+            >
+              <span style={{ width: `${Math.max(0, Math.min(100, Number(pool?.progress_percent || 0)))}%` }} />
+            </div>
+          ) : null}
+          {showCurrentBillStatus && recordId ? (
+            <p className={`channel-cumulative-card__reviewed-note is-${currentBillSummary.tone}`} role="status">
+              <strong>{billConditionError ? '状态读取失败' : loading ? '正在核对本单入池情况…' : currentBillSummary.title}</strong>
+              <span>{billConditionError || (
+                loading ? '' : currentBillSummary.tone === 'accumulating'
+                  ? '本单已核对、未达门槛；只累计应收，不代表已开票或已收款。'
+                  : currentBillSummary.tone === 'ready'
+                    ? '已达到门槛，可统一申请结算，尚未记为已收款。'
+                    : currentBillSummary.description
+              )}</span>
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
+      {!compactReviewed && showCurrentBillStatus && recordId ? (
         <div className={`channel-cumulative-card__bill-status is-${currentBillSummary.tone}`} role="status">
           <strong>{billConditionError ? '本单累计状态暂时无法读取' : loading ? '正在核实本单累计状态…' : currentBillSummary.title}</strong>
           <span>{billConditionError || (loading ? '将根据服务器政策、开票及收款数据判定本单是否入池。' : currentBillSummary.description)}</span>
@@ -256,12 +301,12 @@ export default function ChannelCumulativeSettlementCard({
 
       {thresholdMode ? (
         <>
-          <div className="channel-cumulative-card__metrics">
+          {!compactReviewed ? <div className="channel-cumulative-card__metrics">
             <div><span>{basisLabel}</span><strong>{money(pool?.basis_total || 0)}</strong><small>/ {money(threshold)}</small></div>
             <div><span>距离门槛</span><strong>{pool?.ready ? '已达到' : money(pool?.remaining_to_threshold || threshold)}</strong><small>{pool?.bill_count || 0} 张已核对账单</small></div>
             <div><span>累计应收</span><strong>{money(pool?.settlement_total || 0)}</strong><small>{pool?.period_start ? `${monthText(pool.period_start)} ～ ${monthText(pool.period_end || pool.period_start)}` : '等待已核对账单'}</small></div>
           </div>
-          <div className="channel-cumulative-card__progress"><span style={{ width: `${Math.max(0, Math.min(100, Number(pool?.progress_percent || 0)))}%` }} /></div>
+          <div className="channel-cumulative-card__progress"><span style={{ width: `${Math.max(0, Math.min(100, Number(pool?.progress_percent || 0)))}%` }} /></div> : null}
           {mayJoinAfterReview && !alreadyIncluded && draftBasis > 0 ? (
             <div className={`channel-cumulative-card__projection ${projectedReady ? 'is-ready' : ''}`}>
               <span>本单核对后预计</span>
@@ -283,24 +328,27 @@ export default function ChannelCumulativeSettlementCard({
             ) : null}
           </div>
           {recentBatch ? (
-            <div className={`channel-cumulative-card__batch is-${recentStatus.tone}`}>
+            <details className="channel-cumulative-card__past-batch" open={compactReviewed ? undefined : true}>
+              {compactReviewed ? <summary>查看累计结算批次</summary> : null}
+              <div className={`channel-cumulative-card__batch is-${recentStatus.tone}`}>
               <div><span>最近批次</span><strong>{recentBatch.batch_no}</strong><small>{recentBatch.items?.length || 0} 张账单 · {money(recentBatch.settlement_total)}</small></div>
               <em>{recentStatus.label}</em>
               {recentBatch.status === 'invoiced' ? <small>已收 {money(recentBatch.received_total)} · 剩余 {money(recentBatch.remaining_receivable)}</small> : null}
-            </div>
+              </div>
+            </details>
           ) : null}
         </>
       ) : null}
 
       {canManage && form ? (
         <details className="channel-cumulative-card__settings" open={expandSettings || (showCurrentBillStatus && !thresholdMode) ? true : undefined}>
-          <summary>结算策略设置</summary>
-          <p className="channel-cumulative-card__scope-note">按合作方生效，包含该合作方所有游戏。请严格依据合同填写累计口径和门槛；已收、已开票的历史账单不会重复进入累计池。若同一渠道对应多个独立结算账户，需分别管理结算主体，不能跨账户累计。</p>
+          <summary>{compactReviewed ? '调整累计结算规则' : '结算策略设置'}</summary>
+          <p className="channel-cumulative-card__scope-note">{compactReviewed ? '仅对当前结算主体生效；不可将不同公司或结算账户的金额合并。' : '按合作方生效，包含该合作方所有游戏。请严格依据合同填写累计口径和门槛；已收、已开票的历史账单不会重复进入新累计池。若同一渠道对应多个独立结算账户，需分别管理结算主体，不能跨账户累计。'}</p>
           {xiaomiCandidate ? (
             <div className="channel-cumulative-card__preset">
               <div>
                 <strong>小米开发者平台 · 满 ¥1,000 后申请结算</strong>
-                <small>依据平台结算规则，建议按平台确认的分成金额累计，不要按游戏流水累计。仅为当前合作方预填，实际启用仍需二次确认。</small>
+                <small>{compactReviewed ? '预填按平台分成累计 ¥1,000；保存前确认对应结算主体。' : '依据平台结算规则，建议按平台确认的分成金额累计，不要按游戏流水累计。仅为当前合作方预填，实际启用仍需二次确认。'}</small>
               </div>
               <button
                 type="button"
