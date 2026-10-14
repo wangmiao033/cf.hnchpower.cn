@@ -8,6 +8,7 @@ import {
 } from '@/domain/channel/channelAggregates.js'
 import { channelBillMonths } from '@/domain/reconciliation/sharedBillMonthOptions.js'
 import { ledgerBillGames } from '@/domain/channel/channelFlatLedgerFilters.js'
+import { channelBillLedgerStatuses } from '@/domain/channel/channelBillLedgerStatuses.js'
 import { getChannelBillNumber } from '@/utils/channelBillNumber.js'
 import './ChannelFlatLedger.css'
 
@@ -147,7 +148,8 @@ export default function ChannelFlatLedger({
             <th className="is-numeric">渠道应收</th>
             <th className="is-numeric">已收</th>
             <th className="is-numeric">未收</th>
-            <th>核对 / 收款</th>
+            <th>核对状态</th>
+            <th>收款状态</th>
             <th>操作</th>
           </tr></thead>
           <tbody>
@@ -160,22 +162,15 @@ export default function ChannelFlatLedger({
               const unpaid = Math.max(0, settlement - received)
               const settled = isChannelReceiptSettled(row)
               const difference = hasDifference(row)
-              const reviewed = ['confirmed', 'invoiced', 'completed', 'settled', 'reconciled', 'verified']
-                .includes(String(row.status || '').toLowerCase())
               const games = ledgerBillGames(row)
               const condition = conditions[id]
               const cumulative = !isArchived && !isCancelled && !settled && condition?.deferred &&
                 ['accumulating', 'ready'].includes(condition.state)
-              // A manually reviewed platform amount must retain the discrepancy
-              // flag but must not be displayed as an unconfirmed/unresolved bill.
-              const label = isCancelled ? '已作废' : isArchived ? '已归档'
-                : difference && reviewed ? (cumulative ? '累计中·已核对' : '已核对·有差异')
-                  : difference ? '数据差异'
-                    : cumulative ? (condition.state === 'ready' ? '累计达标' : '累计中')
-                      : settled ? '已结清' : received > 0.01 ? '部分收款' : '未收款'
-              const tone = isCancelled || isArchived ? 'muted' :
-                difference && reviewed ? 'audited' : difference ? 'anomaly' :
-                  cumulative ? 'cumulative' : settled ? 'paid' : 'unpaid'
+              const statuses = channelBillLedgerStatuses(row, {
+                archived: isArchived, cancelled: isCancelled,
+                settlement, received, settled, difference, cumulative,
+                cumulativeState: condition?.state || ''
+              })
               return (
                 <tr key={id} className={selectedSet.has(id) ? 'is-selected' : ''}>
                   <td className="channel-flat-ledger__check">
@@ -198,8 +193,29 @@ export default function ChannelFlatLedger({
                   <td className="is-numeric">{money(settlement)}</td>
                   <td className="is-numeric">{money(received)}</td>
                   <td className={'is-numeric ' + (unpaid > 0.01 ? 'has-unpaid' : '')}>{money(unpaid)}</td>
-                  <td>
-                    <span className={'channel-flat-ledger__status is-' + tone} title={condition?.batch?.batch_no || ''}>{label}</span>
+                  <td className="channel-flat-ledger__status-cell">
+                    <div className="channel-flat-ledger__status-stack" role="group"
+                      aria-label={'核对状态：' + statuses.review.label + (statuses.variance ? '，' + statuses.variance.label : '')}>
+                      <span className={'channel-flat-ledger__status is-' + statuses.review.tone}>{statuses.review.label}</span>
+                      {statuses.variance ? (
+                        <small className={'channel-flat-ledger__status-note is-' + statuses.variance.tone}
+                          title="原始系统与平台金额存在差异，具体原因请查看账单及审核记录">
+                          {statuses.variance.label}
+                        </small>
+                      ) : null}
+                    </div>
+                  </td>
+                  <td className="channel-flat-ledger__status-cell">
+                    <div className="channel-flat-ledger__status-stack" role="group"
+                      aria-label={'收款状态：' + statuses.receipt.label + (statuses.accumulation ? '，' + statuses.accumulation.label : '')}>
+                      <span className={'channel-flat-ledger__status is-' + statuses.receipt.tone}>{statuses.receipt.label}</span>
+                      {statuses.accumulation ? (
+                        <small className="channel-flat-ledger__status-note is-cumulative"
+                          title={condition?.batch?.batch_no || '已核对、进入合作方累计结算池，尚不代表实际到账'}>
+                          {statuses.accumulation.label}
+                        </small>
+                      ) : null}
+                    </div>
                   </td>
                   <td>
                     <div className="channel-flat-ledger__row-actions">
@@ -227,7 +243,7 @@ export default function ChannelFlatLedger({
                 </tr>
               )
             }) : (
-              <tr><td colSpan={9} className="channel-flat-ledger__empty">当前筛选条件下没有渠道账单。可修改筛选条件或进入账期巡检查看缺失月份。</td></tr>
+              <tr><td colSpan={10} className="channel-flat-ledger__empty">当前筛选条件下没有渠道账单。可修改筛选条件或进入账期巡检查看缺失月份。</td></tr>
             )}
           </tbody>
         </table>

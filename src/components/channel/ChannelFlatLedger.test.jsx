@@ -64,9 +64,46 @@ describe('channel bill flat list rendering', () => {
       })],
       apiEnabled: false
     }))
-    expect(html).toContain('已核对·有差异')
-    expect(html).toContain('channel-flat-ledger__status is-audited')
+    expect(html).toContain('核对状态：已核对，差异留痕')
+    expect(html).toContain('收款状态：未收款')
+    expect(html).toContain('channel-flat-ledger__status is-reviewed')
+    expect(html).toContain('channel-flat-ledger__status-note is-audited')
     expect(html).not.toContain('>数据差异</span>')
+  })
+
+
+  it('shows verification and payment as separate columns with correct meaning for five monthly bills', () => {
+    const rows = [
+      bill('2026-05', 60.14, { status: 'pending', validationStatus: 'pass' }),
+      bill('2026-06', 264.96, { status: 'confirmed', receivedAmount: 0 }),
+      bill('2026-07', 220.24, { status: 'confirmed', receivedAmount: 20 }),
+      bill('2026-08', 52.37, { status: 'confirmed', receivedAmount: 52.37 }),
+      bill('2026-09', 864.83, { status: 'pending', receivedAmount: 0, validationStatus: 'fail' })
+    ]
+    const html = renderToStaticMarkup(<ChannelFlatLedger rows={rows} apiEnabled={false} pageSize={25} />)
+    expect(html).toContain('<th>核对状态</th>')
+    expect(html).toContain('<th>收款状态</th>')
+    expect(html).not.toContain('核对 / 收款')
+    expect((html.match(/aria-label="核对状态：已核对"/g) || []).length).toBe(3)
+    expect((html.match(/aria-label="核对状态：待核对/g) || []).length).toBe(2)
+    expect((html.match(/aria-label="收款状态：未收款"/g) || []).length).toBe(3)
+    expect(html).toContain('aria-label="收款状态：部分收款"')
+    expect(html).toContain('aria-label="收款状态：已结清"')
+    expect(html).toContain('核对状态：待核对，金额待核')
+    // A pass in calculation does not imply the account has been confirmed.
+    expect(html).toContain('channel-flat-ledger__status is-pending')
+    expect(html).not.toContain('channel-group-toggle')
+  })
+
+  it('distinguishes zero-receivable and cancelled rows from cash collection', () => {
+    const html = renderToStaticMarkup(<ChannelFlatLedger rows={[
+      bill('2026-02', 0, { status: 'confirmed' }),
+      bill('2026-03', 100, { status: 'cancelled' })
+    ]} apiEnabled={false} />)
+    expect(html).toContain('核对状态：已核对')
+    expect(html).toContain('收款状态：无需收款')
+    expect(html).toContain('核对状态：已作废')
+    expect(html).toContain('收款状态：—')
   })
 
   it('treats a multi-month record as one bill and labels its range', () => {
