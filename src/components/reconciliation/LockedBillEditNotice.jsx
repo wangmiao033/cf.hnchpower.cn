@@ -71,12 +71,14 @@ export default function LockedBillEditNotice({
   }
 
   return (
-    <PageContainer hideHeader className="locked-bill-edit-page has-readonly-details">
+    <PageContainer hideHeader className={`locked-bill-edit-page has-readonly-details ${billType === 'channel' ? 'is-compact-channel' : ''}`}>
       <section className="locked-bill-edit-card">
         <span className="locked-bill-edit-mark" aria-hidden="true">单</span>
         <div>
           <span className="locked-bill-edit-eyebrow">{billName} · 历史详情可直接查看</span>
-          <h1>账单详情 · {billStatusLabel(record?.status)}</h1>
+          <h1>{billType === 'channel'
+            ? `${billStatusLabel(record?.status)} · ${record?.channelName || '渠道账单'} · ${record?.settlementMonth || ''}`
+            : `账单详情 · ${billStatusLabel(record?.status)}`}</h1>
           <p>
             下方完整展示原始账单和结算明细，查看无需任何操作。
             {canEdit
@@ -130,13 +132,13 @@ export default function LockedBillEditNotice({
             {canEdit && !showEditNote ? (
               <button
                 type="button"
-                className="primary"
+                className={billType === 'channel' ? '' : 'primary'}
                 onClick={() => setShowEditNote(true)}
               >
-                修改账单（填写备注）
+                {billType === 'channel' ? '修改账单' : '修改账单（填写备注）'}
               </button>
             ) : null}
-            {onOpen360 ? <button type="button" onClick={onOpen360}>查看核对结果</button> : null}
+            {onOpen360 ? <button type="button" onClick={onOpen360}>{billType === 'channel' ? '核对记录' : '查看核对结果'}</button> : null}
             <button type="button" onClick={onBack}>返回列表</button>
           </div>
           <small>{billName} · 查看不改变账单；修改备注及状态变化写入操作日志。</small>

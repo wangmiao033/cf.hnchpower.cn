@@ -251,3 +251,121 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* 2026-10: Reviewed bill shows the decisions first and keeps full data on demand. */
+.channel-readonly-view {
+  gap: 9px;
+}
+.channel-readonly-identity {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px 18px;
+  border: 1px solid #e5ebf2;
+  border-radius: 10px;
+  padding: 10px 15px;
+  background: #fff;
+  font-size: 12px;
+  color: #64748b;
+}
+.channel-readonly-identity strong {
+  color: #273e56;
+  font-size: 13px;
+}
+.channel-readonly-view .is-brief-games {
+  padding: 14px 17px 16px;
+  border-radius: 11px;
+}
+.channel-readonly-view .is-brief-games .channel-readonly-section-head {
+  align-items: center;
+  margin-bottom: 11px;
+}
+.channel-readonly-view .is-brief-games .channel-readonly-section-head h2 {
+  font-size: 15px;
+  margin: 0 0 2px;
+}
+.channel-readonly-view .is-brief-games .channel-readonly-section-head p {
+  font-size: 11px;
+}
+.channel-readonly-table--brief {
+  width: 100%;
+  min-width: 680px;
+  font-size: 13px;
+}
+.channel-readonly-table--brief th,
+.channel-readonly-table--brief td {
+  padding: 10px 13px;
+}
+.channel-readonly-table--brief tbody td:last-child {
+  color: #247751;
+  font-weight: 650;
+}
+.channel-readonly-fold {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid #e2e9f0;
+  border-radius: 10px;
+  background: #fff;
+}
+.channel-readonly-fold > summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px 10px;
+  cursor: pointer;
+  padding: 13px 15px;
+  color: #3c5069;
+  font-size: 13px;
+  font-weight: 700;
+  list-style: none;
+}
+.channel-readonly-fold > summary::-webkit-details-marker { display: none; }
+.channel-readonly-fold > summary::before {
+  content: "▸";
+  font-size: 13px;
+  color: #8493a6;
+  transition: transform .12s ease;
+}
+.channel-readonly-fold[open] > summary::before { transform: rotate(90deg); }
+.channel-readonly-fold > summary > small {
+  color: #8c98a8;
+  font-size: 11px;
+  font-weight: 400;
+}
+.channel-readonly-fold > summary:hover { background: #f8fafc; }
+.channel-readonly-fold > summary:focus-visible {
+  outline: 2px solid #629ac8;
+  outline-offset: -3px;
+}
+.channel-readonly-fold > .channel-readonly-section {
+  border: 0;
+  border-top: 1px solid #ebeff4;
+  border-radius: 0;
+  padding: 13px 16px;
+}
+.channel-readonly-fold > .channel-readonly-section + .channel-readonly-section {
+  margin-top: 0;
+}
+.channel-readonly-fold .channel-readonly-section-head {
+  margin-bottom: 12px;
+}
+.channel-readonly-fold .channel-readonly-section-head h2 {
+  font-size: 13px;
+}
+.channel-readonly-fold .channel-readonly-metric {
+  padding: 9px 11px;
+}
+.channel-readonly-fold .channel-readonly-metric dd { font-size: 14px; }
+@media (max-width: 600px) {
+  .channel-readonly-identity { align-items: flex-start; }
+  .channel-readonly-view .is-brief-games { padding: 12px; }
+  .channel-readonly-fold > summary { padding: 12px; }
+}
+
+.channel-readonly-table--brief .channel-readonly-brief-empty {
+  text-align: center;
+  padding: 17px;
+  color: #8290a0;
+  font-weight: 400;
+  font-size: 12px;
+}

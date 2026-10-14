@@ -20,13 +20,16 @@ describe('locked channel bill exposes cumulative settlement independent of edit'
       billStatus: 'confirmed',
       draftBasisAmount: 1128,
       draftSettlementAmount: 475.81,
-      showCurrentBillStatus: true
+      showCurrentBillStatus: true,
+      compactReviewed: true
     })
   })
   it('shows the cumulative section directly on reviewed bill details', () => {
     const html = renderToStaticMarkup(<ReviewedChannelCumulativeSection record={sample} CumulativeCard={StubCard} />)
-    expect(html).toContain('本单累计结算')
-    expect(html).toContain('本单实结 ¥475.81')
+    expect(html).toContain('已核对渠道账单累计结算')
+    expect(html).not.toContain('本单实结 ¥475.81')
+    expect(html).toContain('475.81')
+    expect(html).toContain('compactReviewed')
     expect(html).toContain('北京瓦力网络科技有限公司')
     expect(html).toContain('瓦力（小米）')
     expect(html).toContain('累计配置已挂载')
