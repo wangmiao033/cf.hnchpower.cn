@@ -5,7 +5,9 @@ import { billDraftKey, readBillDraft } from '/src/domain/drafts/billDrafts.js'
 
 const initial = { id: 'REV-1', status: 'pending', updatedAt: 'v1', partnerName: '甲', settlementAmount: 10 }
 const normalize = row => ({
-  id: row?.id, status: row?.status, updatedAt: row?.updatedAt,
+  // Deliberately exclude the revision from the business-data normalization:
+  // the hook must still detect a changed server version.
+  id: row?.id, status: row?.status,
   partnerName: row?.partnerName, settlementAmount: row?.settlementAmount
 })
 const noop = () => {}
@@ -25,6 +27,7 @@ function Fixture() {
     <div data-testid="old-draft">{readBillDraft(draftKey)?.record?.settlementAmount || 'none'}</div>
     <button onClick={() => safety.onFormStateChange({ ...server, settlementAmount: 99 })}>edit-draft</button>
     <button onClick={() => setServer({ ...server, status: 'confirmed', updatedAt: 'v2', settlementAmount: 12 })}>server-confirms</button>
+    <button onClick={() => setServer({ ...server, updatedAt: 'v2' })}>server-other-change</button>
     <button onClick={() => safety.discardDraft()}>discard-on-purpose</button>
   </main>
 }
