@@ -15,6 +15,10 @@ from app.schemas.bill_lifecycle import BillLifecycleRead, BillTransitionRequest
 from app.models.channel import ChannelRecord, ChannelRecordLineItem
 from app.models.operation_log import OperationLog
 from app.services.channel_small_variance_approval import assess_channel_small_variance_approval
+from app.services.channel_platform_variance_approval import (
+    assess_channel_platform_variance,
+    assert_no_open_contract_exceptions,
+)
 from app.services import bill_lock_guard as _bill_lock_guard  # noqa: F401  注册 SQLAlchemy 锁单守卫
 from app.services.bill_archive import archive_bill, archive_snapshot, unarchive_bill
 from app.services.bill_lifecycle import build_lifecycle_snapshot, load_bill, transition_bill
@@ -165,6 +169,121 @@ def confirm_approved_channel_small_variance(
     try:
         # Commit + lifecycle/status audit happen together; no calculation, fee,
         # discount, contract, invoice or receipt is rewritten by this operation.
+        transition_bill(db, "channel", bill, "confirmed", reason, user)
+    finally:
+        db.info.pop("allow_lifecycle_transition", None)
+    return BillLifecycleRead.model_validate(_snapshot(db, "channel", bill, user))
+
+
+
+class ApprovedPlatformVarianceRequest(BaseModel):
+    """Explicit approval of the already-saved, recomputed platform amount."""
+    reason: str = Field(min_length=6, max_length=500)
+    expected_system_amount: float
+    expected_platform_amount: float
+    expected_settlement_amount: float
+    expected_signed_difference_cents: int
+    expected_line_ids: list[str] = Field(min_length=1, max_length=100)
+
+
+@router.post("/channel/{bill_id}/confirm-platform-variance", response_model=BillLifecycleRead)
+def confirm_approved_channel_platform_variance(
+    bill_id: str,
+    payload: ApprovedPlatformVarianceRequest,
+    db: Session = Depends(get_db),
+    user: AuthUser = Depends(require_current_user),
+) -> BillLifecycleRead:
+    """Audit-approve <= ¥0.50 summed absolute platform tail, then lock bill.
+
+    This route never edits contract rules, amounts, line items, or source
+    platform figures. It is independent from a *contract* difference approval.
+    """
+    if str(user.role or "").strip().lower() != "admin":
+        raise HTTPException(403, detail={
+            "error": "admin_only",
+            "message": "平台尾差确认需要管理员权限",
+        })
+    reason = str(payload.reason or "").strip()
+    if len(reason) < 6:
+        raise HTTPException(422, detail={
+            "error": "reason_required",
+            "message": "请填写至少6个字的人工核对依据",
+        })
+    bill = db.execute(
+        select(ChannelRecord).where(ChannelRecord.id == bill_id).with_for_update()
+    ).scalar_one_or_none()
+    if bill is None:
+        raise HTTPException(404, detail={"error": "bill_not_found", "message": "账单不存在"})
+    if str(bill.status or "pending").strip().lower() != "pending":
+        raise HTTPException(409, detail={
+            "error": "bill_status_changed", "message": "账单状态已变化，请重新打开",
+        })
+
+    rows = db.execute(
+        select(ChannelRecordLineItem)
+        .where(ChannelRecordLineItem.channel_record_id == bill_id)
+        .order_by(ChannelRecordLineItem.sort_order, ChannelRecordLineItem.id)
+    ).scalars().all()
+    assessment = assess_channel_platform_variance(bill, rows)
+
+    # A stale UI must not be able to approve a different set of lines or a
+    # different payment amount when another tab just edited the record.
+    from app.services.channel_platform_variance_approval import _cents
+    if (
+        sorted(payload.expected_line_ids) != assessment["line_ids"]
+        or _cents(payload.expected_system_amount) != _cents(assessment["system_amount"])
+        or _cents(payload.expected_platform_amount) != _cents(assessment["platform_amount"])
+        or _cents(payload.expected_settlement_amount) != _cents(assessment["recorded_settlement_amount"])
+        or payload.expected_signed_difference_cents != assessment["signed_difference_cents"]
+    ):
+        raise HTTPException(409, detail={
+            "error": "platform_variance_stale_review",
+            "message": "账单明细或金额已改变，请重新点击“保存并确认核对”后再核准",
+        })
+
+    # Contracts are verified through the standard preflight on the frontend,
+    # and any known open/unsafe contract evidence independently blocks here.
+    table_name = db.execute(
+        text("SELECT to_regclass('public.cf_contract_difference_cases')")
+    ).scalar_one_or_none()
+    if not table_name:
+        raise HTTPException(409, detail={
+            "error": "contract_evidence_unavailable",
+            "message": "合同差异审计表不可用，请稍后重试",
+        })
+    cases = [dict(item) for item in db.execute(text("""
+        SELECT id, line_id, game_name, settlement_cycle, status,
+               handling_type, source_snapshot_json
+        FROM cf_contract_difference_cases
+        WHERE bill_type = 'channel' AND bill_id = :bill_id
+        ORDER BY updated_at DESC, id DESC LIMIT 301
+    """), {"bill_id": bill_id}).mappings().all()]
+    if len(cases) > 300:
+        raise HTTPException(409, detail={
+            "error": "contract_evidence_too_many",
+            "message": "当前合同差异记录过多，无法完整校验，暂不进行尾差确认",
+        })
+    assert_no_open_contract_exceptions(cases, rows)
+
+    db.add(OperationLog(
+        id=str(uuid4()), entity_type="channel", entity_id=str(bill.id),
+        entity_number=bill.statement_no, action="platform_small_variance_confirm",
+        summary=(
+            "管理员人工核准平台尾差，系统与平台差额 "
+            f"{assessment['signed_difference_cents'] / 100:+.2f} 元，实际应收未修改"
+        ),
+        actor_user_id=str(user.id), actor_email=str(user.email or ""),
+        changes={},
+        metadata_json={
+            "reason": reason,
+            "approval_source": "saved_channel_platform_bill",
+            "max_absolute_line_variance_cents": 50,
+            **assessment,
+        },
+    ))
+    db.info["allow_lifecycle_transition"] = True
+    try:
+        # The status transition and approval log are committed atomically.
         transition_bill(db, "channel", bill, "confirmed", reason, user)
     finally:
         db.info.pop("allow_lifecycle_transition", None)
