@@ -17,7 +17,6 @@ import {
 } from '@/lib/api/reconciliation.ts'
 import { transitionBillLifecycle } from '@/lib/api/billLifecycle.ts'
 import {
-  getCachedEditRecord,
   invalidateEditRecord,
   loadEditRecord
 } from '@/lib/api/editRecordCache.js'
@@ -82,14 +81,8 @@ function CoreRdBillFormPage({ mode }) {
     }
 
     const recordId = String(reconEditRecordId)
-    const cached = getCachedEditRecord('rd', recordId)
-    if (cached) {
-      setRemoteRecord(cached)
-      setLoading(false)
-      setLoadError('')
-      return
-    }
-
+    // Editing a confirmed bill using a prefetched 45-second-old snapshot causes
+    // a confusing SQLAlchemy lock error. Resolve status from the server first.
     let cancelled = false
     async function loadRecord() {
       setRemoteRecord(null)
@@ -99,7 +92,7 @@ function CoreRdBillFormPage({ mode }) {
         const record = await loadEditRecord('rd', recordId, async () => {
           const row = await getReconciliationRecord(recordId)
           return apiRowToFrontend(row)
-        })
+        }, { force: true })
         if (!cancelled) setRemoteRecord(record)
       } catch (error) {
         if (!cancelled) {
@@ -346,7 +339,10 @@ function CoreRdBillFormPage({ mode }) {
           onFormStateChange={handleRdFormStateChange}
           onSubmitted={handleSubmitted}
           onAddRecord={recon.addRecord}
-          onUpdateRecord={recon.updateRecord}
+          onUpdateRecord={(id, record) => recon.updateRecord(id, {
+            ...record,
+            updatedAt: stableEditRecord?.updatedAt || record?.updatedAt
+          })}
           settlementMonth={settings.settlementMonth}
           settlementCycles={(recon.records || []).map((row) => row.settlementMonth)}
           existingRecords={recon.records || []}
