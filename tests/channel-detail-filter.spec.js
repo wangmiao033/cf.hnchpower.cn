@@ -158,3 +158,35 @@ test('review and cash collection are separate labels in the visible channel bill
   await expect(first.getByText('未收款', { exact: true })).toBeVisible()
   await expect(first.getByText('数据差异', { exact: true })).toHaveCount(0)
 })
+
+
+test('channel keyword search finds historical 游海 / 麦游 account records without merging legal parties', async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 900 })
+  await page.route(url => url.pathname.startsWith('/api/'), route => {
+    const path = new URL(route.request().url()).pathname
+    if (path === '/api/bill-lifecycle/archive')
+      return route.fulfill({ json: { archived_ids: [], eligible_ids: [], items: [] } })
+    if (path === '/api/auth/me')
+      return route.fulfill({ json: { role: 'admin', permissions: [] } })
+    return route.abort()
+  })
+  await page.goto('/tests/fixtures/channel-detail.html?legacy-aliases=1')
+  const tbody = page.locator('.channel-flat-ledger__table tbody')
+  const input = page.getByLabel('搜索渠道账单')
+  await expect(page.locator(rows)).toHaveCount(3)
+  for (const word of ['游海', '麦游', '海游', '游海（麦游）', '游海(麦游)']) {
+    await input.fill(word)
+    await expect(page.locator(rows)).toHaveCount(2)
+    await expect(tbody).toContainText('西安游海网络科技有限公司')
+    await expect(tbody).toContainText('西安麦游网络科技有限公司')
+    await expect(tbody).toContainText('¥3,119.46')
+    await expect(tbody).toContainText('¥2,802.70')
+  }
+  // Full legal partner names are precise and never made synonymous.
+  await input.fill('西安游海网络科技有限公司')
+  await expect(page.locator(rows)).toHaveCount(1)
+  await expect(tbody).not.toContainText('西安麦游网络科技有限公司')
+  await input.fill('西安麦游网络科技有限公司')
+  await expect(page.locator(rows)).toHaveCount(1)
+  await expect(tbody).not.toContainText('西安游海网络科技有限公司')
+})
