@@ -301,12 +301,12 @@ export default function ChannelCumulativeSettlementCard({
 
       {thresholdMode ? (
         <>
-          {!compactReviewed ? <div className="channel-cumulative-card__metrics">
+          {!compactReviewed ? <><div className="channel-cumulative-card__metrics">
             <div><span>{basisLabel}</span><strong>{money(pool?.basis_total || 0)}</strong><small>/ {money(threshold)}</small></div>
             <div><span>距离门槛</span><strong>{pool?.ready ? '已达到' : money(pool?.remaining_to_threshold || threshold)}</strong><small>{pool?.bill_count || 0} 张已核对账单</small></div>
             <div><span>累计应收</span><strong>{money(pool?.settlement_total || 0)}</strong><small>{pool?.period_start ? `${monthText(pool.period_start)} ～ ${monthText(pool.period_end || pool.period_start)}` : '等待已核对账单'}</small></div>
           </div>
-          <div className="channel-cumulative-card__progress"><span style={{ width: `${Math.max(0, Math.min(100, Number(pool?.progress_percent || 0)))}%` }} /></div> : null}
+          <div className="channel-cumulative-card__progress"><span style={{ width: `${Math.max(0, Math.min(100, Number(pool?.progress_percent || 0)))}%` }} /></div></> : null}
           {mayJoinAfterReview && !alreadyIncluded && draftBasis > 0 ? (
             <div className={`channel-cumulative-card__projection ${projectedReady ? 'is-ready' : ''}`}>
               <span>本单核对后预计</span>
