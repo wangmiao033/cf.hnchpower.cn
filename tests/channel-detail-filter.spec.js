@@ -143,3 +143,18 @@ test('status filtering and audit month navigation still use the shared controls'
   await expect(page.getByLabel('筛选明细结算月份')).toHaveValue('2026-09')
   await expect(page.locator(rows)).toHaveCount(7)
 })
+
+
+test('review and cash collection are separate labels in the visible channel bill table', async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 900 })
+  await open(page)
+  const headers = page.locator('.channel-flat-ledger__table thead th')
+  await expect(headers.filter({ hasText: '核对状态' })).toHaveCount(1)
+  await expect(headers.filter({ hasText: '收款状态' })).toHaveCount(1)
+  const first = page.locator('.channel-flat-ledger__table tbody tr').first()
+  await expect(first.getByRole('group', { name: '核对状态：已核对' })).toBeVisible()
+  await expect(first.getByRole('group', { name: '收款状态：未收款' })).toBeVisible()
+  await expect(first.getByText('已核对', { exact: true })).toBeVisible()
+  await expect(first.getByText('未收款', { exact: true })).toBeVisible()
+  await expect(first.getByText('数据差异', { exact: true })).toHaveCount(0)
+})
