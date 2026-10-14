@@ -15,6 +15,31 @@ const records = ['百分', '八门'].flatMap(channelName => Array.from({ length:
   items: [{ settlementCycle: i < 7 ? '2026-09' : '2026-08', gameName: i % 2 ? '游戏甲' : '游戏乙' }]
 })))
 records.push({ ...records[0], id: 'archived', channelName: '归档渠道' })
+if (new URLSearchParams(window.location.search).has('legacy-aliases')) {
+  records.splice(0, records.length,
+    {
+      id: 'Y-202608', channelName: '游海', originalChannelName: '游海（麦游）',
+      partnerName: '西安游海网络科技有限公司',
+      statementNo: 'QD-YOUHAI-08', settlementMonth: '2026-08',
+      settlementAmount: 3119.46, receivedAmount: 0, status: 'confirmed',
+      items: [{ gameName: '一起来修仙', settlementCycle: '2026-08' }]
+    },
+    {
+      id: 'M-202609', channelName: '麦游',
+      partnerName: '西安麦游网络科技有限公司',
+      statementNo: 'QD-MAIYOU-09', settlementMonth: '2026-09',
+      settlementAmount: 2802.70, receivedAmount: 0, status: 'confirmed',
+      items: [{ gameName: '一起来修仙', settlementCycle: '2026-09' }]
+    },
+    {
+      id: 'OTHER', channelName: '百分', partnerName: '四川百分网',
+      settlementMonth: '2026-09', status: 'pending',
+      settlementAmount: 100, receivedAmount: 0,
+      items: [{ gameName: '其他游戏', settlementCycle: '2026-09' }]
+    }
+  )
+}
+
 const noop = () => {}
 const value = {
   recon: { channelRecords: records, records: [], channelApiEnabled: false },
