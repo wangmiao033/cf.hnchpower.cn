@@ -80,6 +80,8 @@ describe('channel per-line contract rule REST round-trip', () => {
       ]
     })
 
+    // Edits must carry the exact server revision, not a 45-second-old cache.
+    expect(frontend.updatedAt).toBe('2026-08-12T00:00:00Z')
     const line = (frontend.items as Record<string, unknown>[])[0]
     expect(line.channelFeeMode).toBe('percent')
     expect(line.channelFeeRate).toBe(6)
