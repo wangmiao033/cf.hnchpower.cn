@@ -995,7 +995,14 @@ function CoreChannelBillFormPage({ mode }) {
           <div className="core-bill-inline-issue__actions">
             {inlineIssue.kind === 'stale-status' ? (
               <button type="button" onClick={() => {
-                if (safety.dirty) safety.flushDraft()
+                if (safety.dirty) {
+                  safety.flushDraft()
+                  if (!window.confirm(
+                    '服务器账单状态已经变化，当前页面还有未提交的修改。\\n' +
+                    '重新读取不会将本机旧草稿覆盖到服务器，也不会自动恢复到新的账单上。\\n' +
+                    '旧草稿会暂时保留。确定重新读取最新状态吗？'
+                  )) return
+                }
                 retryLoad()
               }}>重新读取账单状态</button>
             ) : (
