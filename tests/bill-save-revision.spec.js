@@ -19,3 +19,17 @@ test('an edit draft is not erased or replayed over a server-confirmed bill', asy
   await page.getByRole('button', { name: 'discard-on-purpose' }).click()
   await expect(page.getByTestId('draft-status')).not.toContainText('旧草稿已保留')
 })
+
+test('a receipt-only server revision still protects the unsaved edit draft', async ({ page }) => {
+  await page.goto('/tests/fixtures/bill-save-revision.html')
+  await page.getByRole('button', { name: 'edit-draft' }).click()
+  await expect(page.getByTestId('draft-status')).toContainText('草稿已自动保存', { timeout: 5000 })
+  const before = await page.evaluate(() => Object.entries(localStorage).find(([k]) => k.includes('REV-1'))?.[1])
+  expect(before).toContain('99')
+  await page.getByRole('button', { name: 'server-other-change' }).click()
+  await expect(page.getByTestId('server-status')).toHaveText('pending')
+  await expect(page.getByTestId('draft-status')).toContainText('旧草稿已保留')
+  await page.waitForTimeout(900)
+  const after = await page.evaluate(() => Object.entries(localStorage).find(([k]) => k.includes('REV-1'))?.[1])
+  expect(after).toBe(before)
+})
