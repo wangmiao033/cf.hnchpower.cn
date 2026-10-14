@@ -1,9 +1,10 @@
-"""Audited platform-vs-system penny variance confirmation for channel bills.
+"""Audited confirmation for both small and evidence-backed platform variances.
 
 This does not change how a channel bill is calculated or how platform figures
 are stored. It checks persisted line amounts, caps the SUM of absolute
 line discrepancies at ¥0.50, and returns evidence for one admin approval.
 Contract reconciliation is a separate control and must remain satisfied.
+Substantive differences require an attached source statement and admin approval.
 """
 from __future__ import annotations
 
@@ -33,8 +34,15 @@ def _cents(value: Any) -> int:
         raise _conflict("platform_variance_invalid_amount", "金额不是有效数字，请检查账单明细") from None
 
 
-def assess_channel_platform_variance(bill: Any, lines: list[Any]) -> dict:
-    """Recompute a stored bill; never approve missing platform data or masked errors."""
+def assess_channel_platform_variance(
+    bill: Any, lines: list[Any], *, allow_documented_variance: bool = False
+) -> dict:
+    """Recompute persisted figures without reclassifying or silently offsetting errors.
+
+    The default call remains strictly limited to 50 cents. The documented
+    path is only used by the API after an administrator has supplied a real
+    platform attachment; it does not grant any automatic approval.
+    """
     if str(getattr(bill, "validation_status", "") or "").lower() != "fail":
         raise _conflict("platform_variance_not_required", "这张账单没有待人工核准的平台差异，请使用正常核对")
     if not (1 <= len(lines) <= 100):
@@ -79,8 +87,8 @@ def assess_channel_platform_variance(bill: Any, lines: list[Any]) -> dict:
         raise _conflict("platform_variance_not_required", "系统与平台金额已一致，不需要尾差确认")
     # SUM(abs(line variance)) prevents a ¥20.21 overstatement being concealed
     # by an offsetting -¥20.00 line, while net variance appears to be ¥0.21.
-    if total_abs_cents > MAX_PLATFORM_VARIANCE_CENTS:
-        raise _conflict("platform_variance_too_large", "逐游戏差异绝对值合计超过¥0.50，必须正常核实，不能强制确认")
+    if total_abs_cents > MAX_PLATFORM_VARIANCE_CENTS and not allow_documented_variance:
+        raise _conflict("platform_variance_too_large", "逐游戏差异绝对值合计超过¥0.50，请上传平台原始账单、记录人工核对依据后确认")
 
     recomputed = aggregate_validation(lines, bill)
     if recomputed["validation_status"] != "fail":
@@ -100,10 +108,13 @@ def assess_channel_platform_variance(bill: Any, lines: list[Any]) -> dict:
     signed_difference = system_cents - platform_cents
     if settlement_cents != platform_cents or settlement_cents < 0:
         raise _conflict("platform_variance_settlement_mismatch", "本期结算金额不是平台金额，不能作为纯尾差确认")
-    if signed_difference == 0 or abs(signed_difference) > MAX_PLATFORM_VARIANCE_CENTS:
-        raise _conflict("platform_variance_too_large", "系统与平台合计差异不属于可确认的¥0.50内尾差")
+    if signed_difference == 0 or (
+        abs(signed_difference) > MAX_PLATFORM_VARIANCE_CENTS and not allow_documented_variance
+    ):
+        raise _conflict("platform_variance_too_large", "系统与平台差额需要上传原始结算凭证，并由管理员人工核准")
 
     return {
+        "review_kind": "documented" if total_abs_cents > MAX_PLATFORM_VARIANCE_CENTS else "small",
         "system_amount": system_cents / 100,
         "platform_amount": platform_cents / 100,
         "recorded_settlement_amount": settlement_cents / 100,
