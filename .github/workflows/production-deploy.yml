@@ -241,6 +241,13 @@ jobs:
           check_url 'https://cf.hnchpower.cn/health'
           check_url 'https://cf.hnchpower.cn/health/db'
 
+      - name: Prune Vercel deployments down to the newest three
+        if: steps.latest.outputs.deploy == 'true'
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          DRY_RUN: 'false'
+        run: python3 scripts/cleanup_vercel_deployments.py
+
       - name: Deployment summary
         if: always() && steps.latest.outputs.deploy == 'true'
         run: |
