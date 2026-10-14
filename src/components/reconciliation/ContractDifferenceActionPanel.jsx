@@ -74,11 +74,11 @@ export default function ContractDifferenceActionPanel({
   })
   const [message, setMessage] = useState('')
   const [showDuplicateHistory, setShowDuplicateHistory] = useState(false)
+  const [showResolvedHistory, setShowResolvedHistory] = useState(false)
   const groupedHistory = useMemo(() => groupResolvedDifferenceHistory(items), [items])
-  const visibleItems = showDuplicateHistory ? items : groupedHistory.visibleItems
-  const displayResolvedCount = summary
-    ? Math.max(0, summary.resolved_count - groupedHistory.hiddenCount)
-    : groupedHistory.visibleItems.filter((item) => item.status === 'resolved').length
+  const visibleItems = (showDuplicateHistory ? items : groupedHistory.visibleItems)
+    .filter((item) => item.status !== 'resolved' || showResolvedHistory)
+  const resolvedHistoryCount = items.filter((item) => item.status === 'resolved').length
 
   const load = useCallback(async () => {
     if (!billId) return
@@ -105,6 +105,7 @@ export default function ContractDifferenceActionPanel({
     setForm(emptyForm())
     setMessage('')
     setShowDuplicateHistory(false)
+    setShowResolvedHistory(false)
     if (seededItems.length) {
       setLoading(false)
       return
@@ -287,14 +288,23 @@ export default function ContractDifferenceActionPanel({
         {summary ? (
           <div className="contract-difference-panel__summary">
             <strong>{summary.pending_count + summary.processing_count} 笔未闭环</strong>
-            <small>处理中 {summary.processing_count} · 已解决 {displayResolvedCount}</small>
+            <small>处理中 {summary.processing_count} · 已解决 {summary.resolved_count}</small>
           </div>
         ) : null}
       </header>
 
       {message ? <div className="contract-difference-message">{message}</div> : null}
 
-      {groupedHistory.hiddenCount > 0 ? (
+      {resolvedHistoryCount > 0 ? (
+        <div className="contract-difference-history-summary">
+          <span>已解决的 {resolvedHistoryCount} 条差异已收起，仅保留必要的审计记录，不阻碍继续核对账单。</span>
+          <button type="button" onClick={() => setShowResolvedHistory((value) => !value)}>
+            {showResolvedHistory ? '收起已解决记录' : '查看已解决记录'}
+          </button>
+        </div>
+      ) : null}
+
+      {showResolvedHistory && groupedHistory.hiddenCount > 0 ? (
         <div className="contract-difference-duplicate-notice">
           <span>已折叠 {groupedHistory.hiddenCount} 条相同的已解决历史差异；合同、账单及批准记录均保留，不影响核对。</span>
           <button type="button" onClick={() => setShowDuplicateHistory((value) => !value)}>

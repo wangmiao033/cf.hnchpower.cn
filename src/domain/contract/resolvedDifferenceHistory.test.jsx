@@ -53,9 +53,9 @@ describe('resolved finance-difference history', () => {
       billType: 'channel', billId: 'channel-bill-08',
       initialItems: [accepted('old'), accepted('new', { created_at: '2026-10-14T03:00:00Z' })]
     }))
-    expect((html.match(/class="contract-difference-card is-resolved"/g) || []).length).toBe(1)
-    expect(html).toContain('已折叠 1 条')
-    expect(html).toContain('查看重复历史')
+    expect((html.match(/class="contract-difference-card is-resolved"/g) || []).length).toBe(0)
+    expect(html).toContain('已解决的 2 条差异已收起')
+    expect(html).toContain('查看已解决记录')
     expect(html).not.toContain('已删除')
   })
 })
