@@ -408,7 +408,14 @@ function ReconciliationLineItemsForm({
     if (mode === 'edit' && editRecord && onUpdateRecord) {
       const result = onUpdateRecord(editRecord.id, { ...editRecord, ...merged, id: editRecord.id })
       const ok = result && typeof result.then === 'function' ? await result : result
-      if (ok === false) return
+      if (ok === false) {
+        // The parent page may currently be awaiting "保存并确认核对".
+        // Unwind its submitting state on every failed save, including 409
+        // version/locked conflicts, so the footer never remains spinning.
+        onError?.('研发账单没有保存成功，确认操作已停止；请根据服务器提示核对最新账单状态。')
+        if (submitIntentRef) submitIntentRef.current = 'back'
+        return
+      }
       onSubmitted?.(undefined)
       return
     }
