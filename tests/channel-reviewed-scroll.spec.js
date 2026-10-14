@@ -36,7 +36,9 @@ test('read-only channel scroll has no ghosting or repeated attachment requests',
   })
   await page.setViewportSize({ width: 1180, height: 520 })
   page.on('pageerror', error => errors.push(error.message))
-  await page.route('**/api/**', route => {
+  // Match the API root only. The glob **/api/** would also block Vite's
+  // /src/lib/api/*.ts source imports before the React fixture can mount.
+  await page.route(url => url.pathname.startsWith('/api/'), route => {
     const path = new URL(route.request().url()).pathname
     requests.push(route.request().method()+' '+path)
     if (path === '/api/channel-records/XIAOMI-202609')
