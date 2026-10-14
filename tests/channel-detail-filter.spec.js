@@ -190,3 +190,40 @@ test('channel keyword search finds historical 游海 / 麦游 account records wi
   await expect(page.locator(rows)).toHaveCount(1)
   await expect(tbody).not.toContainText('西安游海网络科技有限公司')
 })
+
+
+test('coverage audit shares the historical 游海/麦游 search with channel bill list', async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 950 })
+  await page.route(url => url.pathname.startsWith('/api/'), route => {
+    const pathname = new URL(route.request().url()).pathname
+    if (pathname === '/api/bill-lifecycle/archive')
+      return route.fulfill({ json: { archived_ids: [], eligible_ids: [], items: [] } })
+    if (pathname === '/api/auth/me')
+      return route.fulfill({ json: { role: 'admin', permissions: [] } })
+    return route.abort()
+  })
+  await page.goto('/tests/fixtures/channel-detail.html?legacy-aliases=1')
+  const search = page.getByLabel('搜索渠道账单')
+  const auditRows = page.locator('.channel-month-audit__matrix tbody tr')
+
+  for (const keyword of ['麦游', '海游', '游海（麦游）']) {
+    await search.fill(keyword)
+    // Same source rows must be discoverable in both views, even when the
+    // legacy display label has already been renamed in memory.
+    await expect(page.locator(rows)).toHaveCount(2)
+    await page.getByRole('tab', { name: '账期巡检', exact: true }).click()
+    await expect(auditRows).toHaveCount(2)
+    await expect(page.getByText('未找到匹配的渠道')).toHaveCount(0)
+    await expect(page.locator('.channel-month-audit__matrix')).toContainText('游海')
+    await expect(page.locator('.channel-month-audit__matrix')).toContainText('麦游')
+    await page.getByRole('tab', { name: '账单明细', exact: true }).click()
+  }
+
+  // Full legal name remains a precise lookup, not a synonym of the other company.
+  await search.fill('西安游海网络科技有限公司')
+  await expect(page.locator(rows)).toHaveCount(1)
+  await page.getByRole('tab', { name: '账期巡检', exact: true }).click()
+  await expect(auditRows).toHaveCount(1)
+  await expect(page.locator('.channel-month-audit__matrix')).toContainText('游海')
+  await expect(page.locator('.channel-month-audit__matrix')).not.toContainText('麦游</strong>')
+})
