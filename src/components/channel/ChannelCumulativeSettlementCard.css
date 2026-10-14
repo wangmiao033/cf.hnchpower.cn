@@ -343,3 +343,139 @@
 .channel-cumulative-card__bill-status.is-accumulating,.channel-cumulative-card__bill-status.is-ready{background:#f3fbf6;border-color:#c5e6d2}
 .channel-cumulative-card__bill-status.is-batched{background:#f3f7ff;border-color:#cbdff5}
 .channel-cumulative-card__bill-status.is-warning{background:#fff9ed;border-color:#f2dcaf}
+
+/* Dedicated compact layout for already-confirmed channel bills. */
+.channel-cumulative-card.is-reviewed-compact {
+  margin-top: 0;
+  padding: 13px 17px 12px;
+  border-radius: 11px;
+  background: #fff;
+  border-color: #dbe5e0;
+}
+.channel-cumulative-card.is-reviewed-compact .channel-cumulative-card__head {
+  align-items: center;
+}
+.channel-cumulative-card.is-reviewed-compact .channel-cumulative-card__head > div {
+  gap: 2px;
+}
+.channel-cumulative-card.is-reviewed-compact .channel-cumulative-card__head > div > span {
+  font-size: 14px;
+  font-weight: 750;
+  color: #223d4c;
+}
+.channel-cumulative-card.is-reviewed-compact .channel-cumulative-card__head > div > strong {
+  font-size: 11px;
+  font-weight: 450;
+  color: #728194;
+}
+.channel-cumulative-card__reviewed-summary {
+  margin-top: 11px;
+}
+.channel-cumulative-card__reviewed-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0;
+  border: 1px solid #edf0f3;
+  border-radius: 9px;
+  background: #fbfcfd;
+}
+.channel-cumulative-card__reviewed-metrics > div {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 11px 16px;
+}
+.channel-cumulative-card__reviewed-metrics > div + div {
+  border-left: 1px solid #e7edf0;
+}
+.channel-cumulative-card__reviewed-metrics span {
+  font-size: 11px;
+  color: #778797;
+}
+.channel-cumulative-card__reviewed-metrics strong {
+  font-size: clamp(17px, 1.5vw, 21px);
+  font-weight: 800;
+  color: #2b4c5e;
+  font-variant-numeric: tabular-nums;
+}
+.channel-cumulative-card__reviewed-metrics > div:first-child strong {
+  color: #167a50;
+}
+.channel-cumulative-card__reviewed-metrics small {
+  font-size: 11px;
+  color: #8b98a5;
+}
+.channel-cumulative-card.is-reviewed-compact .channel-cumulative-card__progress {
+  height: 6px;
+  margin: 10px 0 0;
+}
+.channel-cumulative-card__reviewed-note {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  align-items: baseline;
+  margin: 9px 0 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #697c8a;
+}
+.channel-cumulative-card__reviewed-note strong {
+  font-weight: 750;
+  color: #2d6e52;
+}
+.channel-cumulative-card__reviewed-note.is-warning strong {
+  color: #926b28;
+}
+.channel-cumulative-card.is-reviewed-compact .channel-cumulative-card__settings {
+  margin-top: 11px;
+  padding-top: 10px;
+  border-top: 1px solid #edf0f1;
+}
+.channel-cumulative-card.is-reviewed-compact .channel-cumulative-card__settings > summary {
+  font-size: 12px;
+  font-weight: 700;
+}
+.channel-cumulative-card__past-batch {
+  margin-top: 9px;
+}
+.channel-cumulative-card__past-batch > summary {
+  cursor: pointer;
+  color: #607b8b;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 7px 0;
+}
+.channel-cumulative-card.is-reviewed-compact .channel-cumulative-card__scope-note {
+  background: #f8fafb;
+  border-color: #e6edf1;
+  color: #637485;
+}
+@media (max-width: 730px) {
+  .channel-cumulative-card.is-reviewed-compact {
+    padding: 12px;
+  }
+  .channel-cumulative-card__reviewed-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .channel-cumulative-card__reviewed-metrics > div:last-child {
+    grid-column: 1 / -1;
+    border-top: 1px solid #e7edf0;
+    border-left: none;
+  }
+}
+@media (max-width: 420px) {
+  .channel-cumulative-card__reviewed-metrics {
+    grid-template-columns: 1fr;
+  }
+  .channel-cumulative-card__reviewed-metrics > div {
+    border-left: none !important;
+    border-top: 1px solid #e7edf0;
+  }
+  .channel-cumulative-card__reviewed-metrics > div:first-child {
+    border-top: none;
+  }
+  .channel-cumulative-card__reviewed-metrics > div:last-child {
+    grid-column: auto;
+  }
+}
