@@ -4,6 +4,7 @@
  */
 import { getChannelTotals, getChannelReceivedAmount, getChannelLineItems } from './channelAggregates.js'
 import { channelBillMonths } from '@/domain/reconciliation/sharedBillMonthOptions.js'
+import { channelLedgerMatchesSearch } from '@/domain/channel/channelAliasIdentity.js'
 
 export function ledgerBillGames(row) {
   const items = getChannelLineItems(row)
@@ -27,17 +28,11 @@ export function matchesChannelLedgerFilters(row, options = {}) {
   if (game && !games.some(name => name.toLocaleLowerCase('zh-CN').includes(String(game).trim().toLocaleLowerCase('zh-CN')))) return false
   if (status && String(row.status || 'pending') !== status) return false
   if (query) {
-    const haystack = [
-      row.statementNo,
-      row.billNumber,
-      row.channelName,
-      row.partnerName,
-      row.gameName,
+    if (!channelLedgerMatchesSearch(row, query, [
       ...games,
       ...months,
       row.remark
-    ].filter(Boolean).join(' ').toLocaleLowerCase('zh-CN')
-    if (!haystack.includes(String(query).trim().toLocaleLowerCase('zh-CN'))) return false
+    ])) return false
   }
   return true
 }
