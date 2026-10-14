@@ -4,6 +4,7 @@ import unittest
 from app.services.channel_settlement_engine import (
     ANJIU_PRE_DISCOUNT_DEDUCTION_RULE,
     HONOR_UPFRONT_PERCENT_FEE_RULE,
+    aggregate_validation,
     apply_bill_adjustment,
     calculate_channel_line,
 )
@@ -34,6 +35,41 @@ class ChannelSettlementEngineTests(unittest.TestCase):
             gateway_cost=0,
             platform_settlement_amount=platform,
         )
+
+    def test_signed_reversal_line_keeps_platform_total_390_24(self):
+        # A real channel statement may include a negative line for a refund
+        # or coupon reversal. It must not be clamped or dropped on save.
+        rule = SimpleNamespace(
+            settlement_rule_code="custom",
+            channel_fee_mode="percent",
+            channel_fee_rate=5,
+            tax_mode="none",
+            validation_tolerance=0.05,
+        )
+        items = []
+        for flow, expected_platform in (
+            (1292.57, 368.38),
+            (4.29, 1.22),
+            (70.24, 20.02),
+            (5.40, 1.54),
+            (-3.24, -0.92),
+        ):
+            item = self.line(flow, 0, expected_platform, tax=0)
+            item.share_rate = 30
+            calculated = calculate_channel_line(item, rule)
+            self.assertEqual(calculated["validation_status"], "pass")
+            self.assertAlmostEqual(float(calculated["settlement_amount"]), expected_platform, places=2)
+            for key, value in calculated.items():
+                setattr(item, key, value)
+            items.append(item)
+
+        self.assertAlmostEqual(float(items[-1].share_amount), -0.97, places=2)
+        self.assertAlmostEqual(float(items[-1].system_settlement_amount), -0.92, places=2)
+        totals = aggregate_validation(items, rule)
+        self.assertAlmostEqual(float(totals["system_total"]), 390.24, places=2)
+        self.assertAlmostEqual(float(totals["platform_total"]), 390.24, places=2)
+        self.assertAlmostEqual(float(totals["settlement_total"]), 390.24, places=2)
+        self.assertEqual(totals["validation_status"], "pass")
 
     def test_xiaomi_rows_match_platform_with_rounding_tolerance(self):
         cases = [
