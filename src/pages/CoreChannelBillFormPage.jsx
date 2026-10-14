@@ -480,6 +480,29 @@ function CoreChannelBillFormPage({ mode }) {
         savedSuccessfully = true
       }
 
+      // Verify the persisted row first: explicit platform evidence review
+      // belongs in the same flow, not behind another rejected lifecycle request.
+      const savedBill = await getChannelRecord(billId)
+      if (String(savedBill.validation_status || '').toLowerCase() === 'fail') {
+        const review = assessSavedChannelPlatformDifference(savedBill)
+        if (review.eligible) {
+          const documented = review.reviewKind === 'documented'
+          setInlineIssue({
+            kind: 'platform',
+            title: documented ? '账单已保存 · 核对平台原始结算单' : '账单已保存 · 小额平台尾差',
+            saved: true,
+            message: `系统计算 ${money(review.systemAmount)}，平台实结 ${money(review.platformAmount)}，差额 ${money(Math.abs(review.differenceCents / 100))}。请按下方提示核对并留痕；不修改真实金额。`
+          })
+          openSmallVariancePanel('platform', review)
+          return
+        }
+        reportIssue(
+          review.error || '系统金额与平台结算存在未核实差异，请核对账单明细',
+          { kind: 'review', title: '账单已保存，平台金额需先核对', saved: true }
+        )
+        return
+      }
+
       const lifecycle = await transitionBillLifecycle('channel', billId, 'confirmed', '')
       if (zeroSettlement) {
         await transitionBillLifecycle('channel', billId, 'completed', '')
