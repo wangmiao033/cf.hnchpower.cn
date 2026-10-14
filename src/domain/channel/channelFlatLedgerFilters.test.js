@@ -44,6 +44,41 @@ describe('flat channel ledger', () => {
     expect(matchesChannelLedgerFilters(row,{status:'confirmed'})).toBe(false)
     expect(matchesChannelLedgerFilters(row,{fromMonth:'2026-10',toMonth:'2026-09'})).toBe(false)
   })
+  it('discovers 游海、麦游、海游 and mixed old labels in the same keyword box', () => {
+    const youhai = bill('YOUHAI', '2026-08', 3119.46, {
+      channelName: '游海', partnerName: '西安游海网络科技有限公司',
+      originalChannelName: '游海（麦游）'
+    })
+    const maiyou = bill('MAIYOU', '2026-09', 2802.70, {
+      channelName: '麦游', partnerName: '西安麦游网络科技有限公司'
+    })
+    const other = bill('OTHER', '2026-09', 100, {
+      channelName: '百分', partnerName: '四川百分网'
+    })
+    for (const query of ['游海', '麦游', '海游', '游海（麦游）', '游海(麦游)', '游海麦游']) {
+      expect([youhai, maiyou, other].filter(row => matchesChannelLedgerFilters(row, { query })).map(row => row.id), query)
+        .toEqual(['YOUHAI', 'MAIYOU'])
+    }
+    expect(matchesChannelLedgerFilters(youhai, { query: '西安游海网络科技有限公司' })).toBe(true)
+    expect(matchesChannelLedgerFilters(maiyou, { query: '西安游海网络科技有限公司' })).toBe(false)
+    expect(matchesChannelLedgerFilters(maiyou, { query: '西安麦游网络科技有限公司' })).toBe(true)
+    // Search groups results, but doesn't merge legal entities or modify amounts.
+    expect(youhai.partnerName).not.toBe(maiyou.partnerName)
+    expect(youhai.settlementAmount).toBe(3119.46)
+    expect(maiyou.settlementAmount).toBe(2802.70)
+  })
+
+  it('searches original legacy channel names without altering their stored company', () => {
+    const row = bill('LEGACY', '2026-07', 833.30, {
+      channelName: '游海', originalChannelName: '游海（麦游）',
+      partnerName: '西安游海网络科技有限公司'
+    })
+    expect(matchesChannelLedgerFilters(row, { query: '麦游' })).toBe(true)
+    expect(matchesChannelLedgerFilters(row, { query: '游海（麦游）' })).toBe(true)
+    expect(matchesChannelLedgerFilters(row, { query: '西安麦游网络科技有限公司' })).toBe(false)
+    expect(matchesChannelLedgerFilters(row, { query: '完全不相关' })).toBe(false)
+  })
+
   it('sorts by latest month, unpaid amount and channel, without mutating input', () => {
     const x = bill('a','2026-07',20,{channelName:'九游'})
     const y = bill('b','2026-09',5,{channelName:'八门'})
