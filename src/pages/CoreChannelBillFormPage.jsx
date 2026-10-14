@@ -27,7 +27,7 @@ import { getContractBillReconciliation } from '@/lib/api/contractTerms.ts'
 import { listContractDifferenceCases, handleContractDifferenceCase } from '@/lib/api/contractDifferences.ts'
 import { prepareChannelSpecialSettlement } from '@/domain/channel/channelSpecialSettlement.js'
 import { assessChannelSmallVariancePreflight } from '@/domain/channel/channelSmallVarianceReview.js'
-import { assessSavedChannelPlatformDifference } from '@/domain/channel/channelPlatformVarianceReview.js'
+import { assessSavedChannelPlatformDifference, buildChannelPlatformApprovalNote } from '@/domain/channel/channelPlatformVarianceReview.js'
 import { getRecentApiErrorMessage } from '@/lib/api/client.ts'
 import {
   getCachedEditRecord,
@@ -150,8 +150,8 @@ function CoreChannelBillFormPage({ mode }) {
   const [smallVarianceKind, setSmallVarianceKind] = useState('contract')
   const [platformVarianceReview, setPlatformVarianceReview] = useState(null)
   const [platformEvidenceAttachments, setPlatformEvidenceAttachments] = useState([])
+  const [platformEvidenceLoading, setPlatformEvidenceLoading] = useState(false)
   const [platformEvidenceId, setPlatformEvidenceId] = useState('')
-  const [platformEvidenceConfirmed, setPlatformEvidenceConfirmed] = useState(false)
   const [smallVarianceNote, setSmallVarianceNote] = useState('')
   const [smartRecord, setSmartRecord] = useState(null)
   const [smartRevision, setSmartRevision] = useState(0)
@@ -175,7 +175,6 @@ function CoreChannelBillFormPage({ mode }) {
     setPlatformVarianceReview(null)
     setPlatformEvidenceAttachments([])
     setPlatformEvidenceId('')
-    setPlatformEvidenceConfirmed(false)
     setSmallVarianceNote('')
     setRuleAuthority({ status: 'idle', total: 0, matched: 0, unmatched: 0, needsConfirmation: 0 })
   }, [mode, channelEditRecordId])
@@ -650,13 +649,17 @@ function CoreChannelBillFormPage({ mode }) {
 
   const refreshPlatformEvidence = async () => {
     if (!channelEditRecordId) return
-    const docs = await listBillAttachments('channel', String(channelEditRecordId))
-    setPlatformEvidenceAttachments(docs)
-    setPlatformEvidenceId((previous) => (
-      docs.some((item) => item.id === previous)
-        ? previous
-        : docs.length === 1 ? docs[0].id : ''
-    ))
+    setPlatformEvidenceLoading(true)
+    try {
+      const docs = await listBillAttachments('channel', String(channelEditRecordId))
+      setPlatformEvidenceAttachments(docs)
+      setPlatformEvidenceId(previous => (
+        docs.some(item => item.id === previous) ? previous
+          : docs.length === 1 ? docs[0].id : ''
+      ))
+    } finally {
+      setPlatformEvidenceLoading(false)
+    }
   }
 
   const openSmallVariancePanel = (kind = 'contract', review = null) => {
@@ -664,7 +667,6 @@ function CoreChannelBillFormPage({ mode }) {
     setPlatformVarianceReview(review)
     setPlatformEvidenceAttachments([])
     setPlatformEvidenceId('')
-    setPlatformEvidenceConfirmed(false)
     if (kind === 'platform' && review?.reviewKind === 'documented') {
       void refreshPlatformEvidence().catch((error) => {
         console.warn('读取已上传的渠道原始结算凭证失败', error)
@@ -686,14 +688,19 @@ function CoreChannelBillFormPage({ mode }) {
     const note = smallVarianceNote.trim()
     if (smallVarianceKind === 'platform') {
       const documented = platformVarianceReview?.reviewKind === 'documented'
-      if (!platformVarianceReview || note.length < (documented ? 12 : 6)) {
-        showToast(documented ? '请填写至少12字的原始结算凭证核对依据' : '请填写平台尾差核对依据（至少6个字）', 'error')
+      if (!platformVarianceReview) {
+        showToast('平台结算数据尚未就绪，请重新打开本张账单', 'error')
         return
       }
-      if (documented && (!platformEvidenceId || !platformEvidenceConfirmed)) {
-        showToast('请先上传并选择平台结算原始凭证，并勾选人工核对确认', 'error')
+      const effectiveEvidenceId = platformEvidenceId || (
+        platformEvidenceAttachments.length === 1 ? platformEvidenceAttachments[0].id : ''
+      )
+      if (documented && !effectiveEvidenceId) {
+        showToast('请先上传或选择平台原始结算凭证', 'error')
         return
       }
+      const evidence = platformEvidenceAttachments.find(item => item.id === effectiveEvidenceId)
+      const auditNote = buildChannelPlatformApprovalNote(platformVarianceReview, note, evidence?.file_name || '')
       if (safety.dirty) {
         showToast('有尚未保存的修改，请先保存后重新核对尾差', 'error')
         return
@@ -703,15 +710,12 @@ function CoreChannelBillFormPage({ mode }) {
         // Strict contract preflight: neither unknown authorization nor
         // unresolved contract deviations can be waived by platform approval.
         await assertContractReadyForPlatformTail(String(channelEditRecordId))
-        if (documented) {
-          const docs = await listBillAttachments('channel', String(channelEditRecordId))
-          if (!docs.some((item) => item.id === platformEvidenceId)) {
-            throw new Error('所选原始平台结算凭证已不在账单附件中，请重新上传后确认')
-          }
-        }
+        // The backend checks document ownership, current line IDs, balances and
+        // contract history atomically. Do not block the user with a redundant
+        // second attachment-list fetch before the actual confirmation.
         const lifecycle = await confirmReviewedChannelPlatformVariance(
-          String(channelEditRecordId), note, platformVarianceReview,
-          documented ? platformEvidenceId : '', documented ? platformEvidenceConfirmed : false
+          String(channelEditRecordId), auditNote, platformVarianceReview,
+          documented ? effectiveEvidenceId : '', documented
         )
         safety.clearAfterSubmit()
         invalidateEditRecord('channel', String(channelEditRecordId))
@@ -721,8 +725,7 @@ function CoreChannelBillFormPage({ mode }) {
         setPlatformVarianceReview(null)
         setPlatformEvidenceAttachments([])
         setPlatformEvidenceId('')
-        setPlatformEvidenceConfirmed(false)
-        setSmallVarianceNote('')
+            setSmallVarianceNote('')
         try {
           await recon.refetchChannelFromApi?.()
         } catch (refreshError) {
@@ -1088,6 +1091,7 @@ function CoreChannelBillFormPage({ mode }) {
           platformReview={platformVarianceReview}
           billId={String(stableRecord?.id || channelEditRecordId || '')}
           attachments={platformEvidenceAttachments}
+          attachmentsLoading={platformEvidenceLoading}
           selectedAttachmentId={platformEvidenceId}
           onAttachmentChange={setPlatformEvidenceId}
           onAttachmentsChanged={() => {
@@ -1096,8 +1100,6 @@ function CoreChannelBillFormPage({ mode }) {
               showToast('凭证上传后无法刷新，请重试或刷新页面', 'error')
             })
           }}
-          acknowledgedSource={platformEvidenceConfirmed}
-          onAcknowledgedSourceChange={setPlatformEvidenceConfirmed}
         />
       ) : null}
 
