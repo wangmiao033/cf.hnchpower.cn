@@ -38,7 +38,10 @@ export function useBillFormSafety({
     [type, mode, recordId]
   )
   const baseVersion = useMemo(
-    () => (initialRecord ? JSON.stringify(normalize(initialRecord)) : ''),
+    () => (initialRecord ? JSON.stringify({
+      fields: normalize(initialRecord),
+      serverRevision: String(initialRecord.updatedAt || initialRecord.updated_at || '')
+    }) : ''),
     [initialRecord, normalize]
   )
   const initialDraft = useMemo(
@@ -49,6 +52,7 @@ export function useBillFormSafety({
   const [draftRecord, setDraftRecord] = useState(initialDraft?.record || null)
   const [savedAt, setSavedAt] = useState(initialDraft?.savedAt || 0)
   const [restored, setRestored] = useState(Boolean(initialDraft?.record))
+  const [staleDraft, setStaleDraft] = useState(false)
   const [resetVersion, setResetVersion] = useState(0)
   const suppressAutosaveRef = useRef(false)
 
@@ -59,15 +63,20 @@ export function useBillFormSafety({
       setDraftRecord(null)
       setSavedAt(0)
       setRestored(false)
+      setStaleDraft(false)
       return
     }
     if (stored.baseVersion && baseVersion && stored.baseVersion !== baseVersion) {
-      clearBillDraft(draftKey)
+      // Do NOT silently delete a user's unsaved work after a concurrent
+      // server-side approval or amendment. Keep the old draft available for
+      // recovery, but never auto-apply it to the now-different server bill.
       setDraftRecord(null)
-      setSavedAt(0)
+      setSavedAt(stored.savedAt || 0)
       setRestored(false)
+      setStaleDraft(true)
       return
     }
+    setStaleDraft(false)
     setDraftRecord(stored.record)
     setSavedAt(stored.savedAt)
     setRestored(true)
@@ -87,18 +96,18 @@ export function useBillFormSafety({
   }, [])
 
   const flushDraft = useCallback(() => {
-    if (!dirty || !currentRecord || suppressAutosaveRef.current) return 0
+    if (staleDraft || !dirty || !currentRecord || suppressAutosaveRef.current) return 0
     const timestamp = writeBillDraft(draftKey, currentRecord, baseVersion)
     if (timestamp) {
       setSavedAt(timestamp)
       setRestored(false)
     }
     return timestamp
-  }, [dirty, currentRecord, draftKey, baseVersion])
+  }, [dirty, currentRecord, draftKey, baseVersion, staleDraft])
 
   useEffect(() => {
-    if (!dirty || !currentRecord || suppressAutosaveRef.current) {
-      if (!dirty && currentRecord) {
+    if (staleDraft || !dirty || !currentRecord || suppressAutosaveRef.current) {
+      if (!dirty && currentRecord && !staleDraft) {
         clearBillDraft(draftKey)
         setSavedAt(0)
         setRestored(false)
@@ -108,7 +117,7 @@ export function useBillFormSafety({
 
     const timer = window.setTimeout(flushDraft, 650)
     return () => window.clearTimeout(timer)
-  }, [dirty, currentRecord, flushDraft, draftKey])
+  }, [dirty, currentRecord, flushDraft, draftKey, staleDraft])
 
   useEffect(() => {
     if (!dirty) {
@@ -144,6 +153,7 @@ export function useBillFormSafety({
     setDraftRecord(null)
     setSavedAt(0)
     setRestored(false)
+    setStaleDraft(false)
     clearNavigationBlocker?.(view)
   }, [draftKey, clearNavigationBlocker, view])
 
@@ -154,18 +164,20 @@ export function useBillFormSafety({
     setDraftRecord(null)
     setSavedAt(0)
     setRestored(false)
+    setStaleDraft(false)
     setResetVersion((value) => value + 1)
     clearNavigationBlocker?.(view)
   }, [draftKey, clearNavigationBlocker, view])
 
   const statusText = useMemo(() => {
+    if (staleDraft) return '服务器版本已更新，旧草稿已保留但未自动覆盖'
     if (!dirty) {
       return mode === 'edit' ? '内容与服务器一致' : '尚未产生本机草稿'
     }
     if (restored && savedAt) return `已恢复 ${formatTime(savedAt)} 的本机草稿`
     if (savedAt) return `草稿已自动保存 ${formatTime(savedAt)}`
     return '检测到未保存内容，正在准备草稿'
-  }, [dirty, mode, restored, savedAt])
+  }, [dirty, mode, restored, savedAt, staleDraft])
 
   return {
     currentRecord,
@@ -173,6 +185,7 @@ export function useBillFormSafety({
     dirty,
     savedAt,
     restored,
+    staleDraft,
     resetVersion,
     statusText,
     onFormStateChange,

@@ -170,6 +170,8 @@ class ChannelRecordCreate(BaseModel):
 
 
 class ChannelRecordUpdate(BaseModel):
+    # Optional optimistic concurrency token supplied by the edit page.
+    expected_updated_at: datetime | None = None
     statement_no: str | None = None
     channel_name: str | None = None
     partner_name: str | None = None

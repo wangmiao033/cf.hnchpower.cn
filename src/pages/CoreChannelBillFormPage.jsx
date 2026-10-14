@@ -30,7 +30,6 @@ import { assessChannelSmallVariancePreflight } from '@/domain/channel/channelSma
 import { assessSavedChannelPlatformDifference, buildChannelPlatformApprovalNote } from '@/domain/channel/channelPlatformVarianceReview.js'
 import { getRecentApiErrorMessage } from '@/lib/api/client.ts'
 import {
-  getCachedEditRecord,
   invalidateEditRecord,
   loadEditRecord
 } from '@/lib/api/editRecordCache.js'
@@ -189,14 +188,8 @@ function CoreChannelBillFormPage({ mode }) {
     }
 
     const recordId = String(channelEditRecordId)
-    const cached = getCachedEditRecord('channel', recordId)
-    if (cached) {
-      setRemoteRecord(cached)
-      setLoading(false)
-      setLoadError('')
-      return
-    }
-
+    // A cached "pending" row is not proof the server remains editable.
+    // Always read the authoritative status when entering the editor.
     let cancelled = false
     async function loadRecord() {
       setRemoteRecord(null)
@@ -206,7 +199,7 @@ function CoreChannelBillFormPage({ mode }) {
         const record = await loadEditRecord('channel', recordId, async () => {
           const row = await getChannelRecord(recordId)
           return apiChannelRowToFrontend(row)
-        })
+        }, { force: true })
         if (!cancelled) setRemoteRecord(record)
       } catch (error) {
         if (!cancelled) {
@@ -338,12 +331,18 @@ function CoreChannelBillFormPage({ mode }) {
 
   const handleChannelUpdateRecord = async (recordId, record) => {
     try {
-      const result = await recon.onChannelUpdateRecord?.(recordId, record)
+      const result = await recon.onChannelUpdateRecord?.(recordId, {
+        ...record,
+        updatedAt: stableRecord?.updatedAt || record?.updatedAt
+      })
       if (result === false) {
         const serverMessage = getRecentApiErrorMessage()
-        reportIssue(serverMessage || '服务器没有接受本次保存。请按当前页提示定位问题，修正后再次保存。', {
-          kind: 'save',
-          title: '账单未保存'
+        const reason = serverMessage || '服务器没有接受本次保存。请按提示处理后重新保存。'
+        const stateChanged = /锁定|已核对|服务器账单已更新|版本|状态流转/.test(reason)
+        reportIssue(reason, {
+          kind: stateChanged ? 'stale-status' : 'save',
+          title: stateChanged ? '服务器状态已变化 · 本次没有覆盖账单' : '账单未保存',
+          autoLocate: !stateChanged
         })
         return false
       }
@@ -353,7 +352,12 @@ function CoreChannelBillFormPage({ mode }) {
       const message = error instanceof Error && error.message
         ? error.message
         : '账单保存失败，请根据当前页提示修正后重试。'
-      reportIssue(message, { kind: 'save', title: '账单未保存' })
+      const lockedOrChanged = /锁定|已核对|版本|服务器账单已更新|状态流转|退回待核对/.test(message)
+      reportIssue(message, {
+        kind: lockedOrChanged ? 'stale-status' : 'save',
+        title: lockedOrChanged ? '服务器状态已变化 · 本次没有覆盖账单' : '账单未保存',
+        autoLocate: !lockedOrChanged
+      })
       throw error
     }
   }
@@ -480,9 +484,27 @@ function CoreChannelBillFormPage({ mode }) {
         savedSuccessfully = true
       }
 
-      // Verify the persisted row first: explicit platform evidence review
-      // belongs in the same flow, not behind another rejected lifecycle request.
+      // The initial edit snapshot may have been superseded in a second tab.
+      // Verify the current persisted status before *any* confirmation attempt.
       const savedBill = await getChannelRecord(billId)
+      const savedStatus = String(savedBill.status || 'pending').trim().toLowerCase()
+      if (savedStatus !== 'pending') {
+        reportIssue(
+          `服务器账单现在是「${savedStatus === 'confirmed' ? '已核对' : savedStatus}」，不能再次从旧页面保存或核对。请重新读取服务器状态；需要改金额时，先使用已有的修改账单流程。`,
+          { kind: 'stale-status', title: '服务器状态已变化 · 本次未覆盖账单', saved: savedSuccessfully, autoLocate: false }
+        )
+        return
+      }
+      if (!safety.dirty && stableRecord?.updatedAt && savedBill.updated_at
+        && new Date(stableRecord.updatedAt).getTime() !== new Date(savedBill.updated_at).getTime()) {
+        reportIssue(
+          '本张账单已由其他操作更新，当前页面的数据不是最新版本。本次没有确认；请重新读取服务器账单再操作。',
+          { kind: 'stale-status', title: '账单版本已变化 · 本次未确认', saved: false, autoLocate: false }
+        )
+        return
+      }
+      // A saved platform discrepancy goes through the existing audit review
+      // rather than a guaranteed-failing ordinary confirmed transition.
       if (String(savedBill.validation_status || '').toLowerCase() === 'fail') {
         const review = assessSavedChannelPlatformDifference(savedBill)
         if (review.eligible) {
@@ -971,7 +993,21 @@ function CoreChannelBillFormPage({ mode }) {
             </small>
           </div>
           <div className="core-bill-inline-issue__actions">
-            <button type="button" onClick={() => locateIssue()}>定位问题</button>
+            {inlineIssue.kind === 'stale-status' ? (
+              <button type="button" onClick={() => {
+                if (safety.dirty) {
+                  safety.flushDraft()
+                  if (!window.confirm(
+                    '服务器账单状态已经变化，当前页面还有未提交的修改。\\n' +
+                    '重新读取不会将本机旧草稿覆盖到服务器，也不会自动恢复到新的账单上。\\n' +
+                    '旧草稿会暂时保留。确定重新读取最新状态吗？'
+                  )) return
+                }
+                retryLoad()
+              }}>重新读取账单状态</button>
+            ) : (
+              <button type="button" onClick={() => locateIssue()}>定位问题</button>
+            )}
             {inlineIssue.kind === 'contract' && isEdit && inlineIssue.saved ? (
               <button type="button" className="is-primary" disabled={reviewing} onClick={() => void confirmSavedSpecialSettlement()}>
                 {reviewing ? '正在核对本期结算…' : '按结算确认函保留金额并完成核对'}

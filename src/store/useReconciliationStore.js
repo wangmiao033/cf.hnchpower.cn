@@ -290,14 +290,18 @@ export function useReconciliationStore(settings, showToast, options = {}) {
 
       if (reconciliationApiEnabled) {
         try {
-          await updateReconciliationRecord(sid, frontendRecordToApiPayload(merged))
+          const payload = frontendRecordToApiPayload(merged)
+          // The editor's server revision prevents accidental overwrites after
+          // another tab, approval, or bank action has updated this bill.
+          if (merged.updatedAt) payload.expected_updated_at = String(merged.updatedAt)
+          await updateReconciliationRecord(sid, payload)
           await refetchReconciliationFromApi()
           addHistoryItem('更新记录', { records, partyA, partyB, settlementMonth })
           showToast('记录更新成功！', 'success')
           return true
         } catch (e) {
           console.error(e)
-          showToast('更新服务器失败，请稍后重试', 'error')
+          showToast(e instanceof Error && e.message ? e.message : '研发账单保存失败，请稍后重试', 'error')
           return false
         }
       }
@@ -752,13 +756,15 @@ export function useReconciliationStore(settings, showToast, options = {}) {
       }
       if (channelApiEnabled) {
         try {
-          await updateChannelRecord(sid, frontendChannelRecordToPayload(merged))
+          const payload = frontendChannelRecordToPayload(merged)
+          if (merged.updatedAt) payload.expected_updated_at = String(merged.updatedAt)
+          await updateChannelRecord(sid, payload)
           await refetchChannelFromApi()
           showToast('渠道记录更新成功', 'success')
           return true
         } catch (e) {
           console.error(e)
-          showToast('渠道记录更新服务器失败', 'error')
+          showToast(e instanceof Error && e.message ? e.message : '渠道账单保存失败，请稍后重试', 'error')
           return false
         }
       }
