@@ -104,8 +104,15 @@ export default function ChannelBillReadonlyView({ recordId, fallbackRecord }) {
   const [error, setError] = useState('')
   const [attachments, setAttachments] = useState([])
   const [attachmentError, setAttachmentError] = useState('')
-  const [attachmentLoading, setAttachmentLoading] = useState(true)
+  const [attachmentLoading, setAttachmentLoading] = useState(false)
+  const [attachmentsLoaded, setAttachmentsLoaded] = useState(false)
+  const [openedSections, setOpenedSections] = useState({})
   const [reload, setReload] = useState(0)
+
+  const onDetailToggle = (name, event) => {
+    const open = event.currentTarget.open
+    setOpenedSections(previous => previous[name] === open ? previous : { ...previous, [name]: open })
+  }
 
   useEffect(() => {
     let active = true
@@ -114,7 +121,8 @@ export default function ChannelBillReadonlyView({ recordId, fallbackRecord }) {
     setAttachments([])
     setAttachmentError('')
     setLoading(true)
-    setAttachmentLoading(true)
+    setAttachmentLoading(false)
+    setAttachmentsLoaded(false)
 
     if (!billId) {
       setLoading(false)
@@ -135,19 +143,31 @@ export default function ChannelBillReadonlyView({ recordId, fallbackRecord }) {
         if (active) setLoading(false)
       })
 
+    return () => { active = false }
+  }, [billId, reload])
+
+  // Attachments are secondary audit content. Fetch them only when the user
+  // opens the attachment section; otherwise they compete with the visible
+  // settlement/game-data request and slow down the first paint.
+  useEffect(() => {
+    if (!billId || !openedSections.attachments || attachmentsLoaded) return undefined
+    let active = true
+    setAttachmentLoading(true)
+    setAttachmentError('')
     listBillAttachments('channel', billId)
-      .then((files) => {
-        if (active) setAttachments(files)
+      .then(files => {
+        if (!active) return
+        setAttachments(files)
+        setAttachmentsLoaded(true)
       })
-      .catch((cause) => {
+      .catch(cause => {
         if (active) setAttachmentError(cause?.message || '附件列表读取失败')
       })
       .finally(() => {
         if (active) setAttachmentLoading(false)
       })
-
     return () => { active = false }
-  }, [billId, reload])
+  }, [billId, openedSections.attachments, attachmentsLoaded, reload])
 
   const snapshot = record || fallbackRecord || {}
   const lines = Array.isArray(record?.items) ? record.items : []
@@ -206,8 +226,10 @@ export default function ChannelBillReadonlyView({ recordId, fallbackRecord }) {
         </div>
       </section>
 
-      <details className="channel-readonly-fold">
+      <details className="channel-readonly-fold" onToggle={event => onDetailToggle('calculations', event)}>
         <summary>全部结算计算字段 <small>完整扣减、分成、税率、系统及平台金额</small></summary>
+        {openedSections.calculations ? (
+
       <section className="channel-readonly-section">
         <div className="channel-readonly-section-head">
           <div><h2>逐游戏结算明细</h2><p>可左右滚动查看所有扣减项、分成、通道费和系统/平台结算差异。</p></div>
@@ -235,10 +257,13 @@ export default function ChannelBillReadonlyView({ recordId, fallbackRecord }) {
         ) : <p className="channel-readonly-empty">{loading ? '明细加载中…' : '暂无可显示的明细，请重试读取。'}</p>}
       </section>
 
+        ) : null}
       </details>
 
-      <details className="channel-readonly-fold">
+      <details className="channel-readonly-fold" onToggle={event => onDetailToggle('background', event)}>
         <summary>账单资料与金额构成 <small>流水、计费、分成、实结与已收款</small></summary>
+        {openedSections.background ? (<>
+
       <section className="channel-readonly-section">
         <header className="channel-readonly-section-head">
           <div>
@@ -282,10 +307,13 @@ export default function ChannelBillReadonlyView({ recordId, fallbackRecord }) {
         </dl>
       </section>
 
+        </>) : null}
       </details>
 
-      <details className="channel-readonly-fold">
+      <details className="channel-readonly-fold" onToggle={event => onDetailToggle('rules', event)}>
         <summary>结算规则、历史备注与调整 <small>{hasAdjustment ? '有调整记录 · 可展开核查' : '审计备查 · 默认收起'}</small></summary>
+        {openedSections.rules ? (
+
       <section className="channel-readonly-section">
         <div className="channel-readonly-section-head"><div><h2>结算规则与调整</h2><p>保留账单确认时已记录的规则参数和调整依据。</p></div></div>
         <dl className="channel-readonly-info">
@@ -322,10 +350,13 @@ export default function ChannelBillReadonlyView({ recordId, fallbackRecord }) {
         ) : null}
       </section>
 
+        ) : null}
       </details>
 
-      <details className="channel-readonly-fold">
-        <summary>原始账单附件 <small>{attachmentError ? '附件读取失败' : attachmentLoading ? '读取中' : `${attachments.length} 个`}</small></summary>
+      <details className="channel-readonly-fold" onToggle={event => onDetailToggle('attachments', event)}>
+        <summary>原始账单附件 <small>{attachmentError ? '附件读取失败' : attachmentLoading ? '读取中' : attachmentsLoaded ? `${attachments.length} 个` : '按需查看'}</small></summary>
+        {openedSections.attachments ? (
+
       <section className="channel-readonly-section">
         <div className="channel-readonly-section-head">
           <div><h2>原始账单附件</h2><p>仅支持查看与下载，不提供上传或删除操作。</p></div>
@@ -346,6 +377,7 @@ export default function ChannelBillReadonlyView({ recordId, fallbackRecord }) {
           </ul>
         ) : null}
       </section>
+        ) : null}
       </details>
     </div>
   )
