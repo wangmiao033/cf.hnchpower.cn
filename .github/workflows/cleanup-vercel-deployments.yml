@@ -2,7 +2,7 @@ name: Cleanup old cf.hnchpower.cn deployments
 
 on:
   schedule:
-    # Every day at 04:20 Beijing time (20:20 UTC).
+    # Backstop at 04:20 Beijing time (20:20 UTC). Production deploys also prune immediately.
     - cron: '20 20 * * *'
   workflow_dispatch:
     inputs:

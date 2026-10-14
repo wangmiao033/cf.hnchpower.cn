@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Safely prune old deployments for cf.hnchpower.cn only.
 
-Keeps the latest three deployments plus any aliased/current-production deployments.
-Uses the existing GitHub Actions VERCEL_TOKEN repository secret.
+Keeps the latest three deployments, the live production deployment, in-progress
+builds, and any deployment that still serves a production alias. Automatic git
+branch hostnames do not keep an older deployment. Uses the GitHub Actions
+VERCEL_TOKEN repository secret.
 """
 import json
 import os
@@ -19,7 +21,7 @@ PROJECT_NAME = "cf-hnchpower-cn"
 TEAM_ID = "team_YfsD5pM9JFtkqXnJIUdbF2eI"
 PRODUCTION_DOMAIN = "cf.hnchpower.cn"
 KEEP_LATEST = 3
-MAX_DELETE = 50
+MAX_DELETE = 200
 BASE_URL = "https://api.vercel.com"
 IN_PROGRESS = {"QUEUED", "INITIALIZING", "BUILDING", "DEPLOYING"}
 TERMINAL = {"READY", "ERROR", "CANCELED", "CANCELLED"}
@@ -118,12 +120,23 @@ def list_all_deployments():
     raise RuntimeError("Exceeded pagination safety limit; refusing partial cleanup")
 
 
-def has_alias(deployment):
+def alias_host(alias):
+    if isinstance(alias, dict):
+        return str(alias.get("alias") or "")
+    return str(alias or "")
+
+
+def is_git_branch_alias(host):
+    """Automatic branch hostnames should not pin an old deployment forever."""
+    return host.endswith(".vercel.app") and "-git-" in host
+
+
+def has_sticky_alias(deployment):
     response = api(scoped(f"/v2/deployments/{quote(deployment)}/aliases"))
     aliases = response.get("aliases")
     if not isinstance(aliases, list):
         raise RuntimeError(f"Could not verify aliases for {deployment}; refusing deletion")
-    return bool(aliases)
+    return any(host and not is_git_branch_alias(host) for host in (alias_host(item) for item in aliases))
 
 
 def summary(lines):
@@ -142,12 +155,11 @@ def main():
     deployments = list_all_deployments()
     if original_live not in {deployment_id(item) for item in deployments}:
         raise RuntimeError("Live production deployment missing from full project listing")
-    if any(status(item) in IN_PROGRESS for item in deployments):
-        summary(["### Vercel deployment cleanup", "Build in progress: cleanup deferred until next run."])
-        return
-
     protected = {deployment_id(item) for item in deployments[:KEEP_LATEST]}
     protected.add(original_live)
+    protected.update(
+        deployment_id(item) for item in deployments if status(item) in IN_PROGRESS
+    )
     deleted = 0
     aliased = 0
     candidates = 0
@@ -157,10 +169,11 @@ def main():
             continue
         candidates += 1
         if deleted >= MAX_DELETE:
+            print(f"STOP per-run limit {MAX_DELETE}; older deployments remain for the next run")
             break
-        if has_alias(dep_id):
+        if has_sticky_alias(dep_id):
             aliased += 1
-            print(f"SKIP (active alias) {dep_id}")
+            print(f"SKIP (production alias) {dep_id}")
             continue
         # Fail closed on a concurrent production change.
         if live_production_id() != original_live:
@@ -176,7 +189,7 @@ def main():
     summary([
         "### Vercel deployment cleanup",
         f"- Project: \u0060{PROJECT_NAME}\u0060 only",
-        f"- Policy: newest {KEEP_LATEST} + live production + all alias targets retained",
+        f"- Policy: newest {KEEP_LATEST} + live production + in-progress builds + production aliases retained",
         f"- Existing deployments examined: {len(deployments)}",
         f"- Older terminal-state candidates: {candidates}",
         f"- Skipped because aliased: {aliased}",
