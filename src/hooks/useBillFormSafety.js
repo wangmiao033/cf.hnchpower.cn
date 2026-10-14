@@ -38,7 +38,10 @@ export function useBillFormSafety({
     [type, mode, recordId]
   )
   const baseVersion = useMemo(
-    () => (initialRecord ? JSON.stringify(normalize(initialRecord)) : ''),
+    () => (initialRecord ? JSON.stringify({
+      fields: normalize(initialRecord),
+      serverRevision: String(initialRecord.updatedAt || initialRecord.updated_at || '')
+    }) : ''),
     [initialRecord, normalize]
   )
   const initialDraft = useMemo(
