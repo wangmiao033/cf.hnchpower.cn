@@ -126,3 +126,36 @@
     flex: 1;
   }
 }
+
+.channel-platform-evidence {
+  display: grid;
+  gap: 12px;
+  border: 1px solid #cfddeb;
+  border-radius: 10px;
+  background: #fff;
+  padding: 14px;
+}
+.channel-platform-evidence > strong { font-size: 13px; color: #254b70; }
+.channel-platform-evidence > small { color: #66788f; font-size: 11px; line-height: 1.6; }
+.channel-platform-evidence select {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #bacfe4;
+  border-radius: 8px;
+  color: #2d4967;
+  background: #fff;
+}
+.channel-small-variance-panel .channel-platform-evidence__check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+}
+.channel-platform-evidence__check input {
+  margin-top: 3px;
+  flex: 0 0 auto;
+}
+.channel-small-variance-panel .channel-platform-evidence__check span {
+  font-weight: 500;
+  line-height: 1.65;
+}

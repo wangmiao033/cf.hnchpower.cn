@@ -13,6 +13,7 @@ from app.core.security import require_current_user
 from app.models.user import AuthUser
 from app.schemas.bill_lifecycle import BillLifecycleRead, BillTransitionRequest
 from app.models.channel import ChannelRecord, ChannelRecordLineItem
+from app.models.bill_attachment import BillAttachment
 from app.models.operation_log import OperationLog
 from app.services.channel_small_variance_approval import assess_channel_small_variance_approval
 from app.services.channel_platform_variance_approval import (
@@ -184,6 +185,8 @@ class ApprovedPlatformVarianceRequest(BaseModel):
     expected_settlement_amount: float
     expected_signed_difference_cents: int
     expected_line_ids: list[str] = Field(min_length=1, max_length=100)
+    evidence_attachment_id: str | None = Field(default=None, max_length=128)
+    evidence_confirmed: bool = False
 
 
 @router.post("/channel/{bill_id}/confirm-platform-variance", response_model=BillLifecycleRead)
@@ -193,10 +196,11 @@ def confirm_approved_channel_platform_variance(
     db: Session = Depends(get_db),
     user: AuthUser = Depends(require_current_user),
 ) -> BillLifecycleRead:
-    """Audit-approve <= ¥0.50 summed absolute platform tail, then lock bill.
+    """Confirm a verified platform amount with explicit human accountability.
 
-    This route never edits contract rules, amounts, line items, or source
-    platform figures. It is independent from a *contract* difference approval.
+    <= 50 cents: short remark. Larger discrepancies: uploaded source statement,
+    explicit attestation, and substantive justification. The original amounts,
+    contract, lines, invoice, receipts, and validation status remain unchanged.
     """
     if str(user.role or "").strip().lower() != "admin":
         raise HTTPException(403, detail={
@@ -224,7 +228,41 @@ def confirm_approved_channel_platform_variance(
         .where(ChannelRecordLineItem.channel_record_id == bill_id)
         .order_by(ChannelRecordLineItem.sort_order, ChannelRecordLineItem.id)
     ).scalars().all()
-    assessment = assess_channel_platform_variance(bill, rows)
+    assessment = assess_channel_platform_variance(
+        bill, rows, allow_documented_variance=True
+    )
+    documented = assessment["review_kind"] == "documented"
+    evidence_attachment = None
+    if documented:
+        if len(reason) < 12:
+            raise HTTPException(422, detail={
+                "error": "documented_platform_reason_required",
+                "message": "金额差异超过¥0.50，请填写至少12个字的核对原因",
+            })
+        if not payload.evidence_confirmed:
+            raise HTTPException(422, detail={
+                "error": "documented_platform_attestation_required",
+                "message": "请明确确认已经按平台原始结算单核对真实分成金额",
+            })
+        attachment_id = str(payload.evidence_attachment_id or "").strip()
+        if not attachment_id:
+            raise HTTPException(422, detail={
+                "error": "documented_platform_attachment_required",
+                "message": "金额差异超过¥0.50，请先上传平台原始结算凭证再确认",
+            })
+        evidence_attachment = db.execute(
+            select(BillAttachment).where(
+                BillAttachment.id == attachment_id,
+                BillAttachment.bill_type == "channel",
+                BillAttachment.bill_id == bill_id,
+                BillAttachment.file_size > 0,
+            )
+        ).scalar_one_or_none()
+        if evidence_attachment is None:
+            raise HTTPException(409, detail={
+                "error": "documented_platform_attachment_missing",
+                "message": "所选结算凭证不属于本张账单或已删除，请重新上传并选择",
+            })
 
     # A stale UI must not be able to approve a different set of lines or a
     # different payment amount when another tab just edited the record.
@@ -267,17 +305,21 @@ def confirm_approved_channel_platform_variance(
 
     db.add(OperationLog(
         id=str(uuid4()), entity_type="channel", entity_id=str(bill.id),
-        entity_number=bill.statement_no, action="platform_small_variance_confirm",
+        entity_number=bill.statement_no,
+        action="platform_documented_variance_confirm" if documented else "platform_small_variance_confirm",
         summary=(
-            "管理员人工核准平台尾差，系统与平台差额 "
-            f"{assessment['signed_difference_cents'] / 100:+.2f} 元，实际应收未修改"
+            ("管理员凭平台原始结算单核准大额金额差异" if documented else "管理员人工核准平台小额尾差")
+            + f"，系统与平台差额 {assessment['signed_difference_cents'] / 100:+.2f} 元；实际应收未修改"
         ),
         actor_user_id=str(user.id), actor_email=str(user.email or ""),
         changes={},
         metadata_json={
             "reason": reason,
-            "approval_source": "saved_channel_platform_bill",
-            "max_absolute_line_variance_cents": 50,
+            "approval_source": "attached_platform_statement" if documented else "saved_channel_platform_bill",
+            "max_small_variance_cents": 50,
+            "evidence_attachment_id": str(evidence_attachment.id) if evidence_attachment else None,
+            "evidence_file_name": str(evidence_attachment.file_name) if evidence_attachment else None,
+            "evidence_confirmed": bool(payload.evidence_confirmed) if documented else None,
             **assessment,
         },
     ))

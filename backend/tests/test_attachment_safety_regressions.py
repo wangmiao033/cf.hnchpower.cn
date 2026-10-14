@@ -13,7 +13,7 @@ from app.api.bank_transaction import (
     upload_bank_transaction_attachment,
     download_bank_transaction_attachment,
 )
-from app.api.bill_attachment import upload_attachment
+from app.api.bill_attachment import upload_attachment, delete_attachment
 
 
 class DummyUpload:
@@ -105,6 +105,24 @@ class AttachmentSafetyTests(unittest.IsolatedAsyncioTestCase):
                     DummyUpload(b"x" * (MAX_SERVER_UPLOAD_BYTES + 3)), db=Mock())
         self.assertEqual(raised.exception.status_code, 413)
         put.assert_not_awaited()
+
+
+    async def test_confirmed_platform_source_document_cannot_be_removed(self):
+        db = Mock()
+        db.execute.return_value.scalar_one_or_none.return_value = "audit-entry"
+        with (
+            patch("app.api.bill_attachment._require_parent"),
+            patch("app.api.bill_attachment._get_attachment",
+                  return_value=SimpleNamespace(id="proof-id", file_url="private-proof")),
+            patch("app.api.bill_attachment.delete_private_blob", new_callable=AsyncMock) as storage,
+        ):
+            with self.assertRaises(HTTPException) as raised:
+                await delete_attachment("channel", "bill-id", "proof-id", db=db)
+        self.assertEqual(raised.exception.status_code, 409)
+        self.assertEqual(raised.exception.detail["error"], "settlement_evidence_locked")
+        db.delete.assert_not_called()
+        db.commit.assert_not_called()
+        storage.assert_not_awaited()
 
     async def test_bank_transaction_upload_is_inert_and_downloads_as_attachment(self):
         file = DummyUpload(b"<script>alert(1)</script>", name="invoice.html", mime="text/html")

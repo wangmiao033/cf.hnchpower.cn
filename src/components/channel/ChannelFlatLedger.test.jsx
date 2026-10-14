@@ -56,6 +56,19 @@ describe('channel bill flat list rendering', () => {
     expect(html).toContain('>作废</button>')
   })
 
+  it('shows previously audited discrepancies as reviewed without hiding amount mismatches', () => {
+    const html = renderToStaticMarkup(React.createElement(ChannelFlatLedger, {
+      rows: [bill('2026-09', 475.81, {
+        status: 'confirmed', validationStatus: 'fail',
+        settlementDifference: 59.99, settlementAmount: 475.81
+      })],
+      apiEnabled: false
+    }))
+    expect(html).toContain('已核对·有差异')
+    expect(html).toContain('channel-flat-ledger__status is-audited')
+    expect(html).not.toContain('>数据差异</span>')
+  })
+
   it('treats a multi-month record as one bill and labels its range', () => {
     const html = renderToStaticMarkup(React.createElement(ChannelFlatLedger, {
       rows: [bill('2026-08', 100, {

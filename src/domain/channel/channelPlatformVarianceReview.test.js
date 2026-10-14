@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { assessSavedChannelPlatformVariance } from './channelPlatformVarianceReview.js'
+import { assessSavedChannelPlatformVariance, assessSavedChannelPlatformDifference } from './channelPlatformVarianceReview.js'
 
 const bill = (overrides = {}) => ({
   status: 'pending', validation_status: 'fail',
@@ -35,5 +35,44 @@ describe('saved channel platform variance review', () => {
       { id: 'L1', system_settlement_amount: 2009.25, platform_settlement_amount: 2029.25 },
       { id: 'L2', system_settlement_amount: 2792.02, platform_settlement_amount: 2772.23 }
     ] })).eligible).toBe(false)
+  })
+})
+
+describe('statement-backed Xiaomi platform difference', () => {
+  const xiaomi = () => ({
+    status: 'pending', validation_status: 'fail',
+    settlement_amount: 475.81, platform_settlement_amount: 475.81,
+    system_settlement_amount: 535.80,
+    settlement_adjustment_amount: 0, settlement_final_override: null,
+    items: [
+      { id: 'X1', system_settlement_amount: 2.85, platform_settlement_amount: 2.42 },
+      { id: 'X2', system_settlement_amount: 14.25, platform_settlement_amount: 2.85 },
+      { id: 'X3', system_settlement_amount: 307.80, platform_settlement_amount: 291.27 },
+      { id: 'X4', system_settlement_amount: 210.90, platform_settlement_amount: 179.27 }
+    ]
+  })
+  it('routes a verified 59.99 discrepancy into documented human approval, not the tiny-tail path', () => {
+    expect(assessSavedChannelPlatformVariance(xiaomi()).eligible).toBe(false)
+    const review = assessSavedChannelPlatformDifference(xiaomi())
+    expect(review).toMatchObject({
+      eligible: true, reviewKind: 'documented',
+      systemAmount: 535.80, platformAmount: 475.81,
+      settlementAmount: 475.81,
+      differenceCents: 5999, absoluteLineDifferenceCents: 5999,
+      lineIds: ['X1', 'X2', 'X3', 'X4']
+    })
+  })
+  it('rejects offsets and missing or altered platform totals before requesting audit approval', () => {
+    const base = xiaomi()
+    expect(assessSavedChannelPlatformDifference({
+      ...base, platform_settlement_amount: 475.80
+    }).eligible).toBe(false)
+    expect(assessSavedChannelPlatformDifference({
+      ...base, items: [
+        { id: 'X1', system_settlement_amount: 200.00, platform_settlement_amount: 300.00 },
+        { id: 'X2', system_settlement_amount: 335.80, platform_settlement_amount: 175.81 }
+      ]
+    }).eligible).toBe(false)
+    expect(assessSavedChannelPlatformDifference({ ...base, status: 'confirmed' }).eligible).toBe(false)
   })
 })

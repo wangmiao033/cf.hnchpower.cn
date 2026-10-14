@@ -1,4 +1,4 @@
-/** Client-side *advisory* eligibility for a saved platform penny variance.
+/** Client-side *advisory* eligibility for a saved platform discrepancy.
  * Backend will independently recompute all line amounts under a row lock.
  */
 const cents = (value) => {
@@ -7,10 +7,11 @@ const cents = (value) => {
   return Number.isFinite(n) ? Math.round(n * 100) : null
 }
 
-export function assessSavedChannelPlatformVariance(row) {
+function assess(row, allowDocumented = false) {
   const fail = (error = '') => ({
     eligible: false, error, systemAmount: 0, platformAmount: 0,
-    settlementAmount: 0, differenceCents: 0, lineIds: []
+    settlementAmount: 0, differenceCents: 0, lineIds: [],
+    reviewKind: '', absoluteLineDifferenceCents: 0
   })
   if (row?.status !== 'pending' || row?.validation_status !== 'fail') {
     return fail('不是待核对的平台金额差异账单')
@@ -44,15 +45,34 @@ export function assessSavedChannelPlatformVariance(row) {
   if (linePlatform !== platform || lineSystem !== system || new Set(lineIds).size !== lineIds.length) {
     return fail('逐游戏金额与账单合计不一致')
   }
-  if (totalAbsCents <= 0 || totalAbsCents > 50 || Math.abs(system - platform) > 50) {
+  if (totalAbsCents <= 0 || system === platform) {
+    return fail('系统与平台不存在待核对差异')
+  }
+  if (allowDocumented && totalAbsCents > 50 && totalAbsCents - Math.abs(system - platform) > 2) {
+    return fail('游戏明细存在相互抵消的较大差异，请逐行核对原始平台明细')
+  }
+  if (!allowDocumented && (totalAbsCents > 50 || Math.abs(system - platform) > 50)) {
     return fail('逐游戏平台差异合计不属于¥0.50以内尾差')
   }
   return {
     eligible: true, error: '',
+    reviewKind: totalAbsCents > 50 || Math.abs(system - platform) > 50 ? 'documented' : 'small',
+    absoluteLineDifferenceCents: totalAbsCents,
     systemAmount: system / 100,
     platformAmount: platform / 100,
     settlementAmount: settlement / 100,
     differenceCents: system - platform,
     lineIds: lineIds.sort()
   }
+}
+
+
+/** Keep the legacy tiny-tail evaluator restrictive. */
+export function assessSavedChannelPlatformVariance(row) {
+  return assess(row, false)
+}
+
+/** Substantive discrepancies still require attached original statements + admin approval. */
+export function assessSavedChannelPlatformDifference(row) {
+  return assess(row, true)
 }

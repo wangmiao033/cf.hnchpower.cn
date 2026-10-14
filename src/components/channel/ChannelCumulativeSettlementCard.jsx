@@ -7,6 +7,7 @@ import {
   saveChannelCumulativePolicy,
   submitChannelCumulativeBatchInvoice
 } from '@/lib/api/channelCumulativeSettlement.ts'
+import { isXiaomiPlatform, xiaomiThousandYuanPreset } from '@/domain/channel/xiaomiCumulativePreset.js'
 import './ChannelCumulativeSettlementCard.css'
 
 function money(value) {
@@ -32,6 +33,7 @@ function batchStatus(batch) {
 
 export default function ChannelCumulativeSettlementCard({
   partnerName,
+  platformName = '',
   recordId = '',
   billStatus = 'pending',
   draftBasisAmount = 0,
@@ -86,6 +88,7 @@ export default function ChannelCumulativeSettlementCard({
   }, [load])
 
   const thresholdMode = policy?.enabled && policy?.settlement_mode === 'threshold'
+  const xiaomiCandidate = isXiaomiPlatform(platformName, partnerName)
   const basisLabel = policy?.threshold_basis === 'settlement_amount' ? '累计结算金额' : '累计流水'
   const currentStatus = String(billStatus || 'pending').toLowerCase()
   const alreadyIncluded = Boolean(recordId && pool?.bills?.some((item) => String(item.bill_id) === String(recordId)))
@@ -262,7 +265,20 @@ export default function ChannelCumulativeSettlementCard({
       {canManage && form ? (
         <details className="channel-cumulative-card__settings" open={expandSettings ? true : undefined}>
           <summary>结算策略设置</summary>
-          <p className="channel-cumulative-card__scope-note">按合作方生效，包含该合作方所有游戏。请严格依据合同填写累计口径和门槛；已收、已开票的历史账单不会重复进入累计池。</p>
+          <p className="channel-cumulative-card__scope-note">按合作方生效，包含该合作方所有游戏。请严格依据合同填写累计口径和门槛；已收、已开票的历史账单不会重复进入累计池。若同一渠道对应多个独立结算账户，需分别管理结算主体，不能跨账户累计。</p>
+          {xiaomiCandidate ? (
+            <div className="channel-cumulative-card__preset">
+              <div>
+                <strong>小米开发者平台 · 满 ¥1,000 后申请结算</strong>
+                <small>依据平台结算规则，建议按平台确认的分成金额累计，不要按游戏流水累计。仅为当前合作方预填，实际启用仍需二次确认。</small>
+              </div>
+              <button
+                type="button"
+                disabled={!!working}
+                onClick={() => setForm((old) => xiaomiThousandYuanPreset(old))}
+              >填入小米 ¥1,000 规则</button>
+            </div>
+          ) : null}
           <div className="channel-cumulative-card__settings-grid">
             <label><span>结算方式</span><select value={form.settlement_mode} onChange={(event) => setForm((current) => ({ ...current, settlement_mode: event.target.value }))}><option value="periodic">按月结算</option><option value="threshold">累计达标结算</option></select></label>
             <label><span>累计口径</span><select value={form.threshold_basis} disabled={form.settlement_mode !== 'threshold'} onChange={(event) => setForm((current) => ({ ...current, threshold_basis: event.target.value }))}><option value="">请选择合同约定口径</option><option value="billing_flow">累计流水</option><option value="settlement_amount">累计结算金额</option></select></label>
