@@ -35,6 +35,7 @@
 .channel-flat-ledger__status{display:inline-flex;align-items:center;justify-content:center;padding:4px 7px;min-width:42px;border-radius:99px;white-space:nowrap;font-size:10px;font-weight:800;border:1px solid #e0e6ed;color:#607284;background:#f4f6f9}
 .channel-flat-ledger__status.is-unpaid{border-color:#f0dfbd;color:#976524;background:#fff7eb}
 .channel-flat-ledger__status.is-anomaly{border-color:#f1c0c0;color:#af4747;background:#fff1f0}
+.channel-flat-ledger__status.is-audited{border-color:#ebd59a;color:#825f19;background:#fff9e7}
 .channel-flat-ledger__status.is-cumulative{border-color:#b7dfc8;color:#267950;background:#edf9f2}
 .channel-flat-ledger__status.is-paid{border-color:#c1e7d4;color:#28815a;background:#eefaf3}
 .channel-flat-ledger__row-actions{display:flex;align-items:center;gap:4px;white-space:nowrap}
