@@ -52,3 +52,36 @@ export function unifyLegacyChannelNamesForSamePartner(records = []) {
     }
   })
 }
+
+
+/**
+ * Historical channel keyword search, not company identity normalization.
+ * 西安游海网络科技有限公司 and 西安麦游网络科技有限公司 remain
+ * separate legal customers; "海游" is accepted as a search-only word swap.
+ */
+const CHANNEL_SEARCH_VARIANTS = Object.freeze([
+  '游海', '麦游', '海游', '游海(麦游)', '游海麦游'
+])
+const CHANNEL_SEARCH_KEYS = new Set(CHANNEL_SEARCH_VARIANTS.map(key))
+
+export function channelSearchAliasTerms(query) {
+  const needle = key(query)
+  return needle && CHANNEL_SEARCH_KEYS.has(needle) ? [...CHANNEL_SEARCH_VARIANTS] : []
+}
+
+export function channelLedgerMatchesSearch(row, query, otherFields = []) {
+  const needle = key(query)
+  if (!needle) return true
+  const fields = [
+    row?.statementNo, row?.billNumber,
+    row?.channelName, row?.originalChannelName, row?.partnerName,
+    row?.gameName, ...(otherFields || [])
+  ].map(key).filter(Boolean)
+  if (fields.some(field => field.includes(needle))) return true
+
+  const synonyms = channelSearchAliasTerms(query).map(key)
+  if (!synonyms.length) return false
+  // Do not expand game names or notes into a different customer.
+  return [row?.channelName, row?.originalChannelName, row?.partnerName]
+    .map(key).some(field => synonyms.some(alias => field.includes(alias)))
+}
