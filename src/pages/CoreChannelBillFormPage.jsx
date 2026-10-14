@@ -484,9 +484,27 @@ function CoreChannelBillFormPage({ mode }) {
         savedSuccessfully = true
       }
 
-      // Verify the persisted row first: explicit platform evidence review
-      // belongs in the same flow, not behind another rejected lifecycle request.
+      // The initial edit snapshot may have been superseded in a second tab.
+      // Verify the current persisted status before *any* confirmation attempt.
       const savedBill = await getChannelRecord(billId)
+      const savedStatus = String(savedBill.status || 'pending').trim().toLowerCase()
+      if (savedStatus !== 'pending') {
+        reportIssue(
+          `服务器账单现在是「${savedStatus === 'confirmed' ? '已核对' : savedStatus}」，不能再次从旧页面保存或核对。请重新读取服务器状态；需要改金额时，先使用已有的修改账单流程。`,
+          { kind: 'stale-status', title: '服务器状态已变化 · 本次未覆盖账单', saved: savedSuccessfully, autoLocate: false }
+        )
+        return
+      }
+      if (!safety.dirty && stableRecord?.updatedAt && savedBill.updated_at
+        && new Date(stableRecord.updatedAt).getTime() !== new Date(savedBill.updated_at).getTime()) {
+        reportIssue(
+          '本张账单已由其他操作更新，当前页面的数据不是最新版本。本次没有确认；请重新读取服务器账单再操作。',
+          { kind: 'stale-status', title: '账单版本已变化 · 本次未确认', saved: false, autoLocate: false }
+        )
+        return
+      }
+      // A saved platform discrepancy goes through the existing audit review
+      // rather than a guaranteed-failing ordinary confirmed transition.
       if (String(savedBill.validation_status || '').toLowerCase() === 'fail') {
         const review = assessSavedChannelPlatformDifference(savedBill)
         if (review.eligible) {
