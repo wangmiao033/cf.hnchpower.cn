@@ -93,17 +93,17 @@ export function useBillFormSafety({
   }, [])
 
   const flushDraft = useCallback(() => {
-    if (!dirty || !currentRecord || suppressAutosaveRef.current) return 0
+    if (staleDraft || !dirty || !currentRecord || suppressAutosaveRef.current) return 0
     const timestamp = writeBillDraft(draftKey, currentRecord, baseVersion)
     if (timestamp) {
       setSavedAt(timestamp)
       setRestored(false)
     }
     return timestamp
-  }, [dirty, currentRecord, draftKey, baseVersion])
+  }, [dirty, currentRecord, draftKey, baseVersion, staleDraft])
 
   useEffect(() => {
-    if (!dirty || !currentRecord || suppressAutosaveRef.current) {
+    if (staleDraft || !dirty || !currentRecord || suppressAutosaveRef.current) {
       if (!dirty && currentRecord && !staleDraft) {
         clearBillDraft(draftKey)
         setSavedAt(0)
