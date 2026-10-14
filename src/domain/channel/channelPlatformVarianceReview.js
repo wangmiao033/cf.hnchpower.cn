@@ -48,6 +48,9 @@ function assess(row, allowDocumented = false) {
   if (totalAbsCents <= 0 || system === platform) {
     return fail('系统与平台不存在待核对差异')
   }
+  if (allowDocumented && totalAbsCents > 50 && totalAbsCents - Math.abs(system - platform) > 2) {
+    return fail('游戏明细存在相互抵消的较大差异，请逐行核对原始平台明细')
+  }
   if (!allowDocumented && (totalAbsCents > 50 || Math.abs(system - platform) > 50)) {
     return fail('逐游戏平台差异合计不属于¥0.50以内尾差')
   }
