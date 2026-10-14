@@ -17,6 +17,10 @@ export const OTHER_EXPENSE_SUBCATEGORIES = Object.freeze([
     "label": "业务招待费"
   },
   {
+    "value": "activity_promotion",
+    "label": "活动推广费（用户奖品）"
+  },
+  {
     "value": "miscellaneous",
     "label": "其他杂费"
   }
