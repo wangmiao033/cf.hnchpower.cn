@@ -47,6 +47,22 @@ describe('edit record cache', () => {
     expect(loader).toHaveBeenCalledTimes(2)
   })
 
+  it('bypasses a cached pending record after the server confirmed or returned it', async () => {
+    const loader = vi.fn()
+      .mockResolvedValueOnce({ id: 'bill-1', status: 'pending', updatedAt: 'v1' })
+      .mockResolvedValueOnce({ id: 'bill-1', status: 'confirmed', updatedAt: 'v2' })
+      .mockResolvedValueOnce({ id: 'bill-1', status: 'pending', updatedAt: 'v3' })
+
+    await expect(loadEditRecord('channel', 'bill-1', loader)).resolves.toMatchObject({ status: 'pending' })
+    expect(getCachedEditRecord('channel', 'bill-1')?.status).toBe('pending')
+    await expect(loadEditRecord('channel', 'bill-1', loader, { force: true }))
+      .resolves.toMatchObject({ status: 'confirmed', updatedAt: 'v2' })
+    expect(getCachedEditRecord('channel', 'bill-1')?.status).toBe('confirmed')
+    await expect(loadEditRecord('channel', 'bill-1', loader, { force: true }))
+      .resolves.toMatchObject({ status: 'pending', updatedAt: 'v3' })
+    expect(loader).toHaveBeenCalledTimes(3)
+  })
+
   it('does not retain failed requests', async () => {
     const loader = vi
       .fn()
