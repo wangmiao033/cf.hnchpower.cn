@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
+import re
+import unicodedata
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
@@ -252,11 +254,47 @@ def _replace_line_items(db: Session, parent: ChannelRecord, items: list[ChannelL
     db.flush()
 
 
+# Search-only legacy terminology; never change the bill's legal owner.
+_CHANNEL_SEARCH_ALIASES = ("游海", "麦游", "海游", "游海(麦游)", "游海麦游")
+_CHANNEL_SEARCH_KEYS = frozenset(_CHANNEL_SEARCH_ALIASES)
+
+
+def _channel_search_terms(search: str) -> list[str]:
+    value = str(search or "").strip()
+    if not value:
+        return []
+    needle = re.sub(r"\s+", "", unicodedata.normalize("NFKC", value)).lower()
+    if needle not in _CHANNEL_SEARCH_KEYS:
+        return [value]
+    return list(dict.fromkeys((value, *_CHANNEL_SEARCH_ALIASES, "游海（麦游）")))
+
+
 def _apply_filters(stmt, *, search, settlement_month, channel_name, game_name, status):
     if search and search.strip():
-        term = f"%{search.strip()}%"
-        item_game = exists(select(ChannelRecordLineItem.id).where(ChannelRecordLineItem.channel_record_id == ChannelRecord.id, ChannelRecordLineItem.game_name.ilike(term)))
-        stmt = stmt.where(or_(ChannelRecord.statement_no.ilike(term), ChannelRecord.channel_name.ilike(term), ChannelRecord.game_name.ilike(term), ChannelRecord.settlement_month.ilike(term), ChannelRecord.remark.ilike(term), ChannelRecord.start_date.ilike(term), item_game))
+        phrases = _channel_search_terms(search)
+        base_fields = (
+            ChannelRecord.statement_no, ChannelRecord.channel_name,
+            ChannelRecord.partner_name, ChannelRecord.game_name,
+            ChannelRecord.settlement_month, ChannelRecord.remark,
+            ChannelRecord.start_date,
+        )
+        conditions = []
+        for index, phrase in enumerate(phrases):
+            term = f"%{phrase}%"
+            if index == 0:
+                # Partner company name was absent from the old server search.
+                conditions.extend(field.ilike(term) for field in base_fields)
+                conditions.append(exists(select(ChannelRecordLineItem.id).where(
+                    ChannelRecordLineItem.channel_record_id == ChannelRecord.id,
+                    ChannelRecordLineItem.game_name.ilike(term),
+                )))
+            else:
+                # Expand only channel/customer display names, not games or notes.
+                conditions.extend((
+                    ChannelRecord.channel_name.ilike(term),
+                    ChannelRecord.partner_name.ilike(term),
+                ))
+        stmt = stmt.where(or_(*conditions))
     if settlement_month and settlement_month.strip(): stmt = stmt.where(ChannelRecord.settlement_month == settlement_month.strip())
     if channel_name and channel_name.strip(): stmt = stmt.where(ChannelRecord.channel_name.ilike(f"%{channel_name.strip()}%"))
     if game_name and game_name.strip():
