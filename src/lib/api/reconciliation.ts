@@ -173,7 +173,7 @@ export type ReconciliationCreatePayload = {
   items?: ReconciliationLineItemPayload[]
 }
 
-export type ReconciliationUpdatePayload = Partial<ReconciliationCreatePayload>
+export type ReconciliationUpdatePayload = Partial<ReconciliationCreatePayload> & { expected_updated_at?: string | null }
 
 const PATH = '/api/reconciliation'
 const PERIOD_PATH = '/api/reconciliation-periods'
@@ -379,6 +379,7 @@ export function apiRowToFrontend(row: ApiReconciliationRow): Record<string, unkn
       : legacyItemsFromApiRow(row)
   return {
     id: idStr,
+    updatedAt: row.updated_at,
     settlementMonth: row.settlement_month ?? '',
     settlementPeriods: row.settlement_periods ?? [],
     settlementPeriodLabel: row.settlement_period_label ?? '',
