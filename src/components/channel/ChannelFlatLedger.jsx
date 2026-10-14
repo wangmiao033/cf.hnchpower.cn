@@ -160,15 +160,22 @@ export default function ChannelFlatLedger({
               const unpaid = Math.max(0, settlement - received)
               const settled = isChannelReceiptSettled(row)
               const difference = hasDifference(row)
+              const reviewed = ['confirmed', 'invoiced', 'completed', 'settled', 'reconciled', 'verified']
+                .includes(String(row.status || '').toLowerCase())
               const games = ledgerBillGames(row)
               const condition = conditions[id]
               const cumulative = !isArchived && !isCancelled && !settled && condition?.deferred &&
                 ['accumulating', 'ready'].includes(condition.state)
-              const label = isCancelled ? '已作废' : isArchived ? '已归档' : difference ? '数据差异'
-                : cumulative ? (condition.state === 'ready' ? '累计达标' : '累计中')
-                  : settled ? '已结清' : received > 0.01 ? '部分收款' : '未收款'
-              const tone = isCancelled || isArchived ? 'muted' : difference ? 'anomaly' :
-                cumulative ? 'cumulative' : settled ? 'paid' : 'unpaid'
+              // A manually reviewed platform amount must retain the discrepancy
+              // flag but must not be displayed as an unconfirmed/unresolved bill.
+              const label = isCancelled ? '已作废' : isArchived ? '已归档'
+                : difference && reviewed ? (cumulative ? '累计中·已核对' : '已核对·有差异')
+                  : difference ? '数据差异'
+                    : cumulative ? (condition.state === 'ready' ? '累计达标' : '累计中')
+                      : settled ? '已结清' : received > 0.01 ? '部分收款' : '未收款'
+              const tone = isCancelled || isArchived ? 'muted' :
+                difference && reviewed ? 'audited' : difference ? 'anomaly' :
+                  cumulative ? 'cumulative' : settled ? 'paid' : 'unpaid'
               return (
                 <tr key={id} className={selectedSet.has(id) ? 'is-selected' : ''}>
                   <td className="channel-flat-ledger__check">
