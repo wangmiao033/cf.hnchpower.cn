@@ -5,6 +5,7 @@ import {
   handleContractDifferenceCase,
   listContractDifferenceCases
 } from '@/lib/api/contractDifferences.ts'
+import { groupResolvedDifferenceHistory } from '@/domain/contract/resolvedDifferenceHistory.js'
 import './ContractDifferenceActionPanel.css'
 
 const STATUS_LABELS = {
@@ -72,6 +73,12 @@ export default function ContractDifferenceActionPanel({
     note: ''
   })
   const [message, setMessage] = useState('')
+  const [showDuplicateHistory, setShowDuplicateHistory] = useState(false)
+  const groupedHistory = useMemo(() => groupResolvedDifferenceHistory(items), [items])
+  const visibleItems = showDuplicateHistory ? items : groupedHistory.visibleItems
+  const displayResolvedCount = summary
+    ? Math.max(0, summary.resolved_count - groupedHistory.hiddenCount)
+    : groupedHistory.visibleItems.filter((item) => item.status === 'resolved').length
 
   const load = useCallback(async () => {
     if (!billId) return
@@ -97,6 +104,7 @@ export default function ContractDifferenceActionPanel({
     setEditor(null)
     setForm(emptyForm())
     setMessage('')
+    setShowDuplicateHistory(false)
     if (seededItems.length) {
       setLoading(false)
       return
@@ -279,18 +287,28 @@ export default function ContractDifferenceActionPanel({
         {summary ? (
           <div className="contract-difference-panel__summary">
             <strong>{summary.pending_count + summary.processing_count} 笔未闭环</strong>
-            <small>处理中 {summary.processing_count} · 已解决 {summary.resolved_count}</small>
+            <small>处理中 {summary.processing_count} · 已解决 {displayResolvedCount}</small>
           </div>
         ) : null}
       </header>
 
       {message ? <div className="contract-difference-message">{message}</div> : null}
 
+      {groupedHistory.hiddenCount > 0 ? (
+        <div className="contract-difference-duplicate-notice">
+          <span>已折叠 {groupedHistory.hiddenCount} 条相同的已解决历史差异；合同、账单及批准记录均保留，不影响核对。</span>
+          <button type="button" onClick={() => setShowDuplicateHistory((value) => !value)}>
+            {showDuplicateHistory ? '收起重复历史' : '查看重复历史'}
+          </button>
+        </div>
+      ) : null}
+
       <div className="contract-difference-list">
-        {items.map((item) => {
+        {visibleItems.map((item) => {
           const isEditing = editor?.caseId === item.id
           const isExpanded = expandedId === item.id
           const specialSettlement = isSpecialSettlement(item)
+          const isHistoricalDuplicate = groupedHistory.hiddenIds.has(String(item.id))
           return (
             <article key={item.id} className={`contract-difference-card is-${item.status}`}>
               <div className="contract-difference-card__top">
@@ -302,7 +320,7 @@ export default function ContractDifferenceActionPanel({
                   </small>
                 </div>
                 <div className="contract-difference-card__status">
-                  <em>{STATUS_LABELS[item.status] || item.status}</em>
+                  <em>{isHistoricalDuplicate ? '重复历史 · 只读' : STATUS_LABELS[item.status] || item.status}</em>
                   {specialSettlement
                     ? <small>特殊结算 · 已人工核准</small>
                     : item.handling_type
@@ -329,7 +347,7 @@ export default function ContractDifferenceActionPanel({
                     <button type="button" disabled={workingId === item.id} onClick={() => startEditor(item, 'carry_forward')}>转下月冲抵</button>
                   </>
                 ) : null}
-                {item.status === 'resolved' ? (
+                {item.status === 'resolved' && !isHistoricalDuplicate ? (
                   <button type="button" className="is-muted" disabled={workingId === item.id} onClick={() => void reopen(item)}>重新打开</button>
                 ) : null}
                 <button type="button" className="is-muted" onClick={() => toggleDetail(item.id)}>

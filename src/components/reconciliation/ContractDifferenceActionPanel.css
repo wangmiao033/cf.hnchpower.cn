@@ -356,3 +356,26 @@
     grid-template-columns: 1fr;
   }
 }
+
+.contract-difference-duplicate-notice {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 12px 18px;
+  border-bottom: 1px solid #e9eef4;
+  background: #f8fafc;
+  color: #475467;
+  font-size: 12px;
+}
+.contract-difference-duplicate-notice button {
+  flex-shrink: 0;
+  border: 1px solid #cdd9e5;
+  border-radius: 8px;
+  background: #fff;
+  color: #345e83;
+  padding: 7px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
