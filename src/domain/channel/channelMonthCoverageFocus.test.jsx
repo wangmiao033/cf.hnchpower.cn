@@ -110,3 +110,28 @@ describe('channel month coverage follows ledger identity search', () => {
     expect(html).not.toContain('八门</strong>')
   })
 })
+
+
+describe('关联渠道组显示与原始主体追溯',()=>{
+  it('renders only one linked audit row, with both legal companies and monthly source tooltip',()=>{
+    const partners=[
+      {id:'a',name:'武汉曦晨互娱网络科技有限公司',shortName:'曦晨',channelAuditGroup:'瓜子渠道'},
+      {id:'b',name:'武汉杨桃网络科技有限公司',shortName:'武汉瓜子',channelAuditGroup:'瓜子渠道'}
+    ]
+    const rows=[
+      {...bill('2026-07','曦晨互娱'),partnerName:partners[0].name},
+      {...bill('2026-08','武汉瓜子'),partnerName:partners[1].name},
+      {...bill('2026-09','武汉瓜子'),partnerName:partners[1].name},
+    ]
+    const html=renderToStaticMarkup(React.createElement(ChannelMonthCoveragePanel,{
+      initialExpanded:true,focusKeyword:'曦晨',records:rows,partners,enabled:true
+    }))
+    expect(html).toContain('瓜子渠道')
+    expect(html).toContain('关联组')
+    expect(html).toContain('武汉曦晨互娱网络科技有限公司')
+    expect(html).toContain('武汉杨桃网络科技有限公司')
+    expect(html).toContain('3<!-- -->/<!-- -->6<!-- -->个月有账单')
+    expect(html).toContain('0</strong> 个渠道断档')
+    expect(html).not.toContain('渠道「')
+  })
+})

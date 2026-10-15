@@ -336,3 +336,9 @@
 @media (max-width: 720px) {
   .channel-month-audit__matrix th:first-child { position: static; }
 }
+
+/* Explicit audit groups: legal member companies remain visible and drilldown keeps provenance. */
+.channel-month-audit__matrix tbody th small[title] {
+  color: #4b79a9; max-width: 245px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.channel-month-audit__filters .channel-audit-groups-launch { flex: 0 0 auto; }

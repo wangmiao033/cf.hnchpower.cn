@@ -7,6 +7,11 @@ import { channelBillMonths } from '@/domain/reconciliation/sharedBillMonthOption
 import { getChannelLineItems } from '@/domain/channel/channelAggregates.js'
 import { getChannelBillNumber } from '@/utils/channelBillNumber.js'
 import { unifyLegacyChannelNamesForSamePartner, channelLedgerMatchesSearch, channelIdentityMatchesSearch } from './channelAliasIdentity.js'
+import {
+  buildChannelAuditGroupIndex,
+  auditIdentityForBill,
+  groupContainsKeyword
+} from './channelAuditGroups.js'
 
 const MONTH_PATTERN = /^20\d{2}-(0[1-9]|1[0-2])$/
 
@@ -57,24 +62,29 @@ export function filterScopedChannelAuditRows(records = [], options = {}) {
   const keyword = searchText(options.keyword)
   const local = searchText(options.localChannelSearch)
   if (!name && !keyword && !local) return records || []
+  const index = buildChannelAuditGroupIndex(options.partners || [])
   const identities = new Set()
   for (const row of records || []) {
     if (!row || cancelled(row)) continue
-    const key = channelKey(row)
-    if (!key || (name && !key.includes(name))) continue
-    // Reuse the exact alias-aware keyword rules from the bill list.
-    // "麦游" now locates historical "游海（麦游）" bills even when their
-    // current in-memory display name was normalized to "游海".
-    if (local && !channelIdentityMatchesSearch(row, local)) continue
+    const identity = auditIdentityForBill(row, index)
+    const key = identity.key
+    if (!identity.name) continue
+    // An explicitly linked group may contain members whose individual channel
+    // label differs from the selected filter. Matching ONE member must include
+    // the entire group's history when assessing months.
+    if (name && !channelKey(row).includes(name) && !groupContainsKeyword(identity, name)) continue
+    if (local && !channelIdentityMatchesSearch(row, local) && !groupContainsKeyword(identity, local)) continue
     if (keyword && !channelLedgerMatchesSearch(row, keyword, [
       row.remark,
       getChannelBillNumber(row),
       ...getChannelLineItems(row).map(item => item.gameName),
       ...channelBillMonths(row)
-    ])) continue
+    ]) && !groupContainsKeyword(identity, keyword)) continue
     identities.add(key)
   }
-  return (records || []).filter(row => row && identities.has(channelKey(row)))
+  return (records || []).filter(row =>
+    row && identities.has(auditIdentityForBill(row, index).key)
+  )
 }
 
 /**
@@ -88,24 +98,34 @@ export function auditChannelBillMonths(records = [], options = {}) {
   const months = channelAuditMonths(options)
   const endMonth = months[months.length - 1]
   const map = new Map()
+  const index = buildChannelAuditGroupIndex(options.partners || [])
   const sourceRows = filterScopedChannelAuditRows(unifyLegacyChannelNamesForSamePartner(records), options)
   const matchingChannelCount = new Set(
-    sourceRows.filter(row => row && !cancelled(row)).map(channelKey).filter(Boolean)
+    sourceRows.filter(row => row && !cancelled(row))
+      .map(row => auditIdentityForBill(row, index).key).filter(Boolean)
   ).size
 
   for (const record of sourceRows) {
     if (!record || cancelled(record)) continue
-    const key = channelKey(record)
-    if (!key) continue
-    const normalizedName = String(record.channelName || record.channel_name).trim()
+    const identity = auditIdentityForBill(record, index)
+    const key = identity.key
+    if (!identity.name) continue
     const billMonths = channelBillMonths(record).filter((month) => month <= endMonth)
     if (!billMonths.length) continue
     if (!map.has(key)) {
-      map.set(key, { key, name: normalizedName, recorded: new Map() })
+      map.set(key, {
+        key, name: identity.name, isGroup: identity.isGroup,
+        memberCompanies: identity.memberCompanies,
+        recorded: new Map(), sources: new Map()
+      })
     }
     const group = map.get(key)
+    const sourceName = String(record.partnerName || record.partner_name ||
+      record.channelName || record.channel_name || '').trim()
     for (const month of billMonths) {
       group.recorded.set(month, (group.recorded.get(month) || 0) + 1)
+      if (!group.sources.has(month)) group.sources.set(month, new Set())
+      if (sourceName) group.sources.get(month).add(sourceName)
     }
   }
 
@@ -123,11 +143,16 @@ export function auditChannelBillMonths(records = [], options = {}) {
         : month < firstRecorded ? 'before'
         : month > lastRecorded ? 'trailing'
         : 'gap'
-      return { month, count, kind }
+      return {
+        month, count, kind,
+        sources: [...(group.sources.get(month) || [])].sort((a,b)=>a.localeCompare(b,'zh-CN'))
+      }
     })
     channels.push({
       key: group.key,
       name: group.name,
+      isGroup: group.isGroup,
+      memberCompanies: group.memberCompanies,
       firstRecorded,
       lastRecorded,
       covered: coveredMonths.length,
