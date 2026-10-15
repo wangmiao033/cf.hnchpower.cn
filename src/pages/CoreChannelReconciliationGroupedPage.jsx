@@ -903,7 +903,6 @@ function CoreChannelReconciliationGroupedPage() {
             setInspectedGap(null)
           }}
           onInspectMonth={inspectCoverageMonth}
-          onCreateBill={createBillForCurrentChannel}
         />
       ) : null}
 
@@ -915,7 +914,6 @@ function CoreChannelReconciliationGroupedPage() {
               ? '已按渠道和月份定位。巡检包含归档账单，明细数量不一致时可查看归档账单。'
               : '没有账单不代表一定有流水，请先核对渠道订单明细，再决定是否补录。'}</span>
           </div>
-          <button type="button" onClick={() => createBillForCurrentChannel(inspectedGap?.channelName)}>新增账单</button>
           <button type="button" onClick={() => {
             setMonth('')
             setChannel('')

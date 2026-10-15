@@ -31,19 +31,21 @@ export default function BankMatchRow({ item, selectedKey, expanded, busy, canMan
           <div className="bank-match-meta"><b>{candidate.settlement_month || '账期未填'}</b><span>{candidate.bill_type === 'rd' ? '研发账单' : '渠道账单'}</span></div>
           <button type="button" className="bank-match-bill" onClick={() => onOpenBill(candidate.bill_type, candidate.bill_id)}>{candidate.partner_name || '合作方未填'}</button>
           <span className="bank-match-summary">{candidate.game_name || '游戏未填'}</span>
-          <label className="bank-match-choice">候选账单（{item.candidates.length}）
-            <select aria-label={`选择账单 ${item.transaction_id}`} value={keyOf(candidate)} onChange={event => onSelect(event.target.value)}>
-              {item.candidates.map(row => <option key={keyOf(row)} value={keyOf(row)}>{row.settlement_month || '账期未填'} · {row.partner_name || '合作方未填'} · 未结 {money(row.outstanding_amount)} · {row.bill_number}</option>)}
-            </select>
-          </label>
-        </> : <span className="bank-match-secondary">暂无候选账单<br />请先核对客户与账单资料</span>}
+          {item.candidates.length > 1 ? (
+            <label className="bank-match-choice">切换候选（{item.candidates.length}）
+              <select aria-label={`选择账单 ${item.transaction_id}`} value={keyOf(candidate)} onChange={event => onSelect(event.target.value)}>
+                {item.candidates.map(option => <option key={keyOf(option)} value={keyOf(option)}>{option.settlement_month || '账期未填'} · {option.partner_name || '合作方未填'} · 未结 {money(option.outstanding_amount)} · {option.bill_number}</option>)}
+              </select>
+            </label>
+          ) : <span className="bank-match-single-bill">唯一候选 · {candidate.bill_number}</span>}
+        </> : <div className="bank-match-no-candidate"><strong>未匹配到同一客户的账单</strong><small>请先核对银行对方户名及客户库关系</small></div>
       </td>
       <td>
         {candidate ? <>
           <div className="bank-match-outstanding">{income ? '账单未收' : '账单未付'} <strong>{money(candidate.outstanding_amount)}</strong></div>
           <strong className={`bank-match-difference ${difference === 0 ? 'is-equal' : 'is-different'}`}>{difference == null ? '差额待核实' : difference === 0 ? '金额一致' : `流水${difference > 0 ? '多' : '少'} ${money(Math.abs(difference) / 100)}`}</strong>
           <span className={`bank-center-confidence is-${confidence}`}>{confidenceText} · {Number(candidate.score || 0).toFixed(0)}分</span>
-          <span className="bank-match-secondary">金额一致仍需核对单位与账期</span>
+          <span className="bank-match-secondary">已按客户身份筛选 · 请复核账期与金额</span>
         </> : <span className="bank-center-confidence is-none">未匹配</span>}
         {item.blocked_reason ? <span className="bank-match-warning">{item.blocked_reason}</span> : null}
       </td>

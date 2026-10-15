@@ -16,12 +16,11 @@ class BankIdentityFirewallTests(unittest.TestCase):
         wrong = {"bill_type": "channel", "partner_name": "厦门游戏之家科技有限公司"}
         self.assertFalse(bank_party_matches_candidate(raw, wrong))
         self.assertFalse(bank_party_matches_candidate("巴兔", wrong))
-        self.assertTrue(
-            bank_party_matches_candidate(
-                "重庆天蓝网络传媒有限责任公司",
-                {"partner_name": "重庆天蓝网络传媒有限公司"},
-            ) is False
-        )
+        # Normalizing common legal suffix variants preserves the same underlying company.
+        self.assertTrue(bank_party_matches_candidate(
+            "重庆天蓝网络传媒有限责任公司",
+            {"partner_name": "重庆天蓝网络传媒有限公司"},
+        ))
 
     def test_exact_company_name_or_explicit_alias_to_correct_customer_is_allowed(self):
         self.assertTrue(bank_party_matches_candidate(
