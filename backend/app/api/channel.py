@@ -35,6 +35,7 @@ from app.services.channel_cumulative_batch import refresh_batches_for_bill
 from app.services.channel_cumulative_invoice import assert_single_bill_collection_allowed
 from app.services.channel_settlement_engine import apply_bill_adjustment, aggregate_validation, calculate_channel_line
 from app.services.bill_write_preflight import prepare_bill_financial_update
+from app.services.bill_partner_search import matching_customer_keyword_exists
 
 router = APIRouter()
 RECEIPT_EPS = 0.01
@@ -289,6 +290,12 @@ def _apply_filters(stmt, *, search, settlement_month, channel_name, game_name, s
                     ChannelRecordLineItem.channel_record_id == ChannelRecord.id,
                     ChannelRecordLineItem.game_name.ilike(term),
                 )))
+                # Customer-library names, nicknames, bracket aliases and tags
+                # are searchable for bills belonging to that EXACT company.
+                # No hardcoded customer names or cross-company brand expansion.
+                conditions.append(
+                    matching_customer_keyword_exists(ChannelRecord.partner_name, term)
+                )
             else:
                 # Expand only channel/customer display names, not games or notes.
                 conditions.extend((
