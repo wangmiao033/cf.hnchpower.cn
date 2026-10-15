@@ -225,6 +225,13 @@ def _ensure_partners_table(conn: psycopg.Connection) -> None:
         ADD COLUMN IF NOT EXISTS short_name TEXT NOT NULL DEFAULT ''
         """
     )
+    # Explicit reporting group: never change the legal billing or bank identity.
+    conn.execute(
+        """
+        ALTER TABLE cf_partner_records
+        ADD COLUMN IF NOT EXISTS channel_audit_group TEXT NOT NULL DEFAULT ''
+        """
+    )
     conn.execute(
         """
         UPDATE cf_partner_records
@@ -547,6 +554,7 @@ def _partner_row(row: dict) -> dict:
         "id": row["id"],
         "name": row["name"],
         "short_name": row["short_name"],
+        "channel_audit_group": row.get("channel_audit_group") or "",
         "category": row["category"],
         "tag": row["tag"],
         "tax_registration_no": row["tax_registration_no"],
@@ -1469,6 +1477,54 @@ async def delete_partner(partner_id: str, request: Request) -> Response:
             raise HTTPException(status_code=404, detail="客户不存在")
         conn.commit()
     return Response(status_code=204)
+
+
+@app.post("/api/partners/channel-audit-group")
+async def assign_channel_audit_group(request: Request, payload: dict) -> dict:
+    """Group specific legal customers ONLY for the read-only channel month audit.
+
+    A blank name clears the selected membership, without changing original
+    bank, contract, invoice, bill or payment identities.
+    """
+    await _require_authenticated(request)
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=422, detail="关联组请求格式错误")
+    ids_raw = payload.get("partner_ids")
+    if not isinstance(ids_raw, list):
+        raise HTTPException(status_code=422, detail="请选择要关联的客户库公司")
+    ids = list(dict.fromkeys(str(v or "").strip() for v in ids_raw))
+    if not 1 <= len(ids) <= 30 or any(not val or len(val) > 200 for val in ids):
+        raise HTTPException(status_code=422, detail="一次最多选择30个有效客户")
+    requested = payload.get("group_name")
+    if not isinstance(requested, str):
+        raise HTTPException(status_code=422, detail="请输入关联组名称")
+    group_name = requested.strip()
+    if len(group_name) > 80:
+        raise HTTPException(status_code=422, detail="关联组名称最多80字")
+    with psycopg.connect(_database_url(), connect_timeout=15, row_factory=dict_row) as conn:
+        _ensure_partners_table(conn)
+        locked = conn.execute(
+            "SELECT id FROM cf_partner_records WHERE id = ANY(%s) FOR UPDATE",
+            [ids],
+        ).fetchall()
+        if {str(row["id"]) for row in locked} != set(ids):
+            raise HTTPException(status_code=404, detail="部分客户不存在，请刷新客户库再试")
+        updated = conn.execute(
+            """
+            UPDATE cf_partner_records
+            SET channel_audit_group = %s, updated_at = NOW()
+            WHERE id = ANY(%s)
+            RETURNING id
+            """,
+            [group_name, ids],
+        ).fetchall()
+        conn.commit()
+    return {
+        "updated": len(updated),
+        "group_name": group_name,
+        "partner_ids": ids,
+        "scope": "channel_month_audit_only",
+    }
 
 
 @app.post("/api/partners/import")
