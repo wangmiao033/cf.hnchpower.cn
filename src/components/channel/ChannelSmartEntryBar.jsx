@@ -209,7 +209,6 @@ export default function ChannelSmartEntryBar({
   const [pendingKey, setPendingKey] = useState('')
   const [pendingNote, setPendingNote] = useState('')
 
-  const autoGenerateKeyRef = useRef('')
   const autoAliasKeyRef = useRef('')
 
   useEffect(() => {
@@ -355,15 +354,6 @@ export default function ChannelSmartEntryBar({
     onApply?.(nextRecord, `${sourceLabel}已生成 ${nextLines.filter((item) => item.gameName).length} 个游戏；充值/流水金额仍全部手工填写。`)
     return true
   }, [partnerName, targetMonth, record, onApply, onNotice, resolveGameName])
-
-  useEffect(() => {
-    if (!partnerName || !targetMonth || contractState.key !== partnerKey || contractState.loading) return
-    if (namedLines(record).length > 0 || mergedSeeds.length === 0) return
-    const key = `${partnerKey}|${targetMonth}|${mergedSeeds.map((item) => textKey(item.gameName)).sort().join(',')}`
-    if (autoGenerateKeyRef.current === key) return
-    autoGenerateKeyRef.current = key
-    applyGeneratedRows(mergedSeeds, { replace: true, sourceLabel: '游戏清单' })
-  }, [partnerName, targetMonth, contractState.key, contractState.loading, partnerKey, record, mergedSeeds, applyGeneratedRows])
 
   const generateAll = () => applyGeneratedRows(mergedSeeds, { replace: false, sourceLabel: '游戏清单' })
 
@@ -650,8 +640,8 @@ export default function ChannelSmartEntryBar({
       <div className="channel-smart-entry__head">
         <div>
           <span>V3.2 · 智能账单录入</span>
-          <strong>选渠道、补月份，系统准备游戏清单和合同规则</strong>
-          <small>充值/后台流水不读取数据库、不自动写入，仍由你手工填写。</small>
+          <strong>选公司和月份，不会自动添加其他游戏</strong>
+          <small>游戏明细请手工添加；需要批量生成时，再主动点击下方按钮。流水金额仍需手填。</small>
         </div>
         <em>流水手填</em>
       </div>
@@ -663,7 +653,7 @@ export default function ChannelSmartEntryBar({
         </label>
         <div className="channel-smart-entry__actions">
           <button type="button" className="is-primary" disabled={!partnerName || !targetMonth || !loaded} onClick={generateAll}>
-            {contractState.loading ? '正在读合同…' : '生成 / 补齐游戏清单'}
+            {contractState.loading ? '正在读合同…' : '手动生成 / 补齐游戏清单'}
           </button>
           <button type="button" disabled={!partnerName || !targetMonth || !previousLines.length} onClick={generateFromPrevious}>
             从上月生成
@@ -671,7 +661,7 @@ export default function ChannelSmartEntryBar({
         </div>
         <div className="channel-smart-entry__source">
           <strong>{partnerName || '先选择合作方'}</strong>
-          <span>{partnerName ? (contractState.loading ? '正在读取合同合作清单…' : sourceText) : '选择合作方后自动读取清单'}</span>
+          <span>{partnerName ? (contractState.loading ? '正在读取合同合作清单…' : `可手动选用：${sourceText}`) : '选择合作方仅供合同匹配，不会带出游戏'}</span>
           {channelName && partnerName && textKey(channelName) !== textKey(partnerName) ? (
             <button type="button" className="channel-smart-entry__text-action" disabled={channelAliasRemembered} onClick={rememberCurrentChannelAlias}>
               {channelAliasRemembered ? `已记住别名：${channelName}` : `记住渠道别名：${channelName}`}
