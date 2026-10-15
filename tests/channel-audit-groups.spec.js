@@ -1,0 +1,36 @@
+import {test,expect} from '@playwright/test'
+
+test('two legal customers can be grouped only after explicit UI confirmation; audit keeps original bills',async({page})=>{
+  page.on('dialog', d=>d.accept())
+  await page.goto('/tests/fixtures/channel-audit-group.html')
+  const table=page.locator('.channel-month-audit__matrix')
+  await expect(table.locator('tbody tr')).toHaveCount(2)
+  await page.getByRole('button',{name:'管理关联渠道'}).click()
+  const modal=page.getByRole('dialog',{name:'管理巡检关联渠道'})
+  await expect(modal).toBeVisible()
+  await modal.getByRole('textbox',{name:'巡检关联组名称'}).fill('武汉瓜子渠道')
+  await modal.locator('label').filter({hasText:'武汉曦晨互娱网络科技有限公司'}).getByRole('checkbox').check()
+  await modal.locator('label').filter({hasText:'武汉杨桃网络科技有限公司'}).getByRole('checkbox').check()
+  await modal.getByRole('button',{name:'保存关联组'}).click()
+  await expect(modal).not.toBeVisible()
+  await expect(table.locator('tbody tr')).toHaveCount(1)
+  await expect(table).toContainText('武汉瓜子渠道')
+  await expect(table).toContainText('关联组 · 2 家公司')
+  await expect(table).toContainText('3/6个月有账单')
+  const august=table.getByRole('button',{name:/查看武汉瓜子渠道2026年8月已录账单/})
+  await expect(august).toHaveAttribute('title',/武汉杨桃网络科技有限公司/)
+  await august.click()
+  await expect(page.getByTestId('drill')).toContainText('group:武汉瓜子渠道')
+  await expect(page.getByTestId('drill')).toContainText('2026-08')
+  // Undo grouping does not delete either bill or any customer.
+  await page.getByRole('button',{name:'管理关联渠道'}).click()
+  await modal.getByRole('combobox').selectOption('武汉瓜子渠道')
+  await modal.getByRole('button',{name:'解除整个关联组'}).click()
+  await expect(table.locator('tbody tr')).toHaveCount(2)
+  await expect(page.getByTestId('saved-group')).toContainText('"removeIds":["a","b"]')
+})
+
+test('group management is disabled without server-backed customer library',async({page})=>{
+  await page.goto('/tests/fixtures/channel-audit-group.html')
+  await expect(page.locator('.channel-audit-groups-launch')).toBeEnabled()
+})
