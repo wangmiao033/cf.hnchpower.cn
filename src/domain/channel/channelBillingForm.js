@@ -26,7 +26,7 @@ export const initialHeaderForm = {
 
 export function initialLineItem() {
   return {
-    id: '', settlementCycle: '', gameName: '', flow: '', discountFactor: '1', voucherCost: '', voucherFaceValue: '0', voucherDirectCost: '0', noWorryCost: '', refundCost: '', testCost: '', welfareCost: '', coinCost: '',
+    id: '', settlementCycle: '', gameName: '', flow: '', discountFactor: '1', voucherCost: '', voucherFaceValue: null, voucherDirectCost: null, noWorryCost: '', refundCost: '', testCost: '', welfareCost: '', coinCost: '',
     shareRate: '30', taxRate: '5', gatewayCost: '', platformSettlementAmount: '', systemSettlementAmount: '', settlementDifference: '', validationStatus: 'unvalidated', settlementAmount: '',
     settlementRuleCode: '', channelFeeMode: '', channelFeeRate: '', taxMode: '', validationTolerance: ''
   }

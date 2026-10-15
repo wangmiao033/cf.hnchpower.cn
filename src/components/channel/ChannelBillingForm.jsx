@@ -797,8 +797,8 @@ function ChannelBillingForm({
                   <td className="channel-line-num">{effectiveLineFlowFromFormData(row).toFixed(2)}</td>
                   <td className="channel-voucher-cell">
                     <div className="channel-voucher-split">
-                      <input type="number" step="0.01" className="admin-input" value={row.voucherFaceValue ?? ''} onChange={(e) => handleLineChange(index, 'voucherFaceValue', e.target.value)} aria-label={`第${index + 1}行折算券原始面额`} title="折算券：原始面额 × 折扣系数" placeholder="0" />
-                      <input type="number" step="0.01" className="admin-input" value={row.voucherDirectCost ?? row.voucherCost ?? ''} onChange={(e) => handleLineChange(index, 'voucherDirectCost', e.target.value)} aria-label={`第${index + 1}行直扣券实际金额`} title={row.voucherDirectCost == null ? '历史代金券：保留原计算口径；修改后视为直扣券' : '直扣券：实际金额，直接抵扣'} placeholder="0" />
+                      <input type="number" step="0.01" className="admin-input" value={row.voucherFaceValue ?? '0'} onChange={(e) => handleLineChange(index, 'voucherFaceValue', e.target.value)} aria-label={`第${index + 1}行折算券原始面额`} title="折算券：原始面额 × 折扣系数" placeholder="0" />
+                      <input type="number" step="0.01" className="admin-input" value={row.voucherDirectCost ?? (row.voucherCost === '' ? '0' : row.voucherCost) ?? '0'} onChange={(e) => handleLineChange(index, 'voucherDirectCost', e.target.value)} aria-label={`第${index + 1}行直扣券实际金额`} title={row.voucherDirectCost == null ? '历史代金券：保留原计算口径；修改后视为直扣券' : '直扣券：实际金额，直接抵扣'} placeholder="0" />
                     </div>
                   </td>
                   <td><input type="number" step="0.01" className="admin-input" value={row.noWorryCost} onChange={(e) => handleLineChange(index, 'noWorryCost', e.target.value)} /></td>
