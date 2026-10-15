@@ -69,3 +69,21 @@ test('mobile keeps table scrolling inside the card and candidates usable', async
   await page.getByRole('combobox', { name: '选择账单 tx-a' }).selectOption('channel:bill-b')
   await expect(page.locator('.bank-match-row').first()).toContainText('流水少 ¥39.34')
 })
+
+test('bank center keeps a compact filter row and never offers a wrong-owner unmatched row to confirm', async ({ page }) => {
+  await open(page)
+  const advanced = page.getByRole('button', {name:'高级筛选', exact:false})
+  await expect(advanced).toBeVisible()
+  await expect(page.locator('#bank-v2-advanced-filters')).toHaveCount(0)
+  await advanced.click()
+  await expect(page.locator('#bank-v2-advanced-filters')).toBeVisible()
+  await page.getByRole('button', {name:'收起筛选',exact:false}).click()
+  await expect(page.locator('#bank-v2-advanced-filters')).toHaveCount(0)
+
+  const single = page.locator('.bank-match-row').nth(1)
+  await expect(single).toContainText('唯一候选')
+  await expect(single.locator('select')).toHaveCount(0)
+  const unknown = page.locator('.bank-match-row').last()
+  await expect(unknown).toContainText('未匹配到同一客户的账单')
+  await expect(unknown.getByRole('button',{name:'人工确认'})).toBeDisabled()
+})

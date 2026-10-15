@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections import defaultdict
 
 from app.services.bank_auto_reconciliation import _normalize_party
+from app.services.bank_partner_match import bank_party_matches_candidate
 
 MAX_CANDIDATES_PER_PARTNER = 18
 MAX_BILLS_PER_COMBINATION = 6
@@ -157,7 +158,7 @@ def build_exact_combination(item: dict) -> dict | None:
         # Exact sum is only amount evidence: a different legal counterparty
         # must never be promoted into an automatic two-bill recommendation.
         verified_partner = str(item.get("identity_partner_name") or item.get("counterparty_name") or "")
-        if _party_strength(verified_partner, candidate.get("partner_name")) <= 0:
+        if not bank_party_matches_candidate(verified_partner, candidate):
             continue
         seen.add(key)
         partner_key = _normalize_party(str(candidate.get("partner_name") or ""))
