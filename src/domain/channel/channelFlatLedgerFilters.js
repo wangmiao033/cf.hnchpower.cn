@@ -5,6 +5,7 @@
 import { getChannelTotals, getChannelReceivedAmount, getChannelLineItems } from './channelAggregates.js'
 import { channelBillMonths } from '@/domain/reconciliation/sharedBillMonthOptions.js'
 import { channelLedgerMatchesSearch } from '@/domain/channel/channelAliasIdentity.js'
+import { customerSearchFieldsForBill } from '@/domain/reconciliation/customerBillSearchIndex.js'
 
 export function ledgerBillGames(row) {
   const items = getChannelLineItems(row)
@@ -16,7 +17,7 @@ export function ledgerBillGames(row) {
 
 export function matchesChannelLedgerFilters(row, options = {}) {
   if (!row) return false
-  const { month = '', fromMonth = '', toMonth = '', channel = '', game = '', status = '', query = '' } = options
+  const { month = '', fromMonth = '', toMonth = '', channel = '', game = '', status = '', query = '', customerIndex = null } = options
   const months = channelBillMonths(row)
   if (month && !months.includes(month)) return false
   if (fromMonth && toMonth && fromMonth > toMonth) return false
@@ -32,7 +33,7 @@ export function matchesChannelLedgerFilters(row, options = {}) {
       ...games,
       ...months,
       row.remark
-    ])) return false
+    ], customerSearchFieldsForBill(row, customerIndex))) return false
   }
   return true
 }
