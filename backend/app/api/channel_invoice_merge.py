@@ -21,6 +21,7 @@ from app.models.bill_invoice_allocation import BillInvoiceAllocation
 from app.models.channel import ChannelRecord
 from app.models.invoice import InvoiceRecord
 from app.models.operation_log import OperationLog
+from app.services.invoice_file_proof import verify_invoice_upload
 
 router = APIRouter()
 ACTIVE_ALLOCATION_STATUSES = ("suggested", "confirmed")
@@ -70,6 +71,10 @@ class IssuedChannelInvoiceRequest(BaseModel):
     invoice_amount: Decimal = Field(ge=0, max_digits=18, decimal_places=2)
     tax_amount: Decimal = Field(ge=0, max_digits=18, decimal_places=2)
     amount_with_tax: Decimal = Field(gt=0, max_digits=18, decimal_places=2)
+    # The /electronic-invoices/parse endpoint emits this signed reference.
+    # Never trust a raw blob URL or file name provided by a browser.
+    source_file_proof: str | None = Field(default=None, max_length=8192)
+    existing_invoice_id: str | None = Field(default=None, max_length=128)
     remark: str | None = Field(default=None, max_length=1000)
 
 
@@ -79,6 +84,7 @@ class IssuedChannelInvoiceResult(BaseModel):
     allocated_amount: float
     allocated_bills: int
     bill_ids: list[str]
+    linked_existing: bool = False
 
 
 def prepare_issued_invoice(payload: IssuedChannelInvoiceRequest):
@@ -161,6 +167,9 @@ def record_issued_merged_channel_invoice(
 ) -> IssuedChannelInvoiceResult:
     """Register a real issued invoice and allocate its value to multiple bills atomically."""
     ids, number_data, identity, gross_cents, net_cents, tax_cents = prepare_issued_invoice(payload)
+    if payload.existing_invoice_id and payload.source_file_proof:
+        raise HTTPException(422, detail={"error": "source_proof_existing_conflict", "message": "已有发票无需重复上传原件"})
+    source = verify_invoice_upload(payload.source_file_proof) if payload.source_file_proof else None
     ordered_ids = sorted(ids)
     try:
         rows = db.execute(
@@ -188,21 +197,71 @@ def record_issued_merged_channel_invoice(
         if any(amount <= 0 for amount in outstanding):
             raise HTTPException(409, detail={"error": "invoice_already_covered", "message": "存在已全额开票的账单，请重新选择"})
         actual_total = sum(outstanding)
+        if source and " ".join(payload.buyer_name.split()) not in names:
+            raise HTTPException(409, detail={
+                "error": "invoice_buyer_partner_mismatch",
+                "message": "发票购买方与当前账单合作方不同，请核对开票主体后再关联",
+            })
+
+        existing = None
+        if payload.existing_invoice_id:
+            existing = db.execute(
+                select(InvoiceRecord)
+                .where(InvoiceRecord.id == payload.existing_invoice_id)
+                .with_for_update()
+            ).scalars().first()
+            if (
+                existing is None or existing.invoice_identity_key != identity
+                or existing.invoice_direction != "output"
+                or existing.tax_status in ("red", "void") or existing.status == "作废"
+            ):
+                raise HTTPException(409, detail={
+                    "error": "existing_invoice_unavailable",
+                    "message": "已录入发票不存在、已作废或号码不一致，请在发票中心核对",
+                })
+            if (
+                to_cents(existing.amount_with_tax or 0) != gross_cents
+                or to_cents(existing.invoice_amount or 0) != net_cents
+                or to_cents(existing.tax_amount or 0) != tax_cents
+                or " ".join(str(existing.buyer_name or "").split()) not in names
+            ):
+                raise HTTPException(409, detail={
+                    "error": "existing_invoice_details_mismatch",
+                    "message": "已有发票的真实金额、税额或购买方不同，不能重复登记，请核对后再关联",
+                })
+            already_used = db.execute(
+                select(func.coalesce(func.sum(BillInvoiceAllocation.allocated_gross_amount), 0))
+                .where(
+                    BillInvoiceAllocation.invoice_id == existing.id,
+                    BillInvoiceAllocation.status.in_(ACTIVE_ALLOCATION_STATUSES),
+                )
+            ).scalar_one()
+            if to_cents(already_used or 0):
+                raise HTTPException(409, detail={
+                    "error": "existing_invoice_partly_linked",
+                    "message": "此发票已有账单关联，请在发票中心核对剩余金额后继续分配",
+                })
+        else:
+            _lock_invoice_identity(db, identity)
+            try:
+                _ensure_unique_identity(db, identity)
+            except HTTPException as error:
+                if error.status_code == 409:
+                    raise HTTPException(409, detail={
+                        "error": "duplicate_invoice",
+                        "message": "该发票号码已经存在，请重新上传并选择关联已有发票",
+                    }) from error
+                raise
+
         if actual_total != gross_cents:
             raise HTTPException(409, detail={
                 "error": "invoice_amount_changed",
                 "expected_amount": actual_total / 100,
-                "message": "账单当前剩余可开票金额发生变化，请重新核对",
+                "invoice_gross": gross_cents / 100,
+                "message": "所选账单的未开票余额与正式发票价税合计不一致，请检查是否漏选其他月份",
             })
-        _lock_invoice_identity(db, identity)
-        try:
-            _ensure_unique_identity(db, identity)
-        except HTTPException as error:
-            if error.status_code == 409:
-                raise HTTPException(409, detail={"error": "duplicate_invoice", "message": "该正式发票号码已录入，不能重复登记；请从发票中心关联已有发票"}) from error
-            raise
 
-        invoice_id = str(uuid4())
+        invoice_id = str(existing.id) if existing is not None else str(uuid4())
         number = number_data["digital_invoice_no"] or number_data["invoice_no"]
         descriptions = [
             f"{row.statement_no or row.id}（{row.settlement_month or '-'}）：{amount / 100:.2f}"
@@ -229,7 +288,11 @@ def record_issued_merged_channel_invoice(
             tax_amount=tax_cents / 100,
             amount_with_tax=gross_cents / 100,
             invoice_date=payload.invoice_date,
-            invoice_source="channel_merged_invoice",
+            invoice_source="channel_scanned_invoice" if source else "channel_merged_invoice",
+            source_file_name=source["name"] if source else None,
+            source_file_url=source["url"] if source else None,
+            source_file_type=source["type"] if source else None,
+            source_file_size=source["size"] if source else None,
             tax_status="normal",
             status="已开",
             remark=note,
@@ -239,7 +302,8 @@ def record_issued_merged_channel_invoice(
         )
         now = datetime.now(timezone.utc)
         parts = distribute_gross(outstanding, net_cents, tax_cents)
-        db.add(invoice)
+        if existing is None:
+            db.add(invoice)
         for row, amount, (net, tax) in zip(selected, outstanding, parts):
             db.add(BillInvoiceAllocation(
                 id=str(uuid4()),
@@ -252,7 +316,7 @@ def record_issued_merged_channel_invoice(
                 status="confirmed",
                 match_type="manual",
                 match_score=0,
-                match_reasons=["渠道账单合并开票：用户确认已开具发票"],
+                match_reasons=["已核对正式发票并确认与原渠道账单关联"],
                 confirmed_at=now,
             ))
             db.add(OperationLog(
@@ -279,4 +343,5 @@ def record_issued_merged_channel_invoice(
         allocated_amount=actual_total / 100,
         allocated_bills=len(ids),
         bill_ids=ids,
+        linked_existing=existing is not None,
     )
