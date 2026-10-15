@@ -297,6 +297,44 @@ export default function ChannelInvoiceMergeDialog({ rows, onClose, onIssued, sho
               </table>
             </div>
           ) : null}
+          {scanned ? (
+            <>
+              <section className="channel-invoice-smart-extract">
+                <div className="channel-invoice-smart-extract__head">
+                  <strong>识别到的正式发票信息 · 请核对票面</strong>
+                  <span>识别完整度 {Math.round(Number(scanned.confidence || 0) * 100)}%</span>
+                </div>
+                <div className="channel-invoice-smart-extract__fields">
+                  <span>票号：<strong>{numberType === 'digital' ? digitalInvoiceNo || '待填写' : (invoiceCode && invoiceNo ? invoiceCode + ' / ' + invoiceNo : '待填写')}</strong></span>
+                  <span>开票日期：<strong>{invoiceDate || '待填写'}</strong></span>
+                  <span>购方：<strong>{buyerName || '待填写'}</strong></span>
+                  <span>销方：<strong>{sellerName || '待填写'}</strong></span>
+                  <span>税额：<strong>{taxAmount === '' ? '待填写' : '¥' + Number(taxAmount).toFixed(2)}</strong></span>
+                </div>
+                <label className="channel-invoice-smart-extract__gross">
+                  <span>原始发票价税合计（识别有误可修正）</span>
+                  <input aria-label="正式发票价税合计" type="number" min="0.01" step="0.01"
+                    value={invoiceGross} onChange={event => setInvoiceGross(event.target.value)} />
+                </label>
+              </section>
+              {!buyerMatches ? (
+                <p className="channel-invoice-merge-warning" role="alert">
+                  发票购买方与当前账单合作方不同。请核对正式发票的法律主体，不会按文件名或历史简称强制关联。
+                </p>
+              ) : null}
+              <ChannelInvoiceBillSuggestions gross={invoiceGross}
+                selectedTotalCents={preview.totalCents}
+                candidates={otherBills.map(row => ({
+                  ...row,
+                  remainingCents: Math.round(Number(otherBillSummaries[String(row.id)]?.remaining_amount || 0)*100)
+                }))}
+                selectedIds={selectedIds} recommendedIds={recommended.ids}
+                ambiguous={recommended.ambiguous} loading={findingBills}
+                onToggle={toggleCandidate} onApplyRecommendation={addRecommendedBills}
+              />
+              {matchingWarning ? <p className="channel-invoice-merge-warning">{matchingWarning}</p> : null}
+            </>
+          ) : null}
           <p className="channel-invoice-merge-explanation">计算依据为<b>发票关联余额</b>，不是“未收款”。已开票但未回款的账单不会重复开票。</p>
 
           {!effectiveError && !loading && !showIssueForm ? (
@@ -353,7 +391,7 @@ export default function ChannelInvoiceMergeDialog({ rows, onClose, onIssued, sho
               {!showFields && scanned ? <p className="channel-invoice-smart-extract__complete">
                 识别字段已预填。请核对上方号码、主体与金额；如有识别错误，展开校对字段再确认。
               </p> : null}
-              {buyerName.trim() && preview.partnerName && buyerName.trim() !== preview.partnerName ? (
+              {buyerName.trim() && preview.partnerName && !invoiceBuyerMatchesPartner(buyerName, preview.partnerName) ? (
                 <p className="channel-invoice-merge-warning">购方名称与账单合作方不一致，请确认是否属于同一真实交易主体。</p>
               ) : null}
               {issueError ? <div className="channel-invoice-merge-error" role="alert">{issueError}</div> : null}
@@ -372,7 +410,7 @@ export default function ChannelInvoiceMergeDialog({ rows, onClose, onIssued, sho
             <>
               <button type="button" disabled={issuing} onClick={() => setShowIssueForm(false)}>返回清单</button>
               <button type="submit" form="channel-invoice-issue-form" className="is-primary" disabled={!readyToRecord}>
-                {issuing ? '正在核对并关联…' : '确认登记并关联 ' + money(preview.totalCents)}
+                {issuing ? '正在核对并关联…' : scanned ? '核对无误 · 关联 ' + money(preview.totalCents) : '确认登记并关联 ' + money(preview.totalCents)}
               </button>
             </>
           )}
