@@ -49,6 +49,26 @@ def _money(value: Decimal) -> Decimal:
     return value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
+def voucher_cost_for_storage(item: Any, record: Any) -> Decimal:
+    """Keep the existing voucher_cost ledger column compatible with older code.
+
+    Explicit split vouchers are stored as the discount-equivalent deduction.
+    The Anjiu pre-discount rule needs the corresponding *original* face value
+    (including the pre-discount equivalent of direct deductions).
+    A historical line (both fields NULL) keeps its persisted voucher_cost.
+    """
+    face = getattr(item, "voucher_face_value", None)
+    direct = getattr(item, "voucher_direct_cost", None)
+    if face is None and direct is None:
+        return _money(_d(getattr(item, "voucher_cost", None)))
+    discount = _d(getattr(item, "discount_factor", None), "1")
+    if discount <= 0:
+        discount = Decimal("1")
+    if resolve_rule_settings(item, record)["rule_code"] == ANJIU_PRE_DISCOUNT_DEDUCTION_RULE:
+        return _money(_d(face) + _d(direct) / discount)
+    return _money(_d(face) * discount + _d(direct))
+
+
 def apply_bill_adjustment(
     business_amount: Any,
     adjustment_amount: Any = 0,
@@ -149,16 +169,38 @@ def _calculate_channel_line_raw(item: Any, record: Any) -> tuple[dict[str, Any],
         if settings["rule_code"] == XIAN_WEIZHEN_9917_RULE
         else DEFAULT_DEDUCTION_FIELDS
     )
-    deduction_total = sum(
-        (_d(getattr(item, field, None)) for field in deduction_fields),
-        Decimal("0"),
-    )
-    if settings["rule_code"] == ANJIU_PRE_DISCOUNT_DEDUCTION_RULE:
-        billing_amount = (flow - deduction_total) * discount
-    elif settings["rule_code"] == HONOR_UPFRONT_PERCENT_FEE_RULE:
-        billing_amount = effective_flow * (Decimal("1") - settings["fee_rate"] / Decimal("100")) - deduction_total
+    face = getattr(item, "voucher_face_value", None)
+    direct = getattr(item, "voucher_direct_cost", None)
+    if face is None and direct is None:
+        # Backwards-compatible: voucher_cost retains its historic meaning,
+        # including the Anjiu pre-discount deduction.
+        deduction_total = sum(
+            (_d(getattr(item, field, None)) for field in deduction_fields),
+            Decimal("0"),
+        )
+        if settings["rule_code"] == ANJIU_PRE_DISCOUNT_DEDUCTION_RULE:
+            billing_amount = (flow - deduction_total) * discount
+        elif settings["rule_code"] == HONOR_UPFRONT_PERCENT_FEE_RULE:
+            billing_amount = effective_flow * (Decimal("1") - settings["fee_rate"] / Decimal("100")) - deduction_total
+        else:
+            billing_amount = effective_flow - deduction_total
     else:
-        billing_amount = effective_flow - deduction_total
+        # Split vouchers: the face-value coupon is converted exactly once;
+        # the direct coupon stays in actual yuan, even under Anjiu rules.
+        other_deductions = sum(
+            (_d(getattr(item, field, None)) for field in deduction_fields if field != "voucher_cost"),
+            Decimal("0"),
+        )
+        converted = _d(face) * discount + _d(direct)
+        if settings["rule_code"] == ANJIU_PRE_DISCOUNT_DEDUCTION_RULE:
+            billing_amount = (flow - other_deductions - _d(face)) * discount - _d(direct)
+        elif settings["rule_code"] == HONOR_UPFRONT_PERCENT_FEE_RULE:
+            billing_amount = effective_flow * (Decimal("1") - settings["fee_rate"] / Decimal("100")) - other_deductions - converted
+        elif settings["rule_code"] == XIAN_WEIZHEN_9917_RULE:
+            # This targeted contract records vouchers, but does not deduct them.
+            billing_amount = effective_flow - other_deductions
+        else:
+            billing_amount = effective_flow - other_deductions - converted
 
     share_rate = _d(getattr(item, "share_rate", None)) / Decimal("100")
     share_amount = billing_amount * share_rate

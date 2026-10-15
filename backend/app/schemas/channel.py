@@ -71,6 +71,9 @@ class ChannelLineItemCreate(BaseModel):
     game_name: str | None = None
     billing_flow: float = Field(default=0, allow_inf_nan=False, description="原始后台流水：正数为收入，负数为退款/冲销")
     discount_factor: float = Field(default=1, ge=0, le=1)
+    # Optional metadata: omitted/null means a legacy voucher_cost.
+    voucher_face_value: float | None = Field(default=None, allow_inf_nan=False)
+    voucher_direct_cost: float | None = Field(default=None, allow_inf_nan=False)
     voucher_cost: float = 0
     no_worry_cost: float = 0
     refund_cost: float = 0
@@ -108,6 +111,8 @@ class ChannelLineItemRead(BaseModel):
     game_name: str | None
     billing_flow: float
     discount_factor: float = 1
+    voucher_face_value: float | None = None
+    voucher_direct_cost: float | None = None
     voucher_cost: float
     no_worry_cost: float
     refund_cost: float
