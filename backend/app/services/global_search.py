@@ -80,9 +80,29 @@ def _table_exists(db: Session, table_name: str) -> bool:
 
 
 def _search_rd_bills(db: Session, query: str, limit: int) -> list[dict[str, Any]]:
+    has_customer_library = _table_exists(db, "cf_partner_records")
+    customer_join = """
+        LEFT JOIN cf_partner_records AS customer
+          ON customer.normalized_name = LOWER(REPLACE(REPLACE(REPLACE(
+              COALESCE(bill.partner_name, ''), '（', '('), '）', ')'), ' ', ''))
+    """ if has_customer_library else ""
+    customer_columns = """,
+        COALESCE(MAX(customer.short_name), '') AS customer_short_name,
+        COALESCE(MAX(customer.tag), '') AS customer_tag
+    """ if has_customer_library else """,
+        '' AS customer_short_name,
+        '' AS customer_tag
+    """
+    customer_match = """
+        OR customer.name ILIKE :pattern
+        OR customer.short_name ILIKE :pattern
+        OR customer.tag ILIKE :pattern
+        OR customer.tax_registration_no ILIKE :pattern
+    """ if has_customer_library else ""
+
     rows = db.execute(
         text(
-            """
+            f"""
             SELECT
               bill.id,
               bill.statement_no,
@@ -95,10 +115,12 @@ def _search_rd_bills(db: Session, query: str, limit: int) -> list[dict[str, Any]
                 string_agg(DISTINCT NULLIF(line.game_name, ''), ' / '),
                 ''
               ) AS line_games
+              {customer_columns}
             FROM reconciliation_records AS bill
             LEFT JOIN reconciliation_line_items AS line
               ON line.reconciliation_id = bill.id
-            WHERE concat_ws(
+            {customer_join}
+            WHERE (concat_ws(
               ' ',
               bill.statement_no,
               bill.partner_name,
@@ -106,7 +128,7 @@ def _search_rd_bills(db: Session, query: str, limit: int) -> list[dict[str, Any]
               bill.settlement_month,
               bill.remark,
               line.game_name
-            ) ILIKE :pattern
+            ) ILIKE :pattern {customer_match})
             GROUP BY bill.id
             ORDER BY bill.updated_at DESC NULLS LAST, bill.created_at DESC
             LIMIT :limit
@@ -121,6 +143,8 @@ def _search_rd_bills(db: Session, query: str, limit: int) -> list[dict[str, Any]
             [
                 ("账单编号", row.get("statement_no")),
                 ("合作方", row.get("partner_name")),
+                ("客户简称", row.get("customer_short_name")),
+                ("客户标签", row.get("customer_tag")),
                 ("游戏", row.get("game_name")),
                 ("游戏明细", row.get("line_games")),
                 ("账期", row.get("settlement_month")),
@@ -155,9 +179,29 @@ def _search_rd_bills(db: Session, query: str, limit: int) -> list[dict[str, Any]
 
 
 def _search_channel_bills(db: Session, query: str, limit: int) -> list[dict[str, Any]]:
+    has_customer_library = _table_exists(db, "cf_partner_records")
+    customer_join = """
+        LEFT JOIN cf_partner_records AS customer
+          ON customer.normalized_name = LOWER(REPLACE(REPLACE(REPLACE(
+              COALESCE(bill.partner_name, ''), '（', '('), '）', ')'), ' ', ''))
+    """ if has_customer_library else ""
+    customer_columns = """,
+        COALESCE(MAX(customer.short_name), '') AS customer_short_name,
+        COALESCE(MAX(customer.tag), '') AS customer_tag
+    """ if has_customer_library else """,
+        '' AS customer_short_name,
+        '' AS customer_tag
+    """
+    customer_match = """
+        OR customer.name ILIKE :pattern
+        OR customer.short_name ILIKE :pattern
+        OR customer.tag ILIKE :pattern
+        OR customer.tax_registration_no ILIKE :pattern
+    """ if has_customer_library else ""
+
     rows = db.execute(
         text(
-            """
+            f"""
             SELECT
               bill.id,
               bill.statement_no,
@@ -172,10 +216,12 @@ def _search_channel_bills(db: Session, query: str, limit: int) -> list[dict[str,
                 string_agg(DISTINCT NULLIF(line.game_name, ''), ' / '),
                 ''
               ) AS line_games
+              {customer_columns}
             FROM channel_records AS bill
             LEFT JOIN channel_record_line_items AS line
               ON line.channel_record_id = bill.id
-            WHERE concat_ws(
+            {customer_join}
+            WHERE (concat_ws(
               ' ',
               bill.statement_no,
               bill.channel_name,
@@ -184,7 +230,7 @@ def _search_channel_bills(db: Session, query: str, limit: int) -> list[dict[str,
               bill.settlement_month,
               bill.remark,
               line.game_name
-            ) ILIKE :pattern
+            ) ILIKE :pattern {customer_match})
             GROUP BY bill.id
             ORDER BY bill.updated_at DESC NULLS LAST, bill.created_at DESC
             LIMIT :limit
@@ -200,6 +246,8 @@ def _search_channel_bills(db: Session, query: str, limit: int) -> list[dict[str,
                 ("账单编号", row.get("statement_no")),
                 ("渠道", row.get("channel_name")),
                 ("合作方", row.get("partner_name")),
+                ("客户简称", row.get("customer_short_name")),
+                ("客户标签", row.get("customer_tag")),
                 ("游戏", row.get("game_name")),
                 ("游戏明细", row.get("line_games")),
                 ("账期", row.get("settlement_month")),
