@@ -716,3 +716,91 @@
 .bank-match-tools { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; padding: 10px 24px 0; background: #f5f7fa; }
 .bank-match-tools .bank-customer-launcher,.bank-match-tools .rd-prepay-workbench-launcher { position: static; min-width: 180px; padding: 7px 11px; box-shadow: none; z-index: auto; }
 @media(max-width:720px) { .bank-match-tools { padding: 10px 14px 0; justify-content: flex-start; } }
+
+
+/* Bank center: decision-first layout, secondary controls behind Advanced Filters. */
+.bank-center-v2 .bank-v2-head {
+  padding: 10px 24px 8px; background: #f7f9fc; border-bottom: 1px solid #e9eef6;
+}
+.bank-center-v2 .bank-v2-head p { font-size: 11px; color: #66788f; }
+.bank-center-v2 .bank-v2-filterbar__row {
+  display: grid; grid-template-columns: minmax(250px,1fr) auto auto;
+  align-items: end; gap: 8px; padding: 9px 12px 6px;
+}
+.bank-center-v2 .bank-v2-advanced {
+  display: grid; grid-template-columns: minmax(250px, 1.4fr) minmax(128px,.8fr) minmax(150px,.8fr);
+  gap: 10px; padding: 8px 12px 10px; border-top: 1px solid #edf2f8;
+  background: #fafbfd; align-items: end;
+}
+.bank-center-v2 .bank-v2-advanced-toggle {
+  height: 34px; padding: 0 10px; border-radius: 7px;
+  border: 1px solid #cbd9eb; color: #365773; background: #f8fafc;
+  font-weight: 600; white-space: nowrap; cursor: pointer; font-size: 11px;
+}
+.bank-center-v2 .bank-v2-advanced-toggle[aria-expanded="true"] {
+  background: #edf4ff; border-color: #a2bee5;
+}
+.bank-center-v2 .bank-v2-metrics { gap: 5px; }
+.bank-center-v2 .bank-v2-metric {
+  min-height: 42px; padding: 7px 11px;
+  grid-template-columns: minmax(0,1fr) auto; border-radius: 7px;
+}
+.bank-center-v2 .bank-v2-metric > i { display: none; }
+.bank-center-v2 .bank-v2-metric > div > strong { font-size: 16px; }
+.bank-center-v2 .bank-v2-metric > div > span { font-size: 10px; }
+.bank-center-v2 .bank-match-table td {
+  padding: 10px 11px; font-size: 12px; line-height: 1.45;
+}
+.bank-center-v2 .bank-match-table th { padding: 9px 11px; font-size: 11px; }
+.bank-center-v2 .bank-match-table { min-width: 1020px; }
+.bank-center-v2 .bank-match-secondary { margin-top: 3px; font-size: 10.5px; }
+.bank-center-v2 .bank-match-meta { margin-bottom: 3px; gap: 5px; font-size: 10.5px; }
+.bank-center-v2 .bank-match-summary { margin-top: 3px; font-size: 11px; }
+.bank-center-v2 .bank-match-choice { margin-top: 5px; }
+.bank-center-v2 .bank-match-choice select {
+  height: 29px; margin-top: 3px; font-size: 11px;
+}
+.bank-center-v2 .bank-match-single-bill {
+  display: block; color: #718199; margin-top: 7px; font-size: 10px;
+}
+.bank-center-v2 .bank-match-no-candidate {
+  display: grid; gap: 4px; color: #a25024;
+}
+.bank-center-v2 .bank-match-no-candidate small { color: #7d8491; font-size: 11px; }
+.bank-center-v2 .bank-match-warning { font-weight: 600; color: #9a4f18; }
+.bank-center-v2 .bank-match-actions { gap: 5px; }
+.bank-match-tools {
+  border-bottom: 1px solid #e4eaf2; padding: 0 24px;
+  background: #f7f9fc; display: block;
+}
+.bank-match-tools > summary {
+  display: flex; align-items: center; gap: 8px; width: max-content; max-width: 100%;
+  padding: 8px 0; cursor: pointer; color: #56708e; font-size: 11px; font-weight: 650;
+}
+.bank-match-tools > summary > span {
+  font-size: 10px; font-weight: 400; color: #8c9bab;
+}
+.bank-match-tools__content {
+  display: flex; gap: 8px; justify-content: flex-start;
+  padding-bottom: 10px; flex-wrap: wrap;
+}
+.bank-match-tools__content .bank-customer-launcher,
+.bank-match-tools__content .rd-prepay-workbench-launcher {
+  position: static; min-width: 160px; width: auto; padding: 6px 10px; font-size: 11px;
+}
+@media(max-width:840px) {
+  .bank-center-v2 .bank-v2-filterbar__row {
+    grid-template-columns: minmax(180px,1fr) auto auto;
+  }
+  .bank-center-v2 .bank-v2-advanced { grid-template-columns: 1fr 1fr; }
+  .bank-center-v2 .bank-v2-advanced .bank-v2-date-field { grid-column: 1/-1; }
+  .bank-match-tools { padding: 0 14px; }
+}
+@media(max-width:520px) {
+  .bank-center-v2 .bank-v2-filterbar__row { grid-template-columns: 1fr auto; }
+  .bank-center-v2 .bank-v2-filterbar__row .bank-v2-search { grid-column: 1/-1; }
+  .bank-center-v2 .bank-v2-advanced { grid-template-columns: 1fr; }
+  .bank-center-v2 .bank-v2-advanced .bank-v2-date-field { grid-column: auto; }
+  .bank-center-v2 .bank-v2-metrics { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .bank-match-tools > summary > span { display: none; }
+}
