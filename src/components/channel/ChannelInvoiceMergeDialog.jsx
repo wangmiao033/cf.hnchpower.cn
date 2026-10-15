@@ -2,6 +2,13 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { getBillInvoiceSummary } from '@/lib/api/billInvoiceAllocations.ts'
 import { recordIssuedChannelInvoiceMerge } from '@/lib/api/channelInvoiceMerge.ts'
 import { prepareChannelInvoiceMerge, yuanFromCents } from '@/domain/channel/channelInvoiceMerge.js'
+import { listChannelRecords, apiChannelRowToFrontend } from '@/lib/api/channel.ts'
+import ChannelInvoiceSmartUpload from './ChannelInvoiceSmartUpload.jsx'
+import ChannelInvoiceBillSuggestions from './ChannelInvoiceBillSuggestions.jsx'
+import {
+  eligibleInvoicePartnerRows, invoiceBuyerMatchesPartner, recommendInvoiceBillSet,
+  scannedInvoiceAmountState
+} from '@/domain/channel/channelInvoiceUploadMatch.js'
 import './ChannelInvoiceMergeDialog.css'
 
 const money = cents => '¥' + (Number(cents || 0) / 100).toLocaleString('zh-CN', {
@@ -9,7 +16,8 @@ const money = cents => '¥' + (Number(cents || 0) / 100).toLocaleString('zh-CN',
 })
 const INVOICE_TYPES = [
   '数电发票（增值税普通发票）', '数电发票（增值税专用发票）',
-  '增值税普通发票', '增值税专用发票'
+  '增值税普通发票', '增值税专用发票',
+  '电子发票', '电子发票（增值税普通发票）', '电子发票（增值税专用发票）'
 ]
 
 export default function ChannelInvoiceMergeDialog({ rows, onClose, onIssued, showToast }) {
@@ -32,20 +40,38 @@ export default function ChannelInvoiceMergeDialog({ rows, onClose, onIssued, sho
   const [invoiceDate, setInvoiceDate] = useState('')
   const [taxAmount, setTaxAmount] = useState('')
   const [remark, setRemark] = useState('')
+  const [selectedIds, setSelectedIds] = useState(() => (rows || []).map(item => String(item.id)))
+  const [otherBills, setOtherBills] = useState([])
+  const [otherBillSummaries, setOtherBillSummaries] = useState({})
+  const [findingBills, setFindingBills] = useState(false)
+  const [matchingWarning, setMatchingWarning] = useState('')
+  const [scanned, setScanned] = useState(null)
+  const [invoiceGross, setInvoiceGross] = useState('')
+  const [showFields, setShowFields] = useState(false)
+  const [uploadError, setUploadError] = useState('')
+
+  const allRows = useMemo(() => {
+    const byId = new Map()
+    ;[...(rows || []), ...otherBills].forEach(row => byId.set(String(row.id), row))
+    return [...byId.values()]
+  }, [rows, otherBills])
+  const selectedRows = useMemo(() =>
+    allRows.filter(row => selectedIds.includes(String(row.id))),
+  [allRows, selectedIds])
 
   useEffect(() => {
     let active = true
     setSummaries(null)
     setLoadError('')
     setLoading(true)
-    Promise.all((rows || []).map(row => getBillInvoiceSummary('channel', String(row.id))))
+    Promise.all(selectedRows.map(row => getBillInvoiceSummary('channel', String(row.id))))
       .then(result => { if (active) setSummaries(result) })
       .catch(error => {
         if (active) setLoadError(error instanceof Error ? error.message : '发票关联状态读取失败')
       })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
-  }, [rows, retry])
+  }, [selectedRows, retry])
 
   useEffect(() => {
     const onKeyDown = event => {
@@ -56,19 +82,103 @@ export default function ChannelInvoiceMergeDialog({ rows, onClose, onIssued, sho
   }, [issuing, onClose])
 
   const preview = useMemo(
-    () => prepareChannelInvoiceMerge(rows, summaries),
-    [rows, summaries]
+    () => prepareChannelInvoiceMerge(selectedRows, summaries),
+    [selectedRows, summaries]
   )
   const effectiveError = loadError || (loading ? '' : preview.error)
   const taxCents = taxAmount.trim() === '' ? NaN : Math.round(Number(taxAmount) * 100)
   const validTax = Number.isFinite(taxCents) && taxCents >= 0 && taxCents <= preview.totalCents
   const netCents = validTax ? preview.totalCents - taxCents : null
+  const amountMatch = !scanned || scannedInvoiceAmountState(invoiceGross, preview.totalCents).kind === 'match'
+  const buyerMatches = !scanned || invoiceBuyerMatchesPartner(buyerName, rows?.[0]?.partnerName)
+  const recommended = useMemo(() => {
+    if (!scanned || !summaries || findingBills) return { ids: [], unique: false, ambiguous: false }
+    return recommendInvoiceBillSet(invoiceGross, selectedRows, summaries,
+      otherBills.filter(row => !selectedIds.includes(String(row.id))).map(row => ({
+        id: String(row.id),
+        remaining_amount: otherBillSummaries[String(row.id)]?.remaining_amount ?? 0
+      })))
+  }, [scanned, invoiceGross, selectedRows, summaries, findingBills, otherBills, selectedIds, otherBillSummaries])
   const officialNumberValid = numberType === 'digital'
     ? Boolean(digitalInvoiceNo.trim())
     : Boolean(invoiceCode.trim() && invoiceNo.trim())
   const readyToRecord = !loading && !effectiveError && !issuing &&
     buyerName.trim() && buyerTaxNo.trim() && sellerName.trim() &&
-    invoiceType && invoiceDate && officialNumberValid && validTax
+    invoiceType && invoiceDate && officialNumberValid && validTax && amountMatch && buyerMatches
+
+
+  const findOtherInvoiceBills = async parsed => {
+    const partner = String(rows?.[0]?.partnerName || '').trim()
+    if (!partner || !parsed?.invoice) return
+    setFindingBills(true)
+    setMatchingWarning('')
+    try {
+      const result = await listChannelRecords({ search: partner, limit: 500, offset: 0 })
+      const otherIds = (rows || []).map(item => String(item.id))
+      const candidates = eligibleInvoicePartnerRows(
+        (result.items || []).map(apiChannelRowToFrontend), partner, otherIds
+      ).slice(0, 30)
+      const matching = await Promise.all(candidates.map(async row => {
+        const summary = await getBillInvoiceSummary('channel', String(row.id))
+        return { row, summary }
+      }))
+      const withRemaining = matching.filter(item => Number(item.summary.remaining_amount || 0) > 0.009)
+      setOtherBills(withRemaining.map(item => item.row))
+      setOtherBillSummaries(Object.fromEntries(withRemaining.map(item => [String(item.row.id), item.summary])))
+      if (Number(result.total) > 500) setMatchingWarning('历史账单超过500张，只展示当前加载的同主体账单；如未找到完整组合，请在账单列表勾选其他月份后关联。')
+    } catch (error) {
+      setMatchingWarning(error instanceof Error ? error.message : '其他月份的账单暂时查询失败，请手动选择相关账单')
+    } finally {
+      setFindingBills(false)
+    }
+  }
+
+  const handleParsedFile = async (parsed, file) => {
+    const invoice = parsed.invoice || {}
+    const gross = Number(invoice.amount_with_tax || 0)
+    setScanned({
+      fileName: file.name,
+      confidence: Number(parsed.confidence || 0),
+      warnings: parsed.warnings || [],
+      proof: parsed.source_file_proof || '',
+      existingInvoiceId: String(parsed.existing_invoice_id || '')
+    })
+    setInvoiceGross(gross > 0 ? gross.toFixed(2) : '')
+    setBuyerName(String(invoice.buyer_name || rows?.[0]?.partnerName || '').trim())
+    setBuyerTaxNo(String(invoice.buyer_tax_no || ''))
+    setSellerName(String(invoice.seller_name || ''))
+    setSellerTaxNo(String(invoice.seller_tax_no || ''))
+    setInvoiceType(String(invoice.invoice_type || ''))
+    const legacy = !invoice.digital_invoice_no && Boolean(invoice.invoice_code)
+    setNumberType(legacy ? 'legacy' : 'digital')
+    setDigitalInvoiceNo(String(invoice.digital_invoice_no || ''))
+    setInvoiceCode(String(invoice.invoice_code || ''))
+    setInvoiceNo(String(invoice.invoice_no || ''))
+    setInvoiceDate(String(invoice.invoice_date || ''))
+    setTaxAmount(invoice.tax_amount == null ? '' : Number(invoice.tax_amount).toFixed(2))
+    setShowIssueForm(true)
+    setIssueError('')
+    setUploadError('')
+    const complete = Boolean(
+      invoice.buyer_name && invoice.buyer_tax_no && invoice.seller_name &&
+      invoice.invoice_date && (invoice.digital_invoice_no || (invoice.invoice_code && invoice.invoice_no)) &&
+      gross > 0 && invoice.tax_amount != null
+    )
+    setShowFields(!complete)
+    // Recommendations use independent legal-party plus server-side invoice
+    // remaining amounts; no matching based on the uploaded filename.
+    await findOtherInvoiceBills(parsed)
+  }
+
+  const toggleCandidate = (billId, checked) => {
+    setSelectedIds(previous => checked
+      ? [...new Set([...previous, billId])]
+      : previous.filter(id => id !== billId)
+    )
+  }
+  const addRecommendedBills = () => {
+    setSelectedIds(previous => [...new Set([...previous, ...recommended.ids])])
+  }
 
   const copyDetails = async () => {
     if (effectiveError || loading || !preview.totalCents) return
@@ -96,8 +206,9 @@ export default function ChannelInvoiceMergeDialog({ rows, onClose, onIssued, sho
     const number = numberType === 'digital' ? digitalInvoiceNo : invoiceCode + '-' + invoiceNo
     if (!window.confirm(
       '请确认：税务平台已实际开出发票 ' + number + '。\n' +
-      '本次关联 ' + rows.length + ' 张账单，价税合计 ' + money(preview.totalCents) + '。\n\n' +
-      '确认后将新增已开发票并关联所有原始账单，不修改账单金额和收款数据。'
+      '本次关联 ' + selectedRows.length + ' 张账单，价税合计 ' + money(preview.totalCents) + '。\n\n' +
+      (scanned?.existingInvoiceId ? '将复用发票库已存在的正式发票，不再重复录入。' : '将登记该正式发票并关联账单。') +
+      '不会修改原账单金额或回款数据。'
     )) return
     setIssuing(true)
     setIssueError('')
@@ -116,9 +227,11 @@ export default function ChannelInvoiceMergeDialog({ rows, onClose, onIssued, sho
         invoice_amount: Number(yuanFromCents(netCents)),
         tax_amount: Number(yuanFromCents(taxCents)),
         amount_with_tax: Number(yuanFromCents(preview.totalCents)),
+        source_file_proof: scanned?.proof || null,
+        existing_invoice_id: scanned?.existingInvoiceId || null,
         remark: remark.trim() || null
       })
-      showToast?.('发票 ' + result.invoice_number + ' 已登记，关联 ' + result.allocated_bills + ' 张账单', 'success')
+      showToast?.('发票 ' + result.invoice_number + (result.linked_existing ? ' 已复用并关联 ' : ' 已登记并关联 ') + result.allocated_bills + ' 张账单', 'success')
       try {
         await onIssued?.(result)
       } catch {
