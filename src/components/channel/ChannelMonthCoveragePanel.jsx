@@ -3,6 +3,7 @@ import {
   auditChannelBillMonths,
   lastCompletedChannelMonth
 } from '@/domain/channel/channelMonthCoverage.js'
+import ChannelAuditGroupManager from './ChannelAuditGroupManager.jsx'
 import './ChannelMonthCoveragePanel.css'
 
 function shortMonth(month) {
@@ -21,6 +22,9 @@ function fullMonth(month) {
  */
 export default function ChannelMonthCoveragePanel({
   records = [],
+  partners = [],
+  onSaveGroup,
+  groupEditEnabled = false,
   onInspectMonth,
   enabled = true,
   initialExpanded = false,
@@ -44,9 +48,9 @@ export default function ChannelMonthCoveragePanel({
     () => auditChannelBillMonths(records, {
       endingMonth: endMonth, windowSize,
       channelFilter: focusChannel, keyword: focusKeyword,
-      localChannelSearch: search
+      localChannelSearch: search, partners
     }),
-    [records, endMonth, windowSize, focusChannel, focusKeyword, search]
+    [records, partners, endMonth, windowSize, focusChannel, focusKeyword, search]
   )
   const listed = useMemo(
     () => audit.channels.filter(row => !onlyGaps || row.gaps.length > 0),
@@ -137,6 +141,7 @@ export default function ChannelMonthCoveragePanel({
               <input type="checkbox" checked={onlyGaps} onChange={(event) => setOnlyGaps(event.target.checked)} />
               只显示断档渠道
             </label>
+            <ChannelAuditGroupManager partners={partners} enabled={groupEditEnabled} onSave={onSaveGroup} />
           </div>
 
           {listed.length ? (
@@ -163,19 +168,29 @@ export default function ChannelMonthCoveragePanel({
                     <tr key={row.key}>
                       <th scope="row" title={row.name}>
                         <button type="button" className="channel-month-audit__channel-name"
-                          title={'查看' + row.name + '最近有账单的月份'}
-                          onClick={() => onInspectMonth?.(row.name, row.lastRecorded, { kind: 'recorded' })}>
+                          title={row.isGroup
+                            ? '关联组：' + row.memberCompanies.join('、') + '（仅巡检，不合并公司账单）'
+                            : '查看' + row.name + '最近有账单的月份'}
+                          onClick={() => onInspectMonth?.(row.name, row.lastRecorded, {
+                            kind: 'recorded', groupKey: row.isGroup ? row.key : ''
+                          })}>
                           <strong>{row.name}</strong>
                         </button>
+                        {row.isGroup ? (
+                          <small title={row.memberCompanies.join('、')}>关联组 · {row.memberCompanies.length} 家公司 · {row.memberCompanies.join(' / ')}</small>
+                        ) : null}
                         <small>{fullMonth(row.firstRecorded)}至{fullMonth(row.lastRecorded)}</small>
                       </th>
                       {row.cells.map((cell) => (
                         <td key={cell.month} className={'channel-month-audit__cell is-' + cell.kind}>
                           {cell.kind === 'recorded' ? (
                             <button type="button" className="channel-month-audit__recorded-button"
-                              title={fullMonth(cell.month) + ' 已录 ' + cell.count + ' 张账单（含归档）；点击查看'}
+                              title={fullMonth(cell.month) + ' 已录 ' + cell.count + ' 张账单（含归档）'
+                                + (cell.sources?.length ? '；开单主体：' + cell.sources.join('、') : '')}
                               aria-label={'查看' + row.name + fullMonth(cell.month) + '已录账单'}
-                              onClick={() => onInspectMonth?.(row.name, cell.month, { kind: 'recorded' })}>
+                              onClick={() => onInspectMonth?.(row.name, cell.month, {
+                                kind: 'recorded', groupKey: row.isGroup ? row.key : ''
+                              })}>
                               {cell.count}张
                             </button>
                           ) : cell.kind === 'before' ? (
@@ -185,7 +200,9 @@ export default function ChannelMonthCoveragePanel({
                               type="button"
                               title={cell.kind === 'gap' ? '两笔已录账期之间无账单，点击排查' : '最后已录账期之后暂无账单，点击排查'}
                               aria-label={'排查' + row.name + fullMonth(cell.month) + (cell.kind === 'gap' ? '账期断档' : '未出账')}
-                              onClick={() => onInspectMonth?.(row.name, cell.month, { kind: cell.kind })}
+                              onClick={() => onInspectMonth?.(row.name, cell.month, {
+                                kind: cell.kind, groupKey: row.isGroup ? row.key : ''
+                              })}
                             >
                               {cell.kind === 'gap' ? '断档' : '未出'}
                             </button>

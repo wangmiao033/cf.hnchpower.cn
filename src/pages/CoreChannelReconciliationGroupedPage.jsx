@@ -17,6 +17,7 @@ import ChannelInvoiceMergeDialog from '@/components/channel/ChannelInvoiceMergeD
 import { matchesChannelLedgerFilters, ledgerBillGames, sortChannelLedgerRows } from '@/domain/channel/channelFlatLedgerFilters.js'
 import { buildCustomerBillSearchIndex } from '@/domain/reconciliation/customerBillSearchIndex.js'
 import { resolveChannelCreatePrefill } from '@/domain/channel/channelCreatePrefill.js'
+import { buildChannelAuditGroupIndex, auditIdentityForBill } from '@/domain/channel/channelAuditGroups.js'
 import './ChannelLedgerView.css'
 import ChannelCumulativeLedgerPanel from '@/components/channel/ChannelCumulativeLedgerPanel.jsx'
 import { cumulativeRowCondition } from '@/domain/channel/channelCumulativeLedgerSummary.js'
@@ -296,6 +297,10 @@ function CoreChannelReconciliationGroupedPage() {
     () => new Set(channelBillMonthOptions(recon.channelRecords)),
     [recon.channelRecords]
   )
+  const channelAuditGroupIndex = useMemo(
+    () => buildChannelAuditGroupIndex(settings.partners || []),
+    [settings.partners]
+  )
 
   const channelOptions = useMemo(
     () => [...new Set((recon.channelRecords || []).map((row) => text(row.channelName, '')).filter(Boolean))]
@@ -309,10 +314,12 @@ function CoreChannelReconciliationGroupedPage() {
   useEffect(() => { setFlatPage(1) }, [month, fromMonth, toMonth, gameQuery, channel, status, query, quickFilter, sortMode])
   useEffect(() => { setSelectedIds([]) }, [month, fromMonth, toMonth, gameQuery, channel, status, query, quickFilter])
 
-  const inspectCoverageMonth = (channelName, period, { kind = 'gap' } = {}) => {
+  const inspectCoverageMonth = (channelName, period, { kind = 'gap', groupKey = '' } = {}) => {
     const relevant = (recon.channelRecords || []).filter(row =>
       !isCancelledRow(row) &&
-      String(row.channelName || '').trim().toLocaleLowerCase('zh-CN') === String(channelName).trim().toLocaleLowerCase('zh-CN') &&
+      (groupKey
+        ? auditIdentityForBill(row, channelAuditGroupIndex).key === groupKey
+        : String(row.channelName || '').trim().toLocaleLowerCase('zh-CN') === String(channelName).trim().toLocaleLowerCase('zh-CN')) &&
       channelMonths(row).includes(period)
     )
     const onlyArchived = kind === 'recorded' && relevant.length > 0 &&
@@ -322,13 +329,13 @@ function CoreChannelReconciliationGroupedPage() {
     setFromMonth('')
     setToMonth('')
     setGameQuery('')
-    setChannel(channelName)
+    setChannel(groupKey ? '' : channelName)
     setStatus('')
     setQuery('')
     setQuickFilter(onlyArchived ? 'archived' : 'all')
     setExpandedKeys([])
     setSelectedIds([])
-    setInspectedGap({ channelName, month: period, kind })
+    setInspectedGap({ channelName, month: period, kind, groupKey })
     window.requestAnimationFrame(() => {
       document.querySelector('.core-channel-recon-page .channel-flat-ledger')?.scrollIntoView({
         behavior: 'smooth',
@@ -336,7 +343,8 @@ function CoreChannelReconciliationGroupedPage() {
       })
     })
   }
-  const inspectingCurrentGap = inspectedGap && inspectedGap.month === month && inspectedGap.channelName === channel
+  const inspectingCurrentGap = inspectedGap && inspectedGap.month === month &&
+    (inspectedGap.groupKey ? !channel : inspectedGap.channelName === channel)
 
   const customerSearchIndex = useMemo(
     () => buildCustomerBillSearchIndex(settings.partners || []),
@@ -346,8 +354,11 @@ function CoreChannelReconciliationGroupedPage() {
     matchesChannelLedgerFilters(row, {
       month, fromMonth, toMonth, channel, game: gameQuery, status, query,
       customerIndex: customerSearchIndex
-    })
-  ), [recon.channelRecords, customerSearchIndex, month, fromMonth, toMonth, channel, gameQuery, status, query])
+    }) &&
+    (!inspectedGap?.groupKey ||
+      auditIdentityForBill(row, channelAuditGroupIndex).key === inspectedGap.groupKey)
+  ), [recon.channelRecords, customerSearchIndex, channelAuditGroupIndex,
+    inspectedGap?.groupKey, month, fromMonth, toMonth, channel, gameQuery, status, query])
 
   const trashRows = useMemo(() => scopedRows.filter(isCancelledRow), [scopedRows])
   const archivedRows = useMemo(
@@ -778,6 +789,7 @@ function CoreChannelReconciliationGroupedPage() {
             <label><span>渠道</span>
               <select value={channel} aria-label="筛选明细渠道" onChange={event => {
                 setChannel(event.target.value)
+                setInspectedGap(null)
                 setSelectedIds([])
                 setExpandedKeys([])
               }}>
@@ -788,7 +800,7 @@ function CoreChannelReconciliationGroupedPage() {
             </label>
             <label><span>账期</span>
               <select value={month} aria-label="筛选明细结算月份" onChange={event => {
-                setMonth(event.target.value); setFromMonth(''); setToMonth(''); setExpandedKeys([])
+                setMonth(event.target.value); setFromMonth(''); setToMonth(''); setExpandedKeys([]); setInspectedGap(null)
               }}>
                 <option value="">{fromMonth || toMonth ? '自定义范围（见下方）' : '全部月份'}</option>
                 {monthOptions.map(value => <option key={value} value={value}>
@@ -797,7 +809,7 @@ function CoreChannelReconciliationGroupedPage() {
               </select>
             </label>
             <label className="channel-ledger-filters__search"><span>搜索</span>
-              <input type="search" value={query} onChange={event => setQuery(event.target.value)}
+              <input type="search" value={query} onChange={event => { setQuery(event.target.value); setInspectedGap(null) }}
                 aria-label="搜索渠道账单" placeholder="渠道、合作方、游戏或账单编号" />
             </label>
             <button type="button" aria-expanded={showMoreFilters} aria-controls="channel-ledger-more-filters"
@@ -903,6 +915,9 @@ function CoreChannelReconciliationGroupedPage() {
             setInspectedGap(null)
           }}
           onInspectMonth={inspectCoverageMonth}
+          partners={settings.partners || []}
+          groupEditEnabled={settings.partnerApiEnabled}
+          onSaveGroup={settings.savePartnerAuditGroup}
         />
       ) : null}
 
