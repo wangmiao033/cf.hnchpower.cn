@@ -7,6 +7,12 @@ import BillQuickFilters from '@/components/reconciliation/BillQuickFilters.jsx'
 import RdInvoiceMergeDialog from '@/components/reconciliation/RdInvoiceMergeDialog.jsx'
 import { VIEWS } from '@/app/routes.js'
 import {
+  buildCustomerBillSearchIndex,
+  customerSearchFieldsForBill,
+  linkedCustomerMatchesKeyword,
+  normalizeCustomerSearch
+} from '@/domain/reconciliation/customerBillSearchIndex.js'
+import {
   buildRdSettlementPeriodOptions,
   getRdRecordSettlementPeriods,
   rdRecordMatchesSettlementPeriod,
@@ -195,16 +201,21 @@ function CoreReconciliationPage() {
     return [...unique.values()].sort((a, b) => a.localeCompare(b, 'zh-CN'))
   }, [recon.records, settings.partners])
 
+  const customerSearchIndex = useMemo(
+    () => buildCustomerBillSearchIndex(settings.partners || []),
+    [settings.partners]
+  )
   const scopedRows = useMemo(() => {
     const q = query.trim().toLowerCase()
     return (recon.records || []).filter((row) => {
       const matchesMonth = !month || rdRecordMatchesSettlementPeriod(row, month)
       const rowPartner = text(row.partner || row.partyBName, '')
       const rowPartnerShortName = text(row.partnerShortName, '')
+      const linkedNames = customerSearchFieldsForBill(row, customerSearchIndex)
       const matchesPartner =
         !partner ||
-        [rowPartner, rowPartnerShortName].some((value) =>
-          partnerKey(value).includes(partnerKey(partner))
+        [rowPartner, rowPartnerShortName, ...linkedNames].some((value) =>
+          normalizeCustomerSearch(value).includes(normalizeCustomerSearch(partner))
         )
       const matchesStatus = !status || String(row.status || 'pending') === status
       const haystack = [
@@ -219,9 +230,10 @@ function CoreReconciliationPage() {
         .filter(Boolean)
         .join(' ')
         .toLowerCase()
-      return matchesMonth && matchesPartner && matchesStatus && (!q || haystack.includes(q))
+      return matchesMonth && matchesPartner && matchesStatus &&
+        (!q || haystack.includes(q) || linkedCustomerMatchesKeyword(row, q, customerSearchIndex))
     })
-  }, [recon.records, month, partner, query, status])
+  }, [recon.records, customerSearchIndex, month, partner, query, status])
 
   const trashRows = useMemo(
     () => scopedRows.filter(isCancelledRow),
