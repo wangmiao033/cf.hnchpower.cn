@@ -186,23 +186,59 @@ function linePrefix(gameName: unknown, settlementCycle: unknown): string {
   return cycle ? `${game}（${cycle}）` : game
 }
 
-function describeDifferenceCase(item: ContractDifferenceCase): string {
+type ContractFieldForDisplay = {
+  key?: string
+  label?: string
+  status?: string
+  bill_value?: unknown
+  contract_value?: unknown
+}
+
+function failedContractFields(checks: ContractFieldForDisplay[] | undefined): string[] {
+  return (checks || [])
+    .filter((check) => check?.status === 'fail' && check.key !== 'contract_standard_settlement')
+    .slice(0, 3)
+    .map((check) =>
+      (check.label || check.key || '合同条款') + '：账单 ' + plainValue(check.bill_value) +
+      ' / 合同 ' + plainValue(check.contract_value)
+    )
+}
+
+function describeDifferenceCase(item: ContractDifferenceCase, currentLine?: ContractBillLineCheck): string {
   const prefix = linePrefix(item.game_name, item.settlement_cycle)
   const expected = finiteNumber(item.expected_amount)
   const actual = finiteNumber(item.actual_amount)
   const variance = finiteNumber(item.variance_abs)
+  // A rate-only mismatch can have an exactly zero amount difference. Prefer the
+  // latest verified fields; fall back to the original case's audit snapshot.
+  const failedFields = failedContractFields(
+    currentLine ? currentLine.checks : item.source_snapshot?.checks
+  )
+  if (failedFields.length) {
+    const amountText = expected !== null && actual !== null
+      ? Math.round(expected * 100) === Math.round(actual * 100)
+        ? '；金额一致 ' + money(actual)
+        : '；合同应结 ' + money(expected) + '，账单实际 ' + money(actual)
+      : ''
+    return prefix + '：' + failedFields.join('、') + amountText
+  }
   if (expected !== null && actual !== null) {
+    if (Math.round(expected * 100) === Math.round(actual * 100)) {
+      return prefix + '：合同应结 ' + money(expected) + '，账单实际 ' + money(actual) +
+        '，金额一致；仍有未关闭的合同差异，请查看合同差异处理记录'
+    }
     const tail = variance === null
       ? ''
-      : `，${varianceLabel(item.variance_direction)} ${money(Math.abs(variance))}`
-    return `${prefix}：合同应结 ${money(expected)}，账单实际 ${money(actual)}${tail}`
+      : '，' + varianceLabel(item.variance_direction) + ' ' + money(Math.abs(variance))
+    return prefix + '：合同应结 ' + money(expected) + '，账单实际 ' + money(actual) + tail
   }
-  return `${prefix}：合同核验存在明确差异`
+  return prefix + '：合同核验存在明确差异'
 }
 
 function describeFailedCheck(line: ContractBillLineCheck): string {
   const prefix = linePrefix(line.game_name, line.settlement_cycle)
   const amount = line.contract_amount
+  const failedFields = failedContractFields(line.checks)
   if (
     amount?.status === 'fail' &&
     finiteNumber(amount.expected_amount) !== null &&
@@ -211,20 +247,13 @@ function describeFailedCheck(line: ContractBillLineCheck): string {
     const variance = finiteNumber(amount.variance_abs)
     const tail = variance === null
       ? ''
-      : `，${varianceLabel(amount.variance_direction)} ${money(Math.abs(variance))}`
-    return `${prefix}：合同应结 ${money(amount.expected_amount)}，账单实际 ${money(amount.actual_amount)}${tail}`
+      : '，' + varianceLabel(amount.variance_direction) + ' ' + money(Math.abs(variance))
+    const fieldText = failedFields.length ? '；' + failedFields.join('、') : ''
+    return prefix + '：合同应结 ' + money(amount.expected_amount) +
+      '，账单实际 ' + money(amount.actual_amount) + tail + fieldText
   }
-
-  const failedChecks = (line.checks || [])
-    .filter((check) => check.status === 'fail')
-    .slice(0, 3)
-  if (failedChecks.length) {
-    const detail = failedChecks
-      .map((check) => `${check.label}：账单 ${plainValue(check.bill_value)} / 合同 ${plainValue(check.contract_value)}`)
-      .join('、')
-    return `${prefix}：${detail}`
-  }
-  return `${prefix}：${line.message || '合同核验存在明确差异'}`
+  if (failedFields.length) return prefix + '：' + failedFields.join('、')
+  return prefix + '：' + (line.message || '合同核验存在明确差异')
 }
 
 /**
@@ -238,9 +267,13 @@ export function buildContractDifferenceBlockedMessage(
   preflight: ContractBillReconciliation | null = null
 ): string {
   const count = Math.max(1, Math.trunc(Number(failCount) || 0))
-  let details = cases
-    .filter((item) => item.status !== 'resolved')
-    .map(describeDifferenceCase)
+  const currentLines = new Map(
+    (preflight?.lines || []).map((line) => [String(line.line_id || ''), line])
+  )
+  const unresolvedCases = cases.filter((item) => item.status !== 'resolved')
+  let details = unresolvedCases.map((item) =>
+    describeDifferenceCase(item, currentLines.get(String(item.line_id || '')))
+  )
 
   if (!details.length) {
     details = (preflight?.lines || [])
@@ -255,7 +288,16 @@ export function buildContractDifferenceBlockedMessage(
     : '系统已判定存在明确合同差异，但当前响应没有返回可展示的差异字段。'
   const remainingText = remaining > 0 ? `另有 ${remaining} 条差异未展开。` : ''
 
-  return `合同核对未通过：发现 ${count} 条明确差异。${detailText}${remainingText}请直接修改上述明细；如果这就是双方确认的特殊结算，再使用“特殊结算确认”留痕。`
+  const amountEqualCases = unresolvedCases.length > 0 && unresolvedCases.every((item) =>
+    finiteNumber(item.expected_amount) !== null &&
+    finiteNumber(item.actual_amount) !== null &&
+    Math.round(Number(item.expected_amount) * 100) === Math.round(Number(item.actual_amount) * 100)
+  )
+  const actionText = amountEqualCases
+    ? '请核对合同条款与账单规则；合同记录有误时应核实更正，真实特殊结算则使用“特殊结算确认”留痕。'
+    : '请直接修改上述明细；如果这就是双方确认的特殊结算，再使用“特殊结算确认”留痕。'
+
+  return `合同核对未通过：发现 ${count} 条明确差异。${detailText}${remainingText}${actionText}`
 }
 
 export class ContractDifferenceBlockedError extends Error {
