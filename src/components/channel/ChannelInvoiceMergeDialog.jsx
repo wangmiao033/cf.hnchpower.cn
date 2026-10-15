@@ -118,11 +118,14 @@ export default function ChannelInvoiceMergeDialog({ rows, onClose, onIssued, sho
       const candidates = eligibleInvoicePartnerRows(
         (result.items || []).map(apiChannelRowToFrontend), partner, otherIds
       ).slice(0, 30)
-      const matching = await Promise.all(candidates.map(async row => {
+      const matching = await Promise.allSettled(candidates.map(async row => {
         const summary = await getBillInvoiceSummary('channel', String(row.id))
         return { row, summary }
       }))
-      const withRemaining = matching.filter(item => Number(item.summary.remaining_amount || 0) > 0.009)
+      const withRemaining = matching
+        .filter(result => result.status === 'fulfilled')
+        .map(result => result.value)
+        .filter(item => Number(item.summary.remaining_amount || 0) > 0.009)
       setOtherBills(withRemaining.map(item => item.row))
       setOtherBillSummaries(Object.fromEntries(withRemaining.map(item => [String(item.row.id), item.summary])))
       if (Number(result.total) > 500) setMatchingWarning('历史账单超过500张，只展示当前加载的同主体账单；如未找到完整组合，请在账单列表勾选其他月份后关联。')
@@ -162,12 +165,12 @@ export default function ChannelInvoiceMergeDialog({ rows, onClose, onIssued, sho
     const complete = Boolean(
       invoice.buyer_name && invoice.buyer_tax_no && invoice.seller_name &&
       invoice.invoice_date && (invoice.digital_invoice_no || (invoice.invoice_code && invoice.invoice_no)) &&
-      gross > 0 && invoice.tax_amount != null
+      gross > 0 && invoice.tax_amount != null && invoice.invoice_type
     )
     setShowFields(!complete)
     // Recommendations use independent legal-party plus server-side invoice
     // remaining amounts; no matching based on the uploaded filename.
-    await findOtherInvoiceBills(parsed)
+    void findOtherInvoiceBills(parsed)
   }
 
   const toggleCandidate = (billId, checked) => {
