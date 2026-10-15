@@ -24,7 +24,7 @@ function Fixture(){
   return true
  }
  return <main className="core-channel-recon-page">
-  <ChannelMonthCoveragePanel initialExpanded records={records} partners={partners}
+  <ChannelMonthCoveragePanel initialExpanded focusKeyword="武汉" records={records} partners={partners}
    groupEditEnabled onSaveGroup={onSave} onInspectMonth={(name,month,options)=>setDrill({name,month,options})}/>
   <output data-testid="saved-group">{JSON.stringify(last)}</output>
   <output data-testid="drill">{JSON.stringify(drill)}</output>
