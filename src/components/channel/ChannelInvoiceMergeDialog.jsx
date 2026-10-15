@@ -251,23 +251,31 @@ export default function ChannelInvoiceMergeDialog({ rows, onClose, onIssued, sho
         <header className="channel-invoice-merge-head">
           <div>
             <span>渠道账单 / 发票</span>
-            <h2 id="channel-invoice-merge-title">{rows.length > 1 ? '合并开票' : '账单开票'}</h2>
-            <p>一张正式销项发票可关联多张账单，原始账单与收款数据保持不变。</p>
+            <h2 id="channel-invoice-merge-title">{rows.length > 1 ? '多账单发票关联' : '智能发票关联'}</h2>
+            <p>上传已有电子发票，自动识别号码、金额并推荐账单；确认前不会修改记录。</p>
           </div>
           <button type="button" className="channel-invoice-merge-close" aria-label="关闭合并开票" disabled={issuing} onClick={onClose}>×</button>
         </header>
 
         <div className="channel-invoice-merge-body">
           <div className="channel-invoice-merge-notice">
-            <strong>开票清单 ≠ 正式发票</strong>
-            <span>先核算尚未开票的余额。税务发票仍需在税务平台开具，开出后再登记并关联。</span>
+            <strong>已经拿到正式电子发票？上传即可识别</strong>
+            <span>尚未开票可以复制下方清单。系统只登记关联已开的发票，不会代替税务平台开票。</span>
           </div>
           <div className="channel-invoice-merge-totals">
-            <div><span>已选原始账单</span><strong>{rows.length} 张</strong></div>
+            <div><span>已选原始账单</span><strong>{selectedRows.length} 张</strong></div>
             <div><span>合作方</span><strong className="is-company">{preview.partnerName || rows[0]?.partnerName || '待确认'}</strong></div>
             <div className="is-total"><span>剩余可开票（价税合计）</span><strong>{loading ? '核对中…' : effectiveError ? '—' : money(preview.totalCents)}</strong></div>
           </div>
 
+          <ChannelInvoiceSmartUpload disabled={issuing}
+            fileName={scanned?.fileName || ''}
+            warnings={scanned?.warnings || []}
+            existing={Boolean(scanned?.existingInvoiceId)}
+            onParsed={handleParsedFile}
+            onError={message => { setUploadError(message); showToast?.(message, 'error') }}
+          />
+          {uploadError ? <p className="channel-invoice-merge-error" role="alert">{uploadError}。可用原始 PDF/OFD/XML 重试，或选择手工登记。</p> : null}
           {loading ? <p className="channel-invoice-merge-loading" role="status">正在核对已关联发票金额，防止重复开票…</p> : null}
           {effectiveError ? (
             <div className="channel-invoice-merge-error" role="alert">
@@ -293,18 +301,22 @@ export default function ChannelInvoiceMergeDialog({ rows, onClose, onIssued, sho
 
           {!effectiveError && !loading && !showIssueForm ? (
             <section className="channel-invoice-merge-steps">
-              <strong>下一步</strong>
-              <p>先复制开票清单去税务平台操作。开票完成后，再选择“登记已开发票并关联”，填入真实的号码、税额等信息。</p>
+              <strong>还没有正式发票？</strong>
+              <p>可以复制开票清单交给开票人员，拿到正式发票后再上传。结算单 PDF 不等于正式税务发票。</p>
             </section>
           ) : null}
 
           {showIssueForm && !effectiveError && !loading ? (
             <form id="channel-invoice-issue-form" onSubmit={event => void recordIssued(event)}>
               <div className="channel-invoice-merge-form-head">
-                <h3>登记已在税务平台开具的销项发票</h3>
-                <p>务必核对购方税号、实际开票公司及税额；系统不会代替税务平台开具正式发票。</p>
+                <h3>{scanned ? '最后核对正式发票' : '手工登记正式发票'}</h3>
+                <p>票号、购方、销方和税额必须以发票原件为准；系统不会开具新的税务发票。</p>
+                {scanned ? <button type="button" className="channel-invoice-smart-extract__edit"
+                  onClick={() => setShowFields(value => !value)}>
+                  {showFields ? '收起校对字段' : '识别有误？展开校对字段'}
+                </button> : null}
               </div>
-              <div className="channel-invoice-merge-grid">
+              {showFields ? <div className="channel-invoice-merge-grid">
                 <label><span>购方公司名称 *</span><input value={buyerName} onChange={event => setBuyerName(event.target.value)} required /></label>
                 <label><span>购方税号 *</span><input value={buyerTaxNo} onChange={event => setBuyerTaxNo(event.target.value)} placeholder="购方统一社会信用代码" required /></label>
                 <label><span>开票方公司名称 *</span><input value={sellerName} onChange={event => setSellerName(event.target.value)} placeholder="正式发票实际销售方" required /></label>
@@ -336,8 +348,11 @@ export default function ChannelInvoiceMergeDialog({ rows, onClose, onIssued, sho
                   <strong>{validTax ? money(netCents) : '—'} + {validTax ? money(taxCents) : '—'} = {money(preview.totalCents)}</strong>
                   <small>不含税金额 + 税额 = 开票价税合计</small>
                 </div>
-                <label className="is-wide"><span>备注（选填）</span><input value={remark} onChange={event => setRemark(event.target.value)} placeholder="例如：对应 2026 年 5—7 月渠道结算" /></label>
-              </div>
+                <label className="is-wide"><span>备注（选填）</span><input value={remark} onChange={event => setRemark(event.target.value)} placeholder="例如：覆盖 2025 年 12 月至 2026 年 2 月" /></label>
+              </div> : null}
+              {!showFields && scanned ? <p className="channel-invoice-smart-extract__complete">
+                识别字段已预填。请核对上方号码、主体与金额；如有识别错误，展开校对字段再确认。
+              </p> : null}
               {buyerName.trim() && preview.partnerName && buyerName.trim() !== preview.partnerName ? (
                 <p className="channel-invoice-merge-warning">购方名称与账单合作方不一致，请确认是否属于同一真实交易主体。</p>
               ) : null}
@@ -351,7 +366,7 @@ export default function ChannelInvoiceMergeDialog({ rows, onClose, onIssued, sho
           {!showIssueForm ? (
             <>
               <button type="button" disabled={loading || Boolean(effectiveError)} onClick={() => void copyDetails()}>复制开票清单</button>
-              <button type="button" className="is-primary" disabled={loading || Boolean(effectiveError)} onClick={() => setShowIssueForm(true)}>已开具发票，登记并关联</button>
+              <button type="button" disabled={loading || Boolean(effectiveError)} onClick={() => { setShowFields(true); setShowIssueForm(true) }}>手动登记发票</button>
             </>
           ) : (
             <>
