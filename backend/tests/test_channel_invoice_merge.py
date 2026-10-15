@@ -127,6 +127,94 @@ class ChannelInvoiceMergeTest(TestCase):
         self.assertEqual(sum(float(link.allocated_tax_amount) for link in links), 0.05)
         self.assertEqual([(b.status, b.settlement_amount) for b in records], original)
 
+
+    @patch("app.api.channel_invoice_merge.verify_invoice_upload", return_value={
+        "name": "天宇-熊动12-2月账单发票.pdf",
+        "url": "https://private.example.com/invoice-files/2026/10/verified.pdf",
+        "type": "application/pdf",
+        "size": 103573,
+    })
+    @patch("app.api.channel_invoice_merge._ensure_unique_identity")
+    @patch("app.api.channel_invoice_merge._lock_invoice_identity")
+    @patch("app.api.channel_invoice_merge._effective_coverage_cents", return_value={})
+    def test_scanned_invoice_preserves_original_private_pdf_and_links_atomically(
+        self, _coverage, _lock, _unique, _proof
+    ):
+        db = FakeDb(bills())
+        record_issued_merged_channel_invoice(payload(source_file_proof="signed-proof"), db)
+        created = [row for row in db.added if isinstance(row, InvoiceRecord)]
+        self.assertEqual(len(created), 1)
+        self.assertEqual(created[0].source_file_name, "天宇-熊动12-2月账单发票.pdf")
+        self.assertEqual(created[0].source_file_type, "application/pdf")
+        self.assertIn("/invoice-files/", created[0].source_file_url)
+        self.assertEqual(created[0].invoice_source, "channel_scanned_invoice")
+        self.assertEqual(db.commits, 1)
+
+    @patch("app.api.channel_invoice_merge.verify_invoice_upload", return_value={
+        "name": "other.pdf",
+        "url": "https://private.example.com/invoice-files/2026/10/verified.pdf",
+        "type": "application/pdf",
+        "size": 100,
+    })
+    @patch("app.api.channel_invoice_merge._effective_coverage_cents", return_value={})
+    def test_scanned_invoice_never_links_to_a_different_legal_customer(self, _coverage, _proof):
+        db = FakeDb(bills())
+        with self.assertRaises(HTTPException) as caught:
+            record_issued_merged_channel_invoice(payload(
+                buyer_name="另一个法律主体有限公司",
+                source_file_proof="signed-proof"
+            ), db)
+        self.assertEqual(caught.exception.detail["error"], "invoice_buyer_partner_mismatch")
+        self.assertEqual(db.added, [])
+        self.assertEqual(db.commits, 0)
+
+    @patch("app.api.channel_invoice_merge._effective_coverage_cents", return_value={})
+    def test_existing_identical_invoice_is_reused_once_instead_of_duplicated(self, _coverage):
+        invoice = InvoiceRecord(
+            id="invoice-previous",
+            invoice_direction="output",
+            invoice_identity_key="digital:12345678912345678901",
+            digital_invoice_no="12345678912345678901",
+            buyer_name="上海合作方公司",
+            invoice_amount=Decimal("955.00"),
+            tax_amount=Decimal("0.05"),
+            amount_with_tax=Decimal("955.05"),
+            tax_status="normal",
+            status="已开",
+        )
+
+        class Result(QueryResult):
+            def first(self):
+                return self.rows[0] if self.rows else None
+            def scalar_one(self):
+                return self.rows[0] if self.rows else None
+
+        class ExistingDb(FakeDb):
+            def __init__(self):
+                super().__init__(bills())
+                self.lookups = 0
+            def execute(self, stmt):
+                self.lookups += 1
+                if self.lookups == 1:
+                    return Result(self.rows)
+                if self.lookups == 2:
+                    return Result([invoice])
+                return Result([0])
+
+        db = ExistingDb()
+        result = record_issued_merged_channel_invoice(
+            payload(existing_invoice_id="invoice-previous"), db
+        )
+        self.assertEqual(result.invoice_id, "invoice-previous")
+        self.assertTrue(result.linked_existing)
+        self.assertEqual(db.commits, 1)
+        self.assertEqual(
+            [x for x in db.added if isinstance(x, InvoiceRecord)], []
+        )
+        linked = [x for x in db.added if isinstance(x, BillInvoiceAllocation)]
+        self.assertEqual(len(linked), 2)
+        self.assertTrue(all(x.invoice_id == "invoice-previous" for x in linked))
+
     @patch("app.api.channel_invoice_merge._effective_coverage_cents", return_value={"july": 47952})
     def test_stops_if_any_bill_was_already_invoiced(self, _coverage):
         db = FakeDb(bills())
