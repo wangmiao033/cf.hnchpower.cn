@@ -2470,3 +2470,33 @@
     right: 0;
   }
 }
+
+/* Voucher split stays inside the existing 6th table column, preserving all
+   positional column selectors and the current compact-bill layout. */
+.core-bill-form-page--channel .channel-line-items-table th.channel-voucher-heading,
+.core-bill-form-page--channel .channel-line-items-table td.channel-voucher-cell {
+  min-width: 142px !important;
+  width: 142px;
+}
+.core-bill-form-page--channel .channel-voucher-heading__sub,
+.core-bill-form-page--channel .channel-voucher-split {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+}
+.core-bill-form-page--channel .channel-voucher-heading__sub {
+  margin-top: 3px;
+  color: #64748b;
+  font-size: 9px;
+  font-weight: 500;
+  text-align: center;
+  white-space: nowrap;
+}
+.core-bill-form-page--channel .channel-voucher-split input[type="number"] {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding-left: 4px;
+  padding-right: 4px;
+  text-align: right;
+}
