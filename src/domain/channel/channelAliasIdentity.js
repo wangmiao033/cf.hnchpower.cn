@@ -82,8 +82,9 @@ export function channelLedgerMatchesSearch(row, query, otherFields = [], custome
 
   // Customer-library metadata only applies to an EXACT linked company or
   // unique full nickname; it is never an unqualified global brand synonym.
-  if (customerFields.some(field =>
-    normalizeCustomerSearch(field).includes(normalizeCustomerSearch(query))
+  const linkedNeedle = normalizeCustomerSearch(query)
+  if (linkedNeedle && customerFields.some(field =>
+    normalizeCustomerSearch(field).includes(linkedNeedle)
   )) return true
 
   const synonyms = channelSearchAliasTerms(query).map(key)
