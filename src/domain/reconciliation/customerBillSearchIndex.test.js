@@ -37,7 +37,7 @@ describe('generic customer-linked bill searching', () => {
     expect(customerSearchFieldsForBill(channelBill, index)).toContain('芯动（朋克）')
   })
 
-  it('does not search a different legal company's tag or similarly named brand', () => {
+  it('does not search another legal company tag or a similarly named brand', () => {
     const unrelated = {
       ...channelBill,
       id: 'other',
