@@ -28,6 +28,12 @@ import {
   potentialDoubleAdjustment,
   upsertChannelDifferenceNote
 } from '@/domain/channel/channelDifferenceReview.js'
+import {
+  getVoucherEntry,
+  getVoucherEntryPreview,
+  setVoucherEntryAmount,
+  setVoucherEntryMode
+} from '@/domain/channel/channelVoucherEntry.js'
 import '@/components/ChannelBilling.css'
 import './ChannelSettlementRule.css'
 import LineItemsTable from '@/components/shared/LineItemsTable.jsx'
@@ -187,6 +193,9 @@ function ChannelBillingForm({
 }) {
   const [header, setHeader] = useState(initialHeaderForm)
   const [lines, setLines] = useState([initialLineItem()])
+  // Expanded editor is ephemeral UI state; the persisted two voucher fields
+  // remain the source of truth, and existing mixed rows always show both.
+  const [expandedVoucherRows, setExpandedVoucherRows] = useState({})
   const [partnerId, setPartnerId] = useState('')
   const [contractRuleState, setContractRuleState] = useState(emptyContractRuleState)
   const [contractRuleRevision, setContractRuleRevision] = useState(0)
@@ -533,14 +542,14 @@ function ChannelBillingForm({
       if (rowIndex !== index) return row
       const identityChanged = field === 'gameName' || field === 'settlementCycle'
       const next = identityChanged ? clearLineContractRule(row) : row
+      if (field === 'voucherAmount') return setVoucherEntryAmount(next, value)
+      if (field === 'voucherMode') {
+        return setVoucherEntryMode(next, value, resolveChannelLineRuleHeader(next, effectiveRuleHeader))
+      }
+      if (field === 'voucherModeBoth') return setVoucherEntryMode(next, 'both', value)
       if (field === 'voucherFaceValue' || field === 'voucherDirectCost') {
-        // A historic single voucher is preserved until an operator edits a
-        // voucher input. On first edit, carry its current deduction as direct.
-        return {
-          ...next,
-          voucherFaceValue: field === 'voucherFaceValue' ? value : (row.voucherFaceValue ?? '0'),
-          voucherDirectCost: field === 'voucherDirectCost' ? value : (row.voucherDirectCost ?? String(row.voucherCost || 0))
-        }
+        // Only the expanded dual-voucher editor changes individual fields.
+        return { ...next, [field]: value }
       }
       return {
         ...next,
@@ -548,6 +557,40 @@ function ChannelBillingForm({
         [field]: value
       }
     }))
+  }
+
+  const voucherUiKey = (row, index) => row?.id ? 'saved:' + row.id : 'new:' + index
+
+  const handleVoucherModeChange = (index, newMode) => {
+    const row = lines[index]
+    if (!row) return
+    const view = getVoucherEntry(row)
+    if (view.isLegacy && Number(row.voucherCost || 0) !== 0) {
+      if (!window.confirm('这是历史代金券，原计算口径尚未转换。\n确认改为「' + (newMode === 'discount' ? '按折扣换算' : '直接抵扣') + '」吗？此操作可能改变本行结算金额。')) return
+    }
+    if (view.mode === 'both') {
+      const other = newMode === 'discount' ? Number(row.voucherDirectCost || 0) : Number(row.voucherFaceValue || 0)
+      if (Math.abs(other) > 0.000001 && !window.confirm('本行同时录入了两种代金券，选择单一口径将清除另一类券的金额。确认继续吗？')) return
+    }
+    handleLineChange(index, 'voucherMode', newMode)
+    const key = voucherUiKey(row, index)
+    setExpandedVoucherRows((current) => ({ ...current, [key]: false }))
+  }
+
+  const handleVoucherDualToggle = (index, lineRule) => {
+    const row = lines[index]
+    if (!row) return
+    const key = voucherUiKey(row, index)
+    const view = getVoucherEntry(row)
+    const opened = Boolean(expandedVoucherRows[key]) || view.mode === 'both'
+    // A nonzero mixed record never collapses into one input without an
+    // explicit radio choice and confirmation that a value will be cleared.
+    if (opened) {
+      if (view.mode !== 'both') setExpandedVoucherRows((current) => ({ ...current, [key]: false }))
+      return
+    }
+    handleLineChange(index, 'voucherModeBoth', lineRule)
+    setExpandedVoucherRows((current) => ({ ...current, [key]: true }))
   }
 
   const addLine = () => {
@@ -776,12 +819,15 @@ function ChannelBillingForm({
         <div className="form-section-title channel-bill-detail-title"><span>2）游戏明细</span><span className="channel-bill-period-badge">{periodSummary(lines)}</span></div>
         <LineItemsTable onAddRow={addLine} showAddButton={false} hint="结算月份只能选择本月或过去月份；历史账期允许保存但会提醒核对，未来账期会被前后端同时拦截。">
           <table className="channel-line-items-table">
-            <thead><tr><th>结算月份</th><th>游戏名称</th><th>后台流水</th><th>折扣系数</th><th>总流水</th><th className="channel-voucher-heading" title="折算券填原始面额，自动乘折扣系数；直扣券按实际金额抵扣。旧账单保持原有口径。">代金券<div className="channel-voucher-heading__sub"><span>折算券</span><span>直扣券</span></div></th><th>无忧试</th><th>玩家退款</th><th>测试费</th><th>福利币</th><th>其他扣减</th><th>分成%</th><th>税率%</th><th>通道费</th><th>计费额</th><th>分成额</th><th>系统结算</th><th>平台结算</th><th>差异</th><th>校验</th><th>操作</th></tr></thead>
+            <thead><tr><th>结算月份</th><th>游戏名称</th><th>后台流水</th><th>折扣系数</th><th>总流水</th><th className="channel-voucher-heading" title="代金券只需录入一个金额：折算时按本行折扣系数计算，直扣时按实际金额扣减。两种都有可点「双券」。">代金券 <small>金额 / 口径</small></th><th>无忧试</th><th>玩家退款</th><th>测试费</th><th>福利币</th><th>其他扣减</th><th>分成%</th><th>税率%</th><th>通道费</th><th>计费额</th><th>分成额</th><th>系统结算</th><th>平台结算</th><th>差异</th><th>校验</th><th>操作</th></tr></thead>
             <tbody>{lines.map((row, index) => {
               const rowRuleHeader = resolveChannelLineRuleHeader(row, effectiveRuleHeader)
               const rowFeeMode = rowRuleHeader.channelFeeMode || 'fixed'
               const details = calculateSettlementDetails(row, rowRuleHeader)
               const monthRisk = settlementMonthRisk(row.settlementCycle, currentMonthKey)
+              const voucher = getVoucherEntry(row)
+              const voucherPreview = getVoucherEntryPreview(row, rowRuleHeader)
+              const dualVoucherEditing = voucher.mode === 'both' || Boolean(expandedVoucherRows[voucherUiKey(row, index)])
               return (
                 <tr key={row.id || `line-${index}`}>
                   <td style={{ minWidth: 132 }}>
@@ -796,9 +842,29 @@ function ChannelBillingForm({
                   <td><input type="number" step="0.000001" min="0" className="admin-input" value={row.discountFactor} onChange={(e) => handleLineChange(index, 'discountFactor', e.target.value)} placeholder="默认1" /></td>
                   <td className="channel-line-num">{effectiveLineFlowFromFormData(row).toFixed(2)}</td>
                   <td className="channel-voucher-cell">
-                    <div className="channel-voucher-split">
-                      <input type="number" step="0.01" className="admin-input" value={row.voucherFaceValue ?? '0'} onChange={(e) => handleLineChange(index, 'voucherFaceValue', e.target.value)} aria-label={`第${index + 1}行折算券原始面额`} title="折算券：原始面额 × 折扣系数" placeholder="0" />
-                      <input type="number" step="0.01" className="admin-input" value={row.voucherDirectCost ?? (row.voucherCost === '' ? '0' : row.voucherCost) ?? '0'} onChange={(e) => handleLineChange(index, 'voucherDirectCost', e.target.value)} aria-label={`第${index + 1}行直扣券实际金额`} title={row.voucherDirectCost == null ? '历史代金券：保留原计算口径；修改后视为直扣券' : '直扣券：实际金额，直接抵扣'} placeholder="0" />
+                    <div className="channel-voucher-editor">
+                      <div className="channel-voucher-editor__inline">
+                        {dualVoucherEditing ? (
+                          <div className="channel-voucher-editor__dual-inputs">
+                            <input type="number" step="0.01" className="admin-input" value={row.voucherFaceValue ?? '0'} onChange={(e) => handleLineChange(index, 'voucherFaceValue', e.target.value)} aria-label={`第${index + 1}行折算券原始面额`} title="折算券原始面额" placeholder="折算" />
+                            <input type="number" step="0.01" className="admin-input" value={row.voucherDirectCost ?? '0'} onChange={(e) => handleLineChange(index, 'voucherDirectCost', e.target.value)} aria-label={`第${index + 1}行直扣券实际金额`} title="直扣券实际金额" placeholder="直扣" />
+                          </div>
+                        ) : (
+                          <input type="number" step="0.01" className="admin-input channel-voucher-editor__amount" value={voucher.amount} onChange={(e) => handleLineChange(index, 'voucherAmount', e.target.value)} aria-label={`第${index + 1}行代金券金额`} title={voucher.isLegacy ? '历史账单：未选新口径前，编辑此金额仍沿用原始计算规则' : '代金券金额'} placeholder="0" />
+                        )}
+                        <div className="channel-voucher-editor__choices" role="radiogroup" aria-label={`第${index + 1}行代金券口径`}>
+                          <label title="原始面额 × 本行折扣系数">
+                            <input type="radio" name={`channel-voucher-mode-${row.id || index}`} checked={!dualVoucherEditing && voucher.mode === 'discount'} onChange={() => handleVoucherModeChange(index, 'discount')} />
+                            折算
+                          </label>
+                          <label title="输入多少元就直接扣多少元">
+                            <input type="radio" name={`channel-voucher-mode-${row.id || index}`} checked={!dualVoucherEditing && voucher.mode === 'direct'} onChange={() => handleVoucherModeChange(index, 'direct')} />
+                            直扣
+                          </label>
+                        </div>
+                        <button type="button" className="channel-voucher-editor__dual-trigger" title={dualVoucherEditing ? '正在编辑两种代金券；改成单券请选折算或直扣' : '同时包含两种代金券时，点击展开两个金额'} aria-label={`第${index + 1}行双券编辑`} aria-pressed={dualVoucherEditing} disabled={dualVoucherEditing && voucher.mode === 'both'} onClick={() => handleVoucherDualToggle(index, rowRuleHeader)}>双券</button>
+                      </div>
+                      <small className={`channel-voucher-editor__preview${voucher.mode === 'legacy' ? ' is-legacy' : ''}`} title={voucherPreview.label}>{voucherPreview.label}</small>
                     </div>
                   </td>
                   <td><input type="number" step="0.01" className="admin-input" value={row.noWorryCost} onChange={(e) => handleLineChange(index, 'noWorryCost', e.target.value)} /></td>
