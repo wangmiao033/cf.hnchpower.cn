@@ -4,6 +4,7 @@ export type ApiPartnerRow = {
   id: string
   name: string
   short_name: string
+  channel_audit_group?: string
   category: string
   tag: string
   tax_registration_no: string
@@ -47,6 +48,10 @@ export function listPartners(params?: { q?: string; category?: string }) {
   return apiGet<PartnerListResponse>(`${PATH}${qs ? `?${qs}` : ''}`)
 }
 
+export function assignPartnerChannelAuditGroup(payload: {group_name:string;partner_ids:string[]}) {
+  return apiPost<{updated:number;group_name:string;partner_ids:string[];scope:string}>(`${PATH}/channel-audit-group`, payload)
+}
+
 export function createPartner(payload: PartnerPayload) {
   return apiPost<ApiPartnerRow>(PATH, payload)
 }
@@ -70,6 +75,7 @@ export function apiPartnerRowToFrontend(row: ApiPartnerRow): Record<string, unkn
     id: String(row.id),
     name: row.name ?? '',
     shortName: row.short_name ?? '',
+    channelAuditGroup: row.channel_audit_group ?? '',
     category: row.category || '研发商',
     tag2: row.tag ?? '',
     taxRegistrationNo: row.tax_registration_no ?? '',

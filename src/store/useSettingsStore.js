@@ -11,6 +11,7 @@ import {
 } from '@/lib/api/payment.ts'
 import {
   listPartners,
+  assignPartnerChannelAuditGroup,
   createPartner,
   updatePartner,
   deletePartner,
@@ -226,6 +227,27 @@ export function useSettingsStore({ showToast, enabled = true } = {}) {
     [partnerApiEnabled, refetchPartnersFromApi]
   )
 
+  const savePartnerAuditGroup = useCallback(
+    async (partnerIds, groupName) => {
+      if (!partnerApiEnabled) {
+        showToastRef.current?.('客户库服务器暂不可用，不能保存跨设备关联组', 'error')
+        return false
+      }
+      try {
+        await assignPartnerChannelAuditGroup({
+          partner_ids: partnerIds.map(String),
+          group_name: String(groupName || '').trim()
+        })
+        await refetchPartnersFromApi()
+        return true
+      } catch (error) {
+        showToastRef.current?.(error?.message || '保存关联渠道组失败', 'error')
+        return false
+      }
+    },
+    [partnerApiEnabled, refetchPartnersFromApi]
+  )
+
   const deletePartnerById = useCallback(
     async (rawId) => {
       const sid = String(rawId)
@@ -322,6 +344,7 @@ export function useSettingsStore({ showToast, enabled = true } = {}) {
     partnerApiEnabled,
     partnerLoading,
     persistPartner,
+    savePartnerAuditGroup,
     deletePartnerById,
     replacePartners,
     refetchPartnersFromApi,
