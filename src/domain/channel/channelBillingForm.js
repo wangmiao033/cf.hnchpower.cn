@@ -226,8 +226,10 @@ export function buildLineRecordFromForm(fd, headerForm = initialHeaderForm) {
     settlementCycle: normalizeChannelSettlementCycle(fd.settlementCycle || fd.settlementMonth), gameName: fd.gameName != null ? String(fd.gameName) : '',
     flow: Number(fd.flow || 0), discountFactor: resolveDiscountFactor(fd), effectiveFlow: effectiveLineFlowFromFormData(fd),
     voucherCost: voucherCostForStorage(fd, effectiveHeader),
-    voucherFaceValue: hasSplitVoucherFields(fd) ? Number(fd.voucherFaceValue || 0) : null,
-    voucherDirectCost: hasSplitVoucherFields(fd) ? Number(fd.voucherDirectCost || 0) : null,
+    // Keep NULL in the inactive mode: persisting it as 0 would lose the
+    // operator's radio selection when a saved zero-value voucher is reopened.
+    voucherFaceValue: parseOptionalNum(fd.voucherFaceValue),
+    voucherDirectCost: parseOptionalNum(fd.voucherDirectCost),
     noWorryCost: Number(fd.noWorryCost || 0), refundCost: Number(fd.refundCost || 0), testCost: Number(fd.testCost || 0), welfareCost: Number(fd.welfareCost || 0), coinCost: Number(fd.coinCost || 0),
     billingAmount: round2(calculateBillingAmount(fd, effectiveHeader)), shareRate: Number(fd.shareRate || 0), shareAmount: round2(calculateShareAmount(fd, effectiveHeader)), taxRate: Number(fd.taxRate || 0), gatewayCost: Number(fd.gatewayCost || 0),
     settlementRuleCode: effectiveHeader.settlementRuleCode || '', channelFeeMode: effectiveHeader.channelFeeMode || '', channelFeeRate: parseOptionalNum(effectiveHeader.channelFeeRate), taxMode: effectiveHeader.taxMode || '', validationTolerance: Math.max(0, Number(effectiveHeader.validationTolerance || 0.05)),
