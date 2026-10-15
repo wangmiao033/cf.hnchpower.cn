@@ -47,7 +47,7 @@ export function isMeaningfulChannelDraft(record = {}) {
 }
 
 export function areNormalizedDraftsEqual(left, right, normalize) { return JSON.stringify(normalize(left || {})) === JSON.stringify(normalize(right || {})) }
-export function billDraftKey(type, mode, recordId = '') { const suffix = mode === 'edit' ? `edit:${text(recordId)}` : 'create'; return `${DRAFT_PREFIX}:${type}:${suffix}` }
+export function billDraftKey(type, mode, recordId = '', createScope = '') { const suffix = mode === 'edit' ? `edit:${text(recordId)}` : createScope ? `create:${encodeURIComponent(text(createScope))}` : 'create'; return `${DRAFT_PREFIX}:${type}:${suffix}` }
 export function readBillDraft(key) { if (typeof window === 'undefined' || !key) return null; try { const parsed = JSON.parse(window.localStorage.getItem(key) || 'null'); if (!parsed || typeof parsed !== 'object' || !parsed.record) return null; return { record: parsed.record, savedAt: Number(parsed.savedAt) || 0, baseVersion: text(parsed.baseVersion) } } catch { return null } }
 export function writeBillDraft(key, record, baseVersion = '') { if (typeof window === 'undefined' || !key) return 0; const savedAt = Date.now(); try { window.localStorage.setItem(key, JSON.stringify({ record, savedAt, baseVersion: text(baseVersion) })); return savedAt } catch { return 0 } }
 export function clearBillDraft(key) { if (typeof window === 'undefined' || !key) return; try { window.localStorage.removeItem(key) } catch { /* restricted storage */ } }

@@ -190,6 +190,7 @@ function ChannelBillingForm({
   onError,
   partners = [],
   onAddPartner,
+  createPrefillPartner = null,
   className = ''
 }) {
   const [header, setHeader] = useState(initialHeaderForm)
@@ -289,7 +290,13 @@ function ChannelBillingForm({
   useEffect(() => {
     const stateRecord = draftRecord || (mode === 'edit' ? sourceRecord : null)
     if (stateRecord) {
-      setPartnerId('')
+      // Restoring from a filtered channel list is an explicit customer choice,
+      // not an unverified string copied from an old bill. Link its stable ID
+      // only when the exact saved legal name still belongs to that customer.
+      const linked = mode === 'add' && createPrefillPartner?.partnerId
+        ? findExactPartner(partners, stateRecord.partnerName || stateRecord.channelName)
+        : null
+      setPartnerId(linked && String(linked.id) === String(createPrefillPartner.partnerId) ? String(linked.id) : '')
       setHeader(recordToHeaderForm(stateRecord))
       const lineForms = recordToLineForms(stateRecord)
       setLines(lineForms.length ? lineForms : [initialLineItem()])
@@ -310,7 +317,7 @@ function ChannelBillingForm({
     setDifferenceReviewStatus('pending')
     setDifferenceReviewReason('')
     setDifferenceNoteWritten(false)
-  }, [mode, sourceRecord?.id, draftRecord])
+  }, [mode, sourceRecord?.id, draftRecord, createPrefillPartner?.partnerId])
 
   useEffect(() => {
     // Legacy/edit records only: recover their stable customer link from the persisted

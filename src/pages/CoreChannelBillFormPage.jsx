@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useAppState } from '@/app/AppStateContext.jsx'
 import PageContainer from '@/components/layout/PageContainer.jsx'
 import BillScanAttachments from '@/components/billing/BillScanAttachments.jsx'
@@ -132,9 +132,18 @@ function CoreChannelBillFormPage({ mode }) {
     clearNavigationBlocker,
     openBill360,
     channelEditRecordId,
-    channelReturnView
+    channelReturnView,
+    channelCreatePrefill
   } = useAppState()
   const isEdit = mode === 'edit'
+  // Only a customer ID resolved by the ledger is accepted. This is NOT a
+  // copy of a historical bill, and never supplies games/flows/settlements.
+  const createPrefill = !isEdit && channelCreatePrefill?.partnerId ? channelCreatePrefill : null
+  const prefillRecord = useMemo(() => createPrefill ? {
+    partnerName: createPrefill.partnerName,
+    channelName: createPrefill.channelName,
+    items: []
+  } : null, [createPrefill?.partnerId, createPrefill?.partnerName, createPrefill?.channelName])
   const view = isEdit ? VIEWS.CHANNEL_RECON_EDIT : VIEWS.CHANNEL_RECON_CREATE
   const submitIntentRef = useRef('back')
   const authorityRequestRef = useRef(0)
@@ -234,6 +243,9 @@ function CoreChannelBillFormPage({ mode }) {
     view,
     recordId: isEdit ? String(channelEditRecordId || '') : '',
     initialRecord: stableRecord,
+    // Scoped new-bill drafts cannot overwrite the user's unrelated generic
+    // draft or another company's unfinished statement.
+    draftScope: createPrefill ? `partner:${createPrefill.partnerId}` : '',
     normalize: normalizeChannelDraft,
     isMeaningful: isMeaningfulChannelDraft,
     setNavigationBlocker,
@@ -939,7 +951,7 @@ function CoreChannelBillFormPage({ mode }) {
   }
 
   const zeroSettlementPreview = isZeroSettlement(previewAmount)
-  const currentRecord = safety.currentRecord || smartRecord || safety.draftRecord || stableRecord || {}
+  const currentRecord = safety.currentRecord || smartRecord || safety.draftRecord || prefillRecord || stableRecord || {}
   const hasAdvancedData = hasAdvancedChannelData(currentRecord)
   const hasChannelFee = hasChannelFeeConfiguration(currentRecord)
   const smartEntryPartner = !isEdit
@@ -1070,7 +1082,8 @@ function CoreChannelBillFormPage({ mode }) {
           mode={isEdit ? 'edit' : 'add'}
           recordId={stableRecord?.id}
           sourceRecord={stableRecord}
-          draftRecord={smartRecord || safety.draftRecord}
+          draftRecord={smartRecord || safety.draftRecord || prefillRecord}
+          createPrefillPartner={createPrefill}
           onAddRecord={recon.onChannelAddRecord}
           onUpdateRecord={handleChannelUpdateRecord}
           submitIntentRef={submitIntentRef}

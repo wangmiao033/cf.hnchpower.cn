@@ -16,6 +16,7 @@ import ChannelFlatLedger from '@/components/channel/ChannelFlatLedger.jsx'
 import ChannelInvoiceMergeDialog from '@/components/channel/ChannelInvoiceMergeDialog.jsx'
 import { matchesChannelLedgerFilters, ledgerBillGames, sortChannelLedgerRows } from '@/domain/channel/channelFlatLedgerFilters.js'
 import { buildCustomerBillSearchIndex } from '@/domain/reconciliation/customerBillSearchIndex.js'
+import { resolveChannelCreatePrefill } from '@/domain/channel/channelCreatePrefill.js'
 import './ChannelLedgerView.css'
 import ChannelCumulativeLedgerPanel from '@/components/channel/ChannelCumulativeLedgerPanel.jsx'
 import { cumulativeRowCondition } from '@/domain/channel/channelCumulativeLedgerSummary.js'
@@ -199,6 +200,7 @@ function CoreChannelReconciliationGroupedPage() {
     settings,
     showToast,
     setActiveView,
+    openChannelCreate,
     openChannelReconciliationEdit,
     openBill360,
     prefetchBill360
@@ -728,6 +730,23 @@ function CoreChannelReconciliationGroupedPage() {
     setShowMoreFilters(false)
   }
   const sortLabels = { 'month-asc': '最早月份优先', 'unpaid-desc': '未收金额最高', 'settlement-desc': '渠道应收最高', 'channel-asc': '渠道名称排序' }
+  const createBillForCurrentChannel = (requestedChannel = '') => {
+    const chosenChannel = String(requestedChannel || channel || '').trim()
+    // Exact channel selection can use the full ledger history, even when the
+    // user is inspecting a missing month. Keyword-only search must resolve
+    // a single linked channel from the currently filtered ledger.
+    const prefill = resolveChannelCreatePrefill({
+      records: chosenChannel ? (recon.channelRecords || []) : scopedRows,
+      partners: settings.partners || [],
+      channelName: chosenChannel,
+      search: chosenChannel ? '' : query
+    })
+    if ((chosenChannel || query.trim()) && !prefill) {
+      showToast('当前筛选不能确定唯一客户库渠道；新建页请手动选择合作方，避免误填其他公司。', 'info')
+    }
+    openChannelCreate(prefill)
+  }
+
   const moreFilterCount = [gameQuery, fromMonth || toMonth, status, sortLabels[sortMode]].filter(Boolean).length
   const activeFilters = [
     channel && { key: 'channel', label: '渠道', value: channel, clear: () => setChannel('') },
@@ -750,7 +769,7 @@ function CoreChannelReconciliationGroupedPage() {
           <div className="core-recon-actions">
             <button type="button" onClick={() => fileRef.current?.click()}>导入 Excel</button>
             <button type="button" onClick={() => void exportRows()}>导出</button>
-            <button type="button" className="primary" onClick={() => setActiveView(VIEWS.CHANNEL_RECON_CREATE)}>新增账单</button>
+            <button type="button" className="primary" onClick={() => createBillForCurrentChannel()}>新增账单</button>
             <input ref={fileRef} type="file" accept=".xlsx,.xls" onChange={handleImportFile} hidden />
           </div>
         </div>
@@ -884,7 +903,7 @@ function CoreChannelReconciliationGroupedPage() {
             setInspectedGap(null)
           }}
           onInspectMonth={inspectCoverageMonth}
-          onCreateBill={() => setActiveView(VIEWS.CHANNEL_RECON_CREATE)}
+          onCreateBill={createBillForCurrentChannel}
         />
       ) : null}
 
@@ -896,7 +915,7 @@ function CoreChannelReconciliationGroupedPage() {
               ? '已按渠道和月份定位。巡检包含归档账单，明细数量不一致时可查看归档账单。'
               : '没有账单不代表一定有流水，请先核对渠道订单明细，再决定是否补录。'}</span>
           </div>
-          <button type="button" onClick={() => setActiveView(VIEWS.CHANNEL_RECON_CREATE)}>新增账单</button>
+          <button type="button" onClick={() => createBillForCurrentChannel(inspectedGap?.channelName)}>新增账单</button>
           <button type="button" onClick={() => {
             setMonth('')
             setChannel('')
