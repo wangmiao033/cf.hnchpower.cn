@@ -48,8 +48,11 @@ export function listPartners(params?: { q?: string; category?: string }) {
   return apiGet<PartnerListResponse>(`${PATH}${qs ? `?${qs}` : ''}`)
 }
 
-export function assignPartnerChannelAuditGroup(payload: {group_name:string;partner_ids:string[]}) {
-  return apiPost<{updated:number;group_name:string;partner_ids:string[];scope:string}>(`${PATH}/channel-audit-group`, payload)
+export function assignPartnerChannelAuditGroup(payload: {
+  group_name:string;partner_ids:string[];
+  remove_partner_ids?: string[];expected_group_name?:string
+}) {
+  return apiPost<{updated:number;group_name:string;partner_ids:string[];removed_ids?:string[];scope:string}>(`${PATH}/channel-audit-group`, payload)
 }
 
 export function createPartner(payload: PartnerPayload) {

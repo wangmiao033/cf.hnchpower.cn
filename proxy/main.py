@@ -1493,8 +1493,17 @@ async def assign_channel_audit_group(request: Request, payload: dict) -> dict:
     if not isinstance(ids_raw, list):
         raise HTTPException(status_code=422, detail="请选择要关联的客户库公司")
     ids = list(dict.fromkeys(str(v or "").strip() for v in ids_raw))
-    if not 1 <= len(ids) <= 30 or any(not val or len(val) > 200 for val in ids):
-        raise HTTPException(status_code=422, detail="一次最多选择30个有效客户")
+    removal_raw = payload.get("remove_partner_ids") or []
+    if not isinstance(removal_raw, list):
+        raise HTTPException(status_code=422, detail="移出关联组的客户ID格式错误")
+    remove_ids = list(dict.fromkeys(str(v or "").strip() for v in removal_raw))
+    if (not ids and not remove_ids or len(ids) + len(remove_ids) > 30
+        or set(ids) & set(remove_ids)
+        or any(not val or len(val) > 200 for val in [*ids, *remove_ids])):
+        raise HTTPException(status_code=422, detail="关联组选择的客户无效或超过30个")
+    previous_group_name = str(payload.get("expected_group_name") or "").strip()
+    if remove_ids and not previous_group_name:
+        raise HTTPException(status_code=422, detail="解除关联前必须提供原关联组名称")
     requested = payload.get("group_name")
     if not isinstance(requested, str):
         raise HTTPException(status_code=422, detail="请输入关联组名称")
@@ -1504,25 +1513,44 @@ async def assign_channel_audit_group(request: Request, payload: dict) -> dict:
     with psycopg.connect(_database_url(), connect_timeout=15, row_factory=dict_row) as conn:
         _ensure_partners_table(conn)
         locked = conn.execute(
-            "SELECT id FROM cf_partner_records WHERE id = ANY(%s) FOR UPDATE",
-            [ids],
+            "SELECT id, channel_audit_group FROM cf_partner_records WHERE id = ANY(%s) FOR UPDATE",
+            [list(dict.fromkeys([*ids, *remove_ids]))],
         ).fetchall()
-        if {str(row["id"]) for row in locked} != set(ids):
+        if {str(row["id"]) for row in locked} != set([*ids, *remove_ids]):
             raise HTTPException(status_code=404, detail="部分客户不存在，请刷新客户库再试")
-        updated = conn.execute(
-            """
-            UPDATE cf_partner_records
-            SET channel_audit_group = %s, updated_at = NOW()
-            WHERE id = ANY(%s)
-            RETURNING id
-            """,
-            [group_name, ids],
-        ).fetchall()
+        # If another editor moved a member to a new group after the dialog
+        # opened, do not silently remove that more recent membership.
+        for row in locked:
+            if str(row["id"]) in remove_ids and str(row["channel_audit_group"] or "").strip() != previous_group_name:
+                raise HTTPException(status_code=409, detail="关联组已被其他用户更新，请刷新后重新确认")
+        updated = []
+        if ids:
+            updated = conn.execute(
+                """
+                UPDATE cf_partner_records
+                SET channel_audit_group = %s, updated_at = NOW()
+                WHERE id = ANY(%s)
+                RETURNING id
+                """,
+                [group_name, ids],
+            ).fetchall()
+        removed = []
+        if remove_ids:
+            removed = conn.execute(
+                """
+                UPDATE cf_partner_records
+                SET channel_audit_group = '', updated_at = NOW()
+                WHERE id = ANY(%s)
+                RETURNING id
+                """,
+                [remove_ids],
+            ).fetchall()
         conn.commit()
     return {
-        "updated": len(updated),
+        "updated": len(updated) + len(removed),
         "group_name": group_name,
         "partner_ids": ids,
+        "removed_ids": remove_ids,
         "scope": "channel_month_audit_only",
     }
 

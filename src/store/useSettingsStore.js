@@ -228,7 +228,7 @@ export function useSettingsStore({ showToast, enabled = true } = {}) {
   )
 
   const savePartnerAuditGroup = useCallback(
-    async (partnerIds, groupName) => {
+    async ({partnerIds, groupName, removeIds = [], expectedGroupName = ''}) => {
       if (!partnerApiEnabled) {
         showToastRef.current?.('客户库服务器暂不可用，不能保存跨设备关联组', 'error')
         return false
@@ -236,7 +236,9 @@ export function useSettingsStore({ showToast, enabled = true } = {}) {
       try {
         await assignPartnerChannelAuditGroup({
           partner_ids: partnerIds.map(String),
-          group_name: String(groupName || '').trim()
+          group_name: String(groupName || '').trim(),
+          remove_partner_ids: removeIds.map(String),
+          expected_group_name: String(expectedGroupName || '').trim()
         })
         await refetchPartnersFromApi()
         return true
