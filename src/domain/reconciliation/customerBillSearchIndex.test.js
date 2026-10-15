@@ -88,6 +88,7 @@ describe('generic customer-linked bill searching', () => {
     expect(matchesChannelLedgerFilters(channelBill, { query: '某游戏', customerIndex: index })).toBe(true)
     expect(matchesChannelLedgerFilters(channelBill, { month: '2026-08', query: '朋克', customerIndex: index })).toBe(false)
     expect(matchesChannelLedgerFilters(channelBill, { query: '朋克' })).toBe(false)
+    expect(matchesChannelLedgerFilters(channelBill, { query: '【】', customerIndex: index })).toBe(false)
   })
 
   it('normalizes full-width brackets and spaces without confusing 朋克 and 朋克4', () => {
