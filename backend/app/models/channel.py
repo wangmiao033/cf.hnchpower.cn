@@ -73,6 +73,10 @@ class ChannelRecordLineItem(Base):
     game_name: Mapped[str | None] = mapped_column(String, nullable=True)
     billing_flow: Mapped[float] = mapped_column(Numeric(18, 2), nullable=False, default=0)
     discount_factor: Mapped[float] = mapped_column(Numeric(12, 6), nullable=False, default=1)
+    # NULL in both columns marks a historical row: keep its existing voucher_cost
+    # calculation and never retroactively convert already-reconciled vouchers.
+    voucher_face_value: Mapped[float | None] = mapped_column(Numeric(18, 2), nullable=True)
+    voucher_direct_cost: Mapped[float | None] = mapped_column(Numeric(18, 2), nullable=True)
     voucher_cost: Mapped[float] = mapped_column(Numeric(18, 2), nullable=False, default=0)
     no_worry_cost: Mapped[float] = mapped_column(Numeric(18, 2), nullable=False, default=0)
     refund_cost: Mapped[float] = mapped_column(Numeric(18, 2), nullable=False, default=0)

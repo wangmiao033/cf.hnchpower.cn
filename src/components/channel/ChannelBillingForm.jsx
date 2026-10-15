@@ -533,6 +533,15 @@ function ChannelBillingForm({
       if (rowIndex !== index) return row
       const identityChanged = field === 'gameName' || field === 'settlementCycle'
       const next = identityChanged ? clearLineContractRule(row) : row
+      if (field === 'voucherFaceValue' || field === 'voucherDirectCost') {
+        // A historic single voucher is preserved until an operator edits a
+        // voucher input. On first edit, carry its current deduction as direct.
+        return {
+          ...next,
+          voucherFaceValue: field === 'voucherFaceValue' ? value : (row.voucherFaceValue ?? '0'),
+          voucherDirectCost: field === 'voucherDirectCost' ? value : (row.voucherDirectCost ?? String(row.voucherCost || 0))
+        }
+      }
       return {
         ...next,
         ...(identityChanged && mode === 'add' ? { shareRate: '', taxRate: '' } : {}),
@@ -767,7 +776,7 @@ function ChannelBillingForm({
         <div className="form-section-title channel-bill-detail-title"><span>2）游戏明细</span><span className="channel-bill-period-badge">{periodSummary(lines)}</span></div>
         <LineItemsTable onAddRow={addLine} showAddButton={false} hint="结算月份只能选择本月或过去月份；历史账期允许保存但会提醒核对，未来账期会被前后端同时拦截。">
           <table className="channel-line-items-table">
-            <thead><tr><th>结算月份</th><th>游戏名称</th><th>后台流水</th><th>折扣系数</th><th>总流水</th><th>代金券</th><th>无忧试</th><th>玩家退款</th><th>测试费</th><th>福利币</th><th>其他扣减</th><th>分成%</th><th>税率%</th><th>通道费</th><th>计费额</th><th>分成额</th><th>系统结算</th><th>平台结算</th><th>差异</th><th>校验</th><th>操作</th></tr></thead>
+            <thead><tr><th>结算月份</th><th>游戏名称</th><th>后台流水</th><th>折扣系数</th><th>总流水</th><th className="channel-voucher-heading" title="折算券填原始面额，自动乘折扣系数；直扣券按实际金额抵扣。旧账单保持原有口径。">代金券<div className="channel-voucher-heading__sub"><span>折算券</span><span>直扣券</span></div></th><th>无忧试</th><th>玩家退款</th><th>测试费</th><th>福利币</th><th>其他扣减</th><th>分成%</th><th>税率%</th><th>通道费</th><th>计费额</th><th>分成额</th><th>系统结算</th><th>平台结算</th><th>差异</th><th>校验</th><th>操作</th></tr></thead>
             <tbody>{lines.map((row, index) => {
               const rowRuleHeader = resolveChannelLineRuleHeader(row, effectiveRuleHeader)
               const rowFeeMode = rowRuleHeader.channelFeeMode || 'fixed'
@@ -786,7 +795,12 @@ function ChannelBillingForm({
                   <td><input type="number" step="0.01" className="admin-input" value={row.flow} onChange={(e) => handleLineChange(index, 'flow', e.target.value)} /></td>
                   <td><input type="number" step="0.000001" min="0" className="admin-input" value={row.discountFactor} onChange={(e) => handleLineChange(index, 'discountFactor', e.target.value)} placeholder="默认1" /></td>
                   <td className="channel-line-num">{effectiveLineFlowFromFormData(row).toFixed(2)}</td>
-                  <td><input type="number" step="0.01" className="admin-input" value={row.voucherCost} onChange={(e) => handleLineChange(index, 'voucherCost', e.target.value)} /></td>
+                  <td className="channel-voucher-cell">
+                    <div className="channel-voucher-split">
+                      <input type="number" step="0.01" className="admin-input" value={row.voucherFaceValue ?? '0'} onChange={(e) => handleLineChange(index, 'voucherFaceValue', e.target.value)} aria-label={`第${index + 1}行折算券原始面额`} title="折算券：原始面额 × 折扣系数" placeholder="0" />
+                      <input type="number" step="0.01" className="admin-input" value={row.voucherDirectCost ?? (row.voucherCost === '' ? '0' : row.voucherCost) ?? '0'} onChange={(e) => handleLineChange(index, 'voucherDirectCost', e.target.value)} aria-label={`第${index + 1}行直扣券实际金额`} title={row.voucherDirectCost == null ? '历史代金券：保留原计算口径；修改后视为直扣券' : '直扣券：实际金额，直接抵扣'} placeholder="0" />
+                    </div>
+                  </td>
                   <td><input type="number" step="0.01" className="admin-input" value={row.noWorryCost} onChange={(e) => handleLineChange(index, 'noWorryCost', e.target.value)} /></td>
                   <td><input type="number" step="0.01" className="admin-input" value={row.refundCost} onChange={(e) => handleLineChange(index, 'refundCost', e.target.value)} /></td>
                   <td><input type="number" step="0.01" className="admin-input" value={row.testCost} onChange={(e) => handleLineChange(index, 'testCost', e.target.value)} /></td>

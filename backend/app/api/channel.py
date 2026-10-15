@@ -33,7 +33,7 @@ from app.schemas.channel import (
 )
 from app.services.channel_cumulative_batch import refresh_batches_for_bill
 from app.services.channel_cumulative_invoice import assert_single_bill_collection_allowed
-from app.services.channel_settlement_engine import apply_bill_adjustment, aggregate_validation, calculate_channel_line
+from app.services.channel_settlement_engine import apply_bill_adjustment, aggregate_validation, calculate_channel_line, voucher_cost_for_storage
 from app.services.bill_write_preflight import prepare_bill_financial_update
 from app.services.bill_partner_search import matching_customer_keyword_exists
 
@@ -249,6 +249,9 @@ def _replace_line_items(db: Session, parent: ChannelRecord, items: list[ChannelL
     for idx, it in enumerate(items):
         raw = it.model_dump(exclude={"billing_amount", "share_amount", "system_settlement_amount", "settlement_difference", "validation_status", "settlement_amount"})
         line = ChannelRecordLineItem(id=str(uuid4()), channel_record_id=parent.id, sort_order=idx, **raw)
+        # Never trust a client-submitted voucher_cost for a split row; preserve
+        # the old column as an auditable derived value with legacy-compatible semantics.
+        line.voucher_cost = voucher_cost_for_storage(line, parent)
         computed = calculate_channel_line(line, parent)
         for key, value in computed.items():
             setattr(line, key, value)
