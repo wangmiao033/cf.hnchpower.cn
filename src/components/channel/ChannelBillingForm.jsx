@@ -846,8 +846,8 @@ function ChannelBillingForm({
                       <div className="channel-voucher-editor__inline">
                         {dualVoucherEditing ? (
                           <div className="channel-voucher-editor__dual-inputs">
-                            <input type="number" step="0.01" className="admin-input" value={row.voucherFaceValue ?? '0'} onChange={(e) => handleLineChange(index, 'voucherFaceValue', e.target.value)} aria-label={`第${index + 1}行折算券原始面额`} title="折算券原始面额" placeholder="折算" />
-                            <input type="number" step="0.01" className="admin-input" value={row.voucherDirectCost ?? '0'} onChange={(e) => handleLineChange(index, 'voucherDirectCost', e.target.value)} aria-label={`第${index + 1}行直扣券实际金额`} title="直扣券实际金额" placeholder="直扣" />
+                            <label><span>折算</span><input type="number" step="0.01" className="admin-input" value={row.voucherFaceValue ?? '0'} onChange={(e) => handleLineChange(index, 'voucherFaceValue', e.target.value)} aria-label={`第${index + 1}行折算券原始面额`} title="折算券原始面额" placeholder="0" /></label>
+                            <label><span>直扣</span><input type="number" step="0.01" className="admin-input" value={row.voucherDirectCost ?? '0'} onChange={(e) => handleLineChange(index, 'voucherDirectCost', e.target.value)} aria-label={`第${index + 1}行直扣券实际金额`} title="直扣券实际金额" placeholder="0" /></label>
                           </div>
                         ) : (
                           <input type="number" step="0.01" className="admin-input channel-voucher-editor__amount" value={voucher.amount} onChange={(e) => handleLineChange(index, 'voucherAmount', e.target.value)} aria-label={`第${index + 1}行代金券金额`} title={voucher.isLegacy ? '历史账单：未选新口径前，编辑此金额仍沿用原始计算规则' : '代金券金额'} placeholder="0" />
