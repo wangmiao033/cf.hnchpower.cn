@@ -154,6 +154,11 @@ def build_exact_combination(item: dict) -> dict | None:
         key = _candidate_key(candidate)
         if not key[1] or key in seen or _cents(candidate.get("outstanding_amount")) <= 0:
             continue
+        # Exact sum is only amount evidence: a different legal counterparty
+        # must never be promoted into an automatic two-bill recommendation.
+        verified_partner = str(item.get("identity_partner_name") or item.get("counterparty_name") or "")
+        if _party_strength(verified_partner, candidate.get("partner_name")) <= 0:
+            continue
         seen.add(key)
         partner_key = _normalize_party(str(candidate.get("partner_name") or ""))
         if partner_key:
