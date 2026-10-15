@@ -209,8 +209,41 @@ def _candidate_matches_partner(candidate: dict, resolution: PartnerResolution) -
     return bool(candidate_keys & partner_keys)
 
 
+def bank_party_matches_candidate(
+    raw_name: object, candidate: dict, resolution: PartnerResolution | None = None
+) -> bool:
+    """Strong identity evidence, never only amount/date or a fuzzy 2-char overlap.
+
+    If customer-center or the bank account resolved a specific legal customer,
+    that mapping takes precedence over raw name similarity. Otherwise require
+    an exact normalized company identity. Third-party payments must first be
+    explicitly linked in customer-center, not silently allocated to a stranger.
+    """
+    candidate_name = str(candidate.get("partner_name") or "").strip()
+    if not candidate_name:
+        return False
+    if resolution is not None:
+        return _candidate_matches_partner(candidate, resolution)
+    raw_key = normalize_company(raw_name)
+    candidate_key = normalize_company(candidate_name)
+    return bool(raw_key and candidate_key and raw_key == candidate_key)
+
+
+def verified_candidate_for_transaction(
+    db: Session,
+    row: BankTransaction,
+    direction: str,
+    candidate: dict,
+    resolver: BankPartnerResolver | None = None,
+) -> bool:
+    resolver = resolver or BankPartnerResolver(db)
+    raw_name, account = _counterparty(row, direction)
+    resolution = resolver.resolve(raw_name, account)
+    return bank_party_matches_candidate(raw_name, candidate, resolution)
+
+
 def enrich_reconciliation_dashboard(db: Session, result: dict) -> dict:
-    """把客户简称/人工客户映射注入银行建议，并让人工客户映射参与候选排序。"""
+    """客户身份是候选准入门槛：金额、账期、摘要相近不能跨主体推荐。"""
     suggestions = list(result.get("suggestions") or [])
     if not suggestions:
         return result
@@ -230,51 +263,79 @@ def enrich_reconciliation_dashboard(db: Session, result: dict) -> dict:
             raw_name, raw_account = _counterparty(tx, direction)
         item["counterparty_raw_name"] = raw_name or None
         resolution = resolver.resolve(raw_name, raw_account)
-        if not resolution:
-            item.update(
-                {
-                    "partner_id": None,
-                    "partner_name": None,
-                    "partner_short_name": None,
-                    "partner_match_method": None,
-                    "partner_match_explicit": False,
-                }
+        candidates_before = list(item.get("candidates") or [])
+        candidates = [
+            candidate for candidate in candidates_before
+            if bank_party_matches_candidate(raw_name, candidate, resolution)
+        ]
+        if resolution:
+            item.update(resolution.payload())
+            label = resolution.short_name or resolution.partner_name
+            item["counterparty_name"] = (
+                f"{label} · {raw_name}"
+                if raw_name and normalize_party(label) != normalize_party(raw_name)
+                else label or raw_name
             )
+            if resolution.explicit or resolution.match_method == "bank_account":
+                for candidate in candidates:
+                    candidate["score"] = min(100.0, round(float(candidate.get("score") or 0) + 30.0, 2))
+                    reasons = list(candidate.get("reasons") or [])
+                    reason = f"客户匹配中心已确认：{label}"
+                    if reason not in reasons:
+                        reasons.append(reason)
+                    candidate["reasons"] = reasons
+                    candidate["confidence_level"] = (
+                        "high" if candidate["score"] >= 80 else "medium" if candidate["score"] >= 60 else "low"
+                    )
+        else:
+            item.update({
+                "partner_id": None,
+                "partner_name": None,
+                "partner_short_name": None,
+                "partner_match_method": None,
+                "partner_match_explicit": False,
+            })
+
+        if not candidates:
+            if candidates_before and not item.get("blocked_reason"):
+                item["blocked_reason"] = (
+                    f"银行对方户名「{raw_name or '未提供'}」与候选账单客户不同，已禁止跨客户推荐。"
+                    "如属真实代付或代收，请先在客户匹配中心建立明确关联。"
+                )
+            elif candidates_before:
+                item["blocked_reason"] = (
+                    f"银行对方户名「{raw_name or '未提供'}」尚未核实对应客户，"
+                    "请先在客户匹配中心确认，不得仅凭金额核销。"
+                )
+            item.update({
+                "candidates": [], "top_score": 0, "ambiguity_margin": 0,
+                "confidence_level": "none", "auto_ready": False,
+            })
             continue
 
-        item.update(resolution.payload())
-        label = resolution.short_name or resolution.partner_name
-        item["counterparty_name"] = f"{label} · {raw_name}" if raw_name and normalize_party(label) != normalize_party(raw_name) else (label or raw_name)
-
-        # 只有人工固定映射/银行账号唯一命中才额外改变推荐顺序；名称本来一致时原引擎已计分。
-        if resolution.explicit or resolution.match_method == "bank_account":
-            candidates = list(item.get("candidates") or [])
-            changed = False
-            for candidate in candidates:
-                if not _candidate_matches_partner(candidate, resolution):
-                    continue
-                candidate["score"] = min(100.0, round(float(candidate.get("score") or 0) + 30.0, 2))
-                reasons = list(candidate.get("reasons") or [])
-                reason = f"客户匹配中心已确认：{label}"
-                if reason not in reasons:
-                    reasons.append(reason)
-                candidate["reasons"] = reasons
-                candidate["confidence_level"] = "high" if candidate["score"] >= 80 else "medium" if candidate["score"] >= 60 else "low"
-                changed = True
-            if changed and candidates:
-                amount = float(item.get("amount") or 0)
-                candidates.sort(key=lambda row: (float(row.get("score") or 0), -abs(float(row.get("outstanding_amount") or 0) - amount)), reverse=True)
-                top = candidates[0]
-                second = candidates[1] if len(candidates) > 1 else None
-                margin = float(top.get("score") or 0) - float(second.get("score") or 0 if second else 0)
-                level = "high" if float(top.get("score") or 0) >= 80 and margin >= 10 else "medium" if float(top.get("score") or 0) >= 60 else "low"
-                item["candidates"] = candidates
-                item["top_score"] = float(top.get("score") or 0)
-                item["ambiguity_margin"] = round(margin, 2)
-                item["confidence_level"] = level
-                item["auto_ready"] = level == "high"
-                if level != "low":
-                    item["blocked_reason"] = None
+        amount = float(item.get("amount") or 0)
+        candidates.sort(
+            key=lambda candidate: (
+                float(candidate.get("score") or 0),
+                -abs(float(candidate.get("outstanding_amount") or 0) - amount),
+            ),
+            reverse=True,
+        )
+        top = candidates[0]
+        second = candidates[1] if len(candidates) > 1 else None
+        margin = float(top.get("score") or 0) - float(second.get("score") or 0) if second else float(top.get("score") or 0)
+        level = (
+            "high" if float(top.get("score") or 0) >= 80 and margin >= 10 else
+            "medium" if float(top.get("score") or 0) >= 60 else "low"
+        )
+        item.update({
+            "candidates": candidates,
+            "top_score": float(top.get("score") or 0),
+            "ambiguity_margin": round(margin, 2),
+            "confidence_level": level,
+            "auto_ready": level == "high",
+            "blocked_reason": None if level != "low" else "客户已核实，但账期/金额或候选区分度不足，请人工复核。",
+        })
 
     stats = result.setdefault("stats", {})
     stats["high_confidence"] = sum(1 for item in suggestions if item.get("confidence_level") == "high")

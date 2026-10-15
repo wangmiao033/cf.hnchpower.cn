@@ -30,6 +30,10 @@ from app.services.bank_auto_reconciliation import (
     _transaction_counterparty,
     transaction_direction,
 )
+from app.services.bank_partner_match import (
+    BankPartnerResolver,
+    verified_candidate_for_transaction,
+)
 from app.services.rd_bank_payment_aggregate import aggregate_rd_payments_for_ids, fill_payable_for_row
 from app.services.rd_prepayment import bank_funding_transaction_ids
 
@@ -172,6 +176,7 @@ def build_bill_match_suggestions(
     ).all()
 
     funded_ids = bank_funding_transaction_ids(db)
+    resolver = BankPartnerResolver(db)
     scored_rows: list[tuple[dict, BankTransaction, float, float]] = []
     for row, allocated_raw in rows:
         transaction_id = str(row.id)
@@ -184,6 +189,8 @@ def build_bill_match_suggestions(
             continue
         remaining = max(0.0, round(total - max(0.0, _num(allocated_raw)), 2))
         if remaining <= EPS:
+            continue
+        if not verified_candidate_for_transaction(db, row, direction, candidate, resolver):
             continue
         scored_candidate = _p2_candidate(row, direction, remaining, candidate)
         if scored_candidate is None:
@@ -274,6 +281,7 @@ def build_p2_dashboard(db: Session, limit: int = 500) -> dict:
         rows = [row for row in rows if str(row.id) not in funded_ids]
 
     pool = _candidate_pool(db)
+    resolver = BankPartnerResolver(db)
     suggestions: list[dict] = []
     for row in rows:
         matches = grouped.get(str(row.id), [])
@@ -288,6 +296,8 @@ def build_p2_dashboard(db: Session, limit: int = 500) -> dict:
             for candidate in pool.get(direction, []):
                 pair = (str(candidate.get("bill_type") or ""), str(candidate.get("bill_id") or ""))
                 if pair in existing_pairs:
+                    continue
+                if not verified_candidate_for_transaction(db, row, direction, candidate, resolver):
                     continue
                 item = _p2_candidate(row, direction, remaining, candidate)
                 if item is not None:
@@ -320,7 +330,7 @@ def build_p2_dashboard(db: Session, limit: int = 500) -> dict:
             "top_score": round(top_score, 2),
             "ambiguity_margin": round(margin, 2),
             "candidates": [{k: v for k, v in item.items() if k != "raw_bill_number"} for item in scored[:8]],
-            "blocked_reason": blocked or ("没有找到仍有未结余额的候选账单" if not top else None),
+            "blocked_reason": blocked or ("没有通过银行对方户名核验的未结账单；代付代收请先到客户匹配中心确认关联。" if not top else None),
         })
         if len(suggestions) >= limit:
             break
@@ -448,11 +458,26 @@ def allocate_transaction(db: Session, transaction_id: str, allocations: list[dic
 
     original_type = existing[0].original_transaction_type if existing else tx.type
     original_status = existing[0].original_transaction_status if existing else tx.status
-    created: list[BankReconciliationMatch] = []
+    # Validate ALL requested bill owners before writing a single receipt.
+    # Explicit third-party payments are supported after a human has linked the
+    # bank counterparty with the actual customer in customer-match center.
+    resolver = BankPartnerResolver(db)
+    verified_rows: list[tuple[str, str, float, object, dict]] = []
     for bill_type, bill_id, amount in normalized:
         row, bill = _specific_bill(db, direction, bill_type, bill_id)
         if amount > float(bill["outstanding_amount"]) + EPS:
             raise HTTPException(status_code=409, detail=f"{bill['bill_number']} 分配金额超过未结余额")
+        if not verified_candidate_for_transaction(db, tx, direction, bill, resolver):
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"银行对方户名与账单 {bill['bill_number']} 的合作方「{bill.get('partner_name') or '未填写'}」不一致，"
+                    "不得只凭金额核销。真实第三方代付/代收请先在客户匹配中心确认对应关系。"
+                ),
+            )
+        verified_rows.append((bill_type, bill_id, amount, row, bill))
+    created: list[BankReconciliationMatch] = []
+    for bill_type, bill_id, amount, row, bill in verified_rows:
         generated_receipt_id: str | None = None
         if direction == "collection":
             generated_receipt_id = str(uuid4())
