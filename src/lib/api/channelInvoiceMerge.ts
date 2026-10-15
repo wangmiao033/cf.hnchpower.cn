@@ -15,6 +15,8 @@ export type IssuedChannelInvoiceMerge = {
   invoice_amount: number
   tax_amount: number
   amount_with_tax: number
+  source_file_proof?: string | null
+  existing_invoice_id?: string | null
   remark?: string | null
 }
 
@@ -24,6 +26,7 @@ export type ChannelInvoiceMergeResult = {
   allocated_amount: number
   allocated_bills: number
   bill_ids: string[]
+  linked_existing?: boolean
 }
 
 /** Register an already issued invoice; the backend creates the invoice + all links atomically. */

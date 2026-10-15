@@ -106,6 +106,7 @@ export type ElectronicInvoiceParseResponse = {
   confidence: number
   warnings: string[]
   existing_invoice_id?: string | null
+  source_file_proof?: string | null
   invoice: ElectronicInvoiceParsedFields
 }
 

@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from app.core.blob_storage import MAX_SERVER_UPLOAD_BYTES, private_blob_response, upload_private_blob
 from app.core.deps import get_db
 from app.models.invoice import InvoiceRecord
+from app.services.invoice_file_proof import sign_invoice_upload
 from app.services.electronic_invoice_parser import (
     SUPPORTED_ELECTRONIC_INVOICE_TYPES,
     extract_electronic_invoice_text,
@@ -95,6 +96,9 @@ async def parse_electronic_invoice_file(
         "confidence": confidence,
         "warnings": warnings,
         "existing_invoice_id": existing.id if existing is not None else None,
+        # Proof binds the private source uploaded by this endpoint, not an
+        # arbitrary URL provided later by the browser.
+        "source_file_proof": sign_invoice_upload(parsed) if existing is None else None,
         "invoice": parsed,
     }
 

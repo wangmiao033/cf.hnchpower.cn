@@ -352,3 +352,204 @@
   .channel-invoice-merge-totals { grid-template-columns: 1fr; }
   .channel-invoice-merge-grid { grid-template-columns: 1fr; }
 }
+
+/* Smart invoice linking: upload is the default action, accounting remains
+   conservative and the official-number fields are only shown when needed. */
+.channel-invoice-smart-upload { margin: 0 0 15px; }
+.channel-invoice-smart-upload__drop {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 15px;
+  border: 1px dashed #a8bfdb;
+  border-radius: 11px;
+  background: #f7fbff;
+  min-width: 0;
+}
+.channel-invoice-smart-upload__drop.is-dragging {
+  border-color: #3577c6;
+  background: #eaf4ff;
+}
+.channel-invoice-smart-upload__icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 40px;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: #e6efff;
+  color: #2c65a7;
+  font-weight: 900;
+  font-size: 20px;
+}
+.channel-invoice-smart-upload__drop > div:nth-child(2) {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.channel-invoice-smart-upload__drop strong { font-size: 14px; color: #254365; }
+.channel-invoice-smart-upload__drop small {
+  color: #71859e;
+  overflow-wrap: anywhere;
+  line-height: 1.5;
+}
+.channel-invoice-smart-upload__drop button,
+.channel-invoice-smart-extract__edit,
+.channel-invoice-smart-bills__recommend {
+  border: 1px solid #b3cee8;
+  border-radius: 8px;
+  background: #fff;
+  color: #265f9e;
+  padding: 9px 12px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 750;
+  flex-shrink: 0;
+}
+.channel-invoice-smart-upload__drop button:disabled { opacity: .6; cursor: not-allowed; }
+.channel-invoice-smart-upload__existing,
+.channel-invoice-smart-upload__warnings {
+  font-size: 11px;
+  line-height: 1.55;
+  margin: 7px 0 0;
+}
+.channel-invoice-smart-upload__existing { color: #287453; }
+.channel-invoice-smart-upload__warnings { color: #a46b26; }
+.channel-invoice-smart-extract {
+  margin: 14px 0 11px;
+  border: 1px solid #d8e4f0;
+  border-radius: 9px;
+  padding: 12px 14px;
+  background: #fafdff;
+}
+.channel-invoice-smart-extract__head {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.channel-invoice-smart-extract__head strong { font-size: 13px; color: #2f567b; }
+.channel-invoice-smart-extract__head span { font-size: 11px; color: #738aa5; }
+.channel-invoice-smart-extract__fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 13px;
+  font-size: 11px;
+  color: #61788e;
+}
+.channel-invoice-smart-extract__fields > span { min-width: 0; overflow-wrap: anywhere; }
+.channel-invoice-smart-extract__fields strong { color: #344f69; }
+.channel-invoice-smart-extract__gross {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #476881;
+}
+.channel-invoice-smart-extract__gross input {
+  padding: 8px 10px;
+  border: 1px solid #b9cfe8;
+  border-radius: 8px;
+  width: 130px;
+  min-height: 36px;
+  font-variant-numeric: tabular-nums;
+}
+.channel-invoice-smart-extract__edit {
+  margin-top: 8px;
+  padding: 6px 10px;
+}
+.channel-invoice-smart-extract__complete {
+  color: #61788a;
+  line-height: 1.6;
+  font-size: 12px;
+  margin: 8px 0 12px;
+}
+.channel-invoice-smart-bills {
+  border: 1px solid #e0e8ef;
+  border-radius: 10px;
+  padding: 12px;
+  margin: 10px 0 14px;
+}
+.channel-invoice-smart-bills__compare {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  background: #fafcff;
+  border: 1px solid #e4edf5;
+  border-radius: 8px;
+}
+.channel-invoice-smart-bills__compare > div {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 10px;
+}
+.channel-invoice-smart-bills__compare > div + div { border-left: 1px solid #e4edf5; }
+.channel-invoice-smart-bills__compare span { color: #718399; font-size: 11px; }
+.channel-invoice-smart-bills__compare strong {
+  color: #284e71;
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+}
+.channel-invoice-smart-bills__compare.is-match strong { color: #1b7954; }
+.channel-invoice-smart-bills__hint {
+  margin: 9px 0 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #8d652c;
+}
+.channel-invoice-smart-bills__hint.is-match { color: #287b55; }
+.channel-invoice-smart-bills__recommend {
+  margin-top: 10px;
+  background: #eaf8f0;
+  border-color: #b9dfcb;
+  color: #17764a;
+}
+.channel-invoice-smart-bills__candidates {
+  margin-top: 10px;
+  border-top: 1px solid #e5edf5;
+  padding-top: 10px;
+}
+.channel-invoice-smart-bills__candidates summary {
+  font-weight: 750;
+  color: #3d5e7e;
+  cursor: pointer;
+}
+.channel-invoice-smart-bills__list {
+  display: grid;
+  gap: 5px;
+  max-height: 165px;
+  overflow-y: auto;
+  padding: 7px 0;
+}
+.channel-invoice-smart-bills__list label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px;
+  cursor: pointer;
+  border-radius: 7px;
+  background: #f7fafc;
+}
+.channel-invoice-smart-bills__list label > span {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.channel-invoice-smart-bills__list strong { font-variant-numeric: tabular-nums; color: #496a87; }
+.channel-invoice-smart-bills__candidates small { font-size: 11px; color: #8593a4; }
+@media (max-width: 640px) {
+  .channel-invoice-smart-upload__drop { flex-wrap: wrap; }
+  .channel-invoice-smart-upload__drop button { margin-left: auto; }
+  .channel-invoice-smart-extract__fields { grid-template-columns: 1fr; }
+  .channel-invoice-smart-bills__compare { grid-template-columns: 1fr; }
+  .channel-invoice-smart-bills__compare > div + div {
+    border-left: none;
+    border-top: 1px solid #e4edf5;
+  }
+}
