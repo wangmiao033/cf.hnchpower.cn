@@ -38,6 +38,7 @@ import '@/components/ChannelBilling.css'
 import './ChannelSettlementRule.css'
 import LineItemsTable from '@/components/shared/LineItemsTable.jsx'
 import PartnerPicker, { findExactPartner } from '@/components/shared/PartnerPicker.jsx'
+import ChannelContractIssueEditor from '@/components/channel/ChannelContractIssueEditor.jsx'
 
 function formatMoney(amount) {
   const value = Number(amount || 0)
@@ -201,6 +202,7 @@ function ChannelBillingForm({
   const [contractRuleRevision, setContractRuleRevision] = useState(0)
   const [lastContractRuleKey, setLastContractRuleKey] = useState('')
   const [contractOverrideReason, setContractOverrideReason] = useState('')
+  const [contractIssueTarget, setContractIssueTarget] = useState(null)
   const [differenceReviewStatus, setDifferenceReviewStatus] = useState('pending')
   const [differenceReviewReason, setDifferenceReviewReason] = useState('')
   const [differenceNoteWritten, setDifferenceNoteWritten] = useState(false)
@@ -794,6 +796,11 @@ function ChannelBillingForm({
                     {' · 通道费：'}{item.recommended?.channel_fee_rate == null ? '未填写' : `${item.recommended.channel_fee_rate}%`}
                     {' · 授权期：'}{item.match.authorization_start || '未注明'} 至 {item.match.authorization_end || '未注明'}
                   </small> : null}
+                  {item.match?.contract_id && item.match?.access_item_id ? (
+                    <div><button type="button" className="channel-contract-rule-issue__action" onClick={() => setContractIssueTarget(item)}>
+                      本页核对合同
+                    </button></div>
+                  ) : null}
                 </li>
               ))}
             </ul>
@@ -1007,6 +1014,19 @@ function ChannelBillingForm({
           <div><span>允许误差</span><strong>±{formatMoney(header.validationTolerance)}</strong></div>
         </div>
       </div>
+      {contractIssueTarget ? (
+        <ChannelContractIssueEditor
+          issue={contractIssueTarget}
+          partnerName={header.partnerName || header.channelName}
+          onClose={() => setContractIssueTarget(null)}
+          onSaved={async () => {
+            // Do not replace form rows or amount fields; only refresh the
+            // existing contract-first recommendation after the verified write.
+            setLastContractRuleKey('')
+            setContractRuleRevision((v) => v + 1)
+          }}
+        />
+      ) : null}
     </form>
   )
 }

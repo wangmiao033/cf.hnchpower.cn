@@ -19,6 +19,7 @@ import {
   listContractAccessTerms,
   upsertContractAccessTerms
 } from '@/lib/api/contractTerms.ts'
+import { fullContractAccessUpdate } from '@/domain/channel/channelContractInlineReview.js'
 import './ChannelSmartEntryBar.css'
 
 const textKey = normalizeInlineKey
@@ -554,11 +555,14 @@ export default function ChannelSmartEntryBar({
     if (!ruleMatch?.contract?.id || !ruleMatch?.accessItem?.id) return
     setRuleSaving(true)
     try {
-      await updateContractAccessItem(String(ruleMatch.contract.id), String(ruleMatch.accessItem.id), {
-        product_name: ruleMatch.accessItem.product_name || ruleMatch.gameName,
-        share_rate: nullableValue(ruleShare),
-        channel_fee_rate: nullableValue(ruleFee)
-      })
+      await updateContractAccessItem(
+        String(ruleMatch.contract.id),
+        String(ruleMatch.accessItem.id),
+        fullContractAccessUpdate(ruleMatch.accessItem, {
+          share_rate: nullableValue(ruleShare),
+          channel_fee_rate: nullableValue(ruleFee)
+        })
+      )
       await upsertContractAccessTerms(String(ruleMatch.accessItem.id), {
         contract_id: String(ruleMatch.contract.id),
         currency: 'CNY',
