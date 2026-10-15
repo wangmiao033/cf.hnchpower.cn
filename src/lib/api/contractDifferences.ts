@@ -33,6 +33,16 @@ export type ContractDifferenceCase = {
   description: string
   owner: string
   evidence: string[]
+  // Server includes the audited contract field checks for rate-only differences.
+  source_snapshot?: {
+    checks?: Array<{
+      key?: string
+      label?: string
+      status?: string
+      bill_value?: unknown
+      contract_value?: unknown
+    }>
+  } | null
   created_by: string
   created_at: string | null
   updated_by: string
