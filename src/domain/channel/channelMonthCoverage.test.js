@@ -93,3 +93,60 @@ describe('channel ledger missing-month audit', () => {
     expect(bamen.cells.find((cell) => cell.month === '2026-07').count).toBe(2)
   })
 })
+
+
+describe('explicit customer-linked channel group in month coverage', () => {
+  const legalA='武汉曦晨互娱网络科技有限公司'
+  const legalB='武汉杨桃网络科技有限公司'
+  const partners=[
+    {id:'audit-a',name:legalA,shortName:'曦晨互娱',channelAuditGroup:'武汉瓜子（巡检组）'},
+    {id:'audit-b',name:legalB,shortName:'武汉瓜子',channelAuditGroup:'武汉瓜子（巡检组）'},
+    {id:'unrelated',name:'厦门游戏之家科技有限公司',shortName:'游戏之家',channelAuditGroup:''}
+  ]
+  const records=[
+    {...bill('2026-04',{channel:'曦晨互娱渠道'}),partnerName:legalA},
+    {...bill('2026-05',{channel:'武汉瓜子'}),partnerName:legalB},
+    {...bill('2026-06',{channel:'武汉瓜子'}),partnerName:legalB},
+    {...bill('2026-07',{channel:'曦晨互娱渠道'}),partnerName:legalA},
+  ]
+  it('without mapping, two legal entities stay separate; with mapping, months become continuous',()=>{
+    const before=auditChannelBillMonths(records,{now})
+    expect(before.coveredChannelCount).toBe(2)
+    expect(before.gapMonthCount).toBeGreaterThan(0)
+    const after=auditChannelBillMonths(records,{now,partners})
+    expect(after.coveredChannelCount).toBe(1)
+    expect(after.matchingChannelCount).toBe(1)
+    expect(after.channels[0].isGroup).toBe(true)
+    expect(after.channels[0].memberCompanies).toEqual([legalA,legalB])
+    expect(after.channels[0].gaps).toEqual([])
+    expect(after.channels[0].covered).toBe(4)
+    expect(after.channels[0].cells.find(c=>c.month==='2026-06')).toMatchObject({
+      count:1,kind:'recorded',sources:[legalB]
+    })
+    expect(after.channels[0].trailing).toEqual(['2026-08','2026-09'])
+  })
+  it('searching a member company or selected channel scans the entire linked group history',()=>{
+    for(const query of [legalA,legalB,'曦晨','杨桃','武汉瓜子']) {
+      const result=auditChannelBillMonths(records,{now,partners,keyword:query})
+      expect(result.coveredChannelCount,query).toBe(1)
+      expect(result.channels[0].covered,query).toBe(4)
+    }
+    const filtered=auditChannelBillMonths(records,{now,partners,channelFilter:'曦晨互娱渠道'})
+    expect(filtered.channels[0].covered).toBe(4)
+    const local=auditChannelBillMonths(records,{now,partners,localChannelSearch:'武汉瓜子'})
+    expect(local.channels[0].covered).toBe(4)
+  })
+  it('unrelated same-month customer remains independent and is not auto-merged by game/brand',()=>{
+    const unrelated={...bill('2026-06',{channel:'游戏之家'}),partnerName:'厦门游戏之家科技有限公司'}
+    const after=auditChannelBillMonths([...records,unrelated],{now,partners})
+    expect(after.coveredChannelCount).toBe(2)
+    expect(after.channels.find(c=>c.name==='游戏之家')?.isGroup).toBe(false)
+  })
+  it('cancelled member bills do not fill a missing month, and clearing grouping is reversible',()=>{
+    const cancelled=records.map(r=>r.settlementMonth==='2026-06'?{...r,status:'cancelled'}:r)
+    const result=auditChannelBillMonths(cancelled,{now,partners})
+    expect(result.channels[0].gaps).toEqual(['2026-06'])
+    const unlinked=partners.map(p=>({...p,channelAuditGroup:''}))
+    expect(auditChannelBillMonths(records,{now,partners:unlinked}).coveredChannelCount).toBe(2)
+  })
+})
