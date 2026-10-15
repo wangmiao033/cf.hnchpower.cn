@@ -28,14 +28,15 @@ export function useBillFormSafety({
   view,
   recordId = '',
   initialRecord = null,
+  draftScope = '',
   normalize,
   isMeaningful,
   setNavigationBlocker,
   clearNavigationBlocker
 }) {
   const draftKey = useMemo(
-    () => billDraftKey(type, mode, recordId),
-    [type, mode, recordId]
+    () => billDraftKey(type, mode, recordId, draftScope),
+    [type, mode, recordId, draftScope]
   )
   const baseVersion = useMemo(
     () => (initialRecord ? JSON.stringify({

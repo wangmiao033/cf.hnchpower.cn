@@ -173,6 +173,9 @@ function App() {
   const [reconReturnView, setReconReturnView] = useState(VIEWS.RECON_RD)
   const [channelEditRecordId, setChannelEditRecordId] = useState(null)
   const [channelReturnView, setChannelReturnView] = useState(VIEWS.RECON_CHANNEL)
+  // Only the ledger's explicit "create for this channel" action sets this.
+  // Generic navigation to the create page always clears the selection.
+  const [channelCreatePrefill, setChannelCreatePrefill] = useState(null)
   const [invoiceEditId, setInvoiceEditId] = useState(null)
   const [bill360Targets, setBill360Targets] = useState([])
   const [reconDataActivated, setReconDataActivated] = useState(false)
@@ -302,13 +305,18 @@ function App() {
     return confirmed
   }, [])
 
-  const openView = useCallback((view) => {
+  const openView = useCallback((view, options = null) => {
     const nextView = view || VIEWS.DASHBOARD
     if (!canOpenView(can, nextView)) {
       showToast('当前账号没有访问该模块的权限', 'error')
       return false
     }
     if (!confirmLeaveCurrentView(nextView)) return false
+    // A channel can be trusted only after the list resolved an exact linked
+    // customer. Never retain a stale prior channel for a generic new bill.
+    if (nextView === VIEWS.CHANNEL_RECON_CREATE) {
+      setChannelCreatePrefill(options?.channelCreatePrefill || null)
+    }
     const tabView = getTabView(nextView)
     startTransition(() => {
       if (tabView !== VIEWS.DASHBOARD && VALID_TAB_VIEWS.has(tabView)) {
@@ -321,6 +329,11 @@ function App() {
 
   const setActiveViewRaw = openView
   const navigate = openView
+
+  const openChannelCreate = useCallback(
+    (prefill = null) => openView(VIEWS.CHANNEL_RECON_CREATE, { channelCreatePrefill: prefill }),
+    [openView]
+  )
 
   const closeTab = useCallback((view) => {
     const remainingTabs = openTabs.filter((tab) => tab !== view)
@@ -422,6 +435,7 @@ function App() {
     setNavigationBlocker, clearNavigationBlocker,
     reconEditRecordId, reconReturnView, openReconciliationEdit,
     channelEditRecordId, channelReturnView, openChannelReconciliationEdit,
+    channelCreatePrefill, openChannelCreate,
     openBill360, prefetchBill360, invoiceEditId, openInvoiceEdit, navigateBankPaymentForReconciliation
   }
 

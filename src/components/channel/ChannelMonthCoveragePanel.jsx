@@ -220,7 +220,7 @@ export default function ChannelMonthCoveragePanel({
             <p><strong>标识：</strong>绿色“已录”可点击查看账单（含归档）· 断档 = 前后有账单但本月缺失 · 未出 = 最后一张之后暂无记录。仅供核查，不代表一定有流水。</p>
             <div>
               <span>已归档计入 · 已作废不计 · 根据已加载账单统计</span>
-              <button type="button" onClick={() => onCreateBill?.()}>新增渠道账单</button>
+              <button type="button" onClick={() => onCreateBill?.(listed.length === 1 ? listed[0].name : focusChannel)}>新增渠道账单</button>
             </div>
           </div>
         </div>
