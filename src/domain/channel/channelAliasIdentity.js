@@ -1,3 +1,4 @@
+import { normalizeCustomerSearch } from '@/domain/reconciliation/customerBillSearchIndex.js'
 /**
  * Presentation-only repair for a legacy combined channel label.
  *
@@ -69,7 +70,7 @@ export function channelSearchAliasTerms(query) {
   return needle && CHANNEL_SEARCH_KEYS.has(needle) ? [...CHANNEL_SEARCH_VARIANTS] : []
 }
 
-export function channelLedgerMatchesSearch(row, query, otherFields = []) {
+export function channelLedgerMatchesSearch(row, query, otherFields = [], customerFields = []) {
   const needle = key(query)
   if (!needle) return true
   const fields = [
@@ -78,6 +79,12 @@ export function channelLedgerMatchesSearch(row, query, otherFields = []) {
     row?.gameName, ...(otherFields || [])
   ].map(key).filter(Boolean)
   if (fields.some(field => field.includes(needle))) return true
+
+  // Customer-library metadata only applies to an EXACT linked company or
+  // unique full nickname; it is never an unqualified global brand synonym.
+  if (customerFields.some(field =>
+    normalizeCustomerSearch(field).includes(normalizeCustomerSearch(query))
+  )) return true
 
   const synonyms = channelSearchAliasTerms(query).map(key)
   if (!synonyms.length) return false
