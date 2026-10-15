@@ -37,6 +37,24 @@ function dateTime(value) {
 function directionText(item) {
   return item.variance_direction === 'under' ? '少结' : item.variance_direction === 'over' ? '多结' : '差异'
 }
+function caseIssueTitle(item) {
+  const difference = Number(item?.difference_amount ?? item?.variance_abs)
+  if (Number.isFinite(difference) && Math.round(Math.abs(difference) * 100) === 0) {
+    return '金额一致 · 合同条款待核对'
+  }
+  return directionText(item) + ' ' + money(item.variance_abs)
+}
+
+function failedCaseChecks(item) {
+  const checks = item?.source_snapshot?.checks
+  return Array.isArray(checks)
+    ? checks.filter((check) => check?.status === 'fail' && check.key !== 'contract_standard_settlement').slice(0, 3)
+    : []
+}
+
+function displayFieldValue(value) {
+  return value === undefined || value === null || value === '' ? '未填写' : String(value)
+}
 
 function isSpecialSettlement(item) {
   return item?.handling_type === 'accept_difference' && item?.reason_type === SPECIAL_SETTLEMENT_REASON
@@ -324,10 +342,15 @@ export default function ContractDifferenceActionPanel({
               <div className="contract-difference-card__top">
                 <div>
                   <span>{item.game_name || '账单明细'} · {item.settlement_cycle || '-'}</span>
-                  <strong>{directionText(item)} {money(item.variance_abs)}</strong>
+                  <strong>{caseIssueTitle(item)}</strong>
                   <small>
                     合同应结 {money(item.expected_amount)} · 账单实际 {money(item.actual_amount)}
                   </small>
+                  {failedCaseChecks(item).map((check, index) => (
+                    <small key={(check.key || 'field') + '-' + index}>
+                      {check.label || check.key || '合同条款'}：账单 {displayFieldValue(check.bill_value)} / 合同 {displayFieldValue(check.contract_value)}
+                    </small>
+                  ))}
                 </div>
                 <div className="contract-difference-card__status">
                   <em>{isHistoricalDuplicate ? '重复历史 · 只读' : STATUS_LABELS[item.status] || item.status}</em>
