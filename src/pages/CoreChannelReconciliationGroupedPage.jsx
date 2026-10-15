@@ -15,6 +15,7 @@ import ChannelReceiptDrawer from '@/components/channel/ChannelReceiptDrawer.jsx'
 import ChannelFlatLedger from '@/components/channel/ChannelFlatLedger.jsx'
 import ChannelInvoiceMergeDialog from '@/components/channel/ChannelInvoiceMergeDialog.jsx'
 import { matchesChannelLedgerFilters, ledgerBillGames, sortChannelLedgerRows } from '@/domain/channel/channelFlatLedgerFilters.js'
+import { buildCustomerBillSearchIndex } from '@/domain/reconciliation/customerBillSearchIndex.js'
 import './ChannelLedgerView.css'
 import ChannelCumulativeLedgerPanel from '@/components/channel/ChannelCumulativeLedgerPanel.jsx'
 import { cumulativeRowCondition } from '@/domain/channel/channelCumulativeLedgerSummary.js'
@@ -335,9 +336,16 @@ function CoreChannelReconciliationGroupedPage() {
   }
   const inspectingCurrentGap = inspectedGap && inspectedGap.month === month && inspectedGap.channelName === channel
 
+  const customerSearchIndex = useMemo(
+    () => buildCustomerBillSearchIndex(settings.partners || []),
+    [settings.partners]
+  )
   const scopedRows = useMemo(() => (recon.channelRecords || []).filter(row =>
-    matchesChannelLedgerFilters(row, { month, fromMonth, toMonth, channel, game: gameQuery, status, query })
-  ), [recon.channelRecords, month, fromMonth, toMonth, channel, gameQuery, status, query])
+    matchesChannelLedgerFilters(row, {
+      month, fromMonth, toMonth, channel, game: gameQuery, status, query,
+      customerIndex: customerSearchIndex
+    })
+  ), [recon.channelRecords, customerSearchIndex, month, fromMonth, toMonth, channel, gameQuery, status, query])
 
   const trashRows = useMemo(() => scopedRows.filter(isCancelledRow), [scopedRows])
   const archivedRows = useMemo(
