@@ -38,7 +38,7 @@ export default function BankMatchRow({ item, selectedKey, expanded, busy, canMan
               </select>
             </label>
           ) : <span className="bank-match-single-bill">唯一候选 · {candidate.bill_number}</span>}
-        </> : <div className="bank-match-no-candidate"><strong>未匹配到同一客户的账单</strong><small>请先核对银行对方户名及客户库关系</small></div>
+        </> : <div className="bank-match-no-candidate"><strong>未匹配到同一客户的账单</strong><small>请先核对银行对方户名及客户库关系</small></div>}
       </td>
       <td>
         {candidate ? <>
