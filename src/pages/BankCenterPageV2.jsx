@@ -198,6 +198,7 @@ export default function BankCenterPageV2() {
   const [queueAppliedSearch, setQueueAppliedSearch] = useState('')
   const [queueDirection, setQueueDirection] = useState('all')
   const [queueFilter, setQueueFilter] = useState('all')
+  const [queueAdvanced, setQueueAdvanced] = useState(false)
   const [queueRangeMode, setQueueRangeMode] = useState('all')
   const [queueDateFrom, setQueueDateFrom] = useState('')
   const [queueDateTo, setQueueDateTo] = useState('')
@@ -529,7 +530,7 @@ export default function BankCenterPageV2() {
         <div>
           <span className="bank-v2-eyebrow">BANK RECONCILIATION CENTER</span>
           <h1>银行中心</h1>
-          <p>围绕“原始流水 → 自动匹配 → 人工复核 → 多对多核销 → 账单资金闭环”处理日常银行业务。</p>
+          <p>先核对银行对方户名与账单客户，再复核金额和账期；不同客户不自动推荐核销。</p>
           {primaryAccount ? (
             <div className="bank-v2-account-note">
               <b>{primaryAccount.source_bank || 'BANK'}</b>
@@ -565,18 +566,26 @@ export default function BankCenterPageV2() {
                 <span>搜索流水</span>
                 <div><i>⌕</i><input value={queueSearch} onChange={(event) => setQueueSearch(event.target.value)} placeholder="对方单位 / 摘要 / 用途 / 附言 / 流水号" /></div>
               </label>
-              <label className="bank-v2-date-field">
-                <span>交易日期</span>
-                <div>
-                  <input type="date" value={queueDateFrom} onChange={(event) => { setQueueDateFrom(event.target.value); setQueueRangeMode('custom') }} />
-                  <b>至</b>
-                  <input type="date" value={queueDateTo} onChange={(event) => { setQueueDateTo(event.target.value); setQueueRangeMode('custom') }} />
-                </div>
-              </label>
-              <label className="bank-v2-select-field"><span>收支方向</span><select value={queueDirection} onChange={(event) => setQueueDirection(event.target.value)}><option value="all">全部方向</option><option value="collection">收入</option><option value="payment">支出</option><option value="unknown">待判断</option></select></label>
-              <label className="bank-v2-select-field"><span>匹配状态</span><select value={queueFilter} onChange={(event) => setQueueFilter(event.target.value)}><option value="all">全部状态</option><option value="high">高置信</option><option value="review">需人工确认</option><option value="unmatched">未匹配 / 低置信</option></select></label>
+              <button type="button" className="bank-v2-advanced-toggle" aria-expanded={queueAdvanced} aria-controls="bank-v2-advanced-filters"
+                onClick={() => setQueueAdvanced(value => !value)}>
+                {queueAdvanced ? '收起筛选' : '高级筛选'}{queueDirection !== 'all' || queueFilter !== 'all' || queueRangeMode === 'custom' ? ' · 已筛选' : ''}
+              </button>
               <button type="button" className="bank-v2-reset" onClick={resetQueueFilters}>重置</button>
             </div>
+            {queueAdvanced ? (
+              <div className="bank-v2-advanced" id="bank-v2-advanced-filters">
+                <label className="bank-v2-date-field">
+                  <span>自定义交易日期</span>
+                  <div>
+                    <input type="date" value={queueDateFrom} onChange={(event) => { setQueueDateFrom(event.target.value); setQueueRangeMode('custom') }} />
+                    <b>至</b>
+                    <input type="date" value={queueDateTo} onChange={(event) => { setQueueDateTo(event.target.value); setQueueRangeMode('custom') }} />
+                  </div>
+                </label>
+                <label className="bank-v2-select-field"><span>收支方向</span><select value={queueDirection} onChange={(event) => setQueueDirection(event.target.value)}><option value="all">全部方向</option><option value="collection">收入</option><option value="payment">支出</option><option value="unknown">待判断</option></select></label>
+                <label className="bank-v2-select-field"><span>匹配状态</span><select value={queueFilter} onChange={(event) => setQueueFilter(event.target.value)}><option value="all">全部状态</option><option value="high">高置信</option><option value="review">需人工确认</option><option value="unmatched">未匹配 / 低置信</option></select></label>
+              </div>
+            ) : null}
             <div className="bank-v2-presets">
               <span>快捷日期</span>
               {[['all', '全部'], ['7d', '近7天'], ['this-month', '本月'], ['last-month', '上月']].map(([key, label]) => (
@@ -590,7 +599,7 @@ export default function BankCenterPageV2() {
 
           <section className="bank-v2-metrics">
             <MetricCard icon="核" label="待核销" count={queueMetrics.all.count} amount={queueMetrics.all.amount} active={queueFilter === 'all'} onClick={() => setQueueFilter('all')} hint="当前搜索与日期范围" />
-            <MetricCard icon="✓" label="高置信匹配" count={queueMetrics.high.count} amount={queueMetrics.high.amount} tone="high" active={queueFilter === 'high'} onClick={() => setQueueFilter('high')} hint="可优先批量核销" />
+            <MetricCard icon="✓" label="客户核实 · 高匹配" count={queueMetrics.high.count} amount={queueMetrics.high.amount} tone="high" active={queueFilter === 'high'} onClick={() => setQueueFilter('high')} hint="可优先批量核销" />
             <MetricCard icon="人" label="需人工确认" count={queueMetrics.review.count} amount={queueMetrics.review.amount} tone="review" active={queueFilter === 'review'} onClick={() => setQueueFilter('review')} hint="建议核对合同与账单" />
             <MetricCard icon="!" label="未匹配 / 低置信" count={queueMetrics.unmatched.count} amount={queueMetrics.unmatched.amount} tone="unmatched" active={queueFilter === 'unmatched'} onClick={() => setQueueFilter('unmatched')} hint="暂不自动处理" />
           </section>
@@ -599,7 +608,7 @@ export default function BankCenterPageV2() {
             <header className="bank-v2-card-head">
               <div>
                 <h2>待核销流水</h2>
-                <p>先核对单位与账期，再比较金额；展开对照可查看完整匹配依据。</p>
+                <p>只推荐身份能核实的账单；若有不同公司候选，请先在「客户匹配与专项处理」确认关系。</p>
               </div>
               <div className="bank-v2-card-actions">
                 <span>已筛选 <strong>{filteredQueue.length}</strong> / {suggestions.length} 笔</span>
