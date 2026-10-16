@@ -170,5 +170,37 @@ class V21ExactContractIdentityTests(unittest.TestCase):
                 self.assertFalse(self.jiuyou_result(**overrides)["auto_apply"])
 
 
+    def test_registry_generic_title_cannot_reuse_wrong_discount_contract(self):
+        candidate = self.candidate(
+            product_name="一起来修仙",
+            original_product_name="一起来修仙01折",
+            share_rate=90,
+        )
+        row = channel_rule_recommender.recommend_channel_rules(
+            "昆山爱趣网络科技有限公司", "爱趣",
+            [{"game_name": "一起来修仙", "input_game_name": "一起来修仙（0.05折）",
+              "settlement_cycle": "2026-05"}],
+            [candidate],
+        )["lines"][0]
+        self.assertFalse(row["auto_apply"])
+        self.assertIsNone(row["match"])
+
+    def test_registry_generic_title_keeps_named_same_discount_editions_separate(self):
+        candidate = self.candidate(
+            product_name="一起来修仙",
+            original_product_name="一起来修仙（0.05折普通版）",
+            share_rate=90,
+        )
+        row = channel_rule_recommender.recommend_channel_rules(
+            "昆山爱趣网络科技有限公司", "爱趣",
+            [{"game_name": "一起来修仙", "input_game_name": "一起来修仙（0.05折红包版）",
+              "settlement_cycle": "2026-05"}],
+            [candidate],
+        )["lines"][0]
+        self.assertFalse(row["auto_apply"])
+        self.assertIsNone(row["match"])
+
+
+
 if __name__ == "__main__":
     unittest.main()
