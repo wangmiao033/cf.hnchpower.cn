@@ -78,6 +78,45 @@ def _exact_identity_candidate(partner_name: str, game_name: str, candidate: dict
     return True
 
 
+def _trusted_channel_codes_from_partner_short_name(partner_short_name: Any) -> set[str]:
+    """Extract channel codes the linked customer label is allowed to alias.
+
+    Finance short names vary in punctuation but point at the same platform code:
+    - 巴掌(7723集团) -> 7723
+    - 巴掌(7723\\集网) / 巴掌(7723/集网) / 巴掌(7723集网) -> 7723
+
+    Edition-specific suffixes (iOS / Android / 另一…) are rejected so a
+    customer label never bridges an unlisted channel SKU.
+    """
+    label = unicodedata.normalize("NFKC", str(partner_short_name or "")).strip()
+    decorated = re.fullmatch(r"([^()]+)\(([^()]+)\)", label)
+    if not decorated:
+        return set()
+
+    trusted = {
+        _matcher.normalize_channel(label),
+        _matcher.normalize_channel(decorated.group(1)),
+    }
+    inner = decorated.group(2).strip()
+    # Legacy: 7723集团 / 7723平台 / 7723渠道
+    group_alias = re.fullmatch(r"(\d{3,8})(?:集团|平台|渠道)", inner)
+    if group_alias:
+        trusted.add(_matcher.normalize_channel(group_alias.group(1)))
+        return {item for item in trusted if item}
+
+    # Production short names like 7723\\集网 or 7723/集网 still mean platform 7723.
+    leading = re.fullmatch(r"(\d{3,8})([\s\\/|,、_\-]*集网)?", inner)
+    if leading:
+        trusted.add(_matcher.normalize_channel(leading.group(1)))
+        return {item for item in trusted if item}
+
+    # Digits + soft separators only (no edition words).
+    soft = re.fullmatch(r"(\d{3,8})([\s\\/|,、_\-]+)?", inner)
+    if soft and not re.search(r"(ios|android|另一|其他|版本)", inner, re.IGNORECASE):
+        trusted.add(_matcher.normalize_channel(soft.group(1)))
+    return {item for item in trusted if item}
+
+
 def _channel_compatible(bill_channel: Any, candidate_channel: Any, partner_short_name: Any = "") -> bool:
     bill_key = _matcher.normalize_channel(bill_channel)
     candidate_key = _matcher.normalize_channel(candidate_channel)
@@ -87,23 +126,11 @@ def _channel_compatible(bill_channel: Any, candidate_channel: Any, partner_short
         return True
 
     # The linked customer record is the *only* authority for display aliases:
-    # 巴掌(7723集团) is a customer label, while its own cooperation list can
-    # legitimately say 7723. This is not a cross-customer/group merger.
-    # Do not infer aliases from arbitrary contract names or bill text.
-    label = unicodedata.normalize("NFKC", str(partner_short_name or "")).strip()
-    decorated = re.fullmatch(r"([^()]+)\(([^()]+)\)", label)
-    if not decorated:
+    # 巴掌(7723集团) / 巴掌(7723\\集网) may legitimately list channel 7723.
+    # This is not a cross-customer/group merger.
+    trusted_names = _trusted_channel_codes_from_partner_short_name(partner_short_name)
+    if not trusted_names:
         return False
-    trusted_names = {
-        _matcher.normalize_channel(label),
-        _matcher.normalize_channel(decorated.group(1)),
-    }
-    # Numeric platform/group code explicitly stored inside a verified customer
-    # alias: 巴掌(7723集团) -> 7723. Never strip arbitrary bracketed version
-    # labels, platform OS editions, or digits found somewhere in the bill.
-    group_alias = re.fullmatch(r"(\d{3,8})(?:集团|平台|渠道)", decorated.group(2).strip())
-    if group_alias:
-        trusted_names.add(_matcher.normalize_channel(group_alias.group(1)))
     return bill_key in trusted_names and candidate_key in trusted_names
 
 
