@@ -280,6 +280,50 @@ class V21ExactContractIdentityTests(unittest.TestCase):
                 row = self.bazhang_line(candidates=[self.bazhang_candidate(**override)])
                 self.assertFalse(row["auto_apply"])
 
+    def test_7723_jinwang_short_name_aliases_to_numeric_channel(self):
+        """Production short name 巴掌(7723\\集网) must alias list channel 7723."""
+        for short in ("巴掌(7723\\集网)", "巴掌(7723/集网)", "巴掌(7723集网)"):
+            with self.subTest(short=short):
+                result = channel_rule_recommender.recommend_channel_rules(
+                    "厦门巴掌互动科技有限公司",
+                    short,
+                    [{"game_name": "一起来修仙(0.05折)", "settlement_cycle": "2026-06"}],
+                    [self.bazhang_candidate(partner_short_name=short, channel_name="7723")],
+                )["lines"][0]
+                self.assertTrue(result["auto_apply"], result["message"])
+                self.assertEqual(result["recommended"]["share_rate"], 30)
+                self.assertEqual(result["recommended"]["channel_fee_rate"], 5)
+                self.assertEqual(result["match"]["channel_name"], "7723")
+
+    def test_7723_jinwang_bill_matches_decorated_list_channel(self):
+        short = "巴掌(7723\\集网)"
+        result = channel_rule_recommender.recommend_channel_rules(
+            "厦门巴掌互动科技有限公司",
+            short,
+            [{"game_name": "一起来修仙005折", "settlement_cycle": "2026-01"}],
+            [self.bazhang_candidate(
+                partner_short_name=short,
+                channel_name=short,
+                product_name="一起来修仙005折",
+            )],
+        )["lines"][0]
+        self.assertTrue(result["auto_apply"], result["message"])
+        self.assertEqual(result["recommended"]["share_rate"], 30)
+        self.assertEqual(result["recommended"]["channel_fee_rate"], 5)
+
+    def test_7723_jinwang_keeps_unlisted_channel_blocked(self):
+        short = "巴掌(7723\\集网)"
+        for wrong in ("7724", "7723(iOS)", "7733"):
+            with self.subTest(channel=wrong):
+                result = channel_rule_recommender.recommend_channel_rules(
+                    "厦门巴掌互动科技有限公司",
+                    short,
+                    [{"game_name": "一起来修仙(0.05折)", "settlement_cycle": "2026-06"}],
+                    [self.bazhang_candidate(partner_short_name=short, channel_name=wrong)],
+                )["lines"][0]
+                self.assertFalse(result["auto_apply"])
+                self.assertIsNone(result["match"])
+
 
 if __name__ == "__main__":
     unittest.main()

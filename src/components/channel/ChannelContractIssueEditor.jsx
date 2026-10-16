@@ -263,12 +263,12 @@ export default function ChannelContractIssueEditor({ issue, partnerName, partner
         </div>
         <footer>
           <button type="button" disabled={saving} onClick={onClose}>取消</button>
-          {!issue.match && onUseExisting ? (
+          {onUseExisting ? (
             <button type="button" className="is-primary" disabled={!selected || loading || saving || !sameCommercialGameName(issue.game_name, selected.item.product_name)} onClick={() => void useExisting()}>
               {saving ? '正在核对…' : '使用已有清单重新匹配本行'}
             </button>
           ) : null}
-          <button type="button" className={!issue.match ? '' : 'is-primary'} disabled={!selected || loading || saving || !verified || evidence.trim().length < 6} onClick={() => void save()}>
+          <button type="button" disabled={!selected || loading || saving || !verified || evidence.trim().length < 6} onClick={() => void save()}>
             {saving ? '正在保存…' : issue.match ? '保存合同信息并重新匹配' : '确需修改原合同信息'}
           </button>
         </footer>

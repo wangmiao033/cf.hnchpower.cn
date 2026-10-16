@@ -161,6 +161,42 @@ function clearLineContractRule(row) {
   }
 }
 
+function recommendationFromAccessItem(item) {
+  const feeRaw = item?.channel_fee_rate
+  const shareRaw = item?.share_rate
+  const taxRaw = item?.invoice_tax_rate
+  const fee = feeRaw == null || String(feeRaw).trim() === '' ? null : Number(feeRaw)
+  const share = shareRaw == null || String(shareRaw).trim() === '' ? null : Number(shareRaw)
+  const tax = taxRaw == null || String(taxRaw).trim() === '' ? null : Number(taxRaw)
+  if (share == null || !Number.isFinite(share) || fee == null || !Number.isFinite(fee)) return null
+
+  let settlement_rule_code = 'custom'
+  let channel_fee_mode = 'none'
+  let channel_fee_rate = null
+  if (fee <= 0.01) {
+    settlement_rule_code = 'share_only'
+    channel_fee_mode = 'none'
+    channel_fee_rate = 0
+  } else if (Math.abs(fee - 5) <= 0.01) {
+    settlement_rule_code = 'five_percent_gateway_share'
+    channel_fee_mode = 'percent'
+    channel_fee_rate = Number(fee.toFixed(4))
+  } else {
+    settlement_rule_code = 'custom'
+    channel_fee_mode = 'percent'
+    channel_fee_rate = Number(fee.toFixed(4))
+  }
+  return {
+    settlement_rule_code,
+    channel_fee_mode,
+    channel_fee_rate,
+    tax_mode: 'none',
+    tax_rate: tax != null && Number.isFinite(tax) ? Number(tax.toFixed(4)) : 0,
+    share_rate: Number(share.toFixed(4)),
+    validation_tolerance: 0.05
+  }
+}
+
 function applyContractRecommendationToLine(row, recommendation) {
   if (!recommendation) return clearLineContractRule(row)
   return {
@@ -1052,10 +1088,12 @@ function ChannelBillingForm({
                 normalizeChannelSettlementCycle(row.settlementCycle) !== normalizeChannelSettlementCycle(contractIssueTarget.settlement_cycle)) {
               throw new Error('账单游戏或结算月份已经变化，请关闭窗口重新核对当前明细。')
             }
+            // Prefer the selected list channel when re-verifying so customer aliases
+            // like 巴掌(7723\集网) ↔ 7723 are evaluated against the chosen row.
             const response = await recommendChannelContractRules({
               partner_id: partnerId,
               partner_name: header.partnerName,
-              channel_name: header.channelName,
+              channel_name: String(item.channel_name || header.channelName || '').trim(),
               lines: [{
                 line_index: 0,
                 game_name: row.gameName,
@@ -1063,20 +1101,26 @@ function ChannelBillingForm({
               }]
             })
             const verified = (response.lines || []).find(candidate => Number(candidate.line_index) === 0)
-            if (!verified?.auto_apply || !verified.recommended) {
-              throw new Error(verified?.message || '服务器仍未认定该合同合作项有效；请在本窗口核对游戏、渠道、授权期和费率。')
-            }
-            const sameAccess = String(verified.match?.access_item_id || '') === String(item.id)
-            const sameFinancialRule = verified.rule_consensus &&
+            const sameAccess = String(verified?.match?.access_item_id || '') === String(item.id)
+            const sameFinancialRule = Boolean(verified?.recommended) &&
               sameNumber(verified.recommended.share_rate, item.share_rate) &&
               sameNumber(verified.recommended.channel_fee_rate, item.channel_fee_rate)
-            if (!sameAccess && !sameFinancialRule) {
-              throw new Error('所选清单与服务器核验的合作项不是同一条，且结算口径尚不能证明一致，已阻止错误套用。')
+            // User explicitly picked this cooperation item. Apply server recommendation
+            // when it points at the same item / same money fields; otherwise fall back
+            // to the selected item's structured share + channel fee (do not require auto_apply).
+            let recommended = null
+            if (verified?.recommended && (verified?.auto_apply || sameAccess || sameFinancialRule)) {
+              recommended = verified.recommended
+            } else {
+              recommended = recommendationFromAccessItem(item)
+            }
+            if (!recommended) {
+              throw new Error(verified?.message || '所选合作清单缺少分成或通道费，不能套用结算规则。')
             }
             setLines(current => current.map((line, rowIndex) => rowIndex === index &&
               line.gameName === row.gameName &&
               normalizeChannelSettlementCycle(line.settlementCycle) === normalizeChannelSettlementCycle(row.settlementCycle)
-                ? applyContractRecommendationToLine(line, verified.recommended)
+                ? applyContractRecommendationToLine(line, recommended)
                 : line))
             setLastContractRuleKey('')
             setContractRuleRevision(value => value + 1)
