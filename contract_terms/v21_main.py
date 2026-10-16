@@ -42,12 +42,12 @@ def _formatted_contract_game_key(value: Any) -> str:
     never collapse merely because their base title and discount are identical.
     """
     raw = normalize_registry_game(value)
-    raw = re.sub(r"[()（）\\[\\]【】]", "", raw)
+    raw = re.sub(r"[()（）\[\]【】]", "", raw)
 
     def normalize_discount(match: re.Match) -> str:
         return _matcher.commercial_game_variant(match.group(0)) or match.group(0)
 
-    return re.sub(r"(?<!\\d)\\d+(?:\\.\\d+)?折", normalize_discount, raw)
+    return re.sub(r"(?<!\d)\d+(?:\.\d+)?折", normalize_discount, raw)
 
 
 def _exact_identity_candidate(partner_name: str, game_name: str, candidate: dict[str, Any]) -> bool:
@@ -102,23 +102,33 @@ def _direct_exact_rank(
     # suffixes, and retain commercial-SKU constraints on both enriched names.
     input_name = str(line.get("input_game_name") or game_name).strip()
     original_candidates = []
+    original_variant_conflict = False
     for candidate in candidates:
         original_name = candidate.get("original_product_name") or candidate.get("product_name")
         if _formatted_contract_game_key(input_name) != _formatted_contract_game_key(original_name):
             continue
+        restored = dict(candidate, product_name=original_name)
+        if not _channel._partner_matches(partner_name, restored):
+            continue
         variant = _matcher.commercial_game_variant(input_name)
         # A registry's broad canonical title may omit the discount even when the
         # original access item and input bill describe the same exact version.
-        # Only an explicitly conflicting canonical version is disqualifying.
+        # An explicitly conflicting canonical SKU must never replace that item.
         canonical_variants = (
             _matcher.commercial_game_variant(game_name),
             _matcher.commercial_game_variant(candidate.get("product_name")),
         )
         if any(value and value != variant for value in canonical_variants):
+            original_variant_conflict = True
             continue
-        restored = dict(candidate, product_name=original_name)
         if _exact_identity_candidate(partner_name, input_name, restored):
             original_candidates.append(restored)
+
+    # If the original bill and an existing contract cooperation item agree on
+    # the SKU, but the registry points at a different explicit discount SKU,
+    # do not fall back to the wrong canonical name and silently apply its rate.
+    if original_variant_conflict and not original_candidates:
+        return []
 
     identity_candidates = original_candidates or [
         candidate
