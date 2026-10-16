@@ -50,6 +50,15 @@ def _formatted_contract_game_key(value: Any) -> str:
     return re.sub(r"(?<!\d)\d+(?:\.\d+)?折", normalize_discount, raw)
 
 
+def _discount_game_prefix(value: Any) -> str:
+    """Comparable base name only when a discount token is explicitly present."""
+    raw = normalize_registry_game(value)
+    match = re.search(r"(?<!\d)\d+(?:\.\d+)?折", raw)
+    if not match:
+        return ""
+    return re.sub(r"[()（）\[\]【】]", "", raw[:match.start()])
+
+
 def _exact_identity_candidate(partner_name: str, game_name: str, candidate: dict[str, Any]) -> bool:
     if not _channel._partner_matches(partner_name, candidate):
         return False
@@ -108,10 +117,17 @@ def _direct_exact_rank(
     original_variant_conflict = False
     for candidate in candidates:
         original_name = candidate.get("original_product_name") or candidate.get("product_name")
-        if _formatted_contract_game_key(input_name) != _formatted_contract_game_key(original_name):
-            continue
         restored = dict(candidate, product_name=original_name)
         if not _channel._partner_matches(partner_name, restored):
+            continue
+        if _formatted_contract_game_key(input_name) != _formatted_contract_game_key(original_name):
+            # Never let the registry's generic canonical game silently promote a
+            # different discount or a different named sub-variant's contract.
+            # Explicit variants of the same base game require their own match.
+            input_prefix = _discount_game_prefix(input_name)
+            original_prefix = _discount_game_prefix(original_name)
+            if input_prefix and input_prefix == original_prefix:
+                original_variant_conflict = True
             continue
         variant = _matcher.commercial_game_variant(input_name)
         # A registry's broad canonical title may omit the discount even when the
