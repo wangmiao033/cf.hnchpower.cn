@@ -92,8 +92,8 @@ export default function ElectronicInvoiceQuickEntry({
   const handleFile = async (file) => {
     if (!file || uploading) return
     const lower = String(file.name || '').toLowerCase()
-    if (!['.pdf', '.ofd', '.xml'].some((suffix) => lower.endsWith(suffix))) {
-      showToast?.('请上传电子发票 PDF、OFD 或 XML 文件', 'error')
+    if (!['.ofd', '.xml'].some((suffix) => lower.endsWith(suffix))) {
+      showToast?.('请上传电子发票 OFD 或 XML 文件', 'error')
       return
     }
     setUploading(true)
@@ -176,7 +176,7 @@ export default function ElectronicInvoiceQuickEntry({
       <input
         ref={fileInputRef}
         type="file"
-        accept=".pdf,.ofd,.xml,application/pdf,application/xml"
+        accept=".ofd,.xml,application/xml"
         hidden
         onChange={(event) => void handleFile(event.target.files?.[0])}
       />
@@ -198,7 +198,7 @@ export default function ElectronicInvoiceQuickEntry({
         <span className="electronic-invoice-drop__icon">票</span>
         <span>
           <strong>{uploading ? '正在识别电子发票…' : form ? '重新上传电子发票' : '拖入电子发票，自动识别'}</strong>
-          <small>{form ? parseMeta?.fileName : '支持 PDF / OFD / XML · 单张 ≤ 4MB'}</small>
+          <small>{form ? parseMeta?.fileName : '支持 OFD / XML · 单张 ≤ 4MB'}</small>
         </span>
       </button>
 

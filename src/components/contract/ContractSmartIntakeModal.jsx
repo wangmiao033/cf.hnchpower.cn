@@ -201,9 +201,9 @@ export default function ContractSmartIntakeModal({ onClose, onSaved }) {
 
   const startScan = async (nextFile) => {
     if (!nextFile) return
-    const allowed = /\.(pdf|jpe?g|png|webp)$/i.test(nextFile.name)
+    const allowed = /\.(jpe?g|png|webp)$/i.test(nextFile.name)
     if (!allowed) {
-      showToast('智能录入支持 PDF、JPG、PNG、WEBP 文件', 'error')
+      showToast('智能录入支持 JPG、PNG、WEBP 图片 文件', 'error')
       return
     }
     if (nextFile.size > CONTRACT_SMART_SCAN_MAX_FILE_BYTES) {
@@ -330,7 +330,7 @@ export default function ContractSmartIntakeModal({ onClose, onSaved }) {
           <div>
             <span>AI CONTRACT INTAKE</span>
             <h2>上传合同，自动扫描填表</h2>
-            <p>支持扫描版 PDF 和图片；同时提取分成、CPA、账期、发票、退款和费用承担等结算条款。</p>
+            <p>支持 JPG、PNG、WEBP 合同图片；同时提取分成、CPA、账期、发票、退款和费用承担等结算条款。</p>
           </div>
           <button type="button" className="contract-ai-close" onClick={onClose} disabled={saving}>×</button>
         </header>
@@ -349,13 +349,13 @@ export default function ContractSmartIntakeModal({ onClose, onSaved }) {
           >
             <div className="contract-ai-upload-icon" aria-hidden="true">⇧</div>
             <h3>拖一份合同到这里</h3>
-            <p>PDF / JPG / PNG / WEBP · 最大 50MB</p>
+            <p>JPG / PNG / WEBP · 最大 50MB</p>
             <button type="button" onClick={() => inputRef.current?.click()}>选择合同文件</button>
             <small>超过单次识别限制时会自动按页分段，扫描件无需自己压缩。</small>
             <input
               ref={inputRef}
               type="file"
-              accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp"
+              accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
               hidden
               onChange={(event) => void startScan(event.target.files?.[0])}
             />
@@ -377,7 +377,7 @@ export default function ContractSmartIntakeModal({ onClose, onSaved }) {
                 {isImage ? <img src={previewUrl} alt="合同原件预览" /> : <iframe src={previewUrl} title="合同原件预览" />}
               </div>
               <div className="contract-ai-privacy">
-                原文件只在浏览器中预览；大 PDF 会生成分页识别副本。识别结果不会自动写库，点击“确认并保存”后才创建合同。
+                原文件只在浏览器中预览；大图片会生成压缩识别副本。识别结果不会自动写库，点击“确认并保存”后才创建合同。
               </div>
             </section>
 

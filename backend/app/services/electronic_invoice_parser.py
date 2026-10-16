@@ -1,4 +1,4 @@
-"""Parse text-bearing electronic VAT invoice files (PDF/OFD/XML)."""
+"""Parse text-bearing electronic VAT invoice files (OFD/XML)."""
 
 from __future__ import annotations
 
@@ -9,10 +9,8 @@ from typing import Any
 import xml.etree.ElementTree as ET
 import zipfile
 
-from pypdf import PdfReader
 
 SUPPORTED_ELECTRONIC_INVOICE_TYPES = {
-    ".pdf": "application/pdf",
     ".ofd": "application/ofd",
     ".xml": "application/xml",
 }
@@ -80,23 +78,11 @@ def _ofd_text(body: bytes) -> str:
     return "\n".join(texts)
 
 
-def _pdf_text(body: bytes) -> str:
-    reader = PdfReader(BytesIO(body))
-    parts: list[str] = []
-    for page in reader.pages[:10]:
-        value = page.extract_text() or ""
-        if value.strip():
-            parts.append(value)
-    return "\n".join(parts)
-
-
 def extract_electronic_invoice_text(file_name: str, body: bytes) -> tuple[str, str, str]:
     suffix = Path(file_name or "invoice").suffix.lower()
     content_type = SUPPORTED_ELECTRONIC_INVOICE_TYPES.get(suffix)
     if not content_type:
         raise ValueError("unsupported_file_type")
-    if suffix == ".pdf":
-        return _pdf_text(body), "pdf_text", content_type
     if suffix == ".ofd":
         return _ofd_text(body), "ofd_xml", content_type
     return _xml_text(body), "xml", content_type
