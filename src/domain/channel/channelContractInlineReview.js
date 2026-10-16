@@ -1,3 +1,26 @@
+
+/**
+ * Compare the actual commercial SKU, not just its base game title.
+ * 005折 / 0.05折 and optional brackets are formatting aliases only.
+ * 红包版, 普通版 and different discounts remain different financial products.
+ */
+export function comparableCommercialGameName(value) {
+  const raw = String(value ?? '').normalize('NFKC').trim().toLowerCase()
+    .replace(/[（）()\\[\\]【】\s]/g, '')
+  return raw.replace(/(?<!\d)\d+(?:\.\d+)?折/g, (token) => {
+    const numberToken = token.slice(0, -1)
+    const canonical = /^0\d{2,4}$/.test(numberToken)
+      ? Number('0.' + numberToken.slice(1))
+      : Number(numberToken)
+    return Number.isFinite(canonical) ? String(canonical) + '折' : token
+  })
+}
+
+export function sameCommercialGameName(left, right) {
+  const a = comparableCommercialGameName(left)
+  return Boolean(a && a === comparableCommercialGameName(right))
+}
+
 /**
  * Contract access items use a REPLACE-style PUT endpoint (not PATCH).
  * Copying only product_name/share_rate dates deletes every other field.
