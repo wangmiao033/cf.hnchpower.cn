@@ -202,5 +202,84 @@ class V21ExactContractIdentityTests(unittest.TestCase):
 
 
 
+    def bazhang_candidate(self, **overrides):
+        row = self.candidate(
+            partner_name="厦门巴掌互动科技有限公司",
+            partner_short_name="巴掌(7723集团)",
+            counterparty="厦门巴掌互动科技有限公司",
+            channel_name="7723",
+            product_name="一起来修仙(0.05折)",
+            authorization_start="2025-01-01",
+            authorization_end="2029-12-31",
+            share_rate=30,
+            channel_fee_rate=5,
+            invoice_tax_rate=None,
+        )
+        row.update(overrides)
+        return row
+
+    def bazhang_line(self, game="一起来修仙(0.05折)", candidates=None):
+        return channel_rule_recommender.recommend_channel_rules(
+            "厦门巴掌互动科技有限公司",
+            "巴掌(7723集团)",
+            [{"game_name": game, "settlement_cycle": "2026-06"}],
+            candidates if candidates is not None else [self.bazhang_candidate()],
+        )["lines"][0]
+
+    def test_7723_group_alias_applies_existing_exact_cooperation_item(self):
+        row = self.bazhang_line()
+        self.assertTrue(row["auto_apply"])
+        self.assertEqual(row["recommended"]["share_rate"], 30)
+        self.assertEqual(row["recommended"]["channel_fee_rate"], 5)
+        self.assertEqual(row["authorization_status"], "covered")
+        self.assertEqual(row["match"]["channel_name"], "7723")
+
+    def test_7723_group_alias_applies_compact_discount_and_red_packet_game(self):
+        candidates = [
+            self.bazhang_candidate(product_name="一起来修仙(0.05折)", access_item_id="1"),
+            self.bazhang_candidate(product_name="一起来修仙005折", access_item_id="6"),
+            self.bazhang_candidate(product_name="圣树唤歌(0.1折红包版)", access_item_id="2"),
+            self.bazhang_candidate(product_name="圣树唤歌(0.05折)", access_item_id="4"),
+        ]
+        for game in ("一起来修仙(0.05折)", "一起来修仙005折", "圣树唤歌(0.1折红包版)"):
+            with self.subTest(game=game):
+                row = self.bazhang_line(game, candidates)
+                self.assertTrue(row["auto_apply"], row["message"])
+                self.assertEqual(row["recommended"]["share_rate"], 30)
+                self.assertEqual(row["recommended"]["channel_fee_rate"], 5)
+
+    def test_numeric_group_alias_never_crosses_to_unlisted_channel(self):
+        for wrong_channel in ("7724", "7723(iOS)", "7733", "7723-另一个渠道"):
+            with self.subTest(channel=wrong_channel):
+                row = self.bazhang_line(candidates=[self.bazhang_candidate(channel_name=wrong_channel)])
+                self.assertFalse(row["auto_apply"])
+                self.assertIsNone(row["match"])
+
+    def test_7723_is_not_trusted_without_7723_group_in_selected_customer_label(self):
+        row = self.bazhang_line(candidates=[self.bazhang_candidate(partner_short_name="巴掌")])
+        self.assertFalse(row["auto_apply"])
+
+    def test_7723_group_alias_keeps_other_customers_and_versions_separate(self):
+        other_customer = self.bazhang_candidate(
+            partner_name="厦门另一家游戏科技有限公司",
+            partner_short_name="别家(7723集团)",
+            counterparty="厦门另一家游戏科技有限公司",
+        )
+        self.assertFalse(self.bazhang_line(candidates=[other_customer])["auto_apply"])
+        wrong_version = self.bazhang_candidate(product_name="一起来修仙(0.1折)")
+        self.assertFalse(self.bazhang_line(candidates=[wrong_version])["auto_apply"])
+
+    def test_7723_group_alias_still_honors_expiry_and_incomplete_financial_fields(self):
+        for override in (
+            {"authorization_end": "2026-05-31"},
+            {"share_rate": None},
+            {"channel_fee_rate": None},
+            {"access_status": "已作废"},
+        ):
+            with self.subTest(override=override):
+                row = self.bazhang_line(candidates=[self.bazhang_candidate(**override)])
+                self.assertFalse(row["auto_apply"])
+
+
 if __name__ == "__main__":
     unittest.main()
