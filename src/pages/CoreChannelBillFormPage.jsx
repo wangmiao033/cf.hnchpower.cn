@@ -1092,7 +1092,6 @@ function CoreChannelBillFormPage({ mode }) {
           onFormStateChange={safety.onFormStateChange}
           onError={(msg) => reportIssue(msg, { kind: 'form', title: '账单暂时无法保存' })}
           partners={settings?.partners || []}
-          onOpenContracts={() => setActiveView(VIEWS.CONTRACTS)}
           onAddPartner={async (name) => {
             const newPartner = {
               name,
