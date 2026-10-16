@@ -713,7 +713,8 @@ function ChannelBillingForm({
     }
 
     if (contractAwareMode && !targetedRuleLocked) {
-      const currentFingerprint = recommendationFingerprint(header.partnerName, header.channelName, lines)
+      // Save validation must use the same customer-scoped identity as the contract lookup.
+      const currentFingerprint = recommendationFingerprint(header.partnerName, header.channelName, lines, partnerId)
       if (contractRuleState.loading || contractRuleState.fingerprint !== currentFingerprint) {
         const msg = '合同清单正在按当前合作方、游戏和账期重新匹配，请完成本轮匹配后再保存。'
         onError?.(msg) ?? window.alert(msg); return
