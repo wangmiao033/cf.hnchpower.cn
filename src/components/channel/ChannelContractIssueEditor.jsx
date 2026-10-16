@@ -1,18 +1,23 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { listContracts, updateContractAccessItem } from '@/lib/api/contract.ts'
+import { listAllContracts, listContracts, updateContractAccessItem } from '@/lib/api/contract.ts'
 import { normalizeInlineKey } from '@/domain/channel/channelInlineResolution.js'
 import {
   accessDataModified,
   candidateKey,
   checkContractAuthorizationForMonth,
   fullContractAccessUpdate,
+  sameCommercialGameName,
   withContractReviewNote
 } from '@/domain/channel/channelContractInlineReview.js'
 import './ChannelContractIssueEditor.css'
 
 const normalize = (value) => normalizeInlineKey(value).replace(/[()（）\s]/g, '')
 const safeText = (value) => String(value ?? '').trim()
-const matchedPartner = (contract, partnerName) => {
+const matchedPartner = (contract, partnerName, partnerId = '') => {
+  // A linked legal entity is authoritative. Never expose or apply another
+  // customer's contract merely because two display names look similar.
+  if (partnerId && contract.partner_id && String(contract.partner_id) !== String(partnerId)) return false
+  if (partnerId && String(contract.partner_id || '') === String(partnerId)) return true
   const wanted = normalize(partnerName)
   if (!wanted) return false
   const names = [contract.partner_name, contract.partner_short_name, contract.counterparty]
@@ -30,12 +35,12 @@ function findEntry(rows, contractId, itemId) {
   return null
 }
 
-function availableChoices(rows, issue, partnerName) {
+function availableChoices(rows, issue, partnerName, partnerId) {
   const match = issue?.match || {}
   const baseGame = normalize(safeText(issue?.game_name).split(/[（(]/)[0])
   const all = (rows || []).flatMap(contract => (contract.access_items || []).map(item => ({ contract, item })))
   const similar = all.filter(({contract,item}) => {
-    if (!matchedPartner(contract, partnerName)) return false
+    if (!matchedPartner(contract, partnerName, partnerId)) return false
     const game = normalize(item.product_name)
     return Boolean(baseGame && game && (game.includes(baseGame) || baseGame.includes(game)))
   })
@@ -44,7 +49,7 @@ function availableChoices(rows, issue, partnerName) {
   return similar
 }
 
-export default function ChannelContractIssueEditor({ issue, partnerName, onClose, onSaved }) {
+export default function ChannelContractIssueEditor({ issue, partnerName, partnerId = '', onClose, onSaved, onUseExisting }) {
   const [choices, setChoices] = useState([])
   const [selectedKey, setSelectedKey] = useState('')
   const [fields, setFields] = useState({ product_name: '', channel_name: '', authorization_start: '', authorization_end: '' })
@@ -65,20 +70,27 @@ export default function ChannelContractIssueEditor({ issue, partnerName, onClose
     const load = async () => {
       const first = await listContracts({ q: partnerName, limit: 100, offset: 0 })
       let rows = first.items || []
+      // Search terms can differ from the linked legal company name. If the
+      // customer ID is known but the narrow search did not return its contract,
+      // fall back to the contract ledger without losing the current bill draft.
+      if (partnerId && !rows.some(record => String(record.partner_id || '') === String(partnerId))) {
+        const full = await listAllContracts()
+        rows = [...rows, ...full.items.filter(record => !rows.some(existing => String(existing.id) === String(record.id)))]
+      }
       let matched = findEntry(rows, issue.match?.contract_id, issue.match?.access_item_id)
       if (!matched && issue.match?.contract_name) {
         const second = await listContracts({ q: issue.match.contract_name, limit: 100, offset: 0 })
         rows = [...rows, ...(second.items || []).filter(x => !rows.some(existing => String(existing.id) === String(x.id)))]
       }
-      const available = availableChoices(rows, issue, partnerName)
+      const available = availableChoices(rows, issue, partnerName, partnerId)
       if (!active) return
       if (!available.length) {
-        setError('未能从合同库读取这条候选合作项，不能直接修改。请检查合同资料或重新匹配。')
+        setError('当前客户的已有合同没有可选的同名游戏清单。请核对合作游戏名称；当前账单内容未改变。')
         return
       }
       const current = available.find(({ contract,item }) => (
         String(contract.id) === String(issue.match?.contract_id) && String(item.id) === String(issue.match?.access_item_id)
-      )) || available[0]
+      )) || available.find(({ item }) => sameCommercialGameName(item.product_name, issue.game_name)) || available[0]
       setChoices(available)
       setSelectedKey(candidateKey(current.contract, current.item))
       setFields({
@@ -94,7 +106,7 @@ export default function ChannelContractIssueEditor({ issue, partnerName, onClose
       if (active) setLoading(false)
     })
     return () => { active = false }
-  }, [issue, partnerName])
+  }, [issue, partnerName, partnerId])
 
   const pickChoice = (key) => {
     const next = choices.find(({ contract,item }) => candidateKey(contract,item) === key)
@@ -109,6 +121,32 @@ export default function ChannelContractIssueEditor({ issue, partnerName, onClose
     setEvidence('')
     setVerified(false)
     setError('')
+  }
+
+  const useExisting = async () => {
+    if (!selected || saving || !onUseExisting) return
+    setError('')
+    setSaving(true)
+    try {
+      if (!sameCommercialGameName(issue.game_name, selected.item.product_name)) {
+        throw new Error('当前账单游戏与所选合同游戏不是同一个商业版本（折扣/红包版等必须相同），不能直接套用。请选正确的已有清单。')
+      }
+      checkContractAuthorizationForMonth(
+        issue.settlement_cycle, selected.item.authorization_start, selected.item.authorization_end
+      )
+      if (selected.item.share_rate == null || selected.item.channel_fee_rate == null) {
+        throw new Error('所选合作清单的分成或通道费未填写，不能套用默认财务规则。')
+      }
+      // The server recomputes and validates this existing access-item ID
+      // against the linked customer, channel, SKU, active month and conflicts.
+      // Neither the contract nor any historical bill is changed here.
+      await onUseExisting({ contract: selected.contract, item: selected.item })
+      onClose?.()
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : '核对已有合作清单失败')
+    } finally {
+      setSaving(false)
+    }
   }
 
   const save = async () => {
@@ -176,6 +214,12 @@ export default function ChannelContractIssueEditor({ issue, partnerName, onClose
           {loading ? <p role="status">正在读取合同合作项…</p> : null}
           {selected && !loading ? (
             <>
+              {!issue.match ? (
+                <div className="channel-contract-inline__tip">
+                  已找到当前客户录入过的合作游戏清单。请选择同一折扣和商业版本，点击“使用已有清单重新匹配”即可；
+                  不需要再次录入或修改原合同。只有真实合同信息有误时才使用下方修改功能。
+                </div>
+              ) : null}
               <div className="channel-contract-inline__grid">
                 <label className="is-wide"><span>候选合同与合作游戏</span>
                   <select value={selectedKey} disabled={saving} onChange={(e) => pickChoice(e.target.value)}>
@@ -193,7 +237,13 @@ export default function ChannelContractIssueEditor({ issue, partnerName, onClose
                 <label><span>授权开始</span><input type="date" value={fields.authorization_start} disabled={saving} aria-label="授权开始" onChange={(e) => setFields(v => ({ ...v, authorization_start: e.target.value }))} /></label>
                 <label><span>授权结束</span><input type="date" value={fields.authorization_end} disabled={saving} aria-label="授权结束" onChange={(e) => setFields(v => ({ ...v, authorization_end: e.target.value }))} /></label>
               </div>
+              {!sameCommercialGameName(issue.game_name, selected.item.product_name) ? (
+                <div role="status" className="channel-contract-inline__error">
+                  当前选择的合作游戏“{selected.item.product_name}”与账单游戏“{issue.game_name}”不是同一商业版本，不能自动带入。
+                </div>
+              ) : null}
               <div className="channel-contract-inline__readonly">
+                <span>合同渠道 <strong>{selected.item.channel_name || '未注明'}</strong></span>
                 <span>当前合同分成 <strong>{selected.item.share_rate == null ? '未填' : selected.item.share_rate + '%'}</strong></span>
                 <span>合同通道费 <strong>{selected.item.channel_fee_rate == null ? '未填' : selected.item.channel_fee_rate + '%'}</strong></span>
                 <span>原授权期 <strong>{selected.item.authorization_start || '未注明'} 至 {selected.item.authorization_end || '未注明'}</strong></span>
@@ -212,8 +262,13 @@ export default function ChannelContractIssueEditor({ issue, partnerName, onClose
         </div>
         <footer>
           <button type="button" disabled={saving} onClick={onClose}>取消</button>
-          <button type="button" className="is-primary" disabled={!selected || loading || saving || !verified || evidence.trim().length < 6} onClick={() => void save()}>
-            {saving ? '正在保存…' : '保存合同信息并重新匹配'}
+          {!issue.match && onUseExisting ? (
+            <button type="button" className="is-primary" disabled={!selected || loading || saving || !sameCommercialGameName(issue.game_name, selected.item.product_name)} onClick={() => void useExisting()}>
+              {saving ? '正在核对…' : '使用已有清单重新匹配本行'}
+            </button>
+          ) : null}
+          <button type="button" className={!issue.match ? '' : 'is-primary'} disabled={!selected || loading || saving || !verified || evidence.trim().length < 6} onClick={() => void save()}>
+            {saving ? '正在保存…' : '确需修改原合同信息'}
           </button>
         </footer>
       </section>
