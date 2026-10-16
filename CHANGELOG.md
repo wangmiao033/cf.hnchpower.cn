@@ -10,7 +10,7 @@
 - **关联提交**：[`e24ded3`](https://github.com/wangmiao033/cf.hnchpower.cn/commit/e24ded37bb63563745835e90aeb32e2145069ffb)。
 - **发布状态**：仅仓库文档更新；未单独部署生产。
 
-## 2026-10-16 18:51｜渠道账单：修复合同已匹配仍无法保存
+## 2026-10-16 18:52｜渠道账单：修复合同已匹配仍无法保存
 
 - **类型**：Bug 修复 / 已正式发布。
 - **问题**：渠道账单的合同规则界面显示已匹配，但保存时一直提示“合同清单正在按当前合作方、游戏和账期重新匹配”。
@@ -19,15 +19,15 @@
 - **改动文件**：`src/components/channel/ChannelBillingForm.jsx`。
 - **源码提交**：[`4755ea5`](https://github.com/wangmiao033/cf.hnchpower.cn/commit/4755ea5d627c020207d832c6e724d99a35e9d45f)。
 - **验证**：前端构建成功；预览部署 `dpl_2mNCgH9pz2fywZo1JYsP3FPSKUY3` 为 `READY`；正式部署 `dpl_AwU2fdBKuB2ZN8HVvQRxM2PC2WEn` 为 `READY`，自定义域名解析至该部署。
-- **正式发布**：2026-10-16 18:51，`production / READY`，<https://cf.hnchpower.cn/>。
+- **正式发布**：2026-10-16 18:52，`production / READY`，<https://cf.hnchpower.cn/>。
 - **尚待验证**：线上用户对实际账单执行“保存”并确认数据库持久化的业务验收尚未完成；不能把部署成功等同于账单已经保存。
 
-## 2026-10-16 18:23｜渠道合同：7723 已登记合作清单本页匹配
+## 2026-10-16 18:24｜渠道合同：7723 已登记合作清单本页匹配
 
 - **类型**：Bug 修复 / 已正式发布。
 - **内容**：基于已验证客户关系匹配 7723 渠道别名及折扣版本；优化原合同合作项的本页核对/选用，不要求跳转另建合同；保留不同客户、不同渠道版本之间的隔离校验。
 - **源码提交**：[`b532b3e`（#253）](https://github.com/wangmiao033/cf.hnchpower.cn/commit/b532b3ee18e238ed4d3075b320a17583c88a87f2)。
-- **正式发布**：2026-10-16 18:23，`production / READY`，Vercel `dpl_BSSuW9eZWb4A58bNpBBdhC3fXq7d`。
+- **正式发布**：2026-10-16 18:24，`production / READY`，Vercel `dpl_BSSuW9eZWb4A58bNpBBdhC3fXq7d`。
 - **验证范围**：Vercel 部署状态已确认；实际业务全链路验证未在此日志中确认。
 
 ## 2026-10-16 17:55｜渠道合同：恢复客户关联的合作游戏匹配
@@ -35,7 +35,7 @@
 - **类型**：Bug 修复 / 已正式发布。
 - **内容**：改进客户 ID 与已有合作清单的关联、折扣 SKU 名称识别及无法匹配时的诊断；避免把其他客户或不同商业版本错误匹配进来。
 - **源码提交**：[`01a7c6c`（#252）](https://github.com/wangmiao033/cf.hnchpower.cn/commit/01a7c6c646dc88ef6e5b6e25a2cadc028be974a7)。
-- **正式发布**：2026-10-16 17:55，`production / READY`，Vercel `dpl_991qbTGGDpPNpcjdd9DY41RkVtuk`。
+- **生产部署**：2026-10-16 17:55 发起，`production / READY`（具体完成时间未记录），Vercel `dpl_991qbTGGDpPNpcjdd9DY41RkVtuk`。
 - **验证范围**：Vercel 部署状态已确认；实际业务全链路验证未在此日志中确认。
 
 ## 2026-10-15 17:58｜渠道合同：差异为零时仍显示合同规则真实冲突
@@ -43,7 +43,7 @@
 - **类型**：Bug 修复 / 已正式发布。
 - **内容**：在合同预校验中展示真实冲突字段，避免错误地只显示“金额差异 ¥0.00”而隐藏合同不匹配问题；保留财务安全校验。
 - **源码提交**：[`39f7564`（#251）](https://github.com/wangmiao033/cf.hnchpower.cn/commit/39f7564745121068557c4c7e8ada708a60d7d739)。
-- **正式发布**：2026-10-15 17:58，`production / READY`，Vercel `dpl_9p4PUmRp3GVeG2swEBhiwK86VMnj`。
+- **生产部署**：2026-10-15 17:58 发起，`production / READY`（具体完成时间未记录），Vercel `dpl_9p4PUmRp3GVeG2swEBhiwK86VMnj`。
 - **验证范围**：相关提交说明包含回归测试通过；此处尚无独立的用户实际操作验证记录。
 
 ---
