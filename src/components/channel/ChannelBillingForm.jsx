@@ -1079,7 +1079,7 @@ function ChannelBillingForm({
                 : line))
             setLastContractRuleKey('')
             setContractRuleRevision(value => value + 1)
-          }
+          }}
           onSaved={async () => {
             // Do not replace form rows or amount fields; only refresh the
             // existing contract-first recommendation after the verified write.
