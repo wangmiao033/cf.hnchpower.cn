@@ -35,6 +35,21 @@ app = _v20.app
 _ORIGINAL_RANK_CANDIDATES = _channel._rank_candidates
 
 
+def _formatted_contract_game_key(value: Any) -> str:
+    """Treat 005折/0.05折 and optional display brackets as the same exact SKU.
+
+    Preserve every other suffix (e.g. 红包版), so distinct commercial editions
+    never collapse merely because their base title and discount are identical.
+    """
+    raw = normalize_registry_game(value)
+    raw = re.sub(r"[()（）\\[\\]【】]", "", raw)
+
+    def normalize_discount(match: re.Match) -> str:
+        return _matcher.commercial_game_variant(match.group(0)) or match.group(0)
+
+    return re.sub(r"(?<!\\d)\\d+(?:\\.\\d+)?折", normalize_discount, raw)
+
+
 def _exact_identity_candidate(partner_name: str, game_name: str, candidate: dict[str, Any]) -> bool:
     if not _channel._partner_matches(partner_name, candidate):
         return False
@@ -89,11 +104,17 @@ def _direct_exact_rank(
     original_candidates = []
     for candidate in candidates:
         original_name = candidate.get("original_product_name") or candidate.get("product_name")
-        if normalize_registry_game(input_name) != normalize_registry_game(original_name):
+        if _formatted_contract_game_key(input_name) != _formatted_contract_game_key(original_name):
             continue
         variant = _matcher.commercial_game_variant(input_name)
-        if any(_matcher.commercial_game_variant(name) != variant
-               for name in (game_name, candidate.get("product_name"))):
+        # A registry's broad canonical title may omit the discount even when the
+        # original access item and input bill describe the same exact version.
+        # Only an explicitly conflicting canonical version is disqualifying.
+        canonical_variants = (
+            _matcher.commercial_game_variant(game_name),
+            _matcher.commercial_game_variant(candidate.get("product_name")),
+        )
+        if any(value and value != variant for value in canonical_variants):
             continue
         restored = dict(candidate, product_name=original_name)
         if _exact_identity_candidate(partner_name, input_name, restored):
