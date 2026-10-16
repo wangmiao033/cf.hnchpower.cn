@@ -45,7 +45,8 @@ function availableChoices(rows, issue, partnerName, partnerId) {
     return Boolean(baseGame && game && (game.includes(baseGame) || baseGame.includes(game)))
   })
   const matched = findEntry(rows, match.contract_id, match.access_item_id)
-  if (matched && !similar.some(x => candidateKey(x.contract,x.item) === candidateKey(matched.contract,matched.item))) similar.unshift(matched)
+  if (matched && matchedPartner(matched.contract, partnerName, partnerId) &&
+      !similar.some(x => candidateKey(x.contract,x.item) === candidateKey(matched.contract,matched.item))) similar.unshift(matched)
   return similar
 }
 
