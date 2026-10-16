@@ -269,7 +269,7 @@ export default function ChannelContractIssueEditor({ issue, partnerName, partner
             </button>
           ) : null}
           <button type="button" className={!issue.match ? '' : 'is-primary'} disabled={!selected || loading || saving || !verified || evidence.trim().length < 6} onClick={() => void save()}>
-            {saving ? '正在保存…' : '确需修改原合同信息'}
+            {saving ? '正在保存…' : issue.match ? '保存合同信息并重新匹配' : '确需修改原合同信息'}
           </button>
         </footer>
       </section>
