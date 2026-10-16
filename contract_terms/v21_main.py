@@ -53,7 +53,10 @@ def _formatted_contract_game_key(value: Any) -> str:
 def _exact_identity_candidate(partner_name: str, game_name: str, candidate: dict[str, Any]) -> bool:
     if not _channel._partner_matches(partner_name, candidate):
         return False
-    if not _channel._exact_game_matches(game_name, candidate):
+    if not (
+        _channel._exact_game_matches(game_name, candidate)
+        or _formatted_contract_game_key(game_name) == _formatted_contract_game_key(candidate.get("product_name"))
+    ):
         return False
 
     # Exact normalized names are not enough for discount SKUs because bracketed
