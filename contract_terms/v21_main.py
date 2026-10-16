@@ -86,16 +86,24 @@ def _channel_compatible(bill_channel: Any, candidate_channel: Any, partner_short
     if not (bill_key and candidate_key and bill_key != candidate_key):
         return True
 
-    # Only the linked customer record can establish a decorated display name.
-    # Never strip arbitrary bill/contract suffixes: e.g. channel(Android) and
-    # channel(iOS) can be different agreements. Both names must be exactly the
-    # stored customer label or its leading name, after partner/game identity has
-    # already been checked by _direct_exact_rank.
+    # The linked customer record is the *only* authority for display aliases:
+    # 巴掌(7723集团) is a customer label, while its own cooperation list can
+    # legitimately say 7723. This is not a cross-customer/group merger.
+    # Do not infer aliases from arbitrary contract names or bill text.
     label = unicodedata.normalize("NFKC", str(partner_short_name or "")).strip()
-    decorated = re.fullmatch(r"([^()]+)\([^()]+\)", label)
+    decorated = re.fullmatch(r"([^()]+)\(([^()]+)\)", label)
     if not decorated:
         return False
-    trusted_names = {_matcher.normalize_channel(label), _matcher.normalize_channel(decorated.group(1))}
+    trusted_names = {
+        _matcher.normalize_channel(label),
+        _matcher.normalize_channel(decorated.group(1)),
+    }
+    # Numeric platform/group code explicitly stored inside a verified customer
+    # alias: 巴掌(7723集团) -> 7723. Never strip arbitrary bracketed version
+    # labels, platform OS editions, or digits found somewhere in the bill.
+    group_alias = re.fullmatch(r"(\d{3,8})(?:集团|平台|渠道)", decorated.group(2).strip())
+    if group_alias:
+        trusted_names.add(_matcher.normalize_channel(group_alias.group(1)))
     return bill_key in trusted_names and candidate_key in trusted_names
 
 
