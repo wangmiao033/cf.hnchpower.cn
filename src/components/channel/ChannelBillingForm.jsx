@@ -129,8 +129,9 @@ function identityRows(lines) {
   })).filter((row) => row.game_name && row.settlement_cycle)
 }
 
-function recommendationFingerprint(partnerName, channelName, lines) {
+function recommendationFingerprint(partnerName, channelName, lines, partnerId = '') {
   return JSON.stringify({
+    partnerId: String(partnerId || '').trim(),
     partnerName: String(partnerName || '').trim(),
     channelName: String(channelName || '').trim(),
     lines: identityRows(lines).map((row) => [row.line_index, row.game_name, row.settlement_cycle])
@@ -190,6 +191,7 @@ function ChannelBillingForm({
   onError,
   partners = [],
   onAddPartner,
+  onOpenContracts,
   createPrefillPartner = null,
   className = ''
 }) {
@@ -344,7 +346,7 @@ function ChannelBillingForm({
     }
 
     const preciseLines = identityRows(lines)
-    const fingerprint = recommendationFingerprint(partnerName, header.channelName, lines)
+    const fingerprint = recommendationFingerprint(partnerName, header.channelName, lines, partnerId)
     const requestKey = `${partnerId || 'legacy-edit'}:${fingerprint}:${contractRuleRevision}`
     if (requestKey === lastContractRuleKey) return undefined
 
@@ -359,6 +361,7 @@ function ChannelBillingForm({
     const timer = window.setTimeout(() => {
       recommendChannelContractRules({
         partner_name: partnerName,
+        partner_id: partnerId || undefined,
         channel_name: String(header.channelName || '').trim(),
         lines: preciseLines.length ? preciseLines : [{ line_index: -1, game_name: '', settlement_cycle: '' }]
       })
@@ -372,7 +375,9 @@ function ChannelBillingForm({
 
           const targeted = detectChannelRulePreset(header.partnerName || header.channelName) === XIAN_WEIZHEN_9917_RULE
           const preciseHeader = result.auto_apply && result.header_recommendation ? result.header_recommendation : null
-          const baseline = result.partner_recommendation && (result.partner_auto_apply || mode === 'add')
+          // A uniform partner-level rate is not evidence that an unmatched
+          // game's rate is the same. Only use a baseline before a game is set.
+          const baseline = !preciseLines.length && result.partner_auto_apply && result.partner_recommendation
             ? result.partner_recommendation
             : null
           const chosenHeader = preciseHeader || baseline
@@ -395,7 +400,7 @@ function ChannelBillingForm({
             setLines((current) => current.map((row, index) => {
               const preciseRec = lineRecommendations.get(index)
               if (preciseRec) return applyContractRecommendationToLine(row, preciseRec)
-              if (mode === 'add' && baseline) return applyContractRecommendationToLine(row, baseline)
+              if (mode === 'add' && baseline && !String(row.gameName || '').trim()) return applyContractRecommendationToLine(row, baseline)
               return row
             }))
           }
@@ -433,6 +438,14 @@ function ChannelBillingForm({
           }
 
           if (result.partner_rule_status === 'none') {
+            const linkedCatalog = result.contract_catalog
+            const knownContracts = Number(linkedCatalog?.contract_count || 0)
+            const knownItems = Number(linkedCatalog?.access_item_count || 0)
+            const catalogNotice = knownContracts
+              ? knownItems === 0
+                ? `已找到 ${knownContracts} 份已录入合同，但尚未登记合作游戏清单。请到原合同下补入游戏及真实结算费率，无需重复新建合同。`
+                : `已关联 ${knownContracts} 份合同及 ${knownItems} 条合作清单，但当前游戏或折扣版本未能匹配。请核对原合同下的游戏、渠道及授权期。`
+              : ''
             if (mode === 'add') {
               setHeader((current) => targeted ? applyTargetedChannelRule(current) : ({
                 ...current,
@@ -450,9 +463,9 @@ function ChannelBillingForm({
             setContractRuleState({
               loading: false,
               tone: 'review',
-              message: mode === 'edit'
+              message: catalogNotice || (mode === 'edit'
                 ? '未找到该合作方合同清单，已保留当前账单原有规则；这类“未匹配”不直接判为业务差异。'
-                : '待补规则：未找到该合作方合同清单；新增账单的分成/税率/通道费保持空白，不使用历史值或30%/5%默认值。',
+                : '待补规则：未找到该合作方合同清单；新增账单的分成/税率/通道费保持空白，不使用历史值或30%/5%默认值。'),
               contracts: contractNames,
               recommendation: result,
               fingerprint
@@ -789,7 +802,7 @@ function ChannelBillingForm({
               <button type="button" onClick={() => { setLastContractRuleKey(''); setContractRuleRevision((value) => value + 1) }} disabled={contractRuleState.loading || (mode === 'add' && !partnerId)}>重新匹配</button>
             </div>
           ) : null}
-          {contractAwareMode && !contractRuleState.loading && contractRuleState.fingerprint === recommendationFingerprint(header.partnerName, header.channelName, lines) && (
+          {contractAwareMode && !contractRuleState.loading && contractRuleState.fingerprint === recommendationFingerprint(header.partnerName, header.channelName, lines, partnerId) && (
             (contractRuleState.recommendation?.lines || []).some(item => !item.auto_apply)
           ) ? (
             <ul className="channel-contract-rule-issues" aria-label="未自动带入的合同规则">
@@ -806,6 +819,10 @@ function ChannelBillingForm({
                   {item.match?.contract_id && item.match?.access_item_id ? (
                     <div><button type="button" className="channel-contract-rule-issue__action" onClick={() => setContractIssueTarget(item)}>
                       本页核对合同
+                    </button></div>
+                  ) : !item.match && Number(contractRuleState.recommendation?.contract_catalog?.contract_count || 0) > 0 && onOpenContracts ? (
+                    <div><button type="button" className="channel-contract-rule-issue__action" onClick={onOpenContracts}>
+                      打开已录入合同，核对或补录合作游戏清单
                     </button></div>
                   ) : null}
                 </li>

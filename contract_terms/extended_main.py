@@ -203,6 +203,7 @@ _CANDIDATE_SQL = """
     SELECT
       access.id AS access_item_id,
       access.contract_id,
+      contract.partner_id AS partner_id,
       access.channel_name,
       access.product_name,
       access.authorization_start,

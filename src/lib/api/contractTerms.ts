@@ -229,6 +229,17 @@ export type ChannelContractRuleRecommendation = {
   total_lines: number
   message: string
   partner_auto_apply?: boolean
+  contract_catalog?: {
+    contract_count: number
+    access_item_count: number
+    truncated?: boolean
+    contracts: Array<{
+      contract_id: string
+      contract_name: string
+      contract_no: string
+      access_item_count: number
+    }>
+  }
   partner_recommendation?: ChannelContractRule | null
   header_recommendation: null | {
     settlement_rule_code: string
@@ -358,6 +369,7 @@ export function listContractReconciliationSnapshots(
 
 export function recommendChannelContractRules(payload: {
   partner_name: string
+  partner_id?: string
   channel_name?: string
   lines: Array<{ game_name: string; settlement_cycle: string }>
 }) {

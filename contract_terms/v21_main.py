@@ -35,10 +35,37 @@ app = _v20.app
 _ORIGINAL_RANK_CANDIDATES = _channel._rank_candidates
 
 
+def _formatted_contract_game_key(value: Any) -> str:
+    """Treat 005折/0.05折 and optional display brackets as the same exact SKU.
+
+    Preserve every other suffix (e.g. 红包版), so distinct commercial editions
+    never collapse merely because their base title and discount are identical.
+    """
+    raw = normalize_registry_game(value)
+    raw = re.sub(r"[()（）\[\]【】]", "", raw)
+
+    def normalize_discount(match: re.Match) -> str:
+        return _matcher.commercial_game_variant(match.group(0)) or match.group(0)
+
+    return re.sub(r"(?<!\d)\d+(?:\.\d+)?折", normalize_discount, raw)
+
+
+def _discount_game_prefix(value: Any) -> str:
+    """Comparable base name only when a discount token is explicitly present."""
+    raw = normalize_registry_game(value)
+    match = re.search(r"(?<!\d)\d+(?:\.\d+)?折", raw)
+    if not match:
+        return ""
+    return re.sub(r"[()（）\[\]【】]", "", raw[:match.start()])
+
+
 def _exact_identity_candidate(partner_name: str, game_name: str, candidate: dict[str, Any]) -> bool:
     if not _channel._partner_matches(partner_name, candidate):
         return False
-    if not _channel._exact_game_matches(game_name, candidate):
+    if not (
+        _channel._exact_game_matches(game_name, candidate)
+        or _formatted_contract_game_key(game_name) == _formatted_contract_game_key(candidate.get("product_name"))
+    ):
         return False
 
     # Exact normalized names are not enough for discount SKUs because bracketed
@@ -87,17 +114,40 @@ def _direct_exact_rank(
     # suffixes, and retain commercial-SKU constraints on both enriched names.
     input_name = str(line.get("input_game_name") or game_name).strip()
     original_candidates = []
+    original_variant_conflict = False
     for candidate in candidates:
         original_name = candidate.get("original_product_name") or candidate.get("product_name")
-        if normalize_registry_game(input_name) != normalize_registry_game(original_name):
+        restored = dict(candidate, product_name=original_name)
+        if not _channel._partner_matches(partner_name, restored):
+            continue
+        if _formatted_contract_game_key(input_name) != _formatted_contract_game_key(original_name):
+            # Never let the registry's generic canonical game silently promote a
+            # different discount or a different named sub-variant's contract.
+            # Explicit variants of the same base game require their own match.
+            input_prefix = _discount_game_prefix(input_name)
+            original_prefix = _discount_game_prefix(original_name)
+            if input_prefix and input_prefix == original_prefix:
+                original_variant_conflict = True
             continue
         variant = _matcher.commercial_game_variant(input_name)
-        if any(_matcher.commercial_game_variant(name) != variant
-               for name in (game_name, candidate.get("product_name"))):
+        # A registry's broad canonical title may omit the discount even when the
+        # original access item and input bill describe the same exact version.
+        # An explicitly conflicting canonical SKU must never replace that item.
+        canonical_variants = (
+            _matcher.commercial_game_variant(game_name),
+            _matcher.commercial_game_variant(candidate.get("product_name")),
+        )
+        if any(value and value != variant for value in canonical_variants):
+            original_variant_conflict = True
             continue
-        restored = dict(candidate, product_name=original_name)
         if _exact_identity_candidate(partner_name, input_name, restored):
             original_candidates.append(restored)
+
+    # If the original bill and an existing contract cooperation item agree on
+    # the SKU, but the registry points at a different explicit discount SKU,
+    # do not fall back to the wrong canonical name and silently apply its rate.
+    if original_variant_conflict and not original_candidates:
+        return []
 
     identity_candidates = original_candidates or [
         candidate
