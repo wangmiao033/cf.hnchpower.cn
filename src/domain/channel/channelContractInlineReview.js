@@ -9,7 +9,7 @@ export function comparableCommercialGameName(value) {
     .replace(/[()\[\]【】\s]/g, '')
   return raw.replace(/(?<!\d)\d+(?:\.\d+)?折/g, (token) => {
     const numberToken = token.slice(0, -1)
-    const canonical = /^0\d{2,4}$/.test(numberToken)
+    const canonical = /^0\d{1,4}$/.test(numberToken)
       ? Number('0.' + numberToken.slice(1))
       : Number(numberToken)
     return Number.isFinite(canonical) ? String(canonical) + '折' : token
