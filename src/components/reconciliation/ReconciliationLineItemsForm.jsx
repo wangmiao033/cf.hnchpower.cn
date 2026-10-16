@@ -8,6 +8,12 @@ import {
 } from '@/domain/settlement/calculateSettlementAmount.js'
 import { rdCompatibilitySettlementMonth } from '@/domain/reconciliation/rdSettlementPeriods.js'
 import {
+  allocateStatementPrepayment,
+  contractPrepaymentAvailable,
+  describeRdPrepaymentHint,
+  resolveRdPrepaymentPreview
+} from '@/domain/reconciliation/rdPrepaymentPreview.js'
+import {
   dateToInputValue,
   inheritRdSettlementCycle,
   monthInputValueToSettlementCycle,
@@ -21,6 +27,18 @@ import {
   readRdAutoFlowPreference,
   writeRdAutoFlowPreference
 } from '@/domain/reconciliation/rdAutoFlowPreference.js'
+
+export function readStatementPrepaymentState(record) {
+  if (!record) return { touched: false, amount: '' }
+  const stored = Number(record.prepaymentDeduction ?? record.statementPrepaymentDeduction ?? 0)
+  const explicit = record.statementPrepaymentTouched === true
+    || (Number.isFinite(stored) && stored > 0.009)
+  if (!explicit) return { touched: false, amount: '' }
+  const amount = record.statementPrepaymentTouched === true && record.statementPrepaymentDeduction != null
+    ? String(record.statementPrepaymentDeduction)
+    : stored.toFixed(2)
+  return { touched: true, amount }
+}
 
 export function createEmptyRdLine(sortOrder = 0, settlementCycle = '') {
   return {
@@ -142,7 +160,13 @@ function ReconciliationLineItemsForm({
     memo: '',
     status: 'pending'
   })
-  const [lines, setLines] = useState([createEmptyRdLine(0, initialCycle)])
+  const initialRecord = draftRecord || (mode === 'edit' ? editRecord : null)
+  const [lines, setLines] = useState(() => (
+    initialRecord ? cloneItemsFromRecord(initialRecord) : [createEmptyRdLine(0, initialCycle)]
+  ))
+  const initialStatement = readStatementPrepaymentState(initialRecord)
+  const [statementPrepayment, setStatementPrepayment] = useState(initialStatement.amount)
+  const [statementTouched, setStatementTouched] = useState(initialStatement.touched)
   const [gameSuggestions, setGameSuggestions] = useState({})
   const [flowStatuses, setFlowStatuses] = useState({})
   // Optional QuickSDK flow lookup is OFF unless explicitly enabled by this user.
@@ -195,8 +219,13 @@ function ReconciliationLineItemsForm({
         status: stateRecord.status || 'pending'
       })
       setLines(cloneItemsFromRecord(stateRecord))
+      const statementState = readStatementPrepaymentState(stateRecord)
+      setStatementTouched(statementState.touched)
+      setStatementPrepayment(statementState.amount)
       return
     }
+    setStatementTouched(false)
+    setStatementPrepayment('')
     setHeader((h) => ({
       ...h,
       settlementMonth: settlementMonth || getCurrentCycleLabel(),
@@ -289,30 +318,43 @@ function ReconciliationLineItemsForm({
     }
   }, [lines, header.channelFeeRate])
 
-  const showPrepaymentColumns = useMemo(
-    () => Object.values(prepaymentByLine || {}).some((item) => Boolean(item?.enabled)),
-    [prepaymentByLine]
-  )
-  const prepaymentTotals = useMemo(() => {
+  const contractDeduction = useMemo(() => {
     let deduction = 0
-    let actualPayable = 0
     for (let index = 0; index < lines.length; index += 1) {
       const settlement = Math.max(0, calculateRdSettlementRow(lines[index], header.channelFeeRate).settlementAmount)
       const requested = Math.max(0, Number(prepaymentByLine?.[index]?.deduction || 0))
-      const applied = Math.min(settlement, requested)
-      deduction += applied
-      actualPayable += Math.max(0, settlement - applied)
+      deduction += Math.min(settlement, requested)
     }
-    return {
-      deduction: Math.round(deduction * 100) / 100,
-      actualPayable: Math.round(actualPayable * 100) / 100
-    }
+    return Math.round(deduction * 100) / 100
   }, [lines, header.channelFeeRate, prepaymentByLine])
+  const contractAvailable = useMemo(
+    () => contractPrepaymentAvailable(prepaymentByLine),
+    [prepaymentByLine]
+  )
+  const prepaymentPreview = useMemo(() => resolveRdPrepaymentPreview({
+    settlement: totals.sumSettlement,
+    contractDeduction,
+    statementAmount: statementTouched ? statementPrepayment : null,
+    contractAvailable: contractAvailable > 0 ? contractAvailable : null
+  }), [totals.sumSettlement, contractDeduction, statementTouched, statementPrepayment, contractAvailable])
+  const lineSettlements = useMemo(
+    () => lines.map((line) => Math.max(0, calculateRdSettlementRow(line, header.channelFeeRate).settlementAmount)),
+    [lines, header.channelFeeRate]
+  )
+  const statementAllocations = prepaymentPreview.source === 'statement'
+    ? allocateStatementPrepayment(lineSettlements, prepaymentPreview.deduction)
+    : null
+  const showPrepaymentColumns = statementAllocations != null
+    || Object.values(prepaymentByLine || {}).some((item) => Boolean(item?.enabled))
+  const prepaymentInputValue = statementTouched
+    ? statementPrepayment
+    : (prepaymentPreview.source === 'contract' ? prepaymentPreview.deduction.toFixed(2) : '')
+  const prepaymentHint = describeRdPrepaymentHint(prepaymentPreview, { contractAvailable })
 
   useEffect(() => {
     if (!onPreviewChange) return
-    onPreviewChange(totals.sumSettlement)
-  }, [totals.sumSettlement, onPreviewChange])
+    onPreviewChange(prepaymentPreview.actualPayable, prepaymentPreview)
+  }, [prepaymentPreview, onPreviewChange])
 
   const mergedRecordForSubmit = () => {
     const compatibilitySettlementMonth = rdCompatibilitySettlementMonth(
@@ -340,6 +382,8 @@ function ReconciliationLineItemsForm({
       voucher: String(lines.reduce((s, l) => s + (parseFloat(l.couponAmount || 0) || 0), 0)),
       refund: String(lines.reduce((s, l) => s + (parseFloat(l.extraFee || 0) || 0), 0)),
       settlementAmount: totals.sumSettlement.toFixed(2),
+      statementPrepaymentTouched: statementTouched,
+      statementPrepaymentDeduction: statementTouched ? prepaymentPreview.deduction : null,
       items: lines.map((row, idx) => ({
         ...row,
         settlementCycle: normalizeSettlementCycleLabel(
@@ -354,7 +398,7 @@ function ReconciliationLineItemsForm({
 
   useEffect(() => {
     onFormStateChange?.(mergedRecordForSubmit())
-  }, [header, lines, mode, editRecord?.id, onFormStateChange])
+  }, [header, lines, mode, editRecord?.id, onFormStateChange, statementTouched, statementPrepayment, prepaymentPreview.deduction])
 
   const validate = () => {
     if (!header.partnerId) {
@@ -754,10 +798,12 @@ function ReconciliationLineItemsForm({
                 const gross = calc.shareAmount
                 const settlement = calc.settlementAmount
                 const prepayment = prepaymentByLine?.[index] || {}
-                const prepaymentDeduction = Math.min(
-                  Math.max(0, settlement),
-                  Math.max(0, Number(prepayment.deduction || 0))
-                )
+                const prepaymentDeduction = statementAllocations
+                  ? Number(statementAllocations[index] || 0)
+                  : Math.min(
+                    Math.max(0, settlement),
+                    prepayment.enabled ? Math.max(0, Number(prepayment.deduction || 0)) : 0
+                  )
                 const actualPayable = Math.max(0, settlement - prepaymentDeduction)
                 const flowStatus = autoFlowReadEnabled ? flowStatuses[line.id] : null
                 const gameListId = `${formId || 'rd'}-game-list-${index}`
@@ -863,7 +909,7 @@ function ReconciliationLineItemsForm({
                         rowIndex={index}
                       />
                     </div>
-                    {showPrepaymentColumns ? <div className="channel-cell channel-cell--num"><input type="text" readOnly disabled aria-label={`第 ${index + 1} 行预付款抵扣`} className="admin-input readonly-input channel-input-num" value={prepayment.enabled ? `-${prepaymentDeduction.toFixed(2)}` : '—'} /></div> : null}
+                    {showPrepaymentColumns ? <div className="channel-cell channel-cell--num"><input type="text" readOnly disabled aria-label={`第 ${index + 1} 行预付款抵扣`} className="admin-input readonly-input channel-input-num" value={prepaymentDeduction > 0 ? `-${prepaymentDeduction.toFixed(2)}` : '—'} /></div> : null}
                     {showPrepaymentColumns ? <div className="channel-cell channel-cell--num"><input type="text" readOnly disabled aria-label={`第 ${index + 1} 行实际应付`} className="admin-input readonly-input channel-input-num" value={actualPayable.toFixed(2)} /></div> : null}
                     <div className="channel-cell channel-cell--actions">
                       <button type="button" className="rec-btn rec-btn--ghost" onClick={addRow} title="新增一行并继承当前月份">+</button>
@@ -892,10 +938,27 @@ function ReconciliationLineItemsForm({
             <div className="summary-item summary-item--accent"><div className="label">折后总流水</div><div className="value">¥{totals.sumNet.toFixed(2)}</div></div>
             <div className="summary-item"><div className="label">总代金券</div><div className="value">¥{totals.sumCoupon.toFixed(2)}</div></div>
             <div className="summary-item"><div className="label">总参与分成金额</div><div className="value">¥{totals.sumShareAmount.toFixed(2)}</div></div>
-            <div className="summary-item summary-item--hero"><div className="label">研发应结</div><div className="value">¥{totals.sumSettlement.toFixed(2)}</div></div>
-            {showPrepaymentColumns ? <div className="summary-item"><div className="label">预付款抵扣</div><div className="value">-¥{prepaymentTotals.deduction.toFixed(2)}</div></div> : null}
-            {showPrepaymentColumns ? <div className="summary-item summary-item--hero"><div className="label">本期实际应付</div><div className="value">¥{prepaymentTotals.actualPayable.toFixed(2)}</div></div> : null}
+            <div className={`summary-item${prepaymentPreview.deduction > 0.009 ? '' : ' summary-item--hero'}`}><div className="label">研发应结</div><div className="value">¥{totals.sumSettlement.toFixed(2)}</div></div>
+            <div className="summary-item summary-item--prepayment">
+              <div className="label">预付款余额</div>
+              <div className="value">
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  aria-label="预付款余额"
+                  className="admin-input rd-prepayment-balance-input"
+                  value={prepaymentInputValue}
+                  placeholder="0.00"
+                  onChange={(event) => {
+                    setStatementTouched(true)
+                    setStatementPrepayment(event.target.value.replace(/[^\d.]/g, ''))
+                  }}
+                />
+              </div>
+            </div>
+            <div className={`summary-item${prepaymentPreview.deduction > 0.009 ? ' summary-item--hero' : ''}`}><div className="label">实际应付</div><div className="value">¥{prepaymentPreview.actualPayable.toFixed(2)}</div></div>
           </div>
+          <p className="rd-prepayment-balance-note">{prepaymentHint}</p>
         </div>
 
         {mode === 'edit' && (
@@ -915,8 +978,8 @@ function ReconciliationLineItemsForm({
         {!isDrawer && !isCreatePage && (
           <div className="channel-form-section" style={{ padding: '12px 16px' }}>
             <div className="form-row" style={{ alignItems: 'center' }}>
-              <span style={{ color: 'var(--admin-text-sub)', fontSize: 14 }}>{showPrepaymentColumns ? '预计实际应付' : '预计研发应结'}</span>
-              <span style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--admin-success)' }}>{`\u00a5${(showPrepaymentColumns ? prepaymentTotals.actualPayable : totals.sumSettlement).toFixed(2)}`}</span>
+              <span style={{ color: 'var(--admin-text-sub)', fontSize: 14 }}>{prepaymentPreview.deduction > 0.009 ? '预计实际应付' : '预计研发应结'}</span>
+              <span style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--admin-success)' }}>{`\u00a5${prepaymentPreview.actualPayable.toFixed(2)}`}</span>
             </div>
           </div>
         )}

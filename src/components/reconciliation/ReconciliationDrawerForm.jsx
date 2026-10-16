@@ -22,6 +22,7 @@ function ReconciliationDrawerForm({
   handleApplyTemplate
 }) {
   const [previewAmount, setPreviewAmount] = useState(0)
+  const [previewDetail, setPreviewDetail] = useState(null)
 
   useEffect(() => {
     if (!open) return
@@ -73,7 +74,10 @@ function ReconciliationDrawerForm({
             mode={mode}
             editRecord={mode === 'edit' ? editRecord : null}
             showSubmitButton={false}
-            onPreviewChange={setPreviewAmount}
+            onPreviewChange={(amount, detail) => {
+              setPreviewAmount(Number(amount) || 0)
+              setPreviewDetail(detail && typeof detail === 'object' ? detail : null)
+            }}
             onSubmitted={handleSubmitted}
             onAddRecord={addRecord}
             onUpdateRecord={updateRecord}
@@ -86,7 +90,7 @@ function ReconciliationDrawerForm({
         </div>
         <div className="rec-drawer__footer">
           <div className="rec-drawer__preview">
-            <span className="rec-drawer__preview-label">预计结算金额</span>
+            <span className="rec-drawer__preview-label">{Number(previewDetail?.deduction || 0) > 0.009 ? '预计实际应付' : '预计结算金额'}</span>
             <span className="rec-drawer__preview-value">¥{previewAmount.toFixed(2)}</span>
           </div>
           <div className="rec-drawer__footer-actions">
