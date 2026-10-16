@@ -191,7 +191,6 @@ function ChannelBillingForm({
   onError,
   partners = [],
   onAddPartner,
-  onOpenContracts,
   createPrefillPartner = null,
   className = ''
 }) {
@@ -820,9 +819,9 @@ function ChannelBillingForm({
                     <div><button type="button" className="channel-contract-rule-issue__action" onClick={() => setContractIssueTarget(item)}>
                       本页核对合同
                     </button></div>
-                  ) : !item.match && Number(contractRuleState.recommendation?.contract_catalog?.contract_count || 0) > 0 && onOpenContracts ? (
-                    <div><button type="button" className="channel-contract-rule-issue__action" onClick={onOpenContracts}>
-                      打开已录入合同，核对或补录合作游戏清单
+                  ) : !item.match && partnerId ? (
+                    <div><button type="button" className="channel-contract-rule-issue__action" onClick={() => setContractIssueTarget(item)}>
+                      本页选择已录入的合作游戏清单
                     </button></div>
                   ) : null}
                 </li>
@@ -1042,7 +1041,45 @@ function ChannelBillingForm({
         <ChannelContractIssueEditor
           issue={contractIssueTarget}
           partnerName={header.partnerName || header.channelName}
+          partnerId={partnerId}
           onClose={() => setContractIssueTarget(null)}
+          onUseExisting={async ({ item }) => {
+            if (!partnerId) throw new Error('必须先从客户库选中合作方，才能引用现有合同。')
+            const index = Number(contractIssueTarget.line_index)
+            const row = lines[index]
+            if (!row || row.gameName !== contractIssueTarget.game_name ||
+                normalizeChannelSettlementCycle(row.settlementCycle) !== normalizeChannelSettlementCycle(contractIssueTarget.settlement_cycle)) {
+              throw new Error('账单游戏或结算月份已经变化，请关闭窗口重新核对当前明细。')
+            }
+            const response = await recommendChannelContractRules({
+              partner_id: partnerId,
+              partner_name: header.partnerName,
+              channel_name: header.channelName,
+              lines: [{
+                line_index: 0,
+                game_name: row.gameName,
+                settlement_cycle: normalizeChannelSettlementCycle(row.settlementCycle)
+              }]
+            })
+            const verified = (response.lines || []).find(candidate => Number(candidate.line_index) === 0)
+            if (!verified?.auto_apply || !verified.recommended) {
+              throw new Error(verified?.message || '服务器仍未认定该合同合作项有效；请在本窗口核对游戏、渠道、授权期和费率。')
+            }
+            const sameAccess = String(verified.match?.access_item_id || '') === String(item.id)
+            const sameFinancialRule = verified.rule_consensus &&
+              sameNumber(verified.recommended.share_rate, item.share_rate) &&
+              sameNumber(verified.recommended.channel_fee_rate, item.channel_fee_rate)
+            if (!sameAccess && !sameFinancialRule) {
+              throw new Error('所选清单与服务器核验的合作项不是同一条，且结算口径尚不能证明一致，已阻止错误套用。')
+            }
+            setLines(current => current.map((line, rowIndex) => rowIndex === index &&
+              line.gameName === row.gameName &&
+              normalizeChannelSettlementCycle(line.settlementCycle) === normalizeChannelSettlementCycle(row.settlementCycle)
+                ? applyContractRecommendationToLine(line, verified.recommended)
+                : line))
+            setLastContractRuleKey('')
+            setContractRuleRevision(value => value + 1)
+          }}
           onSaved={async () => {
             // Do not replace form rows or amount fields; only refresh the
             // existing contract-first recommendation after the verified write.

@@ -5,6 +5,8 @@ const pickerSource = readFileSync(new URL('../shared/PartnerPicker.jsx', import.
 const billingSource = readFileSync(new URL('./ChannelBillingForm.jsx', import.meta.url), 'utf8')
 const smartEntrySource = readFileSync(new URL('./ChannelSmartEntryBar.jsx', import.meta.url), 'utf8')
 const settlementRuleCss = readFileSync(new URL('./ChannelSettlementRule.css', import.meta.url), 'utf8')
+const inlineContractEditorSource = readFileSync(new URL('./ChannelContractIssueEditor.jsx', import.meta.url), 'utf8')
+const billPageSource = readFileSync(new URL('../../pages/CoreChannelBillFormPage.jsx', import.meta.url), 'utf8')
 
 describe('channel contract safety guards', () => {
   it('auto-links one unique exact customer match but keeps partial or ambiguous text unlinked', () => {
@@ -61,4 +63,20 @@ describe('channel contract safety guards', () => {
     expect(billingSource).toContain('技术异常 · 合同规则读取失败')
     expect(billingSource).toContain('待补规则：未找到该合作方合同清单')
   })
+  it('合同已录入但未匹配时，在当前账单页引用既有清单而非跳转', () => {
+    expect(billingSource).toContain('本页选择已录入的合作游戏清单')
+    expect(billingSource).toContain('setContractIssueTarget(item)')
+    expect(billingSource).toContain('onUseExisting={async ({ item }) => {')
+    expect(billingSource).toContain('partner_id: partnerId')
+    expect(billingSource).toContain('verified?.auto_apply')
+    expect(billingSource).not.toContain('onOpenContracts')
+    expect(billPageSource).not.toContain('onOpenContracts={() => setActiveView(VIEWS.CONTRACTS)}')
+    expect(inlineContractEditorSource).toContain('listAllContracts()')
+    expect(inlineContractEditorSource).toContain('sameCommercialGameName(issue.game_name, selected.item.product_name)')
+    expect(inlineContractEditorSource).toContain('使用已有清单重新匹配本行')
+    expect(inlineContractEditorSource).toContain('onUseExisting({ contract: selected.contract, item: selected.item })')
+    expect(inlineContractEditorSource).toContain('当前账单内容未改变')
+  })
+
+
 })
