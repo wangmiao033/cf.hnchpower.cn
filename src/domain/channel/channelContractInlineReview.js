@@ -6,7 +6,7 @@
  */
 export function comparableCommercialGameName(value) {
   const raw = String(value ?? '').normalize('NFKC').trim().toLowerCase()
-    .replace(/[（）()\\[\\]【】\s]/g, '')
+    .replace(/[()\[\]【】\s]/g, '')
   return raw.replace(/(?<!\d)\d+(?:\.\d+)?折/g, (token) => {
     const numberToken = token.slice(0, -1)
     const canonical = /^0\d{2,4}$/.test(numberToken)
