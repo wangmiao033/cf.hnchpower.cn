@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { CONTRACT_ACCESS_FIELDS, fullContractAccessUpdate, cleanContractDate,
-  checkContractAuthorizationForMonth, accessDataModified, withContractReviewNote } from './channelContractInlineReview.js'
+  checkContractAuthorizationForMonth, accessDataModified, withContractReviewNote,
+  comparableCommercialGameName, sameCommercialGameName } from './channelContractInlineReview.js'
 
 const old = {
   id: 'item-A', contract_id: 'contract-A',
@@ -47,4 +48,15 @@ describe('当前账单页安全核对候选合同', () => {
     expect(() => withContractReviewNote(old,'好','2025-07')).toThrow('至少6个字')
     expect(withContractReviewNote(old,'已核对签署合同原件','2025-07')).toContain('原合同说明\n【账单页合同核对·2025-07】已核对签署合同原件')
   })
+  it('识别7723清单中已存在的折扣游戏，版本、红包/普通版仍严格区分', () => {
+    expect(comparableCommercialGameName('一起来修仙（0.05折）')).toBe('一起来修仙0.05折')
+    expect(comparableCommercialGameName('一起来修仙005折')).toBe('一起来修仙0.05折')
+    expect(sameCommercialGameName('一起来修仙(0.05折)', '一起来修仙005折')).toBe(true)
+    expect(sameCommercialGameName('圣树唤歌(0.1折红包版)', '圣树唤歌01折红包版')).toBe(true)
+    expect(sameCommercialGameName('圣树唤歌(0.1折红包版)', '圣树唤歌(0.05折红包版)')).toBe(false)
+    expect(sameCommercialGameName('圣树唤歌(0.1折红包版)', '圣树唤歌(0.1折普通版)')).toBe(false)
+    expect(sameCommercialGameName('圣树唤歌(0.1折红包版)', '圣树唤歌')).toBe(false)
+    expect(sameCommercialGameName('一起来修仙(0.05折)', '圣树唤歌(0.05折)')).toBe(false)
+  })
+
 })
