@@ -1,0 +1,66 @@
+.dax-shell{max-width:1450px;margin:0 auto;padding:19px 23px 32px;color:#233650;font-size:13px}
+.dax-shell *{box-sizing:border-box}
+.dax-shell button,.dax-shell input,.dax-shell select{font:inherit}
+.dax-shell button,.dax-upload{cursor:pointer}
+.dax-toolbar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:16px}
+.dax-context{display:flex;flex-direction:column;gap:3px;min-width:0}
+.dax-context strong{font-size:15px;font-weight:750}
+.dax-context span{font-size:11px;color:#8493a8}
+.dax-toolbar-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.dax-shell button,.dax-toolbar select,.dax-panel input,.dax-panel select{min-height:36px;background:#fff;border:1px solid #dce4ef;color:#36506f;border-radius:8px;padding:7px 11px}
+.dax-shell button:hover:not(:disabled){border-color:#9db4de;background:#f7faff}
+.dax-shell button:focus-visible,.dax-upload:focus-within,.dax-shell input:focus-visible,.dax-shell select:focus-visible{outline:2px solid #4e76e9;outline-offset:2px}
+.dax-shell button:disabled,.dax-upload.dax-disabled{opacity:.6;cursor:not-allowed}
+.dax-shell .dax-primary,.dax-upload{display:inline-flex;align-items:center;justify-content:center;background:#2d65dd;color:white;border:1px solid #2d65dd;border-radius:8px;padding:8px 15px;font-weight:650;min-height:36px;white-space:nowrap}
+.dax-shell .dax-primary:hover:not(:disabled),.dax-upload:hover{background:#2354c0;color:#fff}
+.dax-alert{margin:12px 0;padding:11px 13px;border-radius:9px;font-size:12px}
+.dax-alert-ok{background:#edf8f3;color:#167a54}
+.dax-alert-error{background:#fff4ef;color:#b74c37}
+.dax-alert button{float:right;border:0;padding:0;background:transparent;min-height:0;color:inherit}
+.dax-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid #e2e9f1;border-radius:13px;background:#fff;box-shadow:0 4px 20px rgba(33,62,99,.035);overflow:hidden;margin-bottom:16px}
+.dax-metric{min-width:0;padding:19px 19px 16px;border-right:1px solid #e6ecf4;border-top:2px solid #8ea8d5}
+.dax-metric:first-child{border-top-color:#4d7ce6}
+.dax-metric:last-child{border-right:0;border-top-color:#96c9b5}
+.dax-metric-title{font-size:11px;font-weight:650;color:#7b8aa0}
+.dax-metric-number{display:block;font-size:23px;margin-top:10px;font-weight:760;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
+.dax-metric-number [tabindex]{cursor:help}
+.dax-metric-note{margin-top:7px;color:#9aa8b7;font-size:10px;line-height:1.6}
+.dax-unavailable{color:#a4aebd}
+.dax-tabs{display:flex;align-items:center;gap:4px;border-bottom:1px solid #dce5f1;margin-bottom:18px;overflow-x:auto}
+.dax-shell .dax-tab{background:none;border:0;border-bottom:2px solid transparent;border-radius:0;padding:12px 16px;color:#6e8097;min-height:43px;white-space:nowrap}
+.dax-shell .dax-tab.dax-active{color:#2d60d4;border-bottom-color:#2d60d4;font-weight:750}
+.dax-two-cols{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start}
+.dax-panel{background:#fff;border:1px solid #e1e8f1;box-shadow:0 4px 18px rgba(30,60,105,.035);border-radius:12px;min-width:0;overflow:hidden}
+.dax-panel-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:19px 20px 16px}
+.dax-panel-head h2,.dax-info h3,.dax-form h3{margin:0;font-size:14px;font-weight:730;color:#1f3450}
+.dax-panel-head small{display:block;margin-top:6px;color:#95a3b5;font-size:11px;line-height:1.5}
+.dax-panel-head input{min-width:150px;max-width:230px}
+.dax-table-wrap{overflow-x:auto;max-width:100%}
+.dax-table{border-collapse:collapse;width:100%;min-width:610px;font-size:12px}
+.dax-table thead{background:#f8fafd}
+.dax-table th{font-weight:650;color:#8c9caf;text-align:left;border-block:1px solid #ebf0f6;font-size:11px;padding:12px 16px;white-space:nowrap}
+.dax-table td{padding:13px 16px;border-bottom:1px solid #eff2f6;color:#425871}
+.dax-table tbody tr:hover{background:#fbfdff}
+.dax-table td:nth-child(n+2){font-variant-numeric:tabular-nums}
+.dax-table td strong{display:block;font-size:12px;font-weight:680;color:#223955}
+.dax-table td small{display:block;margin-top:4px;font-size:10px;color:#a0afbf}
+.dax-table tr:last-child td{border:0}
+.dax-shell .dax-text-btn{border:0;background:transparent;padding:0;color:#3467ce;min-height:0;font-size:11px;white-space:nowrap}
+.dax-money{font-weight:700;color:#203851}
+.dax-side{display:flex;flex-direction:column;gap:14px}
+.dax-info,.dax-form{padding:19px 18px}
+.dax-info h3,.dax-form h3{margin-bottom:15px}
+.dax-info p{font-size:11px;line-height:1.75;color:#8090a5;margin:8px 0}
+.dax-info div:not(:first-child){display:flex;justify-content:space-between;gap:9px;border-top:1px solid #eef2f7;padding:10px 0;font-size:11px;color:#7890a6}
+.dax-info b{color:#283e5a;white-space:nowrap}
+.dax-form{display:flex;flex-direction:column;gap:12px}
+.dax-form label{display:flex;flex-direction:column;gap:5px;color:#60738a;font-size:11px;font-weight:650}
+.dax-form input,.dax-form select{width:100%;min-width:0;font-size:12px}
+.dax-form p,.dax-form small{color:#8496ad;line-height:1.65;font-size:11px}
+.dax-form p strong{color:#284265}
+.dax-loading{padding:35px 0;text-align:center;color:#7990a9}
+.dax-pending{color:#a07a30;font-weight:650}
+.dax-footer{margin-top:23px;border-top:1px solid #e6ecf3;padding:14px 5px;color:#92a0b2;font-size:11px}
+@media(max-width:1120px){.dax-two-cols{grid-template-columns:minmax(0,1fr) 260px}.dax-metric{padding:15px}.dax-metric-number{font-size:20px}}
+@media(max-width:840px){.dax-two-cols{grid-template-columns:1fr}.dax-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.dax-metric:nth-child(2){border-right:0}.dax-metric:nth-child(n+3){border-top:1px solid #e6ecf4}.dax-side{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}.dax-toolbar{flex-wrap:wrap}}
+@media(max-width:560px){.dax-shell{padding:14px 12px 22px}.dax-toolbar-actions{width:100%}.dax-toolbar-actions select,.dax-toolbar-actions button,.dax-toolbar-actions .dax-upload{flex:1;min-width:0;font-size:11px;padding-inline:7px}.dax-context span{font-size:10px}.dax-metric{padding:14px 12px}.dax-metric-number{font-size:19px}.dax-tabs{gap:0}.dax-shell .dax-tab{padding:12px 11px;font-size:11px}.dax-panel-head{flex-direction:column;align-items:stretch;padding:16px}.dax-panel-head input{max-width:100%;width:100%}.dax-table th,.dax-table td{padding:12px 11px}.dax-table{min-width:550px}.dax-info,.dax-form{padding:16px}.dax-side{display:flex}}

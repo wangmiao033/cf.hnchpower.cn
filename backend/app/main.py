@@ -39,6 +39,7 @@ from app.api.payment import router as payment_router
 from app.api.bank_transaction import router as bank_transaction_router
 from app.api.bank_auto_reconciliation import router as bank_auto_reconciliation_router
 from app.api.reconciliation import router as reconciliation_router
+from app.api.self_operated import router as self_operated_router
 from app.api.rd_prepayment import router as rd_prepayment_router
 from app.api.rd_prepayment_workbench import router as rd_prepayment_workbench_router
 from app.api.rd_prepayment_lifecycle import router as rd_prepayment_lifecycle_router
@@ -235,6 +236,7 @@ app.include_router(workbench_router, prefix="/api/workbench", tags=["workbench"]
 app.include_router(global_search_router, prefix="/api/global-search", tags=["global-search"])
 app.include_router(finance_invoice_task_router, prefix="/api/finance-tasks", tags=["finance-tasks"])
 app.include_router(reconciliation_router, prefix="/api/reconciliation", tags=["reconciliation"], dependencies=[reconciliation_access])
+app.include_router(self_operated_router, prefix="/api/self-operated", tags=["self-operated"], dependencies=[reconciliation_access])
 app.include_router(bill360_performance_router, prefix="/api/reconciliation", tags=["bill360-performance"], dependencies=[reconciliation_access])
 app.include_router(reconciliation_period_router, prefix="/api/reconciliation-periods", tags=["reconciliation-periods"], dependencies=[reconciliation_access])
 app.include_router(channel_router, prefix="/api/channel-records", tags=["channel-records"], dependencies=[reconciliation_access])
