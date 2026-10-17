@@ -291,7 +291,8 @@ def confirm_approved_channel_platform_variance(
         })
     cases = [dict(item) for item in db.execute(text("""
         SELECT id, line_id, game_name, settlement_cycle, status,
-               handling_type, source_snapshot_json
+               handling_type, expected_amount, actual_amount, difference_amount,
+               source_snapshot_json
         FROM cf_contract_difference_cases
         WHERE bill_type = 'channel' AND bill_id = :bill_id
         ORDER BY updated_at DESC, id DESC LIMIT 301
