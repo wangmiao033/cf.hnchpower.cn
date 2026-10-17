@@ -5,9 +5,9 @@ from __future__ import annotations
 from typing import Any
 
 try:
-    from .matcher import commercial_game_variant, normalize_company, normalize_game, score_candidate
+    from .matcher import commercial_game_variant, normalize_channel, normalize_company, normalize_game, score_candidate
 except ImportError:  # Vercel service-root import.
-    from matcher import commercial_game_variant, normalize_company, normalize_game, score_candidate
+    from matcher import commercial_game_variant, normalize_channel, normalize_company, normalize_game, score_candidate
 
 EPS = 0.01
 ALWAYS_DISABLED_STATUSES = {
