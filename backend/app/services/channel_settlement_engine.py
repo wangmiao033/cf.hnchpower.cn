@@ -135,7 +135,14 @@ def resolve_rule_settings(record: Any, fallback: Any = None) -> dict[str, Any]:
         tax_mode = "share"
     elif code in {"xiaomi_percent_fee", "five_percent_gateway_share"}:
         fee_mode, tax_mode = "percent", "none"
-        if fee_rate <= 0:
+        explicit_mode = str(_value(record, "channel_fee_mode", None) or "").strip()
+        explicit_rate = _value(record, "channel_fee_rate", None)
+        line_zero_fee = explicit_mode == "none" or (
+            explicit_rate not in (None, "") and _d(explicit_rate) <= 0
+        )
+        if line_zero_fee:
+            fee_mode, fee_rate = "none", Decimal("0")
+        elif fee_rate <= 0:
             fee_rate = Decimal("5")
     elif code == "percent_fee_after_tax":
         fee_mode, tax_mode = "percent", "after_fee"

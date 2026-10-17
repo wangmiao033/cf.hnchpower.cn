@@ -5,9 +5,9 @@ from __future__ import annotations
 from typing import Any
 
 try:
-    from .matcher import normalize_company, normalize_game, score_candidate
+    from .matcher import commercial_game_variant, normalize_company, normalize_game, score_candidate
 except ImportError:  # Vercel service-root import.
-    from matcher import normalize_company, normalize_game, score_candidate
+    from matcher import commercial_game_variant, normalize_company, normalize_game, score_candidate
 
 EPS = 0.01
 ALWAYS_DISABLED_STATUSES = {
@@ -159,7 +159,36 @@ def _candidate_unusable_for_period(candidate: dict, authorization_status: str) -
     return False
 
 
-def _partner_matches(partner_name: str, candidate: dict) -> bool:
+def _discount_factor_from_game_name(game_name: Any) -> float | None:
+    label = commercial_game_variant(game_name)
+    if not label or not str(label).endswith("折"):
+        return None
+    try:
+        number = float(str(label)[:-1])
+    except (TypeError, ValueError):
+        return None
+    if number <= 0:
+        return None
+    factor = number / 10.0
+    return round(min(factor, 1.0), 6)
+
+
+def _anjiu_partner_channel_bridge(partner_name: str, channel_name: str, candidate: dict) -> bool:
+    partner = normalize_company(partner_name)
+    channel = normalize_channel(channel_name)
+    if not partner or "安久" not in partner:
+        return False
+    if "游戏fan" not in channel and "游戏fan" not in partner:
+        return False
+    cand_text = " ".join(
+        str(candidate.get(field) or "")
+        for field in ("partner_name", "partner_short_name", "counterparty", "channel_name")
+    )
+    normalized = normalize_company(cand_text) + normalize_channel(cand_text)
+    return "安久" in normalized or "游戏fan" in normalized
+
+
+def _partner_matches(partner_name: str, candidate: dict, channel_name: str = "") -> bool:
     target = normalize_company(partner_name)
     if not target:
         return False
@@ -171,6 +200,8 @@ def _partner_matches(partner_name: str, candidate: dict) -> bool:
             return True
         if min(len(value), len(target)) >= 5 and (value in target or target in value):
             return True
+    if channel_name and _anjiu_partner_channel_bridge(partner_name, channel_name, candidate):
+        return True
     return False
 
 
@@ -203,8 +234,8 @@ def _rate_label(value: Any) -> str:
     return "未录入" if number is None else f"{number:g}%"
 
 
-def _partner_rule_summary(partner_name: str, candidates: list[dict]) -> dict:
-    all_matched = [candidate for candidate in candidates if _partner_matches(partner_name, candidate)]
+def _partner_rule_summary(partner_name: str, candidates: list[dict], channel_name: str = "") -> dict:
+    all_matched = [candidate for candidate in candidates if _partner_matches(partner_name, candidate, channel_name)]
     disabled_count = sum(1 for candidate in all_matched if _candidate_explicitly_disabled(candidate))
     matched = [candidate for candidate in all_matched if not _candidate_explicitly_disabled(candidate)]
     contracts = sorted({str(item.get("contract_name") or "").strip() for item in matched if item.get("contract_name")})
@@ -302,6 +333,15 @@ def _selection_pool(ranked: list[tuple[dict, dict, dict]], game_name: str) -> li
     # exact row is missing a field; expose the missing field for review instead.
     exact_game = [item for item in ranked if _exact_game_matches(game_name, item[0])]
     identity_pool = exact_game or ranked
+    line_variant = commercial_game_variant(game_name)
+    if line_variant:
+        variant_exact = [
+            item
+            for item in identity_pool
+            if commercial_game_variant(item[0].get("product_name")) == line_variant
+        ]
+        if variant_exact:
+            identity_pool = variant_exact
 
     # If any candidate within that identity pool is not explicitly out of range,
     # an old/expired candidate must not beat it just because fields are complete.
@@ -331,7 +371,7 @@ def recommend_channel_rules(
     non-settlement metadata (for example invoice tax) is a warning only and must
     never erase known share/channel-fee values from the contract list.
     """
-    partner_summary = _partner_rule_summary(partner_name, candidates)
+    partner_summary = _partner_rule_summary(partner_name, candidates, channel_name)
     results: list[dict] = []
 
     for index, raw in enumerate(lines or []):
@@ -402,7 +442,7 @@ def recommend_channel_rules(
         financially_unambiguous = contract_identity_unambiguous or rule_consensus
 
         authorization_status = scored.get("authorization_status")
-        exact_identity = _partner_matches(partner_name, candidate) and _exact_game_matches(game_name, candidate)
+        exact_identity = _partner_matches(partner_name, candidate, channel_name) and _exact_game_matches(game_name, candidate)
         identity_confident = scored.get("confidence") == "high" or exact_identity
         authorization_allowed = authorization_status != "out_of_range"
         auto_apply = (
@@ -413,6 +453,9 @@ def recommend_channel_rules(
         )
         tax_rate_warning = bool(recommended.get("tax_rate_missing"))
         public_recommended = _public_rule(recommended)
+        discount_factor = _discount_factor_from_game_name(game_name)
+        if discount_factor is not None:
+            public_recommended["discount_factor"] = discount_factor
 
         if auto_apply and not contract_identity_unambiguous:
             warning_bits: list[str] = []

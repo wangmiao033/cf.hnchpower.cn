@@ -1,5 +1,9 @@
 /** 渠道账单表单计算与规则校验。 */
 import { getChannelLineItems } from '@/domain/channel/channelAggregates.js'
+import {
+  applyCommercialDiscountFromGameName,
+  commercialDiscountFactorFromGameName
+} from '@/domain/channel/channelLineDefaults.js'
 
 export const XIAN_WEIZHEN_9917_RULE = 'xian_weizhen_9917'
 export const HONOR_UPFRONT_PERCENT_FEE_RULE = 'honor_upfront_percent_fee'
@@ -32,7 +36,11 @@ export function initialLineItem() {
   }
 }
 
-function round2(value) { return Math.round((Number(value) + Number.EPSILON) * 100) / 100 }
+function round2(value) {
+  const n = Number(value)
+  if (!Number.isFinite(n)) return 0
+  return +(Math.round(+(n + 'e+2')) + 'e-2')
+}
 function cents(value) { return Math.round(Number(value || 0) * 100) }
 function optionalNumber(value) { if (value === '' || value == null) return null; const n = Number(value); return Number.isFinite(n) ? n : null }
 function hasLineRuleValue(value) { return value !== undefined && value !== null && String(value).trim() !== '' }
@@ -84,6 +92,17 @@ export function resolveChannelLineRuleHeader(data = {}, header = initialHeaderFo
       channelFeeMode: hasLineRuleValue(data.channelFeeMode) ? data.channelFeeMode : effectiveHeader.channelFeeMode,
       channelFeeRate: hasLineRuleValue(data.channelFeeRate) ? data.channelFeeRate : effectiveHeader.channelFeeRate,
       taxMode: 'share',
+      validationTolerance: hasLineRuleValue(data.validationTolerance) ? data.validationTolerance : effectiveHeader.validationTolerance
+    }
+  }
+
+  if (hasLineRuleValue(data.channelFeeMode) && String(data.channelFeeMode).trim() === 'none') {
+    return {
+      ...effectiveHeader,
+      settlementRuleCode: hasLineRuleValue(data.settlementRuleCode) ? data.settlementRuleCode : effectiveHeader.settlementRuleCode,
+      channelFeeMode: 'none',
+      channelFeeRate: hasLineRuleValue(data.channelFeeRate) ? data.channelFeeRate : '0',
+      taxMode: hasLineRuleValue(data.taxMode) ? data.taxMode : effectiveHeader.taxMode,
       validationTolerance: hasLineRuleValue(data.validationTolerance) ? data.validationTolerance : effectiveHeader.validationTolerance
     }
   }
@@ -140,7 +159,55 @@ export function channelSettlementPeriodFromLines(lines, fallbackMonth = '') {
 export function channelStatusForSubmit(currentStatus, intent) { return intent === 'confirm' ? 'confirmed' : currentStatus || 'pending' }
 export const initialForm = { ...initialHeaderForm, ...initialLineItem() }
 
-export function resolveDiscountFactor(data) { const n = Number(data.discountFactor); return Number.isFinite(n) && n > 0 ? n : 1 }
+export function resolveDiscountFactor(data) {
+  const n = Number(data.discountFactor)
+  if (Number.isFinite(n) && n > 0) return n
+  const fromName = commercialDiscountFactorFromGameName(data?.gameName)
+  return fromName != null && fromName > 0 ? fromName : 1
+}
+
+/**
+ * When Anjiu platform settlement is known but voucher is blank/zero, back-solve
+ * the pre-discount voucher deduction that makes the dedicated formula match.
+ */
+export function inferAnjiuVoucherFromPlatform(data, header = initialHeaderForm) {
+  const rule = resolveChannelLineRuleHeader(data, header)
+  if (rule.settlementRuleCode !== ANJIU_PRE_DISCOUNT_DEDUCTION_RULE) return null
+  const platform = optionalNumber(data.platformSettlementAmount)
+  if (platform == null || platform <= 0) return null
+  const voucherStored = Number(data.voucherCost || 0)
+  if (voucherStored > 0 || hasSplitVoucherFields(data)) return null
+
+  const flow = Number(data.flow || 0)
+  if (!Number.isFinite(flow) || flow <= 0) return null
+  const discount = resolveDiscountFactor(data)
+  const share = Number(data.shareRate || 0) / 100
+  if (!Number.isFinite(share) || share <= 0) return null
+  const fee = rule.channelFeeMode === 'percent' ? Number(rule.channelFeeRate || 0) / 100 : 0
+  const tax = rule.taxMode === 'share' ? Number(data.taxRate || 0) / 100 : 0
+  const multiplier = share * (1 - fee - tax)
+  if (!Number.isFinite(multiplier) || multiplier <= 0) return null
+
+  let low = 0
+  let high = Math.floor(flow)
+  let best = null
+  while (low <= high) {
+    const mid = Math.floor((low + high) / 2)
+    const trial = { ...data, voucherCost: String(mid) }
+    const system = calculateSettlementDetails(trial, header).systemSettlementAmount
+    if (system === platform) return mid
+    if (system > platform) low = mid + 1
+    else high = mid - 1
+    best = mid
+  }
+  return best
+}
+
+export function applyAnjiuVoucherInference(row, header = initialHeaderForm) {
+  const inferred = inferAnjiuVoucherFromPlatform(row, header)
+  if (inferred == null) return row
+  return { ...row, voucherCost: String(inferred) }
+}
 export function effectiveLineFlowFromFormData(data) { return round2(Number(data.flow || 0) * resolveDiscountFactor(data)) }
 
 /** Both null indicates an untouched historical voucher_cost (never convert it). */
@@ -285,9 +352,13 @@ export function recordToHeaderForm(record) {
 }
 
 export function recordToLineForms(record) {
-  return getChannelLineItems(record).map((line) => ({
-    id: line.id != null ? String(line.id) : '', settlementCycle: normalizeChannelSettlementCycle(line.settlementCycle || record.settlementMonth), gameName: line.gameName || '', flow: String(line.flow ?? ''), discountFactor: line.discountFactor != null ? String(line.discountFactor) : '1', voucherCost: String(line.voucherCost ?? ''), voucherFaceValue: line.voucherFaceValue == null ? null : String(line.voucherFaceValue), voucherDirectCost: line.voucherDirectCost == null ? null : String(line.voucherDirectCost), noWorryCost: String(line.noWorryCost ?? ''), refundCost: String(line.refundCost ?? ''), testCost: String(line.testCost ?? ''), welfareCost: String(line.welfareCost ?? ''), coinCost: String(line.coinCost ?? ''), shareRate: String(line.shareRate ?? '30'), taxRate: String(line.taxRate ?? '5'), gatewayCost: String(line.gatewayCost ?? ''), platformSettlementAmount: line.platformSettlementAmount != null ? String(line.platformSettlementAmount) : '', systemSettlementAmount: String(line.systemSettlementAmount ?? ''), settlementDifference: line.settlementDifference != null ? String(line.settlementDifference) : '', validationStatus: line.validationStatus || 'unvalidated', settlementAmount: String(line.settlementAmount ?? ''),
-    settlementRuleCode: line.settlementRuleCode || '', channelFeeMode: line.channelFeeMode || '', channelFeeRate: line.channelFeeRate != null ? String(line.channelFeeRate) : '', taxMode: line.taxMode || '', validationTolerance: line.validationTolerance != null ? String(line.validationTolerance) : ''
-  }))
+  const header = recordToHeaderForm(record)
+  return getChannelLineItems(record).map((line) => {
+    const base = {
+      id: line.id != null ? String(line.id) : '', settlementCycle: normalizeChannelSettlementCycle(line.settlementCycle || record.settlementMonth), gameName: line.gameName || '', flow: String(line.flow ?? ''), discountFactor: line.discountFactor != null ? String(line.discountFactor) : '1', voucherCost: String(line.voucherCost ?? ''), voucherFaceValue: line.voucherFaceValue == null ? null : String(line.voucherFaceValue), voucherDirectCost: line.voucherDirectCost == null ? null : String(line.voucherDirectCost), noWorryCost: String(line.noWorryCost ?? ''), refundCost: String(line.refundCost ?? ''), testCost: String(line.testCost ?? ''), welfareCost: String(line.welfareCost ?? ''), coinCost: String(line.coinCost ?? ''), shareRate: String(line.shareRate ?? '30'), taxRate: String(line.taxRate ?? '5'), gatewayCost: String(line.gatewayCost ?? ''), platformSettlementAmount: line.platformSettlementAmount != null ? String(line.platformSettlementAmount) : '', systemSettlementAmount: String(line.systemSettlementAmount ?? ''), settlementDifference: line.settlementDifference != null ? String(line.settlementDifference) : '', validationStatus: line.validationStatus || 'unvalidated', settlementAmount: String(line.settlementAmount ?? ''),
+      settlementRuleCode: line.settlementRuleCode || '', channelFeeMode: line.channelFeeMode || '', channelFeeRate: line.channelFeeRate != null ? String(line.channelFeeRate) : '', taxMode: line.taxMode || '', validationTolerance: line.validationTolerance != null ? String(line.validationTolerance) : ''
+    }
+    return applyAnjiuVoucherInference(applyCommercialDiscountFromGameName(base), header)
+  })
 }
 export function recordToFormData(record) { const h = recordToHeaderForm(record); const first = recordToLineForms(record)[0] || initialLineItem(); return { ...h, ...first } }

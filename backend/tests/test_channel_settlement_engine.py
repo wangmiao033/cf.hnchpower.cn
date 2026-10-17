@@ -135,6 +135,26 @@ class ChannelSettlementEngineTests(unittest.TestCase):
 
         self.assertEqual(float(result["system_settlement_amount"]), 300.0)
 
+    def test_five_percent_parent_does_not_override_line_zero_fee(self):
+        parent = SimpleNamespace(
+            settlement_rule_code="five_percent_gateway_share",
+            channel_fee_mode="percent",
+            channel_fee_rate=5,
+            tax_mode="none",
+            validation_tolerance=0.05,
+        )
+        line = self.line(29, 0, 2.18, tax=0)
+        line.discount_factor = 0.3
+        line.share_rate = 25
+        line.settlement_rule_code = "share_only"
+        line.channel_fee_mode = "none"
+        line.channel_fee_rate = 0
+        line.tax_mode = "none"
+
+        result = calculate_channel_line(line, parent)
+
+        self.assertEqual(float(result["system_settlement_amount"]), 2.18)
+
     def test_anjiu_deductions_are_applied_before_discount(self):
         record = SimpleNamespace(
             settlement_rule_code=ANJIU_PRE_DISCOUNT_DEDUCTION_RULE,

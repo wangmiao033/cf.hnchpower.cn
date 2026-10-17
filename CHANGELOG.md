@@ -2,6 +2,16 @@
 
 > 此日志是对账管理系统唯一的正式更新记录。自 **2026-10-16** 起，代码变更与生产发布必须逐次登记，保留全部历史。维护要求详见 [AGENTS.md](AGENTS.md)。下述时间均为 **北京时间（UTC+8）**。只有 Vercel 状态为 `READY` 才标记“部署成功”；实际业务验收另行记录。
 
+## 2026-10-17｜渠道账单：广东安久/游戏fan 折扣与分行通道费（QD-20261015-B78B52）
+
+- **类型**：Bug 修复 / 功能。
+- **问题**：安久账单 `QD-20261015-B78B52` 未从游戏名解析 `0.05折`/`3折` 折扣系数，混用 5% 与 0% 通道费时账单头 5% 误套到 `share_only` 行，平台两行合计应为 ¥1236.51 却算出约 ¥248k 量级错误。
+- **修复**：新增 `channelLineDefaults` 从游戏名解析 `discount_factor`；安久专属公式下可按平台金额反推代金券；分行 `channel_fee_mode=none`/费率 0 不再被账单头 5% 覆盖；多套分行通道费时禁用账单头渠道费编辑并在套用合同后清空头部费率；合同推荐输出 `discount_factor`、放宽安久合作方匹配并优先同折扣版本合作项；金额四舍五入改为与财务一致的 half-up。
+- **影响范围**：渠道账单表单/计算、合同规则推荐、后端 `channel_settlement_engine`。
+- **验证**：`channelBillingAnjiu.test.js`、`channelLineDefaults.test.js`、`test_channel_settlement_engine.py`、`test_channel_rule_recommender_anjiu_discount.py`；`npm run build`；全量 `npm test` 除既有 `routes.test.js` 导航断言外通过。
+- **发布信息**：未部署生产；待 Vercel `READY` 后在 `QD-20261015-B78B52` 复测两行合计 ¥1236.51。
+- **待确认事项**：生产环境未验收；未使用「最终确认金额」覆盖。
+
 ## 2026-10-17｜渠道账单：修复 #257 后平台尾差仍被合同差异拦截
 
 - **类型**：Bug 修复。
