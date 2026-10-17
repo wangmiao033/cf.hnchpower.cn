@@ -10,8 +10,8 @@
 - **安全边界**：新增表，不清理历史业务表；旧研发账单、发票、网商/工行资金核对、服务器及运营费用不复制也不修改；广告账户充值仅记预付款，不作为买量成本；利润缺少合同和费用时显示「待核算」。
 - **影响范围**：新 API `/api/self-operated`、新增只读和可编辑页、迁移 `075_self_operated_channel.sql`。正式平台月度利润汇入需待完整合同/费用口径核验后再激活。
 - **关联提交**：开发分支 [feature/daxiong-self-operated-integration-20261017](https://github.com/wangmiao033/cf.hnchpower.cn/tree/feature/daxiong-self-operated-integration-20261017)；待 PR 审查后回填合并提交。
-- **测试/验证**：新增 CSV 解析回归测试；GitHub CI、正式数据库迁移和实际财务业务验收均待验证。
-- **发布环境与部署状态**：开发分支，**未部署生产**；现网 `cf.hnchpower.cn` 保持原部署。
+- **测试/验证**：GitHub Actions [Production Quality Gate #38995905449](https://github.com/wangmiao033/cf.hnchpower.cn/actions/runs/38995905449) 中，前端单测、浏览器回归和构建 **success**，后端与合同单测和 Python 编译 **success**；真实生产数据库迁移、账单业务验收仍未执行。
+- **发布环境与部署状态**：开发分支，**未部署生产**；尝试通过 Vercel 生成隔离预览部署 `dpl_7Lw8oNKigip9QzkEdppxFphFyM4h`，状态为 **CANCELED**，未作为可用预览发布；正式 `cf.hnchpower.cn/health` 仍返回 HTTP 200，原生产部署保持不变。
 - **待确认事项**：生产 PostgreSQL 完整可恢复备份尚未取得/验证，严禁在此之前触发迁移或切换正式域名。研发合同结算条款、广告成本是否与原运营费用台账重复需最终校验。
 
 ## 2026-10-16｜建立持续更新与发布记录规范
