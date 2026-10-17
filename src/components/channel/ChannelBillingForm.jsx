@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react'
 import {
   CHANNEL_RULE_PRESETS,
   XIAN_WEIZHEN_9917_RULE,
+  ANJIU_PRE_DISCOUNT_DEDUCTION_RULE,
+  applyAnjiuVoucherInference,
   initialHeaderForm,
   initialLineItem,
   calculateBillingAmount,
@@ -20,6 +22,7 @@ import {
   detectChannelRulePreset,
   ruleFormulaText
 } from '@/domain/channel/channelBillingForm.js'
+import { applyCommercialDiscountFromGameName } from '@/domain/channel/channelLineDefaults.js'
 import { recommendChannelContractRules } from '@/lib/api/contractTerms.ts'
 import {
   channelDifferenceLabel,
@@ -203,12 +206,26 @@ function applyContractRecommendationToLine(row, recommendation) {
     ...row,
     shareRate: recommendation.share_rate != null ? String(recommendation.share_rate) : row.shareRate,
     taxRate: recommendation.tax_rate != null ? String(recommendation.tax_rate) : row.taxRate,
+    discountFactor: recommendation.discount_factor != null ? String(recommendation.discount_factor) : row.discountFactor,
     settlementRuleCode: recommendation.settlement_rule_code || '',
     channelFeeMode: recommendation.channel_fee_mode || '',
     channelFeeRate: recommendation.channel_fee_rate != null ? String(recommendation.channel_fee_rate) : '',
     taxMode: recommendation.tax_mode || '',
     validationTolerance: recommendation.validation_tolerance != null ? String(recommendation.validation_tolerance) : '',
     gatewayCost: recommendation.channel_fee_mode === 'fixed' ? row.gatewayCost : ''
+  }
+}
+
+function clearHeaderChannelFeeForMixedLines(header) {
+  const targeted = applyTargetedChannelRule(header)
+  if (targeted.settlementRuleCode === XIAN_WEIZHEN_9917_RULE) return header
+  return {
+    ...header,
+    channelFeeMode: 'none',
+    channelFeeRate: '',
+    settlementRuleCode: targeted.settlementRuleCode === ANJIU_PRE_DISCOUNT_DEDUCTION_RULE
+      ? ANJIU_PRE_DISCOUNT_DEDUCTION_RULE
+      : 'custom'
   }
 }
 
@@ -432,12 +449,20 @@ function ChannelBillingForm({
           // 待核对/未确认的编辑账单：只有精确匹配到“游戏 + 账期”时才自动套用，避免通用规则误套。
           // 已确认账单：仍保持历史快照，只做比较，不自动覆盖。
           if (autoApplyContractRules) {
+            const appliedSignatures = new Set()
             setLines((current) => current.map((row, index) => {
               const preciseRec = lineRecommendations.get(index)
-              if (preciseRec) return applyContractRecommendationToLine(row, preciseRec)
-              if (mode === 'add' && baseline && !String(row.gameName || '').trim()) return applyContractRecommendationToLine(row, baseline)
-              return row
+              let next = row
+              if (preciseRec) next = applyContractRecommendationToLine(row, preciseRec)
+              else if (mode === 'add' && baseline && !String(row.gameName || '').trim()) next = applyContractRecommendationToLine(row, baseline)
+              next = applyCommercialDiscountFromGameName(next)
+              const rule = resolveChannelLineRuleHeader(next, applyTargetedChannelRule(header))
+              appliedSignatures.add(`${rule.settlementRuleCode || ''}|${rule.channelFeeMode || ''}|${rule.channelFeeRate ?? ''}`)
+              return next
             }))
+            if (appliedSignatures.size > 1) {
+              setHeader((current) => clearHeaderChannelFeeForMixedLines(current))
+            }
           }
 
           if (chosenHeader) {
@@ -608,11 +633,16 @@ function ChannelBillingForm({
         // Only the expanded dual-voucher editor changes individual fields.
         return { ...next, [field]: value }
       }
-      return {
+      let updated = {
         ...next,
         ...(identityChanged && mode === 'add' ? { shareRate: '', taxRate: '' } : {}),
         [field]: value
       }
+      if (field === 'gameName') updated = applyCommercialDiscountFromGameName(updated, { force: identityChanged })
+      if (field === 'platformSettlementAmount' || field === 'gameName' || field === 'shareRate' || field === 'flow') {
+        updated = applyAnjiuVoucherInference(updated, effectiveRuleHeader)
+      }
+      return updated
     }))
   }
 
@@ -873,9 +903,9 @@ function ChannelBillingForm({
           ) : null}
           <div className="channel-rule-grid">
             <label><span>规则模板</span><select value={effectiveRuleHeader.settlementRuleCode} disabled={targetedRuleLocked} onChange={(e) => handleRulePresetChange(e.target.value)}>{Object.entries(CHANNEL_RULE_PRESETS).map(([key, preset]) => <option key={key} value={key}>{preset.label}</option>)}</select></label>
-            <label><span>渠道费模式</span><select value={effectiveRuleHeader.channelFeeMode} disabled={targetedRuleLocked} onChange={(e) => handleRuleFieldChange('channelFeeMode', e.target.value)}><option value="none">不扣渠道费</option><option value="percent">百分比</option><option value="fixed">固定金额/行</option></select></label>
-            <label><span>渠道费率%</span><input type="number" step="0.01" min="0" max="100" value={effectiveRuleHeader.channelFeeRate} disabled={targetedRuleLocked || feeMode !== 'percent'} onChange={(e) => handleRuleFieldChange('channelFeeRate', e.target.value)} placeholder={feeMode === 'percent' ? '如 5' : '当前不使用'} /></label>
-            <label><span>税处理</span><select value={effectiveRuleHeader.taxMode} disabled={targetedRuleLocked} onChange={(e) => handleRuleFieldChange('taxMode', e.target.value)}><option value="none">仅记录，不参与</option><option value="share">按分成额扣税</option><option value="after_fee">渠道费后再扣税</option></select></label>
+            <label><span>渠道费模式</span><select value={effectiveRuleHeader.channelFeeMode} disabled={targetedRuleLocked || mixedLineContractRules} onChange={(e) => handleRuleFieldChange('channelFeeMode', e.target.value)}><option value="none">不扣渠道费</option><option value="percent">百分比</option><option value="fixed">固定金额/行</option></select></label>
+            <label><span>渠道费率%</span><input type="number" step="0.01" min="0" max="100" value={effectiveRuleHeader.channelFeeRate} disabled={targetedRuleLocked || mixedLineContractRules || feeMode !== 'percent'} onChange={(e) => handleRuleFieldChange('channelFeeRate', e.target.value)} placeholder={feeMode === 'percent' ? '如 5' : '当前不使用'} /></label>
+            <label><span>税处理</span><select value={effectiveRuleHeader.taxMode} disabled={targetedRuleLocked || mixedLineContractRules} onChange={(e) => handleRuleFieldChange('taxMode', e.target.value)}><option value="none">仅记录，不参与</option><option value="share">按分成额扣税</option><option value="after_fee">渠道费后再扣税</option></select></label>
             <label><span>差异容差（元）</span><input type="number" step="0.01" min="0" value={header.validationTolerance} onChange={(e) => handleRuleFieldChange('validationTolerance', e.target.value)} /></label>
           </div>
           <div className="channel-rule-formula"><span>当前公式</span><strong>{mixedLineContractRules ? '按每行合同规则分别计算（分成、通道费、税处理均以明细匹配结果为准）' : ruleFormulaText(effectiveRuleHeader)}</strong></div>

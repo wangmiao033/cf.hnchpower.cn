@@ -53,9 +53,11 @@ def _is_anjiu(partner_name: str, channel_name: str) -> bool:
     partner = _compact(partner_name)
     channel = _compact(channel_name)
     return (
-        "广东安久科技有限公司" in partner
+        "广东安久" in partner
+        or "安久科技" in partner
         or "游戏fan（安久）" in channel
         or "游戏fan(安久)" in channel
+        or ("游戏fan" in channel and "安久" in partner)
     )
 
 

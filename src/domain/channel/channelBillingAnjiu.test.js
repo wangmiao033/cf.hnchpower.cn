@@ -4,7 +4,9 @@ import {
   calculateBillingAmount,
   calculateSettlementDetails,
   calculateShareAmount,
+  buildFullChannelRecord,
   detectChannelRulePreset,
+  inferAnjiuVoucherFromPlatform,
   initialHeaderForm,
   initialLineItem
 } from '@/domain/channel/channelBillingForm.js'
@@ -73,6 +75,62 @@ describe('广东安久 / 游戏fan 专属结算顺序', () => {
     expect(calculateSettlementDetails(line, anjiuHeader())).toMatchObject({
       systemSettlementAmount: 1984.95,
       settlementDifference: 0,
+      validationStatus: 'pass'
+    })
+  })
+
+  it('QD-20261015-B78B52 两行合计 1236.51 且平台校验通过', () => {
+    const header = anjiuHeader()
+    const lineA = contractLine({
+      gameName: '一起来修仙（0.05折）',
+      flow: '871379',
+      discountFactor: '0.005',
+      voucherCost: '5184',
+      shareRate: '30',
+      platformSettlementAmount: '1234.33'
+    })
+    const lineB = contractLine({
+      gameName: '云上征途3折大混服',
+      flow: '35',
+      discountFactor: '0.3',
+      voucherCost: '6',
+      shareRate: '25',
+      channelFeeMode: 'none',
+      channelFeeRate: '0',
+      settlementRuleCode: 'share_only',
+      taxMode: 'none',
+      taxRate: '0',
+      platformSettlementAmount: '2.18'
+    })
+
+    expect(calculateSettlementDetails(lineA, header)).toMatchObject({
+      systemSettlementAmount: 1234.33,
+      validationStatus: 'pass'
+    })
+    expect(calculateSettlementDetails(lineB, header)).toMatchObject({
+      systemSettlementAmount: 2.18,
+      validationStatus: 'pass'
+    })
+
+    const record = buildFullChannelRecord(header, [lineA, lineB])
+    expect(record.platformSettlementAmount).toBeCloseTo(1236.51, 2)
+    expect(record.items.every((item) => item.validationStatus === 'pass')).toBe(true)
+    expect(record.validationStatus).toBe('pass')
+  })
+
+  it('平台结算已填且代金券为 0 时可反推安久代金券', () => {
+    const header = anjiuHeader()
+    const line = contractLine({
+      flow: '871379',
+      discountFactor: '0.005',
+      voucherCost: '0',
+      shareRate: '30',
+      platformSettlementAmount: '1234.33'
+    })
+    const inferred = inferAnjiuVoucherFromPlatform(line, header)
+    expect(Math.abs(inferred - 5184)).toBeLessThanOrEqual(1)
+    expect(calculateSettlementDetails({ ...line, voucherCost: String(inferred) }, header)).toMatchObject({
+      systemSettlementAmount: 1234.33,
       validationStatus: 'pass'
     })
   })
