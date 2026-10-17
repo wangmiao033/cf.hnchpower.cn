@@ -15,6 +15,7 @@ from app.api.bill_lifecycle import (
 from app.services.channel_platform_variance_approval import (
     assess_channel_platform_variance,
     assert_no_open_contract_exceptions,
+    is_rate_only_contract_exception,
 )
 from app.services.channel_settlement_engine import (
     aggregate_validation,
@@ -233,6 +234,48 @@ class ChannelPlatformVarianceApprovalTests(TestCase):
             assert_no_open_contract_exceptions([
                 {"line_id": "old", "game_name": "六界仙尊",
                  "settlement_cycle": "2026-08", "status": "pending"}
+            ], lines)
+        self.assertEqual(caught.exception.detail["error"], "contract_difference_unresolved")
+
+    def test_rate_only_pending_case_does_not_block_platform_tail(self):
+        bill, lines = bill_and_lines()
+        case = {
+            "line_id": "L1",
+            "game_name": "云上征途0.05折",
+            "settlement_cycle": "2026-08",
+            "status": "pending",
+            "expected_amount": 7.73,
+            "actual_amount": 7.73,
+            "difference_amount": 0,
+            "source_snapshot_json": {
+                "checks": [
+                    {
+                        "key": "channel_fee_rate",
+                        "status": "fail",
+                        "bill_value": 0,
+                        "contract_value": 5,
+                    }
+                ]
+            },
+        }
+        self.assertTrue(is_rate_only_contract_exception(case))
+        assert_no_open_contract_exceptions([case], lines)
+
+    def test_monetary_pending_case_still_blocks_platform_tail(self):
+        bill, lines = bill_and_lines()
+        with self.assertRaises(HTTPException) as caught:
+            assert_no_open_contract_exceptions([
+                {
+                    "line_id": "L1",
+                    "game_name": "六界仙尊",
+                    "settlement_cycle": "2026-08",
+                    "status": "pending",
+                    "expected_amount": 2000,
+                    "actual_amount": 2009.46,
+                    "source_snapshot_json": {
+                        "checks": [{"key": "share_rate", "status": "fail"}]
+                    },
+                }
             ], lines)
         self.assertEqual(caught.exception.detail["error"], "contract_difference_unresolved")
 

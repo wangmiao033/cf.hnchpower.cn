@@ -117,6 +117,88 @@ export async function confirmReviewedChannelPlatformVariance(
   return lifecycle
 }
 
+function finiteNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+const PLATFORM_TAIL_ALLOWED_FINANCIAL_CHECKS = new Set([
+  'share_rate',
+  'channel_fee_rate',
+  'tax_rate',
+  'testing_fee',
+  'contract_standard_settlement'
+])
+
+const BLOCKED_AUTHORIZATION = new Set([
+  'expired',
+  'out_of_range',
+  'invalid',
+  'not_covered'
+])
+
+/** Line fails only on share/fee/tax metadata while contract amount already matches the bill. */
+export function isRateOnlyLineContractFailure(line: ContractBillLineCheck): boolean {
+  const amount = line.contract_amount
+  const expected = finiteNumber(amount?.expected_amount)
+  const actual = finiteNumber(amount?.actual_amount)
+  const amountAligned = amount?.status === 'pass' || (
+    expected !== null &&
+    actual !== null &&
+    Math.round(expected * 100) === Math.round(actual * 100)
+  )
+  if (!amountAligned) return false
+  const failing = (line.checks || []).filter((check) => check?.status === 'fail')
+  if (!failing.length) return false
+  return failing.every((check) => PLATFORM_TAIL_ALLOWED_FINANCIAL_CHECKS.has(String(check.key || '')))
+}
+
+export function isRateOnlyUnresolvedContractCase(item: ContractDifferenceCase): boolean {
+  if (item.status === 'resolved') return false
+  const expected = finiteNumber(item.expected_amount)
+  const actual = finiteNumber(item.actual_amount)
+  if (
+    expected === null ||
+    actual === null ||
+    Math.round(expected * 100) !== Math.round(actual * 100)
+  ) {
+    return false
+  }
+  const snapshot = item.source_snapshot
+  if (snapshot && typeof snapshot === 'object') {
+    const match = (snapshot as { match?: { authorization_status?: string } }).match
+    const authorization = String(match?.authorization_status || '').toLowerCase()
+    if (BLOCKED_AUTHORIZATION.has(authorization)) return false
+    const checks = Array.isArray((snapshot as { checks?: Array<{ key?: string; status?: string }> }).checks)
+      ? (snapshot as { checks?: Array<{ key?: string; status?: string }> }).checks || []
+      : []
+    let sawFinancialFail = false
+    for (const check of checks) {
+      if (check?.status !== 'fail') continue
+      const key = String(check.key || '')
+      if (!PLATFORM_TAIL_ALLOWED_FINANCIAL_CHECKS.has(key)) return false
+      sawFinancialFail = true
+    }
+    if (checks.length) return sawFinancialFail
+  }
+  const variance = finiteNumber(item.variance_abs)
+  if (variance !== null && Math.round(variance * 100) !== 0) return false
+  const difference = finiteNumber(item.difference_amount)
+  if (difference !== null && Math.round(difference * 100) !== 0) return false
+  return true
+}
+
+export function countBlockingContractFailures(preflight: ContractBillReconciliation): number {
+  const billFails = (preflight.bill_checks || []).filter((check) => check.status === 'fail').length
+  const lineFails = (preflight.lines || []).filter((line) => {
+    if (line.status !== 'fail' && line.contract_amount?.status !== 'fail') return false
+    if (isRateOnlyLineContractFailure(line)) return false
+    return true
+  }).length
+  return billFails + lineFails
+}
+
 /** A manual platform-amount exception does NOT override contract identity, authorization
  * or unresolved approval. Unlike the normal flow, contract service unavailability
  * is a hard stop for this exceptional confirmation.
@@ -131,32 +213,26 @@ export async function assertContractReadyForPlatformTail(billId: string): Promis
   if (!Array.isArray(preflight?.lines) || preflight.lines.length === 0) {
     throw new Error('合同核验未返回完整的游戏明细，暂不能确认平台尾差')
   }
-  const allowed = new Set(['share_rate', 'channel_fee_rate', 'tax_rate', 'testing_fee', 'contract_standard_settlement'])
   const hardBill = (preflight.bill_checks || []).find(check => check.status === 'fail')
   const hardLine = preflight.lines.flatMap(line => line.checks || []).find(check =>
-    check.status === 'fail' && !allowed.has(String(check.key || ''))
+    check.status === 'fail' && !PLATFORM_TAIL_ALLOWED_FINANCIAL_CHECKS.has(String(check.key || ''))
   )
   if (hardBill || hardLine) {
     throw new Error('仍存在合同身份、授权范围或账单级核验失败，不能按金额尾差放行')
   }
-  const failCount = Number(preflight.summary?.fail_count || 0)
-  if (failCount > 0) {
-    const approval = await getContractDifferenceApproval('channel', billId, failCount)
+  const blockingFailCount = countBlockingContractFailures(preflight)
+  if (blockingFailCount > 0) {
+    const approval = await getContractDifferenceApproval('channel', billId, blockingFailCount)
     if (!approval.approved) {
       const unresolved = approval.items.filter(item => item.status !== 'resolved')
+      const blockingUnresolved = unresolved.filter((item) => !isRateOnlyUnresolvedContractCase(item))
       throw new ContractDifferenceBlockedError(
-        buildContractDifferenceBlockedMessage(failCount, unresolved, preflight),
-        unresolved.length ? unresolved : approval.items,
-        failCount
+        buildContractDifferenceBlockedMessage(blockingFailCount, blockingUnresolved, preflight),
+        blockingUnresolved.length ? blockingUnresolved : approval.items,
+        blockingFailCount
       )
     }
   }
-}
-
-function finiteNumber(value: unknown): number | null {
-  if (value === null || value === undefined || value === '') return null
-  const parsed = Number(value)
-  return Number.isFinite(parsed) ? parsed : null
 }
 
 function money(value: unknown): string {

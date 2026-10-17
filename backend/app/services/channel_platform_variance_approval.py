@@ -17,6 +17,17 @@ from app.services.channel_settlement_engine import aggregate_validation, calcula
 
 MAX_PLATFORM_VARIANCE_CENTS = 50
 
+ALLOWED_FINANCIAL_CHECKS = frozenset({
+    "share_rate",
+    "channel_fee_rate",
+    "tax_rate",
+    "testing_fee",
+    "contract_standard_settlement",
+})
+_BLOCKED_AUTHORIZATION = frozenset({
+    "expired", "out_of_range", "invalid", "not_covered",
+})
+
 
 def _conflict(code: str, message: str) -> HTTPException:
     return HTTPException(status_code=409, detail={"error": code, "message": message})
@@ -32,6 +43,51 @@ def _cents(value: Any) -> int:
         return int((amount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP) * 100).to_integral_value())
     except (TypeError, ValueError, InvalidOperation):
         raise _conflict("platform_variance_invalid_amount", "金额不是有效数字，请检查账单明细") from None
+
+
+def _amounts_align_cents(expected: Any, actual: Any) -> bool:
+    try:
+        return _cents(expected) == _cents(actual)
+    except HTTPException:
+        return False
+
+
+def is_rate_only_contract_exception(case: dict) -> bool:
+    """Money already matches; only share/fee/tax metadata still disagrees with contract."""
+    if case.get("status") not in ("pending", "processing"):
+        return False
+    if not _amounts_align_cents(case.get("expected_amount"), case.get("actual_amount")):
+        return False
+    snapshot = case.get("source_snapshot_json")
+    if isinstance(snapshot, dict):
+        match = snapshot.get("match")
+        if isinstance(match, dict) and str(match.get("authorization_status") or "").lower() in _BLOCKED_AUTHORIZATION:
+            return False
+        checks = snapshot.get("checks") or []
+        saw_financial_fail = False
+        for check in checks:
+            if not isinstance(check, dict) or check.get("status") != "fail":
+                continue
+            key = str(check.get("key") or "")
+            if key not in ALLOWED_FINANCIAL_CHECKS:
+                return False
+            saw_financial_fail = True
+        if checks:
+            return saw_financial_fail
+    try:
+        difference = case.get("difference_amount")
+        if difference is not None and _cents(difference) != 0:
+            return False
+    except HTTPException:
+        return False
+    variance = case.get("variance_abs")
+    if variance is not None:
+        try:
+            if _cents(variance) != 0:
+                return False
+        except HTTPException:
+            return False
+    return True
 
 
 def assess_channel_platform_variance(
@@ -144,7 +200,6 @@ def assert_no_open_contract_exceptions(cases: list[dict], lines: list[Any]) -> N
     }
     current_ids = {item[0] for item in current}
     game_periods = {(item[1], item[2]) for item in current}
-    allowed_financial_checks = {"share_rate", "channel_fee_rate", "tax_rate", "testing_fee", "contract_standard_settlement"}
     for case in cases:
         related = str(case.get("line_id") or "") in current_ids or (
             str(case.get("game_name") or "").strip(), str(case.get("settlement_cycle") or "").strip()
@@ -152,15 +207,21 @@ def assert_no_open_contract_exceptions(cases: list[dict], lines: list[Any]) -> N
         if not related:
             continue
         if case.get("status") in ("pending", "processing"):
+            if is_rate_only_contract_exception(case):
+                # Platform-tail confirmation settles on the saved/platform amount.
+                # A rate-only metadata mismatch does not change receivables here.
+                continue
             raise _conflict("contract_difference_unresolved", "本账单仍有待处理的合同差异，请先完成相应审核")
         snapshot = case.get("source_snapshot_json")
         if not isinstance(snapshot, dict):
             continue
         match = snapshot.get("match")
-        if isinstance(match, dict) and str(match.get("authorization_status") or "").lower() in (
-            "expired", "out_of_range", "invalid", "not_covered"
-        ):
+        if isinstance(match, dict) and str(match.get("authorization_status") or "").lower() in _BLOCKED_AUTHORIZATION:
             raise _conflict("contract_authorization_failed", "合同授权范围存在问题，不能使用平台尾差确认")
         for check in snapshot.get("checks") or []:
-            if isinstance(check, dict) and check.get("status") == "fail" and check.get("key") not in allowed_financial_checks:
+            if (
+                isinstance(check, dict)
+                and check.get("status") == "fail"
+                and check.get("key") not in ALLOWED_FINANCIAL_CHECKS
+            ):
                 raise _conflict("contract_identity_failed", "合同主体、授权或其他非金额核验存在问题，不能强制确认")
