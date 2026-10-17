@@ -38,6 +38,7 @@ const PAGE_LOADERS = Object.freeze({
   businessDashboard: () => import('./pages/MonthlyBusinessDashboardPage.jsx'),
   profitAnalysis: () => import('./pages/ProfitAnalysisPage.jsx'),
   bankReconciliation: () => import('./pages/BankAutoReconciliationPage.jsx'),
+  selfOperated: () => import('./pages/SelfOperatedPage.jsx'),
   bankLedger: () => import('./pages/BankTransactionsLedgerPage.jsx'),
   bankStatementImport: () => import('./pages/BankStatementImportPage.jsx'),
   bill360: () => import('./components/reconciliation/Bill360Drawer.jsx'),
@@ -64,6 +65,7 @@ const AnomalyCenterPage = lazy(PAGE_LOADERS.anomalies)
 const MonthlyBusinessDashboardPage = lazy(PAGE_LOADERS.businessDashboard)
 const ProfitAnalysisPage = lazy(PAGE_LOADERS.profitAnalysis)
 const BankAutoReconciliationPage = lazy(PAGE_LOADERS.bankReconciliation)
+const SelfOperatedPage = lazy(PAGE_LOADERS.selfOperated)
 const BankTransactionsLedgerPage = lazy(PAGE_LOADERS.bankLedger)
 const BankStatementImportPage = lazy(PAGE_LOADERS.bankStatementImport)
 const Bill360Drawer = lazy(PAGE_LOADERS.bill360)
@@ -459,6 +461,7 @@ function App() {
       case VIEWS.RECON_CREATE: return <ReconciliationCreatePage />
       case VIEWS.RECON_EDIT: return <ReconciliationEditPage />
       case VIEWS.RECON_CHANNEL: return <CoreChannelReconciliationPage />
+      case VIEWS.SELF_OPERATED: return <SelfOperatedPage />
       case VIEWS.CHANNEL_RECON_CREATE: return <ChannelReconciliationCreatePage />
       case VIEWS.CHANNEL_RECON_EDIT: return <ChannelReconciliationEditPage />
       case VIEWS.CONTRACTS: return <ContractManagementPage />
