@@ -52,6 +52,47 @@ class ChannelRuleRecommenderAnjiuDiscountTests(unittest.TestCase):
         self.assertEqual(row["recommended"]["channel_fee_rate"], 0)
         self.assertEqual(row["recommended"]["discount_factor"], 0.3)
 
+    def test_three_zhe_line_does_not_use_zero_one_zhe_access_item(self):
+        bill_partner = "广东安久科技有限公司"
+        bill_channel = "游戏fan（安久）"
+        lines = [{"line_index": 0, "game_name": "云上征途3折大混服", "settlement_cycle": "2026-07"}]
+        candidates = [
+            {
+                "access_item_id": "qi-tian",
+                "contract_id": "c1",
+                "contract_name": "安久合同",
+                "partner_name": "广东安久科技有限公司",
+                "channel_name": "游戏fan（安久）",
+                "product_name": "云上征途（0.1折齐天伏魔）",
+                "authorization_start": "2026-01-01",
+                "authorization_end": "2026-12-31",
+                "share_rate": 25,
+                "channel_fee_rate": 0,
+                "invoice_tax_rate": 0,
+                "access_status": "生效",
+            },
+            {
+                "access_item_id": "three-zhe",
+                "contract_id": "c2",
+                "contract_name": "HT-202101-0002",
+                "partner_name": "广东安久科技有限公司",
+                "channel_name": "游戏fan（安久）",
+                "product_name": "云上征途3折大混服",
+                "authorization_start": "2026-01-01",
+                "authorization_end": "2026-12-31",
+                "share_rate": 30,
+                "channel_fee_rate": 5,
+                "invoice_tax_rate": 0,
+                "access_status": "生效",
+            },
+        ]
+
+        result = recommend_channel_rules(bill_partner, bill_channel, lines, candidates)
+        row = result["lines"][0]
+        self.assertEqual(row["match"]["access_item_id"], "three-zhe")
+        self.assertEqual(row["recommended"]["share_rate"], 30)
+        self.assertEqual(row["recommended"]["channel_fee_rate"], 5)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -155,6 +155,27 @@ class ChannelSettlementEngineTests(unittest.TestCase):
 
         self.assertEqual(float(result["system_settlement_amount"]), 2.18)
 
+    def test_explicit_zero_line_fee_rate_without_mode_beats_parent_percent(self):
+        parent = SimpleNamespace(
+            settlement_rule_code=ANJIU_PRE_DISCOUNT_DEDUCTION_RULE,
+            channel_fee_mode="percent",
+            channel_fee_rate=5,
+            tax_mode="share",
+            validation_tolerance=0.05,
+        )
+        line = self.line(35, 0, 2.18, tax=0)
+        line.discount_factor = 0.3
+        line.test_cost = 6
+        line.share_rate = 25
+        line.settlement_rule_code = None
+        line.channel_fee_mode = None
+        line.channel_fee_rate = 0
+        line.tax_mode = None
+
+        result = calculate_channel_line(line, parent)
+
+        self.assertEqual(float(result["system_settlement_amount"]), 2.18)
+
     def test_anjiu_deductions_are_applied_before_discount(self):
         record = SimpleNamespace(
             settlement_rule_code=ANJIU_PRE_DISCOUNT_DEDUCTION_RULE,

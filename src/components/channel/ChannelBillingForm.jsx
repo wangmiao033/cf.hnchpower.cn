@@ -23,6 +23,7 @@ import {
   ruleFormulaText
 } from '@/domain/channel/channelBillingForm.js'
 import { applyCommercialDiscountFromGameName } from '@/domain/channel/channelLineDefaults.js'
+import { linesWithChannelLineContractFees } from '@/domain/channel/channelLineContractFee.js'
 import { recommendChannelContractRules } from '@/lib/api/contractTerms.ts'
 import {
   channelDifferenceLabel,
@@ -263,9 +264,13 @@ function ChannelBillingForm({
   const [differenceNoteWritten, setDifferenceNoteWritten] = useState(false)
   const currentMonthKey = currentMonth()
 
+  const linesForSettlement = useMemo(
+    () => linesWithChannelLineContractFees(lines, header),
+    [lines, header]
+  )
   const fullRecord = useMemo(
-    () => buildFullChannelRecord({ ...header, status: header.status || 'pending' }, lines),
-    [header, lines]
+    () => buildFullChannelRecord({ ...header, status: header.status || 'pending' }, linesForSettlement),
+    [header, linesForSettlement]
   )
   const previewSettlement = Number(fullRecord.settlementAmount || 0)
   const totals = useMemo(() => ({
@@ -307,13 +312,13 @@ function ChannelBillingForm({
   const contractAwareMode = mode === 'add' || mode === 'edit'
   const autoApplyContractRules = canAutoApplyContractRules(mode, header.status)
   const lineRuleSignatures = useMemo(() => new Set(
-    lines
+    linesForSettlement
       .filter((row) => String(row.channelFeeMode || row.taxMode || row.settlementRuleCode || '').trim())
       .map((row) => {
         const rule = resolveChannelLineRuleHeader(row, effectiveRuleHeader)
         return `${rule.settlementRuleCode || ''}|${rule.channelFeeMode || ''}|${rule.channelFeeRate ?? ''}|${rule.taxMode || ''}`
       })
-  ), [lines, effectiveRuleHeader])
+  ), [linesForSettlement, effectiveRuleHeader])
   const mixedLineContractRules = lineRuleSignatures.size > 1
 
   const contractRuleNeedsOverride = useMemo(() => {
@@ -804,7 +809,7 @@ function ChannelBillingForm({
       status: channelStatusForSubmit(header.status, intent),
       remark: [String(header.remark || '').trim(), overrideNote].filter(Boolean).join('；')
     }
-    const record = buildFullChannelRecord(recordHeader, lines)
+    const record = buildFullChannelRecord(recordHeader, linesWithChannelLineContractFees(lines, header))
     try {
       if (mode === 'edit' && recordId != null) {
         const pendingResult = onUpdateRecord?.(recordId, { ...record, id: recordId })
@@ -917,7 +922,7 @@ function ChannelBillingForm({
         <LineItemsTable onAddRow={addLine} showAddButton={false} hint="结算月份只能选择本月或过去月份；历史账期允许保存但会提醒核对，未来账期会被前后端同时拦截。">
           <table className="channel-line-items-table">
             <thead><tr><th>结算月份</th><th>游戏名称</th><th>后台流水</th><th>折扣系数</th><th>总流水</th><th className="channel-voucher-heading" title="代金券只需录入一个金额：折算时按本行折扣系数计算，直扣时按实际金额扣减。两种都有可点「双券」。">代金券 <small>金额 / 口径</small></th><th>无忧试</th><th>玩家退款</th><th>测试费</th><th>福利币</th><th>其他扣减</th><th>分成%</th><th>税率%</th><th>通道费</th><th>计费额</th><th>分成额</th><th>系统结算</th><th>平台结算</th><th>差异</th><th>校验</th><th>操作</th></tr></thead>
-            <tbody>{lines.map((row, index) => {
+            <tbody>{linesForSettlement.map((row, index) => {
               const rowRuleHeader = resolveChannelLineRuleHeader(row, effectiveRuleHeader)
               const rowFeeMode = rowRuleHeader.channelFeeMode || 'fixed'
               const details = calculateSettlementDetails(row, rowRuleHeader)
