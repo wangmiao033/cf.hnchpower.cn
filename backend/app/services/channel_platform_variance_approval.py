@@ -52,11 +52,30 @@ def _amounts_align_cents(expected: Any, actual: Any) -> bool:
         return False
 
 
+def _case_monetary_fields(case: dict) -> tuple[Any, Any, Any]:
+    """Resolve amounts from persisted columns or the audit snapshot."""
+    expected = case.get("expected_amount")
+    actual = case.get("actual_amount")
+    difference = case.get("difference_amount")
+    snapshot = case.get("source_snapshot_json")
+    if isinstance(snapshot, dict):
+        amount = snapshot.get("contract_amount")
+        if isinstance(amount, dict):
+            if expected is None:
+                expected = amount.get("expected_amount")
+            if actual is None:
+                actual = amount.get("actual_amount")
+            if difference is None:
+                difference = amount.get("difference_amount")
+    return expected, actual, difference
+
+
 def is_rate_only_contract_exception(case: dict) -> bool:
     """Money already matches; only share/fee/tax metadata still disagrees with contract."""
     if case.get("status") not in ("pending", "processing"):
         return False
-    if not _amounts_align_cents(case.get("expected_amount"), case.get("actual_amount")):
+    expected, actual, difference = _case_monetary_fields(case)
+    if not _amounts_align_cents(expected, actual):
         return False
     snapshot = case.get("source_snapshot_json")
     if isinstance(snapshot, dict):
@@ -75,7 +94,6 @@ def is_rate_only_contract_exception(case: dict) -> bool:
         if checks:
             return saw_financial_fail
     try:
-        difference = case.get("difference_amount")
         if difference is not None and _cents(difference) != 0:
             return False
     except HTTPException:

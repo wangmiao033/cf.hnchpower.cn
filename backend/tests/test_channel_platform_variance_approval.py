@@ -261,6 +261,36 @@ class ChannelPlatformVarianceApprovalTests(TestCase):
         self.assertTrue(is_rate_only_contract_exception(case))
         assert_no_open_contract_exceptions([case], lines)
 
+    def test_rate_only_pending_case_without_amount_columns_matches_confirm_api_query(self):
+        """confirm-platform-variance used to omit amount columns; classification must still work."""
+        bill, lines = bill_and_lines()
+        db_row = {
+            "line_id": "L1",
+            "game_name": "云上征途0.05折",
+            "settlement_cycle": "2026-08",
+            "status": "pending",
+            "handling_type": None,
+            "source_snapshot_json": {
+                "contract_amount": {
+                    "status": "pass",
+                    "expected_amount": 7.73,
+                    "actual_amount": 7.73,
+                    "difference_amount": 0,
+                },
+                "checks": [
+                    {
+                        "key": "channel_fee_rate",
+                        "label": "渠道费率",
+                        "status": "fail",
+                        "bill_value": 0,
+                        "contract_value": 5,
+                    }
+                ],
+            },
+        }
+        self.assertTrue(is_rate_only_contract_exception(db_row))
+        assert_no_open_contract_exceptions([db_row], lines)
+
     def test_monetary_pending_case_still_blocks_platform_tail(self):
         bill, lines = bill_and_lines()
         with self.assertRaises(HTTPException) as caught:

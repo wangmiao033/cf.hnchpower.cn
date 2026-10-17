@@ -2,6 +2,17 @@
 
 > 此日志是对账管理系统唯一的正式更新记录。自 **2026-10-16** 起，代码变更与生产发布必须逐次登记，保留全部历史。维护要求详见 [AGENTS.md](AGENTS.md)。下述时间均为 **北京时间（UTC+8）**。只有 Vercel 状态为 `READY` 才标记“部署成功”；实际业务验收另行记录。
 
+## 2026-10-17｜渠道账单：修复 #257 后平台尾差仍被合同差异拦截
+
+- **类型**：Bug 修复。
+- **问题**：生产已合并 #257（`13fab91`）后，爱趣账单 `QD-20261015-78B026` 点击「按平台¥2566.74确认账单」仍返回「本账单仍有待处理的合同差异，请先完成相应审核」；待办为「云上征途0.05折 · 2026-08 · 金额一致 ¥7.73 · 渠道费率 账单0 / 合同5」。
+- **根因**：`is_rate_only_contract_exception` 依赖 `expected_amount`/`actual_amount`，但 `confirm-platform-variance` 接口查询 `cf_contract_difference_cases` 时未 SELECT 金额列（小额合同差异确认路径已包含这些列）。载入的 case 字典金额均为空，分类恒为 false，仍触发 `contract_difference_unresolved`。
+- **修复**：平台尾差确认查询补齐金额列；`is_rate_only_contract_exception` 在列缺失时回退读取 `source_snapshot_json.contract_amount`。
+- **影响范围**：`bill_lifecycle.py`、`channel_platform_variance_approval.py`。
+- **验证**：`backend/tests/test_channel_platform_variance_approval.py` 新增与生产 SQL 形状一致的回归用例；`npm test` / `npm run build`。
+- **发布信息**：未部署生产；待 Vercel `READY` 后在 `QD-20261015-78B026` 复测。
+- **待确认事项**：无。
+
 ## 2026-10-17｜渠道账单：平台小额尾差不再被「仅费率不一致」挡住
 
 - **类型**：Bug 修复。
