@@ -76,8 +76,8 @@ def _matching_short_alias(partner_name: Any, candidate: dict[str, Any]) -> str:
     return ""
 
 
-def partner_matches_v20(partner_name: str, candidate: dict) -> bool:
-    if _ORIGINAL_PARTNER_MATCHES(partner_name, candidate):
+def partner_matches_v20(partner_name: str, candidate: dict, channel_name: str = "") -> bool:
+    if _ORIGINAL_PARTNER_MATCHES(partner_name, candidate, channel_name):
         return True
     return bool(_matching_short_alias(partner_name, candidate))
 
