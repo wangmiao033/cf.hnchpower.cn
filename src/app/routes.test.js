@@ -50,9 +50,11 @@ describe('统一对账进度路由', () => {
       VIEWS.RECON_RD,
       VIEWS.RECON_PROGRESS,
       VIEWS.RECON_CHANNEL,
+      VIEWS.SELF_OPERATED,
       VIEWS.CHANNEL_RECON_CREATE
     ])
     expect(getTabView(VIEWS.RECON_PROGRESS)).toBe(VIEWS.RECON_PROGRESS)
+    expect(getGroupForView(VIEWS.SELF_OPERATED)?.id).toBe('reconciliation')
   })
 
   it('渠道智能录入直接复用现有新增渠道账单页面', () => {
