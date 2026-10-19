@@ -163,7 +163,7 @@ BEGIN
     IF TG_OP = 'UPDATE'
        AND OLD.action = 'status_change'
        AND (NEW.metadata - 'reason' - 'from_status' - 'to_status') = (OLD.metadata - 'reason' - 'from_status' - 'to_status')
-       AND OLD.xmin::text = (txid_current() % 4294967296)::text
+       AND OLD.xmin::text = mod(txid_current(), 4294967296)::text
        AND (to_jsonb(NEW) - 'metadata' - 'summary') = (to_jsonb(OLD) - 'metadata' - 'summary') THEN
         RETURN NEW;
     END IF;
