@@ -215,3 +215,7 @@
   color: #73869c;
   font-size: 12px;
 }
+
+.channel-honor-official-review { display: grid; gap: 12px; }
+.channel-honor-official-review .channel-honor-official-line { display: flex; align-items: center; gap: 8px; }
+.channel-honor-official-line input[type="checkbox"] { width: 18px; height: 18px; flex: 0 0 auto; }

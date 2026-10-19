@@ -21,7 +21,8 @@ import {
   transitionBillLifecycle,
   confirmApprovedChannelSmallVariance,
   confirmReviewedChannelPlatformVariance,
-  assertContractReadyForPlatformTail
+  assertContractReadyForPlatformTail,
+  getChannelOfficialStatementPolicy
 } from '@/lib/api/billLifecycle.ts'
 import { getContractBillReconciliation } from '@/lib/api/contractTerms.ts'
 import { listContractDifferenceCases, handleContractDifferenceCase } from '@/lib/api/contractDifferences.ts'
@@ -48,6 +49,12 @@ import './CoreBillFormPages.css'
 import '@/components/reconciliation/reconciliation-admin.css'
 import '@/styles/SimplifiedBillReview.css'
 import './ChannelBillCompact.css'
+
+async function assessCurrentPlatformReview(savedBill) {
+  const honor = savedBill.partner_name === '荣耀' && (!savedBill.channel_name || savedBill.channel_name === '荣耀')
+  const policy = honor ? (await getChannelOfficialStatementPolicy(String(savedBill.id))).policy : null
+  return assessSavedChannelPlatformDifference(savedBill, policy)
+}
 
 const FORM_ID = 'core-channel-bill-form'
 
@@ -161,6 +168,7 @@ function CoreChannelBillFormPage({ mode }) {
   const [platformEvidenceAttachments, setPlatformEvidenceAttachments] = useState([])
   const [platformEvidenceLoading, setPlatformEvidenceLoading] = useState(false)
   const [platformEvidenceId, setPlatformEvidenceId] = useState('')
+  const [officialConfirmedLineIds, setOfficialConfirmedLineIds] = useState([])
   const [smallVarianceNote, setSmallVarianceNote] = useState('')
   const [smartRecord, setSmartRecord] = useState(null)
   const [smartRevision, setSmartRevision] = useState(0)
@@ -539,10 +547,16 @@ function CoreChannelBillFormPage({ mode }) {
         )
         return
       }
+      if (savedBill.partner_name === '荣耀' && (!savedBill.channel_name || savedBill.channel_name === '荣耀')
+        && (!(savedBill.items || []).length || savedBill.items.some(line => line.platform_settlement_amount == null))) {
+        reportIssue('荣耀账单必须逐游戏录入官方结算金额，不能用公式金额代替尚未提供的官方金额。',
+          { kind: 'review', title: '账单已保存，官方结算金额尚未补齐', saved: true })
+        return
+      }
       // A saved platform discrepancy goes through the existing audit review
       // rather than a guaranteed-failing ordinary confirmed transition.
       if (String(savedBill.validation_status || '').toLowerCase() === 'fail') {
-        const review = assessSavedChannelPlatformDifference(savedBill)
+        const review = await assessCurrentPlatformReview(savedBill)
         if (review.eligible) {
           const documented = review.reviewKind === 'documented'
           setInlineIssue({
@@ -593,7 +607,7 @@ function CoreChannelBillFormPage({ mode }) {
       )) {
         try {
           const savedBill = await getChannelRecord(billId)
-          const review = assessSavedChannelPlatformDifference(savedBill)
+          const review = await assessCurrentPlatformReview(savedBill)
           if (review.eligible) {
             const documented = review.reviewKind === 'documented'
             setInlineIssue({
@@ -723,6 +737,7 @@ function CoreChannelBillFormPage({ mode }) {
   const openSmallVariancePanel = (kind = 'contract', review = null) => {
     setSmallVarianceKind(kind)
     setPlatformVarianceReview(review)
+    setOfficialConfirmedLineIds([])
     setPlatformEvidenceAttachments([])
     setPlatformEvidenceId('')
     if (kind === 'platform' && review?.reviewKind === 'documented') {
@@ -746,6 +761,7 @@ function CoreChannelBillFormPage({ mode }) {
     const note = smallVarianceNote.trim()
     if (smallVarianceKind === 'platform') {
       const documented = platformVarianceReview?.reviewKind === 'documented'
+      const official = platformVarianceReview?.policyCode === 'honor_official_statement_v1'
       if (!platformVarianceReview) {
         showToast('平台结算数据尚未就绪，请重新打开本张账单', 'error')
         return
@@ -755,6 +771,10 @@ function CoreChannelBillFormPage({ mode }) {
       )
       if (documented && !effectiveEvidenceId) {
         showToast('请先上传或选择平台原始结算凭证', 'error')
+        return
+      }
+      if (official && (note.length < 6 || officialConfirmedLineIds.length !== platformVarianceReview.officialLines.length)) {
+        showToast('请逐游戏勾选确认官方金额，并填写至少6个字的核对依据', 'error')
         return
       }
       const evidence = platformEvidenceAttachments.find(item => item.id === effectiveEvidenceId)
@@ -767,13 +787,15 @@ function CoreChannelBillFormPage({ mode }) {
       try {
         // Strict contract preflight: neither unknown authorization nor
         // unresolved contract deviations can be waived by platform approval.
-        await assertContractReadyForPlatformTail(String(channelEditRecordId))
+        await assertContractReadyForPlatformTail(String(channelEditRecordId), platformVarianceReview)
         // The backend checks document ownership, current line IDs, balances and
         // contract history atomically. Do not block the user with a redundant
         // second attachment-list fetch before the actual confirmation.
         const lifecycle = await confirmReviewedChannelPlatformVariance(
           String(channelEditRecordId), auditNote, platformVarianceReview,
-          documented ? effectiveEvidenceId : '', documented
+          documented ? effectiveEvidenceId : '', documented,
+          official ? platformVarianceReview.officialLines.filter(line => officialConfirmedLineIds.includes(line.line_id)) : [],
+          official ? note : ''
         )
         safety.clearAfterSubmit()
         invalidateEditRecord('channel', String(channelEditRecordId))
@@ -1168,6 +1190,9 @@ function CoreChannelBillFormPage({ mode }) {
           settlementAmount={stableRecord?.settlementAmount ?? previewAmount}
           kind={smallVarianceKind}
           platformReview={platformVarianceReview}
+          officialConfirmedLineIds={officialConfirmedLineIds}
+          onOfficialLineToggle={lineId => setOfficialConfirmedLineIds(previous => previous.includes(lineId)
+            ? previous.filter(id => id !== lineId) : [...previous, lineId])}
           billId={String(stableRecord?.id || channelEditRecordId || '')}
           attachments={platformEvidenceAttachments}
           attachmentsLoading={platformEvidenceLoading}

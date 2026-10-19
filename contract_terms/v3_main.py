@@ -405,8 +405,25 @@ def create_reconciliation_snapshot_v3(request: Request, payload: dict) -> dict:
         raise HTTPException(status_code=422, detail="账单类型或账单 ID 无效")
 
     with psycopg.connect(_database_url(), connect_timeout=15, row_factory=dict_row) as conn:
+        if event_type == "honor_official_statement_v1" and bill_type == "channel":
+            # Calculation and revision capture must see one DB snapshot. A
+            # concurrent source update conflicts with the subsequent share lock.
+            conn.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
         _ensure_v2_tables(conn)
         result = _reconcile_data_v3(conn, bill_type, bill_id)
+        # Only the Honor official-source review needs the same persisted line-fee
+        # authority used by the live confirmation preflight. Other snapshots retain
+        # their existing semantics, and monetary differences remain in the result.
+        if (event_type == "honor_official_statement_v1" and bill_type == "channel"
+                and (result.get("bill") or {}).get("partner_name") == "荣耀"):
+            try:
+                from .channel_line_verification import apply_channel_line_fee_authority
+                from .honor_official_snapshot import attach_honor_source_revisions
+            except ImportError:
+                from channel_line_verification import apply_channel_line_fee_authority
+                from honor_official_snapshot import attach_honor_source_revisions
+            result = apply_channel_line_fee_authority(conn, bill_type, bill_id, result)
+            result = attach_honor_source_revisions(conn, bill_id, result)
         safe_result = jsonable_encoder(result)
         safe_summary = jsonable_encoder(result.get("summary") or {})
         snapshot_id = uuid4().hex

@@ -380,7 +380,20 @@ def _transition_guard(
 
     if target == "confirmed":
         ok, reason = _base_bill_is_complete(bill_type, bill)
-        return None if ok else reason
+        if not ok:
+            return reason
+        if bill_type == "channel":
+            from app.services.honor_official_statement import resolve_honor_policy
+            try:
+                official_policy = resolve_honor_policy(db, bill)
+            except HTTPException as error:
+                # Snapshot reads should remain available with a blocked transition.
+                return str(error.detail.get("message") or "荣耀客户身份尚未唯一确认") if isinstance(error.detail, dict) else str(error.detail)
+            if official_policy:
+                lines = list(getattr(bill, "line_items", None) or [])
+                if not lines or any(getattr(line, "platform_settlement_amount", None) is None for line in lines):
+                    return "荣耀账单必须逐游戏录入官方结算金额，不能用公式金额代替尚未提供的官方金额。"
+        return None
 
     cumulative_block = _cumulative_transition_block(db, bill_type, bill, current, target)
     if cumulative_block:

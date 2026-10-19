@@ -109,7 +109,8 @@ def is_rate_only_contract_exception(case: dict) -> bool:
 
 
 def assess_channel_platform_variance(
-    bill: Any, lines: list[Any], *, allow_documented_variance: bool = False
+    bill: Any, lines: list[Any], *, allow_documented_variance: bool = False,
+    official_statement: bool = False
 ) -> dict:
     """Recompute persisted figures without reclassifying or silently offsetting errors.
 
@@ -184,6 +185,7 @@ def assess_channel_platform_variance(
     # real line-rule correction, not a bundled one-click financial approval.
     if (
         allow_documented_variance
+        and not official_statement
         and total_abs_cents > MAX_PLATFORM_VARIANCE_CENTS
         and total_abs_cents - abs(signed_difference) > 2
     ):
@@ -193,13 +195,13 @@ def assess_channel_platform_variance(
         )
     if settlement_cents != platform_cents or settlement_cents < 0:
         raise _conflict("platform_variance_settlement_mismatch", "本期结算金额不是平台金额，不能作为纯尾差确认")
-    if signed_difference == 0 or (
+    if (signed_difference == 0 and not official_statement) or (
         abs(signed_difference) > MAX_PLATFORM_VARIANCE_CENTS and not allow_documented_variance
     ):
         raise _conflict("platform_variance_too_large", "系统与平台差额需要上传原始结算凭证，并由管理员人工核准")
 
     return {
-        "review_kind": "documented" if total_abs_cents > MAX_PLATFORM_VARIANCE_CENTS else "small",
+        "review_kind": "documented" if official_statement or total_abs_cents > MAX_PLATFORM_VARIANCE_CENTS else "small",
         "system_amount": system_cents / 100,
         "platform_amount": platform_cents / 100,
         "recorded_settlement_amount": settlement_cents / 100,

@@ -40,11 +40,15 @@ SUPPORTED_FILE_LABEL = "JPG、PNG、GIF、WebP、PDF、Excel、CSV 或 Word"
 PARENT_MODELS = {"rd": ReconciliationRecord, "channel": ChannelRecord}
 
 
-def _require_parent(db: Session, bill_type: str, bill_id: str) -> None:
+def _require_parent(db: Session, bill_type: str, bill_id: str, *, for_update: bool = False) -> None:
     model = PARENT_MODELS.get(bill_type)
     if model is None:
         raise HTTPException(status_code=400, detail="不支持的账单类型")
-    if db.get(model, bill_id) is None:
+    parent = (
+        db.execute(select(model).where(model.id == bill_id).with_for_update()).scalar_one_or_none()
+        if for_update else db.get(model, bill_id)
+    )
+    if parent is None:
         raise HTTPException(status_code=404, detail="账单不存在")
 
 
@@ -126,7 +130,9 @@ async def upload_attachment(
 async def delete_attachment(
     bill_type: str, bill_id: str, attachment_id: str, db: Session = Depends(get_db)
 ):
-    _require_parent(db, bill_type, bill_id)
+    # Approval holds this same parent lock. Read the audit reference only after
+    # acquiring it so concurrent confirmation cannot lose its source document.
+    _require_parent(db, bill_type, bill_id, for_update=bill_type == "channel")
     item = _get_attachment(db, bill_type, bill_id, attachment_id)
     # A formally approved platform settlement statement is immutable evidence;
     # do not silently delete it while retaining an approval in audit logs.
@@ -135,7 +141,10 @@ async def delete_attachment(
             select(OperationLog.id).where(
                 OperationLog.entity_type == "channel",
                 OperationLog.entity_id == bill_id,
-                OperationLog.action == "platform_documented_variance_confirm",
+                OperationLog.action.in_((
+                    "platform_documented_variance_confirm",
+                    "honor_official_statement_confirm",
+                )),
                 OperationLog.metadata_json["evidence_attachment_id"].as_string() == attachment_id,
             ).limit(1)
         ).scalar_one_or_none()
