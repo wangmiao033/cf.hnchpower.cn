@@ -61,6 +61,8 @@ function CoreRdBillFormPage({ mode }) {
   const isEdit = mode === 'edit'
   const view = isEdit ? VIEWS.RECON_EDIT : VIEWS.RECON_CREATE
   const submitIntentRef = useRef('back')
+  const [auditReason, setAuditReason] = useState('')
+  useEffect(() => setAuditReason(''), [reconEditRecordId, mode])
   const [previewAmount, setPreviewAmount] = useState(0)
   const [remoteRecord, setRemoteRecord] = useState(null)
   const [loading, setLoading] = useState(isEdit)
@@ -273,7 +275,7 @@ function CoreRdBillFormPage({ mode }) {
         record={stableEditRecord}
         onEditApproved={retryLoad}
         onOpen360={() => {
-          goList()
+          // Keep the reviewed bill visible while its audit drawer loads/closes.
           openBill360?.('rd', String(stableEditRecord.id), stableEditRecord)
         }}
         onBack={goList}
@@ -323,6 +325,7 @@ function CoreRdBillFormPage({ mode }) {
         onSourceChanged={handleContractSourceChanged}
       />
 
+      {isEdit ? <label className="core-bill-card">修改原因（可选，随本次修改留档）<input value={auditReason} maxLength={2000} onChange={event => setAuditReason(event.target.value)} placeholder="说明本次调整的依据；不填写则明确记为未填写" /></label> : null}
       <section className="core-bill-card core-bill-card--embedded">
         <ContractDrivenRdEntry
           key={`${mode}-${reconEditRecordId || 'new'}-${safety.resetVersion}-${contractSourceRevision}`}
@@ -339,10 +342,15 @@ function CoreRdBillFormPage({ mode }) {
           onFormStateChange={handleRdFormStateChange}
           onSubmitted={handleSubmitted}
           onAddRecord={recon.addRecord}
-          onUpdateRecord={(id, record) => recon.updateRecord(id, {
-            ...record,
-            updatedAt: stableEditRecord?.updatedAt || record?.updatedAt
-          })}
+          onUpdateRecord={async (id, record) => {
+            const saved = await recon.updateRecord(id, {
+              ...record,
+              auditReason,
+              updatedAt: stableEditRecord?.updatedAt || record?.updatedAt
+            })
+            if (saved === true) setAuditReason('')
+            return saved
+          }}
           settlementMonth={settings.settlementMonth}
           settlementCycles={(recon.records || []).map((row) => row.settlementMonth)}
           existingRecords={recon.records || []}

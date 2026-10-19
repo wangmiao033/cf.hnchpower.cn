@@ -41,6 +41,14 @@ test('read-only channel scroll has no ghosting or repeated attachment requests',
   await page.route(url => url.pathname.startsWith('/api/'), route => {
     const path = new URL(route.request().url()).pathname
     requests.push(route.request().method()+' '+path)
+    if (path === '/api/auth/me')
+      return route.fulfill({json:{id:'viewer-test', role:'viewer', permissions:['audit.view']}})
+    if (path === '/api/operation-logs/bill-actors/channel/XIAOMI-202609')
+      return route.fulfill({json:{
+        entered:{id:'create-log',actor_user_id:'entry-test',actor_email:'entry@example.test',created_at:'2026-09-01T01:00:00Z'},
+        verified:{id:'verify-log',actor_user_id:'review-test',actor_email:'review@example.test',created_at:'2026-09-02T01:00:00Z'},
+        modified:null
+      }})
     if (path === '/api/channel-records/XIAOMI-202609')
       return route.fulfill({json:record})
     if (path === '/api/bill-attachments/channel/XIAOMI-202609')
@@ -62,7 +70,12 @@ test('read-only channel scroll has no ghosting or repeated attachment requests',
   }
   await expect(panel.locator('.is-brief-games tbody tr')).toHaveCount(4)
   await expect(folds).toHaveCount(4)
-  expect(requests).toEqual(['GET /api/channel-records/XIAOMI-202609'])
+  await expect(panel.getByText('entry@example.test', {exact:false})).toBeVisible()
+  await expect(panel.getByText('review@example.test', {exact:false})).toBeVisible()
+  expect(requests.slice().sort()).toEqual([
+    'GET /api/auth/me', 'GET /api/channel-records/XIAOMI-202609',
+    'GET /api/operation-logs/bill-actors/channel/XIAOMI-202609'
+  ].sort())
   await expect(folds.nth(0).locator('table')).toHaveCount(0)
 
   for (let i = 0; i < 3; i++) {

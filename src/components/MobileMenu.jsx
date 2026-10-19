@@ -23,7 +23,9 @@ function MobileMenu({ children }) {
   }, [isOpen])
 
   const closeAfterNavigation = (event) => {
-    if (event.target.closest('button, a, [role="menuitem"]')) setIsOpen(false)
+    const control = event.target.closest('button, a, [role="menuitem"]')
+    // Sidebar group buttons expand in-place; only destinations close the menu.
+    if (control && !control.hasAttribute('aria-expanded')) setIsOpen(false)
   }
 
   return (
@@ -43,7 +45,7 @@ function MobileMenu({ children }) {
         <>
           <div className="mobile-menu-overlay" role="presentation" onMouseDown={() => setIsOpen(false)} />
           <div id={menuId} className="mobile-menu" role="dialog" aria-modal="true" aria-label="系统导航">
-            <div className="mobile-menu-content" onClickCapture={closeAfterNavigation}>
+            <div className="mobile-menu-content" onClick={closeAfterNavigation}>
               {children}
             </div>
           </div>

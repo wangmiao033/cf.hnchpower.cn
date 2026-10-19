@@ -1,5 +1,6 @@
 import React from 'react'
 import { createRoot } from 'react-dom/client'
+import { AuthProvider } from '/src/features/auth/AuthContext.jsx'
 import ChannelBillReadonlyView from '/src/components/channel/ChannelBillReadonlyView.jsx'
 import mainSource from '/src/main.jsx?raw'
 for (const [, path] of mainSource.matchAll(/import ['"](.+\.css)['"]/g)) {
@@ -16,7 +17,7 @@ const snapshot = {
   receivedAmount: 0
 }
 createRoot(document.getElementById('fixture')).render(
-  <main style={{ maxWidth: 1000, margin: '0 auto', padding: 20, minWidth: 0 }}>
+  <AuthProvider><main style={{ maxWidth: 1000, margin: '0 auto', padding: 20, minWidth: 0 }}>
     <ChannelBillReadonlyView recordId="XIAOMI-202609" fallbackRecord={snapshot} />
-  </main>
+  </main></AuthProvider>
 )

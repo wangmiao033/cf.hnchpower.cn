@@ -412,3 +412,27 @@
   }
 
 }
+
+/* Account management remains reachable after the global header is retired. */
+.sidebar-account-entry {
+  margin-top: 20px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.sidebar-account-profile {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 0 12px 8px;
+  color: #94a3b8;
+  font-size: 11px;
+}
+
+.sidebar-account-profile strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #e2e8f0;
+  font-size: 12px;
+}

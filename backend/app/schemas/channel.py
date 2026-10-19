@@ -175,6 +175,7 @@ class ChannelRecordCreate(BaseModel):
 
 
 class ChannelRecordUpdate(BaseModel):
+    audit_reason: str | None = Field(default=None, max_length=2000)
     # Optional optimistic concurrency token supplied by the edit page.
     expected_updated_at: datetime | None = None
     statement_no: str | None = None

@@ -154,6 +154,8 @@ function CoreChannelBillFormPage({ mode }) {
   const view = isEdit ? VIEWS.CHANNEL_RECON_EDIT : VIEWS.CHANNEL_RECON_CREATE
   const submitIntentRef = useRef('back')
   const authorityRequestRef = useRef(0)
+  const [auditReason, setAuditReason] = useState('')
+  useEffect(() => setAuditReason(''), [channelEditRecordId, mode])
   const [previewAmount, setPreviewAmount] = useState(0)
   const [remoteRecord, setRemoteRecord] = useState(null)
   const [loading, setLoading] = useState(isEdit)
@@ -355,6 +357,7 @@ function CoreChannelBillFormPage({ mode }) {
     try {
       const result = await recon.onChannelUpdateRecord?.(recordId, {
         ...record,
+        auditReason,
         updatedAt: stableRecord?.updatedAt || record?.updatedAt
       })
       if (result === false) {
@@ -369,6 +372,7 @@ function CoreChannelBillFormPage({ mode }) {
         return false
       }
       setInlineIssue(null)
+      if (result === true) setAuditReason('')
       return result
     } catch (error) {
       const message = error instanceof Error && error.message
@@ -961,7 +965,7 @@ function CoreChannelBillFormPage({ mode }) {
         billType="channel"
         record={stableRecord}
         onOpen360={() => {
-          goList()
+          // Keep the reviewed bill visible while its audit drawer loads/closes.
           openBill360('channel', String(stableRecord.id), stableRecord)
         }}
         onBack={goList}
@@ -1104,6 +1108,7 @@ function CoreChannelBillFormPage({ mode }) {
         </div>
       ) : null}
 
+      {isEdit ? <label className="core-bill-card">修改原因（可选，随本次修改留档）<input value={auditReason} maxLength={2000} onChange={event => setAuditReason(event.target.value)} placeholder="说明本次调整的依据；不填写则明确记为未填写" /></label> : null}
       <section className="core-bill-card core-bill-card--embedded">
         <ChannelBillingForm
           key={`${mode}-${channelEditRecordId || 'new'}-${safety.resetVersion}-${smartRevision}`}

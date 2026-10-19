@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from fastapi import HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from app.models.bill_invoice_allocation import BillInvoiceAllocation
@@ -516,29 +516,11 @@ def transition_bill(
             },
         )
 
+    db.execute(text("SELECT set_config('app.operation_reason', :reason, true)"), {"reason": normalized_reason})
     bill.status = target
     if hasattr(bill, "updated_at"):
         bill.updated_at = datetime.now(timezone.utc)
     db.flush()
-
-    if normalized_reason:
-        latest = db.execute(
-            select(OperationLog)
-            .where(
-                OperationLog.entity_type == bill_type,
-                OperationLog.entity_id == str(bill.id),
-                OperationLog.action == "status_change",
-            )
-            .order_by(OperationLog.created_at.desc())
-            .limit(1)
-        ).scalars().first()
-        if latest is not None:
-            metadata = dict(latest.metadata_json or {})
-            metadata["reason"] = normalized_reason
-            metadata["from_status"] = current
-            metadata["to_status"] = target
-            latest.metadata_json = metadata
-            latest.summary = f"{status_label(current)} → {status_label(target)}"
 
     db.commit()
     db.refresh(bill)

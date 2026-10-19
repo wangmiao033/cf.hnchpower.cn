@@ -26,3 +26,9 @@ class OperationLogRead(BaseModel):
 class OperationLogListResponse(BaseModel):
     items: list[OperationLogRead]
     total: int
+
+
+class BillActorSummary(BaseModel):
+    entered: OperationLogRead | None = None
+    verified: OperationLogRead | None = None
+    modified: OperationLogRead | None = None

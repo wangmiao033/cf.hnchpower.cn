@@ -68,6 +68,9 @@ const PERCENT_FIELDS = new Set([
 ])
 
 const ACTION_META = {
+  line_add: { label: '新增明细', tone: 'create', mark: '明' },
+  line_update: { label: '修改明细', tone: 'update', mark: '明' },
+  line_delete: { label: '删除明细', tone: 'delete', mark: '明' },
   create: { label: '创建', tone: 'create', mark: '建' },
   update: { label: '修改', tone: 'update', mark: '改' },
   delete: { label: '删除', tone: 'delete', mark: '删' },
@@ -195,9 +198,8 @@ export function operationChangeLines(changes = {}, limit = 8) {
 
 export function operationActorLabel(log) {
   const email = String(log?.actor_email || '').trim()
-  if (!email) return '系统'
-  const local = email.split('@')[0]
-  return local || email
+  if (email) return email
+  return log?.actor_user_id ? `用户 ${log.actor_user_id}` : '未记录操作者'
 }
 
 export function operationHiddenChangeCount(changes = {}, shown = 8) {

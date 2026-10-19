@@ -294,6 +294,7 @@ export function useReconciliationStore(settings, showToast, options = {}) {
           // The editor's server revision prevents accidental overwrites after
           // another tab, approval, or bank action has updated this bill.
           if (merged.updatedAt) payload.expected_updated_at = String(merged.updatedAt)
+          if (merged.auditReason) payload.audit_reason = String(merged.auditReason)
           await updateReconciliationRecord(sid, payload)
           await refetchReconciliationFromApi()
           addHistoryItem('更新记录', { records, partyA, partyB, settlementMonth })
@@ -758,6 +759,7 @@ export function useReconciliationStore(settings, showToast, options = {}) {
         try {
           const payload = frontendChannelRecordToPayload(merged)
           if (merged.updatedAt) payload.expected_updated_at = String(merged.updatedAt)
+          if (merged.auditReason) payload.audit_reason = String(merged.auditReason)
           await updateChannelRecord(sid, payload)
           await refetchChannelFromApi()
           showToast('渠道记录更新成功', 'success')

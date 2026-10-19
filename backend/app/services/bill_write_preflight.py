@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import HTTPException
+from sqlalchemy import text
 
 from app.services.bill_lifecycle import assert_update_allowed, normalize_status, status_label
 
@@ -65,3 +66,11 @@ def prepare_bill_financial_update(bill_type: str, bill: Any, incoming: dict) -> 
                 },
             )
     return approved
+
+
+def set_bill_audit_reason(db, reason: str | None) -> None:
+    """Set transaction-local audit context without touching financial fields."""
+    if db.get_bind().dialect.name != "postgresql":
+        return  # SQLite unit fixtures have no PostgreSQL audit triggers.
+    db.execute(text("SELECT set_config('app.operation_reason', :reason, true)"),
+               {"reason": str(reason or "").strip()})

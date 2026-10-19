@@ -1,3 +1,4 @@
+import BillActorSummary from '@/components/reconciliation/BillActorSummary.jsx'
 import React, { useEffect, useState } from 'react'
 import { apiChannelRowToFrontend, getChannelRecord } from '@/lib/api/channel.ts'
 import { billAttachmentFileUrl, listBillAttachments } from '@/lib/api/billAttachments.ts'
@@ -226,6 +227,7 @@ export default function ChannelBillReadonlyView({ recordId, fallbackRecord }) {
         </div>
       </section>
 
+      <BillActorSummary billType="channel" billId={recordId} />
       <details className="channel-readonly-fold" onToggle={event => onDetailToggle('calculations', event)}>
         <summary>全部结算计算字段 <small>完整扣减、分成、税率、系统及平台金额</small></summary>
         {openedSections.calculations ? (

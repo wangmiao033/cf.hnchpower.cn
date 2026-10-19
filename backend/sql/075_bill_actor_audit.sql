@@ -1,0 +1,176 @@
+CREATE OR REPLACE FUNCTION app_capture_bill_operation_log()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    old_json JSONB := CASE WHEN TG_OP = 'INSERT' THEN '{}'::jsonb ELSE to_jsonb(OLD) END;
+    new_json JSONB := CASE WHEN TG_OP = 'DELETE' THEN '{}'::jsonb ELSE to_jsonb(NEW) END;
+    changed JSONB;
+    entity_type_value TEXT := TG_ARGV[0];
+    entity_id_key TEXT := TG_ARGV[1];
+    entity_number_key TEXT := NULLIF(TG_ARGV[2], '');
+    resource_kind TEXT := TG_ARGV[3];
+    entity_id_value TEXT;
+    entity_number_value TEXT;
+    action_value TEXT;
+    summary_value TEXT;
+    actor_id TEXT := NULLIF(current_setting('app.current_user_id', true), '');
+    actor_email_value TEXT := NULLIF(current_setting('app.current_user_email', true), '');
+BEGIN
+    IF left(entity_type_value, 1) = '@' THEN
+        entity_type_value := COALESCE(
+            new_json ->> substring(entity_type_value FROM 2),
+            old_json ->> substring(entity_type_value FROM 2)
+        );
+    END IF;
+
+    entity_id_value := COALESCE(new_json ->> entity_id_key, old_json ->> entity_id_key);
+    IF entity_number_key IS NOT NULL THEN
+        entity_number_value := COALESCE(new_json ->> entity_number_key, old_json ->> entity_number_key);
+    END IF;
+
+    IF entity_type_value IS NULL OR entity_id_value IS NULL OR entity_id_value = '' THEN
+        IF TG_OP = 'DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF;
+    END IF;
+
+    changed := app_operation_log_changes(old_json, new_json);
+
+    -- 收款汇总会自动回写渠道主表；收款明细本身已有日志时，不重复制造一条主表更新日志。
+    IF TG_TABLE_NAME = 'channel_records' AND TG_OP = 'UPDATE' THEN
+        IF (changed - 'received_amount' - 'receipt_status') = '{}'::jsonb THEN
+            RETURN NEW;
+        END IF;
+    END IF;
+
+    IF TG_TABLE_NAME = 'bank_transactions' THEN
+        IF COALESCE(new_json ->> 'reconciliation_id', old_json ->> 'reconciliation_id', '') = '' THEN
+            IF TG_OP = 'DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF;
+        END IF;
+        IF COALESCE(new_json ->> 'reconciliation_type', old_json ->> 'reconciliation_type', '') NOT IN ('rd', 'channel') THEN
+            IF TG_OP = 'DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF;
+        END IF;
+        entity_type_value := COALESCE(new_json ->> 'reconciliation_type', old_json ->> 'reconciliation_type');
+        entity_id_value := COALESCE(new_json ->> 'reconciliation_id', old_json ->> 'reconciliation_id');
+    END IF;
+
+    IF resource_kind = 'bill' THEN
+        IF TG_OP = 'INSERT' THEN
+            action_value := 'create';
+            summary_value := CASE entity_type_value WHEN 'rd' THEN '创建研发账单' ELSE '创建渠道账单' END;
+            changed := jsonb_build_object('record', jsonb_build_object('before', NULL, 'after', new_json));
+        ELSIF TG_OP = 'DELETE' THEN
+            action_value := 'delete';
+            summary_value := CASE entity_type_value WHEN 'rd' THEN '删除研发账单' ELSE '删除渠道账单' END;
+            changed := jsonb_build_object('record', jsonb_build_object('before', old_json, 'after', NULL));
+        ELSIF (old_json -> 'status') IS DISTINCT FROM (new_json -> 'status')
+              AND (changed - 'status') = '{}'::jsonb THEN
+            action_value := 'status_change';
+            summary_value := '变更账单状态';
+        ELSE
+            action_value := 'update';
+            summary_value := CASE entity_type_value WHEN 'rd' THEN '修改研发账单' ELSE '修改渠道账单' END;
+        END IF;
+    ELSIF resource_kind = 'line' THEN
+        action_value := CASE TG_OP WHEN 'INSERT' THEN 'line_add' WHEN 'DELETE' THEN 'line_delete' ELSE 'line_update' END;
+        summary_value := CASE TG_OP WHEN 'INSERT' THEN '新增账单明细' WHEN 'DELETE' THEN '删除账单明细' ELSE '修改账单明细' END;
+        changed := jsonb_build_object('line', jsonb_build_object('before', NULLIF(old_json, '{}'::jsonb), 'after', NULLIF(new_json, '{}'::jsonb)));
+    ELSIF resource_kind = 'receipt' THEN
+        action_value := CASE TG_OP WHEN 'INSERT' THEN 'receipt_add' WHEN 'DELETE' THEN 'receipt_delete' ELSE 'receipt_update' END;
+        summary_value := CASE TG_OP WHEN 'INSERT' THEN '登记渠道收款' WHEN 'DELETE' THEN '删除渠道收款' ELSE '修改渠道收款' END;
+        IF TG_OP = 'DELETE' THEN
+            changed := jsonb_build_object('receipt', jsonb_build_object('before', old_json, 'after', NULL));
+        END IF;
+    ELSIF resource_kind = 'bank_transaction' THEN
+        action_value := CASE TG_OP WHEN 'INSERT' THEN 'payment_add' WHEN 'DELETE' THEN 'payment_delete' ELSE 'payment_update' END;
+        summary_value := CASE TG_OP WHEN 'INSERT' THEN '登记银行收付款' WHEN 'DELETE' THEN '删除银行收付款' ELSE '修改银行收付款' END;
+        IF TG_OP = 'DELETE' THEN
+            changed := jsonb_build_object('payment', jsonb_build_object('before', old_json, 'after', NULL));
+        END IF;
+    ELSIF resource_kind = 'bank_instruction' THEN
+        action_value := CASE TG_OP WHEN 'INSERT' THEN 'payment_instruction_create' WHEN 'DELETE' THEN 'payment_instruction_delete' ELSE 'payment_instruction_update' END;
+        summary_value := CASE TG_OP WHEN 'INSERT' THEN '创建付款指令' WHEN 'DELETE' THEN '删除付款指令' ELSE '更新付款指令' END;
+        IF TG_OP = 'DELETE' THEN
+            changed := jsonb_build_object('instruction', jsonb_build_object('before', old_json, 'after', NULL));
+        END IF;
+    ELSIF resource_kind = 'invoice_allocation' THEN
+        IF TG_OP = 'INSERT' THEN
+            action_value := 'invoice_link';
+            summary_value := '关联发票';
+        ELSIF TG_OP = 'DELETE' THEN
+            action_value := 'invoice_unlink';
+            summary_value := '撤销发票关联';
+            changed := jsonb_build_object('allocation', jsonb_build_object('before', old_json, 'after', NULL));
+        ELSIF (old_json ->> 'status') IS DISTINCT FROM (new_json ->> 'status')
+              AND COALESCE(new_json ->> 'status', '') NOT IN ('confirmed', 'suggested') THEN
+            action_value := 'invoice_unlink';
+            summary_value := '撤销发票关联';
+        ELSE
+            action_value := 'invoice_link_update';
+            summary_value := '更新发票关联';
+        END IF;
+    ELSE
+        action_value := lower(TG_OP);
+        summary_value := '更新业务记录';
+    END IF;
+
+    INSERT INTO operation_logs (
+        id,
+        entity_type,
+        entity_id,
+        entity_number,
+        action,
+        summary,
+        actor_user_id,
+        actor_email,
+        changes,
+        metadata
+    ) VALUES (
+        md5(random()::text || clock_timestamp()::text || entity_type_value || entity_id_value),
+        entity_type_value,
+        entity_id_value,
+        entity_number_value,
+        action_value,
+        summary_value,
+        actor_id,
+        actor_email_value,
+        COALESCE(changed, '{}'::jsonb),
+        jsonb_build_object('table', TG_TABLE_NAME, 'operation', TG_OP,
+            'reason', NULLIF(current_setting('app.operation_reason', true), ''))
+    );
+
+    IF TG_OP = 'DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF;
+END;
+$$;
+
+
+-- No backfill: old/shared-account operations must not be attributed by guesswork.
+DROP TRIGGER IF EXISTS trg_operation_log_channel_line ON channel_record_line_items;
+CREATE TRIGGER trg_operation_log_channel_line
+AFTER INSERT OR UPDATE OR DELETE ON channel_record_line_items
+FOR EACH ROW EXECUTE FUNCTION app_capture_bill_operation_log('channel', 'channel_record_id', '', 'line');
+
+DROP TRIGGER IF EXISTS trg_operation_log_rd_line ON reconciliation_line_items;
+CREATE TRIGGER trg_operation_log_rd_line
+AFTER INSERT OR UPDATE OR DELETE ON reconciliation_line_items
+FOR EACH ROW EXECUTE FUNCTION app_capture_bill_operation_log('rd', 'reconciliation_id', '', 'line');
+
+-- Committed audit entries are append-only. Preserve old runtime compatibility
+-- only for same-transaction summary/reason enrichment; identity and evidence
+-- fields can never be rewritten. Corrections after commit must be new entries.
+CREATE OR REPLACE FUNCTION app_reject_operation_log_mutation()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN
+    IF TG_OP = 'UPDATE'
+       AND OLD.action = 'status_change'
+       AND (NEW.metadata - 'reason' - 'from_status' - 'to_status') = (OLD.metadata - 'reason' - 'from_status' - 'to_status')
+       AND OLD.xmin::text = (txid_current() % 4294967296)::text
+       AND (to_jsonb(NEW) - 'metadata' - 'summary') = (to_jsonb(OLD) - 'metadata' - 'summary') THEN
+        RETURN NEW;
+    END IF;
+    RAISE EXCEPTION 'operation_logs are append-only';
+END;
+$$;
+DROP TRIGGER IF EXISTS trg_operation_logs_append_only ON operation_logs;
+CREATE TRIGGER trg_operation_logs_append_only
+BEFORE UPDATE OR DELETE ON operation_logs
+FOR EACH ROW EXECUTE FUNCTION app_reject_operation_log_mutation();
