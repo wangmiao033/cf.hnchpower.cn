@@ -1,4 +1,4 @@
-/* 全宽后台布局：侧栏 + 主列（Header + 工作区） */
+/* 全宽后台布局：侧栏 + 主列（全宽工作区） */
 
 .app {
   flex: 1 1 auto;
@@ -169,5 +169,31 @@
 
   .sidebar-toggle-rail {
     display: none;
+  }
+}
+/* No reserved header height: page content and workspace tabs start at the top. */
+.app-main-shell > .app-top-subnav {
+  top: 0 !important;
+}
+
+.app-shell-mobile-navigation {
+  display: none;
+}
+
+@media (max-width: 960px) {
+  .app-shell-mobile-navigation {
+    display: block;
+    position: fixed;
+    left: 12px;
+    bottom: 12px;
+    z-index: 40;
+  }
+
+  .app-shell-mobile-navigation .app-sidebar {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    min-height: 0;
   }
 }

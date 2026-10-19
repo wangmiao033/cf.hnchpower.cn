@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react'
-import Header from '@/components/layout/Header.jsx'
+import MobileMenu from '@/components/MobileMenu.jsx'
+// Keep ledger styling while retiring the global header and its proxy controls.
+import '@/components/channel/ChannelLedgerHeaderActions.css'
 import Sidebar from '@/components/layout/Sidebar.jsx'
 import TopSubnav from '@/components/layout/TopSubnav.jsx'
 import ContractSmartIntakeLauncher, { CONTRACT_SMART_SAVED_EVENT } from '@/components/contract/ContractSmartIntakeLauncher.jsx'
@@ -7,7 +9,7 @@ import { VIEWS } from '@/app/routes.js'
 import './AppShell.css'
 
 /**
- * 标准后台骨架：左侧固定导航 + 右侧（顶栏 + 全宽工作区）
+ * 标准后台骨架：左侧固定导航 + 右侧全宽工作区
  * 不再使用「整页居中大白盒」包裹。
  */
 function AppShell({
@@ -15,7 +17,6 @@ function AppShell({
   onNavigate,
   openTabs,
   onCloseTab,
-  onSettingsChange,
   dataConnectionWarning,
   dataConnectionDetail,
   onRetryDataConnection,
@@ -59,11 +60,11 @@ function AppShell({
           </button>
         </div>
         <div className="app-main-shell">
-          <Header
-            activeView={activeView}
-            onNavigate={onNavigate}
-            onSettingsChange={onSettingsChange}
-          />
+          <div className="app-shell-mobile-navigation">
+            <MobileMenu>
+              <Sidebar activeView={activeView} onNavigate={onNavigate} />
+            </MobileMenu>
+          </div>
           <TopSubnav
             activeView={activeView}
             onNavigate={onNavigate}

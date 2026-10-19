@@ -1,3 +1,4 @@
+import BillActorSummary from './BillActorSummary.jsx'
 import React, { useEffect, useState } from 'react'
 import { billStatusLabel } from '@/domain/reconciliation/billLifecycle.js'
 import { rdRecordSettlementPeriodLabel } from '@/domain/reconciliation/rdSettlementPeriods.js'
@@ -91,6 +92,7 @@ export default function RdBillReadonlyView({ record }) {
 
   return (
     <div className="channel-readonly-view" aria-label="研发账单只读完整详情">
+      <BillActorSummary billType="rd" billId={billId} />
       <section className="channel-readonly-section">
         <header className="channel-readonly-section-head">
           <div>

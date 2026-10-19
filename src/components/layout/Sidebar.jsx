@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { getGroupForView, getTabView, SIDEBAR_GROUPS, VIEW_ICONS } from '@/app/routes.js'
+import { getGroupForView, getTabView, SIDEBAR_GROUPS, VIEW_ICONS, VIEWS } from '@/app/routes.js'
 import { canOpenView } from '@/app/viewPermissions.js'
 import { useAuth } from '@/features/auth/AuthContext.jsx'
 import './Sidebar.css'
 
 function Sidebar({ activeView, onNavigate, collapsed = false }) {
-  const { can } = useAuth()
+  const { can, user } = useAuth()
+  const accountLabel = user?.display_name || user?.email || '当前账号'
   const accessibleGroups = useMemo(
     () => SIDEBAR_GROUPS
       .map((group) => ({
@@ -73,7 +74,7 @@ function Sidebar({ activeView, onNavigate, collapsed = false }) {
             const isExpanded = expandedGroupId === group.id
 
             if (isSingleton) {
-              const isActive = firstItem.view === activeTabView
+              const isActive = activeView !== VIEWS.USER_CENTER && firstItem.view === activeTabView
               return (
                 <div key={group.id} className="sidebar-group sidebar-group--singleton">
                   <button
@@ -114,6 +115,20 @@ function Sidebar({ activeView, onNavigate, collapsed = false }) {
             )
           })}
         </nav>
+        <div className="sidebar-account-entry">
+          <div className="sidebar-account-profile" title={accountLabel}>
+            <span>当前账号</span><strong>{accountLabel}</strong>
+          </div>
+          <button
+            type="button"
+            className={`sidebar-item sidebar-item--direct ${activeView === VIEWS.USER_CENTER ? 'active' : ''}`}
+            aria-current={activeView === VIEWS.USER_CENTER ? 'page' : undefined}
+            onClick={() => onNavigate?.(VIEWS.USER_CENTER)}
+          >
+            <span className="sidebar-item-icon" aria-hidden>{VIEW_ICONS[VIEWS.USER_CENTER]}</span>
+            <span className="sidebar-item-label">系统管理</span>
+          </button>
+        </div>
       </div>
     </aside>
   )

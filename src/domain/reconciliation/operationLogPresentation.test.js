@@ -10,8 +10,10 @@ describe('operation log presentation', () => {
   it('formats money, percent and actor labels', () => {
     expect(formatOperationValue('settlement_amount', 1234.5)).toBe('¥1,234.50')
     expect(formatOperationValue('share_rate', 30)).toBe('30%')
-    expect(operationActorLabel({ actor_email: 'finance@example.com' })).toBe('finance')
-    expect(operationActorLabel({ actor_email: '' })).toBe('系统')
+    expect(operationActorLabel({ actor_email: 'finance@example.com' })).toBe('finance@example.com')
+    expect(operationActorLabel({ actor_email: '' })).toBe('未记录操作者')
+    expect(operationActorLabel({ actor_email: 'finance@other.example' })).toBe('finance@other.example')
+    expect(operationActorLabel({ actor_user_id: 'user-2' })).toBe('用户 user-2')
   })
 
   it('turns database change json into readable rows', () => {

@@ -42,3 +42,13 @@ export function listOperationLogs(params: {
   const qs = query.toString()
   return apiGet<OperationLogListResponse>(`/api/operation-logs${qs ? `?${qs}` : ''}`)
 }
+
+export type BillActorSummary = {
+  entered: OperationLogRow | null
+  verified: OperationLogRow | null
+  modified: OperationLogRow | null
+}
+
+export function getBillActorSummary(billType: string, billId: string): Promise<BillActorSummary> {
+  return apiGet<BillActorSummary>(`/api/operation-logs/bill-actors/${encodeURIComponent(billType)}/${encodeURIComponent(billId)}`)
+}

@@ -94,15 +94,11 @@ body:has(.core-channel-recon-page) .app-top-subnav__close {
   font-size: 16px;
 }
 
-/* 第二层只放筛选；原页面内重复的标题/操作保留 DOM 供功能触发，但不再占视觉空间。 */
+/* 全局顶栏已停用，页面原生标题和操作保留可见，筛选沿用紧凑布局。 */
 .core-channel-recon-page .core-recon-workbar {
   display: block !important;
   min-height: 44px !important;
   overflow: visible !important;
-}
-
-.core-channel-recon-page .core-recon-workbar > .core-recon-head {
-  display: none !important;
 }
 
 .core-channel-recon-page .core-recon-workbar .core-recon-filters {

@@ -23,7 +23,9 @@ function MobileMenu({ children }) {
   }, [isOpen])
 
   const closeAfterNavigation = (event) => {
-    if (event.target.closest('button, a, [role="menuitem"]')) setIsOpen(false)
+    const control = event.target.closest('button, a, [role="menuitem"]')
+    // Sidebar group buttons expand in-place; only destinations close the menu.
+    if (control && !control.hasAttribute('aria-expanded')) setIsOpen(false)
   }
 
   return (

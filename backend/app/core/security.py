@@ -9,7 +9,7 @@ from uuid import uuid4
 import jwt
 from fastapi import Cookie, Depends, HTTPException, status
 from passlib.context import CryptContext
-from sqlalchemy import select, text
+from sqlalchemy import event, select, text
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_db
@@ -173,6 +173,7 @@ def clear_login_fail(user: AuthUser) -> None:
 
 def _set_audit_actor(db: Session, user: AuthUser) -> None:
     """Expose the authenticated actor to PostgreSQL triggers for this transaction only."""
+    db.info["audit_actor"] = {"user_id": str(user.id), "email": str(user.email or "")}
     db.execute(
         text(
             """
@@ -183,6 +184,21 @@ def _set_audit_actor(db: Session, user: AuthUser) -> None:
         ),
         {"user_id": str(user.id), "email": str(user.email or "")},
     )
+
+
+@event.listens_for(Session, "after_begin")
+def _restore_audit_actor(session, transaction, connection) -> None:
+    """Keep attribution across transaction boundaries within this request only.
+
+    get_db creates a fresh Session per request; SET LOCAL never leaks actors to
+    another request using the same pooled connection.
+    """
+    actor = session.info.get("audit_actor")
+    if actor and connection.dialect.name == "postgresql":
+        connection.execute(text("""
+            SELECT set_config('app.current_user_id', :user_id, true),
+                   set_config('app.current_user_email', :email, true)
+        """), actor)
 
 
 def require_current_user(

@@ -34,7 +34,7 @@ from app.schemas.channel import (
 from app.services.channel_cumulative_batch import refresh_batches_for_bill
 from app.services.channel_cumulative_invoice import assert_single_bill_collection_allowed
 from app.services.channel_settlement_engine import apply_bill_adjustment, aggregate_validation, calculate_channel_line, voucher_cost_for_storage
-from app.services.bill_write_preflight import prepare_bill_financial_update
+from app.services.bill_write_preflight import prepare_bill_financial_update, set_bill_audit_reason
 from app.services.bill_partner_search import matching_customer_keyword_exists
 
 router = APIRouter()
@@ -480,6 +480,7 @@ def update_channel_record(record_id: str, payload: ChannelRecordUpdate, db: Sess
     # Check the current DB status and editor revision while holding the row lock.
     # Do not touch ORM fields or child lines before this unified check succeeds.
     data = prepare_bill_financial_update("channel", row, payload.model_dump(exclude_unset=True))
+    set_bill_audit_reason(db, data.pop("audit_reason", None))
     items_payload = data.pop("items", None)
     adjustment_touched = bool(SETTLEMENT_ADJUSTMENT_FIELDS.intersection(data))
     prior_rule_context = {field: getattr(row, field) for field in _CHANNEL_RULE_CONTEXT_FIELDS}

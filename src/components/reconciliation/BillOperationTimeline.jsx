@@ -8,6 +8,7 @@ import {
   operationChangeLines,
   operationHiddenChangeCount
 } from '@/domain/reconciliation/operationLogPresentation.js'
+import BillActorSummary from './BillActorSummary.jsx'
 import BillLifecyclePanel from './BillLifecyclePanel.jsx'
 import './Bill360OperationTimeline.css'
 
@@ -60,6 +61,12 @@ export default function BillOperationTimeline({ billType, billId }) {
   const [error, setError] = useState('')
   const [revision, setRevision] = useState(0)
   const [filter, setFilter] = useState('all')
+  const [offset, setOffset] = useState(0)
+  const [hasMore, setHasMore] = useState(false)
+  const [retry, setRetry] = useState(0)
+  const [total, setTotal] = useState(0)
+
+  useEffect(() => { setOffset(0); setLogs([]); setTotal(0); setHasMore(false) }, [billId, billType, revision])
 
   useEffect(() => {
     if (!billId) return undefined
@@ -71,14 +78,17 @@ export default function BillOperationTimeline({ billType, billId }) {
       entity_id: billId,
       include_related: true,
       limit: 300,
-      offset: 0
+      offset
     })
       .then((response) => {
-        if (!cancelled) setLogs(response.items || [])
+        if (!cancelled) {
+          setTotal(response.total || 0)
+          setHasMore((response.items || []).length > 0 && offset + (response.items || []).length < (response.total || 0))
+          setLogs(previous => offset === 0 ? (response.items || []) : [...new Map([...previous, ...(response.items || [])].map(row => [row.id, row])).values()])
+        }
       })
       .catch((loadError) => {
         if (!cancelled) {
-          setLogs([])
           setError(loadError instanceof Error ? loadError.message : '操作日志读取失败')
         }
       })
@@ -88,7 +98,7 @@ export default function BillOperationTimeline({ billType, billId }) {
     return () => {
       cancelled = true
     }
-  }, [billId, billType, revision])
+  }, [billId, billType, revision, offset, retry])
 
   useEffect(() => setFilter('all'), [billId, billType])
 
@@ -122,6 +132,7 @@ export default function BillOperationTimeline({ billType, billId }) {
 
   return (
     <div className="bill360-status-history-stack">
+      <BillActorSummary billType={billType} billId={billId} revision={revision} />
       <BillLifecyclePanel
         billType={billType}
         billId={billId}
@@ -132,7 +143,8 @@ export default function BillOperationTimeline({ billType, billId }) {
       <section className="bill360-card bill360-card--table">
         <div className="bill360-card-head">
           <div><span>审计轨迹</span><h3>账单完整操作证据链</h3></div>
-          <span className="bill360-card-meta">{loading ? '读取中…' : `${ordered.length} 条`}</span>
+          <button type="button" disabled={loading} onClick={() => setRevision(value => value + 1)}>刷新记录</button>
+          <span className="bill360-card-meta">{loading ? '读取中…' : `${ordered.length} / ${total} 条`}</span>
         </div>
         <div className="bill360-operation-note">
           状态、发票、银行核销和附件操作按数据库审计日志统一汇总。银行核销虽然来自独立核销表，也会按账单关系归入当前时间线。
@@ -153,7 +165,7 @@ export default function BillOperationTimeline({ billType, billId }) {
           </div>
         ) : null}
 
-        {error ? <div className="bill360-history-empty">{error}</div> : null}
+        {error ? <div className="bill360-history-empty">{error} <button type="button" onClick={() => setRetry(value => value + 1)}>重试当前页</button></div> : null}
         {!error && loading ? <div className="bill360-history-empty">正在读取操作日志…</div> : null}
         {!error && !loading && ordered.length === 0 ? (
           <div className="bill360-history-empty">当前账单暂无操作日志。历史数据不会反向伪造日志，新操作会自动开始记录。</div>
@@ -162,7 +174,7 @@ export default function BillOperationTimeline({ billType, billId }) {
           <div className="bill360-history-empty">当前分类暂无操作记录。</div>
         ) : null}
 
-        {!error && visibleLogs.length > 0 ? (
+        {visibleLogs.length > 0 ? (
           <div className="bill360-timeline">
             {visibleLogs.map((log) => {
               const action = operationActionMeta(log.action)
@@ -182,7 +194,9 @@ export default function BillOperationTimeline({ billType, billId }) {
                       <time>{dateTime(log.created_at)}</time>
                     </div>
                     {evidence ? <div className="bill360-audit-evidence">证据：{evidence}</div> : null}
-                    {reason ? <div className="bill360-transition-reason">原因：{reason}</div> : null}
+                    <div className="bill360-transition-reason">原因：{reason || '未填写（历史日志不补造原因）'}</div>
+                    {log.actor_user_id ? <small>用户 ID：{log.actor_user_id}</small> : null}
+                    <details><summary>完整变更前后值</summary><pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{JSON.stringify(log.changes || {}, null, 2)}</pre></details>
                     {changes.length > 0 ? (
                       <div className="bill360-change-list">
                         {changes.map((change) => (
@@ -204,6 +218,7 @@ export default function BillOperationTimeline({ billType, billId }) {
             })}
           </div>
         ) : null}
+        {hasMore ? <button type="button" disabled={loading || Boolean(error)} onClick={() => setOffset(value => value + 300)}>{loading ? '读取中…' : '加载更早记录'}</button> : null}
       </section>
     </div>
   )

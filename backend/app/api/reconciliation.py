@@ -15,7 +15,7 @@ from app.core.deps import get_db
 from app.models.bank_payment import BankPaymentRecord
 from app.models.bank_transaction import BankTransaction
 from app.models.reconciliation import ReconciliationLineItem, ReconciliationRecord
-from app.services.bill_write_preflight import prepare_bill_financial_update
+from app.services.bill_write_preflight import prepare_bill_financial_update, set_bill_audit_reason
 from app.services.bank_payment_status import compute_bank_payment_list_status
 from app.services.rd_bank_payment_aggregate import (
     RD_TYPE,
@@ -418,6 +418,7 @@ def update_reconciliation(
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"error": "not_found", "id": record_id})
     data = prepare_bill_financial_update("rd", row, payload.model_dump(exclude_unset=True))
+    set_bill_audit_reason(db, data.pop("audit_reason", None))
     partner_id_supplied = "partner_id" in data
     partner_id = data.pop("partner_id", None)
     items_payload = data.pop("items", None)
