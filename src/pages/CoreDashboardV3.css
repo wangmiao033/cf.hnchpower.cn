@@ -30,7 +30,7 @@
 .app-dashboard:has(.core-dashboard-v3) .app-admin-header__title-block span {font-size:11px;color:#91a0b6;}
 .app-dashboard:has(.core-dashboard-v3) .app-top-subnav--workspace {top:79px;background:#fff;}
 .app-dashboard:has(.core-dashboard-v3) .sidebar-rail-button {top:112px;}
-.core-dashboard-v3 {--fv3-bg:#f5f7fc;--fv3-card:#fff;--fv3-line:#e9edf5;--fv3-text:#192940;--fv3-muted:#8494aa;--fv3-blue:#3d70ed;--fv3-green:#14a97f;--fv3-orange:#ea982e;--fv3-radius:15px;--fv3-shadow:0 5px 24px rgba(36,66,109,.045),0 1px 4px rgba(36,66,109,.035);font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft Yahei',sans-serif;color:var(--fv3-text);min-height:0;overflow:visible!important;}
+.core-dashboard-v3 {--fv3-bg:#f5f7fc;--fv3-card:#fff;--fv3-line:#e9edf5;--fv3-text:#192940;--fv3-muted:#8494aa;--fv3-blue:#3d70ed;--fv3-green:#14a97f;--fv3-orange:#ea982e;--fv3-radius:15px;--fv3-shadow:0 5px 24px rgba(36,66,109,.045),0 1px 4px rgba(36,66,109,.035);font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft Yahei',sans-serif;color:var(--fv3-text);min-height:0;overflow:auto!important;}
 .core-dashboard-v3 *{box-sizing:border-box;}
 .core-dashboard-v3 .page-container-body{display:flex;flex-direction:column;gap:0;width:100%;max-width:1510px;margin:0 auto;flex:0 0 auto;min-height:0;}
 .core-dashboard-v3 button,.core-dashboard-v3 select {font:inherit;}
