@@ -164,12 +164,13 @@ function CoreDashboardV3() {
     return () => { cancelled = true }
   }, [revision])
   const selectedMonth = month || profit?.month || ''
-  const current = profit?.operating_profit?.value
-  const shared = profit ? n(profit.shared_expense?.value) + n(profit.shared_server_cost?.value) : null
-  const priorShared = profit ? n(profit.shared_expense?.previous_value) + n(profit.shared_server_cost?.previous_value) : null
-  const gross = profit ? n(current) + n(shared) : null
-  const priorGross = profit ? n(profit.operating_profit?.previous_value) + n(priorShared) : null
-  const grossRate = profit && n(profit.channel_settlement?.value) > 0 ? 100 * n(gross) / n(profit.channel_settlement.value) : null
+  const hasPeriodData = Boolean(profit?.available_months?.includes(profit?.month))
+  const current = hasPeriodData ? profit?.operating_profit?.value : null
+  const shared = hasPeriodData ? n(profit.shared_expense?.value) + n(profit.shared_server_cost?.value) : null
+  const priorShared = hasPeriodData ? n(profit.shared_expense?.previous_value) + n(profit.shared_server_cost?.previous_value) : null
+  const gross = hasPeriodData ? n(current) + n(shared) : null
+  const priorGross = hasPeriodData ? n(profit.operating_profit?.previous_value) + n(priorShared) : null
+  const grossRate = hasPeriodData && n(profit.channel_settlement?.value) > 0 ? 100 * n(gross) / n(profit.channel_settlement.value) : null
   const summary = todos?.summary || null
   const todoItems = useMemo(() => (todos?.items || [])
     .filter(item => item.key !== 'risk_alerts')
@@ -197,7 +198,7 @@ function CoreDashboardV3() {
     <div className="fv3-head">
       <div className="fv3-heading"><span className="fv3-heading-icon"><Icon name="trend" size={21}/></span><div><h1>财务工作台</h1><p>经营利润、资金状况与待办进度，一屏掌握</p></div></div>
       <div className="fv3-head-actions">
-        {canProfit && <label className="fv3-month"><Icon name="calendar" size={17}/><span className="sr-only">经营月份</span><select aria-label="选择利润账期" value={selectedMonth} onChange={event => setMonth(event.target.value)}>
+        {canProfit && <label className="fv3-month"><Icon name="calendar" size={17}/><span className="sr-only">经营月份</span><select aria-label="选择利润账期" value={selectedMonth} onChange={event => { setProfit(null); setMonth(event.target.value) }}>
           {(profit?.available_months?.length ? profit.available_months : selectedMonth ? [selectedMonth] : []).map(key => <option value={key} key={key}>{formatMonth(key)}</option>)}
           {!selectedMonth && <option value="">最新有数据月份</option>}
         </select></label>}
@@ -213,7 +214,7 @@ function CoreDashboardV3() {
       <div className="fv3-section-heading"><h2><i/>经营利润 <small>游戏表现与公司经营同时展示 · {formatMonth(selectedMonth)}</small></h2><button type="button" onClick={() => go(VIEWS.PROFIT_ANALYSIS)}>完整利润分析 <Icon name="chevron" size={15}/></button></div>
       <div className="fv3-profit-grid">
         <ProfitCard name="游戏业务利润" note="项目可归属毛利 · 不分摊公共费用" amount={gross} prior={priorGross} rate={grossRate} footnote="查看项目毛利明细" icon="game" kind="gross" loading={profitLoading} onClick={() => go(VIEWS.PROFIT_ANALYSIS)}/>
-        <ProfitCard name="公司经营利润" note="管理口径 · 扣除已录入全部费用" amount={current} prior={profit?.operating_profit?.previous_value} rate={profit?.profit_margin?.value} footnote={'公共费用 ' + compactMoney(shared)} icon="wallet" kind="operating" loading={profitLoading} onClick={() => go(VIEWS.PROFIT_ANALYSIS)}/>
+        <ProfitCard name="公司经营利润" note="管理口径 · 扣除已录入全部费用" amount={current} prior={hasPeriodData ? profit?.operating_profit?.previous_value : null} rate={hasPeriodData ? profit?.profit_margin?.value : null} footnote={'公共费用 ' + compactMoney(shared)} icon="wallet" kind="operating" loading={profitLoading} onClick={() => go(VIEWS.PROFIT_ANALYSIS)}/>
       </div>
       {profitError && <div className="fv3-error" role="alert">利润数据不可用：{profitError}。页面不会用演示金额替代真实数据。</div>}
     </>}
