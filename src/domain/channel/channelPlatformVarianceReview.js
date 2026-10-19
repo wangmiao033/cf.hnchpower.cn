@@ -1,3 +1,5 @@
+export const HONOR_OFFICIAL_STATEMENT_POLICY = 'honor_official_statement_v1'
+
 /** Client-side *advisory* eligibility for a saved platform discrepancy.
  * Backend will independently recompute all line amounts under a row lock.
  */
@@ -7,7 +9,10 @@ const cents = (value) => {
   return Number.isFinite(n) ? Math.round(n * 100) : null
 }
 
-function assess(row, allowDocumented = false) {
+function assess(row, allowDocumented = false, policy = null) {
+  const official = allowDocumented && policy?.code === HONOR_OFFICIAL_STATEMENT_POLICY
+    && Boolean(policy.partner_id) && row?.partner_name === '荣耀'
+    && (!row?.channel_name || row.channel_name === '荣耀')
   const fail = (error = '') => ({
     eligible: false, error, systemAmount: 0, platformAmount: 0,
     settlementAmount: 0, differenceCents: 0, lineIds: [],
@@ -45,10 +50,10 @@ function assess(row, allowDocumented = false) {
   if (linePlatform !== platform || lineSystem !== system || new Set(lineIds).size !== lineIds.length) {
     return fail('逐游戏金额与账单合计不一致')
   }
-  if (totalAbsCents <= 0 || system === platform) {
+  if (totalAbsCents <= 0 || (system === platform && !official)) {
     return fail('系统与平台不存在待核对差异')
   }
-  if (allowDocumented && totalAbsCents > 50 && totalAbsCents - Math.abs(system - platform) > 2) {
+  if (allowDocumented && !official && totalAbsCents > 50 && totalAbsCents - Math.abs(system - platform) > 2) {
     return fail('游戏明细存在相互抵消的较大差异，请逐行核对原始平台明细')
   }
   if (!allowDocumented && (totalAbsCents > 50 || Math.abs(system - platform) > 50)) {
@@ -56,7 +61,11 @@ function assess(row, allowDocumented = false) {
   }
   return {
     eligible: true, error: '',
-    reviewKind: totalAbsCents > 50 || Math.abs(system - platform) > 50 ? 'documented' : 'small',
+    reviewKind: official || totalAbsCents > 50 || Math.abs(system - platform) > 50 ? 'documented' : 'small',
+    ...(official ? { policyCode: policy.code, partnerId: policy.partner_id, officialLines: items.map(item => ({
+      line_id: String(item.id), game_name: String(item.game_name || ''), settlement_cycle: String(item.settlement_cycle || ''),
+      system_amount: Number(item.system_settlement_amount), platform_amount: Number(item.platform_settlement_amount)
+    })) } : {}),
     absoluteLineDifferenceCents: totalAbsCents,
     systemAmount: system / 100,
     platformAmount: platform / 100,
@@ -73,8 +82,8 @@ export function assessSavedChannelPlatformVariance(row) {
 }
 
 /** Substantive discrepancies still require attached original statements + admin approval. */
-export function assessSavedChannelPlatformDifference(row) {
-  return assess(row, true)
+export function assessSavedChannelPlatformDifference(row, policy = null) {
+  return assess(row, true, policy)
 }
 
 

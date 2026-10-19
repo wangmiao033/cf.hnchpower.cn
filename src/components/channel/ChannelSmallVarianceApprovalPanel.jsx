@@ -18,10 +18,15 @@ export default function ChannelSmallVarianceApprovalPanel({
   selectedAttachmentId = '',
   onAttachmentChange,
   onAttachmentsChanged,
+  officialConfirmedLineIds = [],
+  onOfficialLineToggle,
   attachmentsLoading = false
 }) {
   if (!open) return null
   const isPlatform = kind === 'platform'
+  const isHonorOfficial = isPlatform && platformReview?.policyCode === 'honor_official_statement_v1'
+  const officialLines = isHonorOfficial ? platformReview.officialLines || [] : []
+  const allOfficialLinesConfirmed = officialLines.length > 0 && officialLines.every(line => officialConfirmedLineIds.includes(line.line_id))
   const isDocumented = isPlatform && platformReview?.reviewKind === 'documented'
   const autoSelectedAttachmentId = selectedAttachmentId || (attachments.length === 1 ? attachments[0].id : '')
   const amount = Number(platformReview?.settlementAmount ?? settlementAmount ?? 0)
@@ -35,9 +40,11 @@ export default function ChannelSmallVarianceApprovalPanel({
       <header>
         <div>
           <span className="channel-small-variance-eyebrow">管理员人工确认 · 账单金额不改变</span>
-          <h2>{isDocumented ? '平台结算金额差异确认' : isPlatform ? '平台小额尾差确认' : '小额合同差异强制核对'}</h2>
+          <h2>{isHonorOfficial ? '荣耀官方结算单确认' : isDocumented ? '平台结算金额差异确认' : isPlatform ? '平台小额尾差确认' : '小额合同差异强制核对'}</h2>
           {isPlatform ? (
-            <p>{isDocumented
+            <p>{isHonorOfficial
+              ? '本规则仅用于已核实的荣耀客户。请逐游戏核对官方金额并保留原始凭证；公式计算与差异继续保留。'
+              : isDocumented
               ? '请核对已上传的平台原始账单。点击下方确认即可完成核对，系统自动保存差异金额、凭证及审核人；无需再填写重复原因。'
               : '核对后点击确认即可；系统会自动生成金额差异说明并记录审批人，原计算和实际收款均不改变。'}</p>
           ) : (
@@ -54,7 +61,24 @@ export default function ChannelSmallVarianceApprovalPanel({
         </div>
       ) : null}
 
-      {isPlatform ? (
+      {isHonorOfficial ? (
+        <div className="channel-honor-official-review">
+          <strong>逐游戏确认官方结算金额（必选）</strong>
+          {officialLines.map(line => (
+            <label key={line.line_id} className="channel-honor-official-line">
+              <input type="checkbox" checked={officialConfirmedLineIds.includes(line.line_id)}
+                disabled={busy} onChange={() => onOfficialLineToggle?.(line.line_id)} />
+              <span>{line.game_name} · {line.settlement_cycle}：官方 ¥{line.platform_amount.toFixed(2)}；公式 ¥{line.system_amount.toFixed(2)}</span>
+            </label>
+          ))}
+          <label htmlFor="channel-small-variance-note">
+            <span>官方结算核对依据（必填，至少6个字）</span>
+            <textarea id="channel-small-variance-note" rows={2} value={note}
+              onChange={event => onNoteChange(event.target.value)} maxLength={250} disabled={busy}
+              placeholder="例如：已逐游戏核对荣耀官方当月结算单，以官方应结金额为准，公式差异保留备查。" />
+          </label>
+        </div>
+      ) : isPlatform ? (
         <details className="channel-platform-optional-note">
           <summary>补充说明（选填，系统已自动生成核对记录）</summary>
           <label htmlFor="channel-small-variance-note">
@@ -140,7 +164,7 @@ export default function ChannelSmallVarianceApprovalPanel({
         <button
           type="button"
           className="is-primary"
-          disabled={busy || (!isPlatform && note.trim().length < 2) || (isDocumented && !autoSelectedAttachmentId)}
+          disabled={busy || (!isPlatform && note.trim().length < 2) || (isDocumented && !autoSelectedAttachmentId) || (isHonorOfficial && (!allOfficialLinesConfirmed || note.trim().length < 6))}
           onClick={onConfirm}
         >
           {busy ? '正在核对并保存…' : isDocumented ? `我已核对凭证，按平台¥${amount.toFixed(2)}确认账单` : isPlatform ? `按平台¥${amount.toFixed(2)}确认账单` : '确认合同差异（保留原金额）'}

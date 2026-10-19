@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select, text
 from uuid import uuid4
+import json
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_db
@@ -19,6 +20,11 @@ from app.services.channel_small_variance_approval import assess_channel_small_va
 from app.services.channel_platform_variance_approval import (
     assess_channel_platform_variance,
     assert_no_open_contract_exceptions,
+)
+from app.services.honor_official_statement import (
+    POLICY_CODE as HONOR_OFFICIAL_POLICY, resolve_honor_policy,
+    validate_official_line_confirmations, load_and_validate_contract_snapshot,
+    official_amount_case_ids,
 )
 from app.services import bill_lock_guard as _bill_lock_guard  # noqa: F401  注册 SQLAlchemy 锁单守卫
 from app.services.bill_archive import archive_bill, archive_snapshot, unarchive_bill
@@ -177,6 +183,24 @@ def confirm_approved_channel_small_variance(
 
 
 
+@router.get("/channel/{bill_id}/official-statement-policy")
+def get_channel_official_statement_policy(
+    bill_id: str, db: Session = Depends(get_db),
+    user: AuthUser = Depends(require_current_user),
+) -> dict:
+    del user
+    bill = load_bill(db, "channel", bill_id)
+    return {"policy": resolve_honor_policy(db, bill)}
+
+
+class OfficialLineConfirmation(BaseModel):
+    line_id: str = Field(min_length=1, max_length=128)
+    game_name: str = Field(min_length=1, max_length=500)
+    settlement_cycle: str = Field(min_length=1, max_length=16)
+    system_amount: float
+    platform_amount: float
+
+
 class ApprovedPlatformVarianceRequest(BaseModel):
     """Explicit approval of the already-saved, recomputed platform amount."""
     reason: str = Field(min_length=6, max_length=500)
@@ -187,6 +211,11 @@ class ApprovedPlatformVarianceRequest(BaseModel):
     expected_line_ids: list[str] = Field(min_length=1, max_length=100)
     evidence_attachment_id: str | None = Field(default=None, max_length=128)
     evidence_confirmed: bool = False
+    official_statement_policy: str | None = Field(default=None, max_length=80)
+    expected_partner_id: str | None = Field(default=None, max_length=128)
+    official_statement_reason: str = Field(default="", max_length=250)
+    official_line_confirmations: list[OfficialLineConfirmation] = Field(default_factory=list, max_length=100)
+    contract_snapshot_id: str | None = Field(default=None, max_length=128)
 
 
 @router.post("/channel/{bill_id}/confirm-platform-variance", response_model=BillLifecycleRead)
@@ -228,8 +257,18 @@ def confirm_approved_channel_platform_variance(
         .where(ChannelRecordLineItem.channel_record_id == bill_id)
         .order_by(ChannelRecordLineItem.sort_order, ChannelRecordLineItem.id)
     ).scalars().all()
+    official = bool(payload.official_statement_policy)
+    policy = None
+    if official:
+        policy = resolve_honor_policy(db, bill)
+        if (not policy or payload.official_statement_policy != HONOR_OFFICIAL_POLICY
+                or payload.expected_partner_id != policy["partner_id"]):
+            raise HTTPException(409, detail={"error": "honor_policy_identity_mismatch", "message": "荣耀专属规则与当前客户身份不一致，请重新核对"})
+        if len(payload.official_statement_reason.strip()) < 6:
+            raise HTTPException(422, detail={"error": "honor_source_reason_required", "message": "请填写至少6个字的荣耀官方结算核对依据"})
+        validate_official_line_confirmations(rows, [row.model_dump() for row in payload.official_line_confirmations])
     assessment = assess_channel_platform_variance(
-        bill, rows, allow_documented_variance=True
+        bill, rows, allow_documented_variance=True, official_statement=official
     )
     documented = assessment["review_kind"] == "documented"
     evidence_attachment = None
@@ -295,21 +334,54 @@ def confirm_approved_channel_platform_variance(
                source_snapshot_json
         FROM cf_contract_difference_cases
         WHERE bill_type = 'channel' AND bill_id = :bill_id
-        ORDER BY updated_at DESC, id DESC LIMIT 301
+        ORDER BY updated_at DESC, id DESC LIMIT 301 FOR UPDATE
     """), {"bill_id": bill_id}).mappings().all()]
     if len(cases) > 300:
         raise HTTPException(409, detail={
             "error": "contract_evidence_too_many",
             "message": "当前合同差异记录过多，无法完整校验，暂不进行尾差确认",
         })
-    assert_no_open_contract_exceptions(cases, rows)
+    official_case_ids = []
+    if official:
+        contract_snapshot = load_and_validate_contract_snapshot(
+            db, payload.contract_snapshot_id, bill, rows, policy["partner_id"]
+        )
+        official_case_ids = official_amount_case_ids(cases, rows)
+        # The fresh snapshot is authoritative for identity/terms. Only monetary
+        # cases covered by this exact reviewed bill are accepted, in this transaction.
+        for case_id in official_case_ids:
+            updated_case = db.execute(text("""
+                UPDATE cf_contract_difference_cases
+                SET status = 'resolved', handling_type = 'accept_difference',
+                    substatus = 'honor_official_statement', reason_type = '官方结算单',
+                    description = :reason, updated_by = :actor,
+                    updated_at = NOW(), resolved_at = NOW()
+                WHERE id = :id AND bill_type = 'channel' AND bill_id = :bill_id
+                  AND status = 'pending' AND (handling_type IS NULL OR handling_type = '')
+            """), {"id": case_id, "bill_id": bill_id, "reason": reason, "actor": str(user.email or user.id)})
+            if updated_case.rowcount != 1:
+                db.rollback()
+                raise HTTPException(409, detail={"error": "honor_contract_case_changed", "message": "合同差异处理状态已改变，本次未确认，请刷新后重试"})
+            db.execute(text("""
+                INSERT INTO cf_contract_difference_events
+                (id, case_id, event_type, title, detail, payload_json, actor)
+                VALUES (:id, :case_id, 'honor_official_statement', '按荣耀官方结算单确认',
+                        :reason, CAST(:evidence AS jsonb), :actor)
+            """), {"id": str(uuid4()), "case_id": case_id, "reason": reason,
+                   "actor": str(user.email or user.id), "evidence": json.dumps({
+                       "policy": policy, "attachment_id": payload.evidence_attachment_id,
+                       "contract_snapshot_id": str(contract_snapshot["id"]),
+                       "official_lines": [row.model_dump() for row in payload.official_line_confirmations],
+                   }, ensure_ascii=False)})
+    else:
+        assert_no_open_contract_exceptions(cases, rows)
 
     db.add(OperationLog(
         id=str(uuid4()), entity_type="channel", entity_id=str(bill.id),
         entity_number=bill.statement_no,
-        action="platform_documented_variance_confirm" if documented else "platform_small_variance_confirm",
+        action="honor_official_statement_confirm" if official else "platform_documented_variance_confirm" if documented else "platform_small_variance_confirm",
         summary=(
-            ("管理员凭平台原始结算单核准大额金额差异" if documented else "管理员人工核准平台小额尾差")
+            ("管理员按荣耀官方逐游戏结算单确认" if official else "管理员凭平台原始结算单核准大额金额差异" if documented else "管理员人工核准平台小额尾差")
             + f"，系统与平台差额 {assessment['signed_difference_cents'] / 100:+.2f} 元；实际应收未修改"
         ),
         actor_user_id=str(user.id), actor_email=str(user.email or ""),
@@ -322,6 +394,11 @@ def confirm_approved_channel_platform_variance(
             "evidence_file_name": str(evidence_attachment.file_name) if evidence_attachment else None,
             "evidence_confirmed": bool(payload.evidence_confirmed) if documented else None,
             **assessment,
+            **({"official_statement_policy": policy,
+                "official_statement_reason": payload.official_statement_reason.strip(),
+                "official_line_confirmations": [row.model_dump() for row in payload.official_line_confirmations],
+                "contract_snapshot_id": payload.contract_snapshot_id,
+                "accepted_contract_case_ids": official_case_ids} if official else {}),
         },
     ))
     db.info["allow_lifecycle_transition"] = True

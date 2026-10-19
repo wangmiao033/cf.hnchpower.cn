@@ -285,9 +285,9 @@ def _carry_payload(row: dict) -> dict:
     return payload
 
 
-def _case_by_id(conn: psycopg.Connection, case_id: str) -> dict:
+def _case_by_id(conn: psycopg.Connection, case_id: str, *, for_update: bool = False) -> dict:
     row = conn.execute(
-        "SELECT * FROM cf_contract_difference_cases WHERE id = %s",
+        "SELECT * FROM cf_contract_difference_cases WHERE id = %s" + (" FOR UPDATE" if for_update else ""),
         [case_id],
     ).fetchone()
     if row is None:
@@ -735,7 +735,10 @@ def handle_difference_case(request: Request, case_id: str, payload: dict) -> dic
 
     with psycopg.connect(_database_url(), connect_timeout=15, row_factory=dict_row) as conn:
         _ensure_difference_tables(conn)
-        case = _case_by_id(conn, case_id)
+        # Validate the latest status under the same lock held through mutation.
+        # A competing Honor confirmation may have resolved the case while this
+        # request waited; never act on an earlier pending-state read.
+        case = _case_by_id(conn, case_id, for_update=True)
         if case.get("status") == "resolved" and action not in {"reopen"}:
             raise HTTPException(status_code=409, detail="该差异已解决，如需继续处理请先重新打开")
 

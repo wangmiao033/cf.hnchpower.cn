@@ -76,7 +76,24 @@ type ContractDifferenceApproval = {
   items: ContractDifferenceCase[]
 }
 
+export type OfficialStatementLine = {
+  line_id: string
+  game_name: string
+  settlement_cycle: string
+  system_amount: number
+  platform_amount: number
+}
+
+export function getChannelOfficialStatementPolicy(billId: string) {
+  return apiGet<{ policy: { code: string; partner_id: string; partner_name: string } | null }>(
+    '/api/bill-lifecycle/channel/' + encodeURIComponent(billId) + '/official-statement-policy'
+  )
+}
+
 export type ChannelPlatformVarianceReview = {
+  policyCode?: string
+  partnerId?: string
+  officialLines?: OfficialStatementLine[]
   reviewKind?: 'small' | 'documented'
   absoluteLineDifferenceCents?: number
   systemAmount: number
@@ -94,8 +111,16 @@ export async function confirmReviewedChannelPlatformVariance(
   reason: string,
   review: ChannelPlatformVarianceReview,
   evidenceAttachmentId = '',
-  evidenceConfirmed = false
+  evidenceConfirmed = false,
+  officialLineConfirmations: OfficialStatementLine[] = [],
+  officialReason = ''
 ): Promise<BillLifecycle> {
+  const official = review.policyCode === 'honor_official_statement_v1'
+  // This existing endpoint generates the snapshot on the contract server; the
+  // backend independently verifies it, rather than trusting client preflight.
+  const snapshot = official
+    ? await createContractReconciliationSnapshot('channel', billId, review.policyCode)
+    : null
   const lifecycle = await apiPost<BillLifecycle>(
     '/api/bill-lifecycle/channel/' + encodeURIComponent(billId) + '/confirm-platform-variance',
     {
@@ -106,7 +131,14 @@ export async function confirmReviewedChannelPlatformVariance(
       expected_signed_difference_cents: review.differenceCents,
       expected_line_ids: review.lineIds,
       evidence_attachment_id: evidenceAttachmentId || null,
-      evidence_confirmed: evidenceConfirmed
+      evidence_confirmed: evidenceConfirmed,
+      ...(official ? {
+        official_statement_policy: review.policyCode,
+        expected_partner_id: review.partnerId,
+        official_statement_reason: officialReason,
+        official_line_confirmations: officialLineConfirmations,
+        contract_snapshot_id: snapshot?.id
+      } : {})
     }
   )
   try {
@@ -203,7 +235,7 @@ export function countBlockingContractFailures(preflight: ContractBillReconciliat
  * or unresolved approval. Unlike the normal flow, contract service unavailability
  * is a hard stop for this exceptional confirmation.
  */
-export async function assertContractReadyForPlatformTail(billId: string): Promise<void> {
+export async function assertContractReadyForPlatformTail(billId: string, review: ChannelPlatformVarianceReview | null = null): Promise<void> {
   let preflight: ContractBillReconciliation
   try {
     preflight = await getContractBillReconciliation('channel', billId)
@@ -212,6 +244,23 @@ export async function assertContractReadyForPlatformTail(billId: string): Promis
   }
   if (!Array.isArray(preflight?.lines) || preflight.lines.length === 0) {
     throw new Error('合同核验未返回完整的游戏明细，暂不能确认平台尾差')
+  }
+  if (review?.policyCode === 'honor_official_statement_v1') {
+    const current = new Map((review.officialLines || []).map(line => [line.line_id, line]))
+    const invalid = (preflight.lines.length !== current.size)
+      || (preflight.bill_checks || []).some(check => check.status === 'fail')
+      || preflight.lines.some(line => {
+        const saved = current.get(String(line.line_id))
+        return !saved || line.game_name !== saved.game_name || line.settlement_cycle !== saved.settlement_cycle
+          || !line.match?.contract_id || !line.match?.access_item_id || line.match.confidence !== 'high'
+          || !(line.checks || []).some(check => check.key === 'authorization' && check.status === 'pass')
+          || (line.checks || []).some(check => check.status === 'fail' && check.key !== 'contract_standard_settlement')
+          || !line.contract_amount?.supported || !line.contract_amount?.deterministic
+          || finiteNumber(line.contract_amount?.actual_amount) === null
+          || Math.round(Number(line.contract_amount?.actual_amount) * 100) !== Math.round(saved.platform_amount * 100)
+      })
+    if (invalid) throw new Error('合同主体、游戏、授权期或费率未通过核验；荣耀官方金额规则只处理金额比较差异')
+    return
   }
   const hardBill = (preflight.bill_checks || []).find(check => check.status === 'fail')
   const hardLine = preflight.lines.flatMap(line => line.checks || []).find(check =>
