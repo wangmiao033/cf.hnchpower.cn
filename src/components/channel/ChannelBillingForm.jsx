@@ -943,17 +943,17 @@ function ChannelBillingForm({
                       <div className={'channel-voucher-editor__inline' + (dualVoucherEditing ? ' is-dual' : '')}>
                         {dualVoucherEditing ? (
                           <div className="channel-voucher-editor__dual-inputs">
-                            <label title="折算券原始面额"><span aria-hidden="true">折</span><input type="number" step="0.01" className="admin-input" value={row.voucherFaceValue ?? '0'} onChange={(e) => handleLineChange(index, 'voucherFaceValue', e.target.value)} aria-label={\`第\${index + 1}行折算券原始面额\`} placeholder="0" /></label>
-                            <label title="直扣券实际金额"><span aria-hidden="true">直</span><input type="number" step="0.01" className="admin-input" value={row.voucherDirectCost ?? '0'} onChange={(e) => handleLineChange(index, 'voucherDirectCost', e.target.value)} aria-label={\`第\${index + 1}行直扣券实际金额\`} placeholder="0" /></label>
+                            <label title="折算券原始面额"><span aria-hidden="true">折</span><input type="number" step="0.01" className="admin-input" value={row.voucherFaceValue ?? '0'} onChange={(e) => handleLineChange(index, 'voucherFaceValue', e.target.value)} aria-label={`第${index + 1}行折算券原始面额`} placeholder="0" /></label>
+                            <label title="直扣券实际金额"><span aria-hidden="true">直</span><input type="number" step="0.01" className="admin-input" value={row.voucherDirectCost ?? '0'} onChange={(e) => handleLineChange(index, 'voucherDirectCost', e.target.value)} aria-label={`第${index + 1}行直扣券实际金额`} placeholder="0" /></label>
                           </div>
                         ) : (
-                          <input type="number" step="0.01" className="admin-input channel-voucher-editor__amount" value={voucher.amount} onChange={(e) => handleLineChange(index, 'voucherAmount', e.target.value)} aria-label={\`第\${index + 1}行代金券金额\`} title={voucher.isLegacy ? '历史账单：未转换口径时仍按原结算规则计算' : '代金券金额'} placeholder="0" />
+                          <input type="number" step="0.01" className="admin-input channel-voucher-editor__amount" value={voucher.amount} onChange={(e) => handleLineChange(index, 'voucherAmount', e.target.value)} aria-label={`第${index + 1}行代金券金额`} title={voucher.isLegacy ? '历史账单：未转换口径时仍按原结算规则计算' : '代金券金额'} placeholder="0" />
                         )}
                         <select
                           className="channel-voucher-editor__mode"
                           value={dualVoucherEditing ? 'both' : voucher.mode}
-                          aria-label={\`第\${index + 1}行代金券口径\`}
-                          title={\`当前代金券口径（切换时使用原有确认和计算规则）：\${voucherPreview.label}\`}
+                          aria-label={`第${index + 1}行代金券口径`}
+                          title={`当前代金券口径（切换时使用原有确认和计算规则）：${voucherPreview.label}`}
                           onChange={(event) => {
                             const mode = event.target.value
                             if (mode === 'both') handleVoucherDualToggle(index, rowRuleHeader)
@@ -966,7 +966,7 @@ function ChannelBillingForm({
                           <option value="both">双券</option>
                         </select>
                       </div>
-                      <small className={\`channel-voucher-editor__preview\${voucher.mode === 'legacy' ? ' is-legacy' : ''}\`}>{voucherPreview.label}</small>
+                      <small className={`channel-voucher-editor__preview${voucher.mode === 'legacy' ? ' is-legacy' : ''}`}>{voucherPreview.label}</small>
                     </div>
                   </td>
                   <td><input type="number" step="0.01" className="admin-input" value={row.noWorryCost} onChange={(e) => handleLineChange(index, 'noWorryCost', e.target.value)} /></td>
