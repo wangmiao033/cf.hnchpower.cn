@@ -12,7 +12,7 @@ describe('V4.1 工作流导航', () => {
   it('收口为七个清晰业务域', () => {
     expect(SIDEBAR_GROUPS.map((group) => group.label)).toEqual([
       '工作台',
-      '经营分析',
+      '运营费用',
       '对账中心',
       '合同与客户',
       '发票',
@@ -21,12 +21,16 @@ describe('V4.1 工作流导航', () => {
     ])
   })
 
-  it('日常执行留在工作台，经营类页面独立成经营分析', () => {
-    expect(getGroupForView(VIEWS.FINANCE_WORKBENCH)?.id).toBe('workbench')
-    expect(getGroupForView(VIEWS.ANOMALIES)?.id).toBe('workbench')
-    expect(getGroupForView(VIEWS.BUSINESS_DASHBOARD)?.id).toBe('analysis')
-    expect(getGroupForView(VIEWS.PROFIT_ANALYSIS)?.id).toBe('analysis')
+  it('V4 汇总首页仅保留一个经营入口，开票任务迁移到发票中心', () => {
+    expect(getGroupForView(VIEWS.DASHBOARD)?.id).toBe('workbench')
+    expect(getGroupForView(VIEWS.FINANCE_WORKBENCH)?.id).toBe('invoices')
+    expect(getGroupForView(VIEWS.ANOMALIES)?.id).toBe('data')
     expect(getGroupForView(VIEWS.SERVER_COSTS)?.id).toBe('analysis')
+    const visible = SIDEBAR_GROUPS.flatMap(group => group.items.map(item => item.view))
+    expect(visible).not.toContain(VIEWS.PROFIT_ANALYSIS)
+    expect(visible).not.toContain(VIEWS.BUSINESS_DASHBOARD)
+    expect(visible).toContain(VIEWS.FINANCE_WORKBENCH)
+    expect(getPageTitle(VIEWS.DASHBOARD)).toBe('经营工作台')
   })
 
   it('客户库与合同台账共享合同与客户域', () => {
@@ -74,7 +78,7 @@ describe('统一对账进度路由', () => {
 })
 
 describe('QuickSDK 数据路由', () => {
-  it('数据域只保留数据库、数据源和游戏/渠道数据', () => {
+  it('数据域保留数据入口，并提供异常处理入口', () => {
     const group = getGroupForView(VIEWS.PRODUCT_SOURCES)
 
     expect(group.id).toBe('data')
@@ -82,7 +86,8 @@ describe('QuickSDK 数据路由', () => {
       VIEWS.QUICKSDK_LIBRARY,
       VIEWS.PRODUCT_SOURCES,
       VIEWS.QUICKSDK_GAMES,
-      VIEWS.QUICKSDK_CHANNELS
+      VIEWS.QUICKSDK_CHANNELS,
+      VIEWS.ANOMALIES
     ])
     expect(getPageTitle(VIEWS.PRODUCT_SOURCES)).toBe('数据源')
     expect(getPageDescription(VIEWS.PRODUCT_SOURCES)).toContain('ProductCode')
@@ -90,13 +95,14 @@ describe('QuickSDK 数据路由', () => {
 })
 
 describe('发票路由', () => {
-  it('销项和进项发票均在发票域，并让新增/编辑复用销项标签页', () => {
+  it('开票任务与销进项发票在同一发票域，原任务路由保留', () => {
     const group = getGroupForView(VIEWS.INVOICE_INPUT)
 
     expect(group.id).toBe('invoices')
     expect(group.items.map((item) => item.view)).toEqual([
       VIEWS.INVOICE_MANAGE,
-      VIEWS.INVOICE_INPUT
+      VIEWS.INVOICE_INPUT,
+      VIEWS.FINANCE_WORKBENCH
     ])
     expect(getTabView(VIEWS.INVOICE_CREATE)).toBe(VIEWS.INVOICE_MANAGE)
     expect(getTabView(VIEWS.INVOICE_EDIT)).toBe(VIEWS.INVOICE_MANAGE)
