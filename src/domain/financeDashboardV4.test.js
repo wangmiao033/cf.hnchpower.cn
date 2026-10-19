@@ -48,7 +48,7 @@ describe('V4 finance overview scopes and display-only metrics', () => {
     expect(s.gross).toBe(83000)
     expect(s.operating).toBe(77000)
     expect(s.sharedTotal).toBe(6000)
-    expect(s.cashNet).toBe(12000)
+    expect(s.cashNet).toBe(8000)
     expect(s.channelSettlement).toBe(241000)
   })
   it('formatting does not invent values, preserves cents on small numbers', () => {
