@@ -339,6 +339,7 @@ def build_profit_analysis(
                 "server_cost": round(bucket.server_cost, 2),
                 "operating_expense": round(bucket.operating_expense, 2),
                 "operating_profit": derived["operating_profit"],
+                "project_gross_profit": round(derived["operating_profit"] + bucket.shared_server_cost + bucket.shared_expense, 2),
                 "profit_margin": derived["profit_margin"],
             }
         )
@@ -360,6 +361,14 @@ def build_profit_analysis(
             current_d["pre_expense_contribution"], previous_d["pre_expense_contribution"]
         ),
         "operating_profit": metric(current_d["operating_profit"], previous_d["operating_profit"]),
+        "project_gross_profit": metric(
+            current_d["operating_profit"] + current.shared_server_cost + current.shared_expense,
+            previous_d["operating_profit"] + previous.shared_server_cost + previous.shared_expense,
+        ),
+        "shared_cost_total": metric(
+            current.shared_server_cost + current.shared_expense,
+            previous.shared_server_cost + previous.shared_expense,
+        ),
         "profit_margin": metric(current_d["profit_margin"], previous_d["profit_margin"]),
         "shared_expense": metric(current.shared_expense, previous.shared_expense),
         "attributed_expense": metric(current.attributed_expense, previous.attributed_expense),
