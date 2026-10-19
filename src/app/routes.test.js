@@ -53,17 +53,17 @@ describe('统一对账进度路由', () => {
     expect(group.items.map((item) => item.view)).toEqual([
       VIEWS.RECON_RD,
       VIEWS.RECON_PROGRESS,
-      VIEWS.RECON_CHANNEL,
-      VIEWS.CHANNEL_RECON_CREATE
+      VIEWS.RECON_CHANNEL
     ])
     expect(getTabView(VIEWS.RECON_PROGRESS)).toBe(VIEWS.RECON_PROGRESS)
   })
 
-  it('渠道智能录入直接复用现有新增渠道账单页面', () => {
+  it('渠道智能补齐留在新增账单页，左侧不再显示重复入口', () => {
     const group = getGroupForView(VIEWS.CHANNEL_RECON_CREATE)
     expect(group.id).toBe('reconciliation')
-    expect(group.items.find((item) => item.view === VIEWS.CHANNEL_RECON_CREATE)?.label).toBe('智能录入')
+    expect(group.items.some((item) => item.view === VIEWS.CHANNEL_RECON_CREATE)).toBe(false)
     expect(getTabView(VIEWS.CHANNEL_RECON_CREATE)).toBe(VIEWS.RECON_CHANNEL)
+    expect(getPageTitle(VIEWS.CHANNEL_RECON_CREATE)).toBe('新增渠道账单')
   })
 
   it('提供独立页面文案', () => {

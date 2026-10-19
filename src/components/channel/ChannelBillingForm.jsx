@@ -40,6 +40,7 @@ import {
 } from '@/domain/channel/channelVoucherEntry.js'
 import '@/components/ChannelBilling.css'
 import './ChannelSettlementRule.css'
+import './ChannelOptionalSections.css'
 import LineItemsTable from '@/components/shared/LineItemsTable.jsx'
 import PartnerPicker, { findExactPartner } from '@/components/shared/PartnerPicker.jsx'
 import ChannelContractIssueEditor from '@/components/channel/ChannelContractIssueEditor.jsx'
@@ -253,6 +254,8 @@ function ChannelBillingForm({
   // Expanded editor is ephemeral UI state; the persisted two voucher fields
   // remain the source of truth, and existing mixed rows always show both.
   const [expandedVoucherRows, setExpandedVoucherRows] = useState({})
+  const [adjustmentExpanded, setAdjustmentExpanded] = useState(false)
+  const [remarksExpanded, setRemarksExpanded] = useState(false)
   const [partnerId, setPartnerId] = useState('')
   const [contractRuleState, setContractRuleState] = useState(emptyContractRuleState)
   const [contractRuleRevision, setContractRuleRevision] = useState(0)
@@ -722,6 +725,7 @@ function ChannelBillingForm({
         remark: upsertChannelDifferenceNote(current.remark, note)
       }))
       setDifferenceNoteWritten(true)
+      setRemarksExpanded(true)
     } catch (error) {
       const message = error instanceof Error ? error.message : '生成差异说明失败'
       if (onError) onError(message)
@@ -752,6 +756,7 @@ function ChannelBillingForm({
     }
 
     if (adjustmentActive && !String(header.settlementAdjustmentReason || '').trim()) {
+      setAdjustmentExpanded(true)
       const msg = '使用结算调整时必须填写调整原因，避免账单金额被无依据修改。'
       onError?.(msg) ?? window.alert(msg); return
     }
@@ -844,17 +849,6 @@ function ChannelBillingForm({
           <div className="form-group channel-bill-meta-grid__partner">
             <label>合作方 *</label>
             <PartnerPicker value={header.partnerName || header.channelName} partnerId={partnerId} partners={partners} onChange={handlePartnerChange} onAddPartner={onAddPartner} required linkedText={selectedPartner ? `已关联客户库 · 简称：${selectedPartner.shortName || selectedPartner.name}` : '已关联客户库'} unlinkedText="输入简称或公司全称，并从客户库结果中选择" />
-          </div>
-          <div className="form-group channel-bill-meta-grid__remark">
-            <label>备注 / 特殊说明</label>
-            <textarea
-              rows={3}
-              value={header.remark}
-              onChange={(e) => handleHeaderChange('remark', e.target.value)}
-              className="admin-input channel-bill-remark-textarea"
-              placeholder="选填，例如：10月差异结转至12月；特殊扣款；双方确认按实际金额结算；下月冲抵等"
-              style={{ height: 'auto', minHeight: 72, padding: '8px 10px', lineHeight: 1.5, resize: 'vertical' }}
-            />
           </div>
         </div>
 
@@ -1047,7 +1041,7 @@ function ChannelBillingForm({
                   <button type="button" onClick={writeDifferenceNote}>写入账单备注</button>
                 </div>
                 {differenceNoteWritten ? (
-                  <small className="channel-difference-review__saved" role="status">差异说明已写入上方备注；请保存账单后才会同步到服务器。此操作不增加应收。</small>
+                  <small className="channel-difference-review__saved" role="status">差异说明已写入账单末尾备注，并自动展开供你查看；保存账单后才会同步到服务器。此操作不增加应收。</small>
                 ) : null}
               </>
             )}
@@ -1056,48 +1050,59 @@ function ChannelBillingForm({
             ) : null}
           </section>
         ) : null}
-        <div style={{ marginTop: 10, border: '1px solid #dbe5f3', borderRadius: 10, padding: '10px 12px', background: '#f8fbff' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start', marginBottom: 8 }}>
-            <div style={{ display: 'grid', gap: 2 }}>
-              <strong style={{ fontSize: 13 }}>结算调整（通用）</strong>
-              <span style={{ color: '#667085', fontSize: 11 }}>所有渠道都可用；普通账单保持为空。跨月差额、补扣、补款时才填写，不会改写上面的游戏明细。</span>
-            </div>
-            {adjustmentActive ? <span style={{ fontSize: 11, color: '#9a6700', background: '#fff8c5', borderRadius: 999, padding: '3px 8px' }}>已启用调整</span> : <span style={{ fontSize: 11, color: '#667085' }}>未启用</span>}
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(130px, .8fr) minmax(125px, .7fr) minmax(140px, .8fr) minmax(150px, .8fr) minmax(220px, 1.6fr)', gap: 8 }}>
-            <label style={{ display: 'grid', gap: 4, fontSize: 11 }}><span>调整类型</span><select className="admin-input" value={header.settlementAdjustmentType || ''} onChange={(e) => handleHeaderChange('settlementAdjustmentType', e.target.value)}><option value="">不调整</option><option value="historical_carryover">历史差额结转</option><option value="business_makeup">商务补差</option><option value="offset">补扣 / 冲抵</option><option value="other">其他</option></select></label>
-            <label style={{ display: 'grid', gap: 4, fontSize: 11 }}><span>来源账期</span><input type="month" max={currentMonthKey} className="admin-input" value={normalizeChannelSettlementCycle(header.settlementAdjustmentSourceMonth)} onChange={(e) => handleHeaderChange('settlementAdjustmentSourceMonth', e.target.value)} /></label>
-            <label style={{ display: 'grid', gap: 4, fontSize: 11 }}><span>调整金额（可正负）</span><input type="number" step="0.01" className="admin-input" value={header.settlementAdjustmentAmount ?? ''} onChange={(e) => handleHeaderChange('settlementAdjustmentAmount', e.target.value)} placeholder="扣减如 -498.64" /></label>
-            <label style={{ display: 'grid', gap: 4, fontSize: 11 }}><span>最终确认金额（选填）</span><input type="number" step="0.01" min="0" className="admin-input" value={header.settlementFinalOverride ?? ''} onChange={(e) => handleHeaderChange('settlementFinalOverride', e.target.value)} placeholder="如双方确认 376.00" /></label>
-            <label style={{ display: 'grid', gap: 4, fontSize: 11 }}><span>调整原因 {adjustmentActive ? '*' : ''}</span><input type="text" className="admin-input" value={header.settlementAdjustmentReason || ''} onChange={(e) => handleHeaderChange('settlementAdjustmentReason', e.target.value)} placeholder="例如：10月差额于12月结转，双方确认最终金额" /></label>
-          </div>
-          {hasAdjustmentTypeWithoutAmount && hasDifferenceToReview ? (
-            <div className="channel-difference-review__adjustment-hint">
-              <span>仅选择调整类型并不会增加金额；这笔差异已包含在平台结算中，无需再“商务补差”。</span>
-              <button
-                type="button"
-                onClick={() => setHeader((current) => ({
-                  ...current,
-                  settlementAdjustmentType: '',
-                  settlementAdjustmentSourceMonth: '',
-                  settlementAdjustmentAmount: '',
-                  settlementFinalOverride: '',
-                  settlementAdjustmentReason: ''
-                }))}
-              >
-                一键改回不调整
-              </button>
-            </div>
-          ) : null}
-          {adjustmentActive ? (
-            <div style={{ marginTop: 9, display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', fontSize: 12 }}>
-              <span>本期业务结算 <strong>{formatMoney(totals.businessSettlement)}</strong></span>
-              <span>+</span>
-              <span>调整 <strong>{totals.adjustment >= 0 ? '+' : ''}{formatMoney(totals.adjustment)}</strong></span>
-              <span>=</span>
-              <span>计算后 <strong>{formatMoney(totals.afterAdjustment)}</strong></span>
-              {String(header.settlementFinalOverride ?? '').trim() !== '' ? <><span>→</span><span>最终确认 <strong>{formatMoney(totals.settlement)}</strong></span></> : null}
-              {Math.abs(totals.adjustmentTail) >= 0.005 ? <span style={{ color: '#9a6700' }}>尾差 {totals.adjustmentTail >= 0 ? '+' : ''}{formatMoney(totals.adjustmentTail)}</span> : null}
+        <div className="channel-optional-adjustment" data-testid="channel-optional-adjustment">
+          <button
+            type="button"
+            className="channel-optional-toggle"
+            aria-expanded={adjustmentExpanded}
+            aria-controls="channel-optional-adjustment-fields"
+            onClick={() => setAdjustmentExpanded((value) => !value)}
+          >
+            <span className="channel-optional-toggle__title">特殊结算调整</span>
+            <span className={adjustmentActive ? 'channel-optional-toggle__status is-active' : 'channel-optional-toggle__status'}>
+              {adjustmentActive
+                ? `已启用 · 调整 ${formatMoney(totals.adjustment)}${String(header.settlementFinalOverride ?? '').trim() !== '' ? ' · 有最终确认金额' : ''}`
+                : hasAdjustmentTypeWithoutAmount ? '已选调整类型，待补金额' : '仅跨月冲抵、补差或特殊确认时填写'}
+            </span>
+            <span className="channel-optional-toggle__action">{adjustmentExpanded ? '收起' : '展开'} <span aria-hidden="true">{adjustmentExpanded ? '⌃' : '⌄'}</span></span>
+          </button>
+          {adjustmentExpanded ? (
+            <div id="channel-optional-adjustment-fields" className="channel-optional-adjustment__fields">
+              <p>只调整账单级最终结算金额，不改写游戏明细。已有特殊调整不会因收起而清空。</p>
+              <div className="channel-optional-adjustment__grid">
+                <label><span>调整类型</span><select className="admin-input" value={header.settlementAdjustmentType || ''} onChange={(e) => handleHeaderChange('settlementAdjustmentType', e.target.value)}><option value="">不调整</option><option value="historical_carryover">历史差额结转</option><option value="business_makeup">商务补差</option><option value="offset">补扣 / 冲抵</option><option value="other">其他</option></select></label>
+                <label><span>来源账期</span><input type="month" max={currentMonthKey} className="admin-input" value={normalizeChannelSettlementCycle(header.settlementAdjustmentSourceMonth)} onChange={(e) => handleHeaderChange('settlementAdjustmentSourceMonth', e.target.value)} /></label>
+                <label><span>调整金额（可正负）</span><input type="number" step="0.01" className="admin-input" value={header.settlementAdjustmentAmount ?? ''} onChange={(e) => handleHeaderChange('settlementAdjustmentAmount', e.target.value)} placeholder="扣减如 -498.64" /></label>
+                <label><span>最终确认金额（选填）</span><input type="number" step="0.01" min="0" className="admin-input" value={header.settlementFinalOverride ?? ''} onChange={(e) => handleHeaderChange('settlementFinalOverride', e.target.value)} placeholder="如双方确认 376.00" /></label>
+                <label><span>调整原因 {adjustmentActive ? '*' : ''}</span><input type="text" className="admin-input" value={header.settlementAdjustmentReason || ''} onChange={(e) => handleHeaderChange('settlementAdjustmentReason', e.target.value)} placeholder="例如：10月差额于12月结转，双方确认最终金额" /></label>
+              </div>
+              {hasAdjustmentTypeWithoutAmount && hasDifferenceToReview ? (
+                <div className="channel-difference-review__adjustment-hint">
+                  <span>仅选择调整类型并不会增加金额；平台差异已经包含在账单结算中，不需要重复补差。</span>
+                  <button
+                    type="button"
+                    onClick={() => setHeader((current) => ({
+                      ...current,
+                      settlementAdjustmentType: '',
+                      settlementAdjustmentSourceMonth: '',
+                      settlementAdjustmentAmount: '',
+                      settlementFinalOverride: '',
+                      settlementAdjustmentReason: ''
+                    }))}
+                  >一键改回不调整</button>
+                </div>
+              ) : null}
+              {adjustmentActive ? (
+                <div className="channel-optional-adjustment__calculation">
+                  <span>业务结算 <strong>{formatMoney(totals.businessSettlement)}</strong></span>
+                  <span>+</span>
+                  <span>调整 <strong>{totals.adjustment >= 0 ? '+' : ''}{formatMoney(totals.adjustment)}</strong></span>
+                  <span>=</span>
+                  <span>计算后 <strong>{formatMoney(totals.afterAdjustment)}</strong></span>
+                  {String(header.settlementFinalOverride ?? '').trim() !== '' ? <><span>→</span><span>最终确认 <strong>{formatMoney(totals.settlement)}</strong></span></> : null}
+                  {Math.abs(totals.adjustmentTail) >= 0.005 ? <span>尾差 {totals.adjustmentTail >= 0 ? '+' : ''}{formatMoney(totals.adjustmentTail)}</span> : null}
+                </div>
+              ) : null}
             </div>
           ) : null}
         </div>
@@ -1108,6 +1113,32 @@ function ChannelBillingForm({
           <div className={validationTone}><span>校验状态</span><strong>{validationText(totals.validationStatus)}</strong></div>
           <div><span>允许误差</span><strong>±{formatMoney(header.validationTolerance)}</strong></div>
         </div>
+      </div>
+      <div className="channel-optional-remarks" data-testid="channel-optional-remarks">
+        <button
+          type="button"
+          className="channel-optional-remarks__toggle"
+          aria-expanded={remarksExpanded}
+          aria-controls="channel-optional-remarks-textarea"
+          onClick={() => setRemarksExpanded((value) => !value)}
+        >
+          {String(header.remark || '').trim() ? '备注 / 特殊说明 · 已填写' : '＋ 添加备注 / 特殊说明（选填）'}
+          <span aria-hidden="true">{remarksExpanded ? '⌃' : '⌄'}</span>
+        </button>
+        {remarksExpanded ? (
+          <div className="channel-optional-remarks__body" id="channel-optional-remarks-textarea">
+            <label htmlFor="channel-bill-last-remarks">备注 / 特殊说明</label>
+            <textarea
+              id="channel-bill-last-remarks"
+              rows={3}
+              value={header.remark}
+              onChange={(e) => handleHeaderChange('remark', e.target.value)}
+              className="admin-input channel-bill-remark-textarea"
+              placeholder="只有特殊结算、跨月冲抵、双方确认差异等情况才填写；普通账单留空即可。"
+            />
+            <small>原有备注、合同人工覆盖说明及差异核对记录仍随账单保存，收起不会删除。</small>
+          </div>
+        ) : null}
       </div>
       {contractIssueTarget ? (
         <ChannelContractIssueEditor

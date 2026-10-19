@@ -314,8 +314,9 @@ function CoreChannelBillFormPage({ mode }) {
       target = form?.querySelector('.channel-bill-meta-grid__partner')
     }
     if (!target && /调整原因|结算调整|冲抵|补差/.test(message)) {
-      target = Array.from(form?.querySelectorAll('.channel-form-section') || [])
-        .find((section) => String(section.textContent || '').includes('结算调整（通用）'))
+      // The exceptional adjustment editor is collapsed by default.
+      // Its action row remains focusable even before the inputs are expanded.
+      target = form?.querySelector('.channel-optional-adjustment .channel-optional-toggle')
     }
     if (!target && /合同|分成|税率|通道费|匹配/.test(message)) {
       target = form?.querySelector('.channel-rule-panel')
@@ -1060,12 +1061,18 @@ function CoreChannelBillFormPage({ mode }) {
       ) : null}
 
       {!isEdit ? (
-        <ChannelSmartEntryBar
-          record={smartEntryRecord}
-          channelRecords={recon.channelRecords || []}
-          onApply={applySmartRecord}
-          onNotice={(message, tone = 'info') => showToast(message, tone)}
-        />
+        <details className="core-bill-smart-details">
+          <summary>
+            <span>智能补齐游戏明细（按合同 / 上月账单）</span>
+            <small>非必需 · 需要时点击展开，普通账单直接填写下方明细</small>
+          </summary>
+          <ChannelSmartEntryBar
+            record={smartEntryRecord}
+            channelRecords={recon.channelRecords || []}
+            onApply={applySmartRecord}
+            onNotice={(message, tone = 'info') => showToast(message, tone)}
+          />
+        </details>
       ) : null}
 
       {!isEdit && ruleAuthority.status !== 'idle' ? (
