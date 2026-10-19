@@ -88,7 +88,7 @@ function Chart({ rows, series }) {
   const min=Math.min(0,...vals),max=Math.max(1,...vals),spread=Math.max(1,max-min)
   const xpos = i => 48 + i * 555 / Math.max(1,present.length-1)
   const ypos = v => 210 - (v-min)/spread * 165
-  const path=key => present.map((row,i)=>valid(row[key])?(i?'L':'M')+xpos(i).toFixed(1)+','+ypos(row[key]).toFixed(1):'').join(' ')
+  const path=key => { let started=false; return present.map((row,i)=>{ if(!valid(row[key])) { started=false; return '' }; const command=(started?'L':'M')+xpos(i).toFixed(1)+','+ypos(row[key]).toFixed(1); started=true; return command }).join(' ') }
   return <div className="f4-trend-canvas"><svg viewBox="0 0 650 255" preserveAspectRatio="xMidYMid meet" role="img" aria-label="月度经营趋势">
     {[0,1,2,3,4].map(i=>{const v=min+(max-min)*(4-i)/4;return <g key={i}><line x1="44" x2="611" y1={ypos(v)} y2={ypos(v)} stroke="#e7edf6" strokeDasharray="4 5"/><text x="38" y={ypos(v)+4} textAnchor="end" fontSize="10" fill="#9eabc0">{(v/10000).toFixed(1)}</text></g>})}
     {min<0 && <line x1="44" x2="611" y1={ypos(0)} y2={ypos(0)} stroke="#bccadc"/>}
@@ -113,21 +113,30 @@ function CashPanel({ summary, loading, onMore }) {
     <p className="f4-panel-caption">应收未收与已经到账属于不同口径，资金指标不替代公司银行余额。</p>
   </section>
 }
-function Breakdown({ summary, onClick, annual }) {
-  const rows=[
-    ['渠道结算收入（利润归集口径）', summary.profitIncome,'blue'],
-    ['研发结算成本', summary.rdCost,'orange'],
-    ['服务器成本', summary.serverCost,'orange'],
-    ['经营费用（含归属及公共费用）',summary.operatingExpense,'orange']
-  ]
+function Breakdown({ summary, profit, onClick, annual }) {
+  // The bridge is a single equation. Never subtract all company expenses
+  // before displaying project gross profit (which excludes shared expenses).
+  const directlyAttributableServer = annual || !valid(summary.serverCost) ? null
+    : Math.max(0, Number(summary.serverCost) - number(profit?.shared_server_cost?.value))
+  const directlyAttributableTotal = valid(summary.profitIncome) && valid(summary.gross)
+    ? Math.round((Number(summary.profitIncome) - Number(summary.gross))*100)/100 : null
+  const costs = annual
+    ? [['项目可归属总成本（含研发、服务器、归属费用）',directlyAttributableTotal,'orange']]
+    : [
+      ['研发结算成本',summary.rdCost,'orange'],
+      ['游戏可归属服务器成本',directlyAttributableServer,'orange'],
+      ['游戏可归属经营费用',summary.attributedExpense,'orange']
+    ]
   return <section className="f4-panel f4-card">
     <div className="f4-panel-head"><div><h3>利润构成与成本拆解</h3><p>同一核算范围 · 每项成本只扣一次</p></div><button type="button" onClick={onClick}>计算口径 <I name="chevron" size={14}/></button></div>
-    <div className="f4-bridge">{rows.map(([name,value,tone])=><div key={name} className="f4-bridge-line"><span><i className={'f4-dot '+tone}/>{name}</span><strong className={tone==='orange'?'expense':''} title={exactMoney(value)}>{tone==='orange'&&valid(value)?'− ':''}{displayMoney(value)}</strong></div>)}
+    <div className="f4-bridge">
+      <div className="f4-bridge-line"><span><i className="f4-dot blue"/>渠道结算收入（利润归集口径）</span><strong title={exactMoney(summary.profitIncome)}>{displayMoney(summary.profitIncome)}</strong></div>
+      {costs.map(([name,value,tone])=><div key={name} className="f4-bridge-line"><span><i className={'f4-dot '+tone}/>{name}</span><strong className="expense" title={exactMoney(value)}>{valid(value)?'− ':''}{displayMoney(value)}</strong></div>)}
       <div className="f4-bridge-result gross"><b>游戏业务利润</b><strong title={exactMoney(summary.gross)}>{displayMoney(summary.gross)}</strong></div>
-      <div className="f4-bridge-line"><span><i className="f4-dot orange"/>未归属公共成本与费用</span><strong className="expense" title={exactMoney(summary.sharedTotal)}>{valid(summary.sharedTotal)?'− ':''}{displayMoney(summary.sharedTotal)}</strong></div>
+      <div className="f4-bridge-line"><span><i className="f4-dot orange"/>公司公共服务器及经营费用</span><strong className="expense" title={exactMoney(summary.sharedTotal)}>{valid(summary.sharedTotal)?'− ':''}{displayMoney(summary.sharedTotal)}</strong></div>
       <div className="f4-bridge-result operating"><b>公司经营利润</b><strong title={exactMoney(summary.operating)}>{displayMoney(summary.operating)}</strong></div>
     </div>
-    <p className="f4-panel-caption">{annual?'年度数据按已有月度利润记录汇总。':'费用仅扣已录入台账金额，未录入的成本不会自动估算。'} 游戏利润与经营利润属于不同层次，不能相加。</p>
+    <p className="f4-panel-caption">{annual?'年度数字按已有月份实际记录汇总。':'经营费用按台账归属，公共费用不强行摊入游戏。'} 项目毛利减去公共成本才是公司经营利润；两种利润不能相加。</p>
   </section>
 }
 function Projects({ projects, loading, onProject, onMore, annual }) {
@@ -233,7 +242,7 @@ function CoreDashboardV4() {
   const invoiceCount=invoiceItems.reduce((sum,item)=>sum+number(item.count),0)
   if(canInvoices&&invoiceCount>0)alerts.push({label:'发票覆盖与开票缺口',sub:'账单未被有效发票完全覆盖',value:invoiceCount+' 项',tone:'purple',icon:'receipt',onClick:()=>go(VIEWS.INVOICE_MANAGE)})
   if(canFinanceTasks&&number(financeTasks?.pending_count)+number(financeTasks?.processing_count)>0)alerts.push({label:'业务开票任务',sub:'开票任务已移到发票中心，历史记录保留',value:(number(financeTasks.pending_count)+number(financeTasks.processing_count))+' 笔',tone:'orange',icon:'receipt',onClick:()=>go(VIEWS.FINANCE_WORKBENCH)})
-  if(canAnalytics&&metrics.profitReady&&!annual&&number(profit?.expense_count)===0)alerts.push({label:'本期经营费用录入检查',sub:'费用记录为 0，请确认属于无发生还是尚未录入',value:'待核实',tone:'blue',icon:'info',onClick:()=>go(VIEWS.PROFIT_ANALYSIS)})
+  if(canAnalytics&&metrics.profitReady&&!annual&&number(profit?.expense_count)===0)alerts.push({label:'本期经营费用录入检查',sub:'费用记录为 0，请确认属于无发生还是尚未录入',value:'待核实',tone:'blue',icon:'info',onClick:()=>go(VIEWS.OPERATING_EXPENSES||VIEWS.PROFIT_ANALYSIS)})
   if(canAnalytics&&!metrics.profitReady&&!loading)alerts.push({label:'当前账期暂无利润归集',sub:'请核查所选月份是否仅存在实际收付款',value:'待核实',tone:'blue',icon:'info',onClick:()=>setDrawer({kind:'method'})})
   const showDrawer=(kind,extra)=>{setDrawer({kind,...extra})}
   const marginChange=annual||!profit?.operating_profit||!metrics.profitReady?null:profit.operating_profit.change_percent
@@ -282,7 +291,7 @@ function CoreDashboardV4() {
       <CashPanel summary={metrics} loading={loading} onMore={()=>showDrawer('cash')}/>
     </div>}
     {canAnalytics&&<div className="f4-grid middle">
-      <Breakdown summary={metrics} annual={annual} onClick={()=>showDrawer('method')}/>
+      <Breakdown summary={metrics} profit={profit} annual={annual} onClick={()=>showDrawer('method')}/>
       <Projects projects={projects} loading={loading} annual={annual} onMore={()=>{showDrawer('projects')}} onProject={project=>showDrawer('project',{project})}/>
     </div>}
     <div className="f4-grid bottom">
