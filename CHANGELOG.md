@@ -5,9 +5,9 @@
 - **影响范围**：荣耀官方凭证确认流程；其他渠道的公式、容差、平台尾差和合同核对流程保持原行为。无新增数据库迁移、历史金额批量重算或支付操作。
 - **安全措施**：服务端核对完整明细、并发版本、附件归属和不可删除性；使用新的服务器合同快照以及合同/合作清单/条款/绑定版本；快照读取使用一致事务，确认与差异审计原子提交。
 - **代码提交**：[PR #266](https://github.com/wangmiao033/cf.hnchpower.cn/pull/266)、[正式提交 89e498d](https://github.com/wangmiao033/cf.hnchpower.cn/commit/89e498dfbdaa2ce258d4a78a8e1f223060fc6597)。
-- **验证结果**：本地完整前端 475 项、后端 355 项、合同服务 163 项测试及构建通过，独立代码复核通过。[PR Quality Gate](https://github.com/wangmiao033/cf.hnchpower.cn/actions/runs/39236786223) 补齐并通过浏览器回归；[正式部署流程](https://github.com/wangmiao033/cf.hnchpower.cn/actions/runs/39236969020) 的预检、测试、构建和正式域名 `/`、`/health`、`/health/db` 健康检查全部成功。额外独立健康请求均返回 200；真实 PostgreSQL 并发与登录账单业务点击未在该发布记录中视为已验收。
+- **验证结果**：本地完整前端 475 项、后端 355 项、合同服务 163 项测试及构建通过，独立代码复核通过。[PR Quality Gate](https://github.com/wangmiao033/cf.hnchpower.cn/actions/runs/39236786223) 补齐并通过浏览器回归；[正式部署流程](https://github.com/wangmiao033/cf.hnchpower.cn/actions/runs/39236969020) 的预检、测试、构建和正式域名 `/`、`/health`、`/health/db` 健康检查全部成功。额外独立健康请求均返回 200。北京时间 18:32，登录浏览器完成荣耀待核对账单实际验收：逐游戏官方金额、原始附件与确认依据保留，状态已核对；系统公式及差异仍留痕，未收款及零调整状态保持，既有已确认账单未重复处理。真实 PostgreSQL 并发压测未执行。
 - **发布信息**：北京时间 2026-10-19 18:24:28；`production / READY`；Vercel Deployment ID `dpl_5X5CgiiXzTnrQsTnXKy5Hwrbq4XY`；正式域名 https://cf.hnchpower.cn 已指向该提交。
-- **待确认事项**：已部署不等于业务核对完成；荣耀待核对账单的登录操作验收继续进行。已确认账单不重复确认，收付款状态不随发布改变。
+- **业务验收**：上述登录核对已完成并重新读取确认结果；生产发布、技术检查与实际账单核对均有独立证据。其他渠道继续沿用原计算路径，完整回归通过。
 - **回滚候选**：此前生产 `dpl_9frMZWQS8SXd9q4Yh1Dd95FgzBcR`（提交 `8a84084`），仅出现回归时依既有正式流程处理。
 
 # 更新日志
