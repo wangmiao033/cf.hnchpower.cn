@@ -61,6 +61,8 @@ describe('V4 finance overview scopes and display-only metrics', () => {
     expect(latestPeriod(profit, business)).toBe('2026-09')
     const rows=combineMonthlyTrends(profit,business,'2026-09',{months:12})
     expect(rows).toHaveLength(3)
+    expect(rows.at(-1).gross).toBeNull() // cash-only period must not be graphed as zero profit
+    expect(rows.at(-1).cashNet).toBe(13000)
     const year=combineMonthlyTrends(profit,business,'',{annual:true,year:'2026',months:12})
     expect(year.at(-1).month).toBe('2026-09')
   })
