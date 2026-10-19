@@ -173,7 +173,6 @@ function CoreDashboardV4() {
   const [series,setSeries]=useState('profit')
   const [range,setRange]=useState(6)
   const [drawer,setDrawer]=useState(null)
-  const [showAllProjects,setShowAllProjects]=useState(false)
   const [newBillMenu,setNewBillMenu]=useState(false)
   const go=useCallback(view=>{if(view&&canOpenView(can,view))setActiveView(view)},[can,setActiveView])
   const refresh=useCallback(()=>setRevision(count=>count+1),[])
@@ -224,8 +223,6 @@ function CoreDashboardV4() {
   const overviewCompleted=overviewBillCount===null?null:number(business.channel_completed_count)+number(business.rd_completed_count)
   const completion=overviewBillCount>0?Math.round(overviewCompleted/overviewBillCount*100):null
   const contributionRate=valid(metrics.contribution)&&metrics.channelSettlement>0?metrics.contribution/metrics.channelSettlement*100:null
-  const cashShare=valid(metrics.cashIn)&&valid(metrics.cashOut)&&number(metrics.cashIn)+number(metrics.cashOut)>0
-    ?100*number(metrics.cashIn)/(number(metrics.cashIn)+number(metrics.cashOut)):null
   const alerts=[]
   if(errors.length)alerts.push({label:'数据读取异常',sub:errors.join('；'),value:errors.length+' 项',tone:'warning',icon:'alert',onClick:refresh})
   if(canContracts&&contractSummary){
@@ -236,7 +233,7 @@ function CoreDashboardV4() {
   const invoiceCount=invoiceItems.reduce((sum,item)=>sum+number(item.count),0)
   if(canInvoices&&invoiceCount>0)alerts.push({label:'发票覆盖与开票缺口',sub:'账单未被有效发票完全覆盖',value:invoiceCount+' 项',tone:'purple',icon:'receipt',onClick:()=>go(VIEWS.INVOICE_MANAGE)})
   if(canFinanceTasks&&number(financeTasks?.pending_count)+number(financeTasks?.processing_count)>0)alerts.push({label:'业务开票任务',sub:'开票任务已移到发票中心，历史记录保留',value:(number(financeTasks.pending_count)+number(financeTasks.processing_count))+' 笔',tone:'orange',icon:'receipt',onClick:()=>go(VIEWS.FINANCE_WORKBENCH)})
-  if(canAnalytics&&metrics.profitReady&&!annual&&number(profit?.expense_count)===0)alerts.push({label:'本期经营费用录入检查',sub:'费用记录为 0，请确认属于无发生还是尚未录入',value:'待核实',tone:'blue',icon:'info',onClick:()=>go(VIEWS.OPERATING_EXPENSES)})
+  if(canAnalytics&&metrics.profitReady&&!annual&&number(profit?.expense_count)===0)alerts.push({label:'本期经营费用录入检查',sub:'费用记录为 0，请确认属于无发生还是尚未录入',value:'待核实',tone:'blue',icon:'info',onClick:()=>go(VIEWS.PROFIT_ANALYSIS)})
   if(canAnalytics&&!metrics.profitReady&&!loading)alerts.push({label:'当前账期暂无利润归集',sub:'请核查所选月份是否仅存在实际收付款',value:'待核实',tone:'blue',icon:'info',onClick:()=>setDrawer({kind:'method'})})
   const showDrawer=(kind,extra)=>{setDrawer({kind,...extra})}
   const marginChange=annual||!profit?.operating_profit||!metrics.profitReady?null:profit.operating_profit.change_percent
@@ -286,14 +283,14 @@ function CoreDashboardV4() {
     </div>}
     {canAnalytics&&<div className="f4-grid middle">
       <Breakdown summary={metrics} annual={annual} onClick={()=>showDrawer('method')}/>
-      <Projects projects={projects} loading={loading} annual={annual} onMore={()=>{setShowAllProjects(true);showDrawer('projects')}} onProject={project=>showDrawer('project',{project})}/>
+      <Projects projects={projects} loading={loading} annual={annual} onMore={()=>{showDrawer('projects')}} onProject={project=>showDrawer('project',{project})}/>
     </div>}
     <div className="f4-grid bottom">
       {canRecon&&<ProgressPanel business={metrics.businessReady?business:null} annual={annual} openView={go}/>}
       <Alerts items={alerts} onMore={()=>showDrawer('alerts')}/>
     </div>
     <p className="f4-page-footer">经营工作台 V4 · 实时读取已授权财务接口 · 未修改合同、账单、银行及发票原始数据</p>
-    {drawer&&<div className="f4-overlay" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget){setDrawer(null);setShowAllProjects(false)}}}><aside className="f4-drawer" role="dialog" aria-modal="true" aria-label="经营指标详情"><header><div><span>经营数据 · {scope}</span><h2>{drawer.kind==='method'?'利润计算口径':drawer.kind==='profit'?'游戏业务利润':drawer.kind==='operating'?'公司经营利润':drawer.kind==='settlement'?'结算来源':drawer.kind==='cash'?'部分现金净流入':drawer.kind==='projects'?'项目毛利明细':drawer.kind==='project'?drawer.project?.game_name:'经营提醒'}</h2></div><button type="button" aria-label="关闭明细" onClick={()=>{setDrawer(null);setShowAllProjects(false)}}><I name="x" size={20}/></button></header>
+    {drawer&&<div className="f4-overlay" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget){setDrawer(null)}}}><aside className="f4-drawer" role="dialog" aria-modal="true" aria-label="经营指标详情"><header><div><span>经营数据 · {scope}</span><h2>{drawer.kind==='method'?'利润计算口径':drawer.kind==='profit'?'游戏业务利润':drawer.kind==='operating'?'公司经营利润':drawer.kind==='settlement'?'结算来源':drawer.kind==='cash'?'部分现金净流入':drawer.kind==='projects'?'项目毛利明细':drawer.kind==='project'?drawer.project?.game_name:'经营提醒'}</h2></div><button type="button" aria-label="关闭明细" onClick={()=>{setDrawer(null)}}><I name="x" size={20}/></button></header>
       <main>
         {['method','profit','operating'].includes(drawer.kind)&&<><p className="f4-drawer-note">管理口径：游戏业务利润只扣游戏可归属成本；公司经营利润再扣未归属公共服务器与经营费用。两者不相加。</p><div className="f4-drawer-kpis"><div><span>游戏业务利润</span><strong>{displayMoney(metrics.gross)}</strong></div><div><span>公司经营利润</span><strong>{displayMoney(metrics.operating)}</strong></div><div><span>未归属公共成本</span><strong>{displayMoney(metrics.sharedTotal)}</strong></div></div>{(profit?.notes||[]).map((note,i)=><p key={i} className="f4-drawer-small">{i+1}. {note}</p>)}</>}
         {drawer.kind==='settlement'&&<><p className="f4-drawer-note">结算数据由经营驾驶舱提供，按账单周期汇总。由于跨月拆分规则与利润归集不同，不以结算贡献代替游戏毛利。</p><div className="f4-drawer-kpis"><div><span>渠道结算</span><strong>{displayMoney(metrics.channelSettlement)}</strong></div><div><span>研发结算</span><strong>{displayMoney(metrics.rdSettlement)}</strong></div><div><span>结算贡献（扣服务器前后按原接口定义）</span><strong>{displayMoney(metrics.contribution)}</strong></div></div>{canRecon&&<button className="f4-drawer-link" type="button" onClick={()=>go(VIEWS.RECON_PROGRESS)}>查看账单及对账进度 →</button>}</>}
@@ -301,7 +298,7 @@ function CoreDashboardV4() {
         {drawer.kind==='project'&&drawer.project&&<><p className="f4-drawer-note">游戏名称已按后台项目归并规则汇总；公共费用未摊派到具体游戏。</p><div className="f4-drawer-kpis"><div><span>项目毛利</span><strong>{displayMoney(drawer.project.profit)}</strong></div><div><span>渠道结算</span><strong>{displayMoney(drawer.project.channel_settlement)}</strong></div><div><span>研发成本</span><strong>{displayMoney(drawer.project.rd_cost)}</strong></div><div><span>服务器成本</span><strong>{displayMoney(drawer.project.server_cost_allocated??drawer.project.server_cost)}</strong></div><div><span>归属费用</span><strong>{displayMoney(drawer.project.attributed_expense)}</strong></div></div></>}
         {drawer.kind==='projects'&&<div className="f4-drawer-projects">{projects.map(row=><button type="button" key={row.game_name} onClick={()=>showDrawer('project',{project:row})}><span>{row.game_name}</span><strong>{displayMoney(row.profit)}</strong></button>)}{!projects.length&&<p>所选账期暂无项目数据。</p>}</div>}
         {drawer.kind==='alerts'&&<div className="f4-drawer-projects">{alerts.map((item,i)=><button type="button" key={i} onClick={item.onClick} disabled={!item.onClick}><span>{item.label}<small>{item.sub}</small></span><strong>{item.value||'查看'}</strong></button>)}{!alerts.length&&<p>暂无提醒项目。</p>}</div>}
-      </main><footer><button type="button" onClick={()=>{setDrawer(null);setShowAllProjects(false)}}>关闭</button></footer></aside></div>}
+      </main><footer><button type="button" onClick={()=>{setDrawer(null)}}>关闭</button></footer></aside></div>}
   </PageContainer>
 }
 export default CoreDashboardV4
