@@ -1,0 +1,218 @@
+/* Channel bill: non-routine fields remain in the model but stay visually quiet.
+ * The calculation and persistence flow is unchanged; these are display-only controls.
+ */
+.core-bill-form-page--channel .channel-optional-adjustment {
+  margin-top: 9px;
+  border: 1px solid #e2e9f3;
+  border-radius: 9px;
+  background: #fafcff;
+  overflow: hidden;
+}
+.core-bill-form-page--channel .channel-optional-toggle {
+  display: flex;
+  width: 100%;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  padding: 9px 12px;
+  cursor: pointer;
+  color: #536985;
+}
+.core-bill-form-page--channel .channel-optional-toggle:hover {
+  background: #f2f7ff;
+}
+.core-bill-form-page--channel .channel-optional-toggle__title {
+  flex: 0 0 auto;
+  color: #516a8a;
+  font-size: 11px;
+  font-weight: 750;
+}
+.core-bill-form-page--channel .channel-optional-toggle__status {
+  flex: 1 1 150px;
+  min-width: 0;
+  color: #95a4b9;
+  font-size: 10px;
+  line-height: 1.5;
+}
+.core-bill-form-page--channel .channel-optional-toggle__status.is-active {
+  color: #a36d1d;
+  font-weight: 700;
+}
+.core-bill-form-page--channel .channel-optional-toggle__action {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  color: #3273e2;
+  font-size: 10px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+.core-bill-form-page--channel .channel-optional-adjustment__fields {
+  border-top: 1px solid #e4ebf5;
+  padding: 11px 12px 12px;
+  background: #fff;
+}
+.core-bill-form-page--channel .channel-optional-adjustment__fields > p {
+  margin: 0 0 10px;
+  color: #8293ab;
+  font-size: 10px;
+  line-height: 1.55;
+}
+.core-bill-form-page--channel .channel-optional-adjustment__grid {
+  display: grid;
+  grid-template-columns: minmax(115px,.8fr) minmax(125px,.85fr) minmax(125px,.8fr) minmax(150px,1fr) minmax(180px,1.4fr);
+  gap: 9px;
+}
+.core-bill-form-page--channel .channel-optional-adjustment__grid label {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+  font-size: 11px;
+  color: #5e738f;
+}
+.core-bill-form-page--channel .channel-optional-adjustment__grid input,
+.core-bill-form-page--channel .channel-optional-adjustment__grid select {
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+  font-size: 11px;
+}
+.core-bill-form-page--channel .channel-optional-adjustment__calculation {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  align-items: center;
+  margin-top: 11px;
+  padding: 9px 11px;
+  border-radius: 7px;
+  background: #f5f8fe;
+  color: #69819e;
+  font-size: 11px;
+}
+.core-bill-form-page--channel .channel-optional-adjustment__calculation strong {
+  color: #385574;
+}
+.core-bill-form-page--channel .channel-optional-remarks {
+  margin: 0 0 2px;
+  padding: 0 11px 7px;
+}
+.core-bill-form-page--channel .channel-optional-remarks__toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-height: 34px;
+  border: 1px dashed #dce6f1;
+  border-radius: 8px;
+  background: #fafcff;
+  color: #768aa5;
+  text-align: left;
+  padding: 7px 12px;
+  font-size: 11px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.core-bill-form-page--channel .channel-optional-remarks__toggle:hover {
+  border-color: #aec7f1;
+  color: #3871d5;
+  background: #f4f8ff;
+}
+.core-bill-form-page--channel .channel-optional-remarks__body {
+  display: grid;
+  gap: 7px;
+  border: 1px solid #e3eaf3;
+  border-top: 0;
+  border-radius: 0 0 8px 8px;
+  padding: 10px 12px;
+  background: #fff;
+}
+.core-bill-form-page--channel .channel-optional-remarks__body label {
+  font-size: 11px;
+  font-weight: 650;
+  color: #62778f;
+}
+.core-bill-form-page--channel .channel-optional-remarks__body textarea {
+  width: 100%;
+  min-height: 66px;
+  height: auto;
+  padding: 9px 11px;
+  font-size: 11px;
+  line-height: 1.5;
+  resize: vertical;
+}
+.core-bill-form-page--channel .channel-optional-remarks__body small {
+  font-size: 10px;
+  color: #96a5b9;
+}
+.core-bill-form-page--channel .core-bill-smart-details {
+  border: 1px solid #dfe8f3;
+  border-radius: 9px;
+  background: #fbfcff;
+  overflow: hidden;
+}
+.core-bill-form-page--channel .core-bill-smart-details > summary {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 34px;
+  padding: 7px 12px;
+  color: #4c688e;
+  font-size: 11px;
+  font-weight: 750;
+  cursor: pointer;
+}
+.core-bill-form-page--channel .core-bill-smart-details > summary::marker {
+  content: '';
+}
+.core-bill-form-page--channel .core-bill-smart-details > summary::-webkit-details-marker {
+  display: none;
+}
+.core-bill-form-page--channel .core-bill-smart-details > summary small {
+  color: #8198b6;
+  font-size: 10px;
+  font-weight: 500;
+  flex: 1 1 auto;
+  text-align: right;
+}
+.core-bill-form-page--channel .core-bill-smart-details > summary:hover {
+  background: #f2f7ff;
+}
+.core-bill-form-page--channel .core-bill-smart-details[open] > summary {
+  border-bottom: 1px solid #e2eaf5;
+}
+.core-bill-form-page--channel .core-bill-smart-details .channel-smart-entry {
+  border: 0;
+  border-radius: 0;
+  margin: 0;
+  box-shadow: none;
+}
+@media (max-width: 1150px) {
+  .core-bill-form-page--channel .channel-optional-adjustment__grid {
+    grid-template-columns: repeat(2, minmax(0,1fr));
+  }
+  .core-bill-form-page--channel .channel-optional-adjustment__grid label:last-child {
+    grid-column: 1 / -1;
+  }
+}
+@media (max-width: 690px) {
+  .core-bill-form-page--channel .channel-optional-adjustment__grid {
+    grid-template-columns: 1fr;
+  }
+  .core-bill-form-page--channel .channel-optional-adjustment__grid label:last-child {
+    grid-column: auto;
+  }
+  .core-bill-form-page--channel .channel-optional-toggle,
+  .core-bill-form-page--channel .core-bill-smart-details > summary {
+    align-items: flex-start;
+    gap: 6px;
+  }
+  .core-bill-form-page--channel .core-bill-smart-details > summary small {
+    display: none;
+  }
+}
