@@ -8,6 +8,8 @@ import {
 } from '@/domain/reconciliation/billLifecycle.js'
 import { invalidateEditRecord } from '@/lib/api/editRecordCache.js'
 import { transitionBillLifecycle } from '@/lib/api/billLifecycle.ts'
+import { useAuth } from '@/features/auth/AuthContext.jsx'
+import BillOperationTimeline from './BillOperationTimeline.jsx'
 import './LockedBillEditNotice.css'
 
 /**
@@ -18,12 +20,13 @@ import './LockedBillEditNotice.css'
 export default function LockedBillEditNotice({
   billType,
   record,
-  onOpen360,
   onBack,
   onEditApproved,
   children
 }) {
   const { recon, showToast } = useAppState()
+  const { can } = useAuth()
+  const [showHistory, setShowHistory] = useState(false)
   const [showEditNote, setShowEditNote] = useState(false)
   const [note, setNote] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -138,12 +141,17 @@ export default function LockedBillEditNotice({
                 {billType === 'channel' ? '修改账单' : '修改账单（填写备注）'}
               </button>
             ) : null}
-            {onOpen360 ? <button type="button" onClick={onOpen360}>{billType === 'channel' ? '核对记录' : '查看核对结果'}</button> : null}
+            {billId && can('audit.view') ? <button type="button" aria-expanded={showHistory} aria-controls={'bill-history-' + billId} onClick={() => setShowHistory(value => !value)}>{billType === 'channel' ? '核对记录' : '查看核对结果'}</button> : null}
             <button type="button" onClick={onBack}>返回列表</button>
           </div>
           <small>{billName} · 查看不改变账单；修改备注及状态变化写入操作日志。</small>
         </div>
       </section>
+      {showHistory && can('audit.view') ? (
+        <section id={'bill-history-' + billId} aria-label="账单核对记录" className="locked-bill-readonly-content">
+          <BillOperationTimeline key={billType + ':' + billId} billType={billType} billId={billId} readOnly />
+        </section>
+      ) : null}
       {children ? (
         <div className="locked-bill-readonly-content">{children}</div>
       ) : (
