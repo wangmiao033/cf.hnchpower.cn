@@ -1,5 +1,17 @@
 # 更新日志
 
+## 2026-10-19 16:47（北京时间）｜渠道代金券单元格单行优化正式上线
+
+- **类型**：前端 UI 优化 / 生产发布。
+- **需求**：仅美化渠道账单「游戏明细」中代金券录入控件，不改计算逻辑；保持一款游戏一行。
+- **改动内容**：由旧「金额 + 折算/直扣两个 radio + 双券按钮 + 第二行预览」改成「金额 + 单个紧凑的口径下拉」；双券时两项金额继续同格并排输入；金额折算预览由常驻第二行移至悬停提示与无障碍文本。切换仍调用已有的 `handleVoucherModeChange` / `handleVoucherDualToggle`；历史原口径不能无确认转换，已填写两类券切换单券仍走原确认。没有修改渠道结算公式、服务端计算和数据库字段。
+- **变更文件**：`src/components/channel/ChannelBillingForm.jsx` 仅代金券 JSX 与样式引用，新增 `src/components/channel/ChannelVoucherCompact.css`、`tests/channel-voucher-inline-ui.spec.js`、日志；**未修改** `src/domain/channel/channelBillingForm.js` 和 `src/domain/channel/channelVoucherEntry.js`。
+- **代码记录**：[PR #265](https://github.com/wangmiao033/cf.hnchpower.cn/pull/265)、[正式提交 8a84084](https://github.com/wangmiao033/cf.hnchpower.cn/commit/8a84084b76dbcd0e6cdca718234bd2c6c423937a)。
+- **验证结果**：提交的前端单元测试、浏览器回归（含新代金券单行与原有两类券确认）、前端生产构建及后端/合同服务测试均通过；[Production Deploy #39224940041](https://github.com/wangmiao033/cf.hnchpower.cn/actions/runs/39224940041) 的预检、构建、正式域名 `/`、`/health`、`/health/db` 健康检查成功。业务实际金额仍待登录后的人工核验，自动化通过不等于人工核对。
+- **上线信息**：北京时间 2026-10-19 16:47；`production / READY`，Vercel Deployment ID `dpl_9frMZWQS8SXd9q4Yh1Dd95FgzBcR`，域名 <https://cf.hnchpower.cn/>，生产 alias 已指向此次提交。
+- **回滚候选**：上一版生产 `dpl_CeF3APDJnXktwwAcRDJS3abiCDAf`（提交 `6623594`），仅出现回归时依现有 Vercel 正规流程回滚。
+
+
 ## 2026-10-19｜渠道账单代金券单元格精修（待发布）
 
 - **类型**：仅前端录入控件 UI 优化 / 单行展示。
