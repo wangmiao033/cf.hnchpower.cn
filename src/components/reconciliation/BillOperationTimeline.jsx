@@ -54,7 +54,7 @@ function evidenceText(log) {
   return ''
 }
 
-export default function BillOperationTimeline({ billType, billId }) {
+export default function BillOperationTimeline({ billType, billId, readOnly = false }) {
   const { recon, showToast } = useAppState()
   const [logs, setLogs] = useState([])
   const [loading, setLoading] = useState(true)
@@ -133,12 +133,12 @@ export default function BillOperationTimeline({ billType, billId }) {
   return (
     <div className="bill360-status-history-stack">
       <BillActorSummary billType={billType} billId={billId} revision={revision} />
-      <BillLifecyclePanel
+      {!readOnly ? <BillLifecyclePanel
         billType={billType}
         billId={billId}
         onTransitioned={handleTransitioned}
         showToast={showToast}
-      />
+      /> : null}
 
       <section className="bill360-card bill360-card--table">
         <div className="bill360-card-head">

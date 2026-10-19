@@ -1,6 +1,6 @@
 import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { AppStateProvider } from '@/app/AppStateContext.jsx'
 import {
   canRequestReviewedBillAmendment,
@@ -8,6 +8,8 @@ import {
 } from '@/domain/reconciliation/billLifecycle.js'
 import LockedBillEditNotice from './LockedBillEditNotice.jsx'
 import RdBillReadonlyView from './RdBillReadonlyView.jsx'
+
+vi.mock('@/features/auth/AuthContext.jsx', () => ({ useAuth: () => ({ can: permission => permission === 'audit.view' }) }))
 
 function renderBill(state) {
   return renderToStaticMarkup(
