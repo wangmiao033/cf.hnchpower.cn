@@ -45,7 +45,7 @@ function MobileMenu({ children }) {
         <>
           <div className="mobile-menu-overlay" role="presentation" onMouseDown={() => setIsOpen(false)} />
           <div id={menuId} className="mobile-menu" role="dialog" aria-modal="true" aria-label="系统导航">
-            <div className="mobile-menu-content" onClickCapture={closeAfterNavigation}>
+            <div className="mobile-menu-content" onClick={closeAfterNavigation}>
               {children}
             </div>
           </div>
