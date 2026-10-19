@@ -7,6 +7,10 @@ async function getVoucherRecord(page) {
 
 test('voucher input stays on one game row and reuses original voucher handlers', async ({ page }) => {
   await page.goto('/tests/fixtures/channel-create-prefill.html?blank=1')
+  // The fixture defaults to the simple bill mode, where the entire voucher
+  // column is hidden. Exercise the voucher cell in the actual advanced-field
+  // state without changing the application's simple/advanced display rules.
+  await page.locator('main.core-bill-form-page--channel').evaluate(node => node.classList.add('has-advanced-data'))
 
   const rows = page.locator('.channel-line-items-table tbody tr')
   await expect(rows).toHaveCount(1)
