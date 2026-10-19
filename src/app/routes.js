@@ -104,7 +104,7 @@ export const SIDEBAR_GROUPS = [
 ]
 
 const VIEW_TITLES = {
-  [VIEWS.DASHBOARD]: '核心工作台',
+  [VIEWS.DASHBOARD]: '财务工作台',
   [VIEWS.FINANCE_WORKBENCH]: '财务待办',
   [VIEWS.SERVER_COSTS]: '服务器成本',
   [VIEWS.BUSINESS_DASHBOARD]: '月度经营驾驶舱',
@@ -134,7 +134,7 @@ const VIEW_TITLES = {
 }
 
 const VIEW_DESCRIPTIONS = {
-  [VIEWS.DASHBOARD]: '围绕待办、对账、合同、发票和资金闭环统一处理日常财务工作。',
+  [VIEWS.DASHBOARD]: '经营利润、资金状况与待办进度，一屏掌握。',
   [VIEWS.FINANCE_WORKBENCH]: '集中处理业务提交的开票任务，跟踪领取、驳回、完成与真实发票关联。',
   [VIEWS.SERVER_COSTS]: '独立维护云服务器、CDN、数据库、带宽和域名等成本，并自动进入利润分析。',
   [VIEWS.BUSINESS_DASHBOARD]: '按月区分权责结算与实际现金口径，查看渠道应收、研发应付、现金收支、结算贡献、产品排行与账单完成度。',

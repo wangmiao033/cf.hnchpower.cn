@@ -2,6 +2,18 @@
 
 > 此日志是对账管理系统唯一的正式更新记录。自 **2026-10-16** 起，代码变更与生产发布必须逐次登记，保留全部历史。维护要求详见 [AGENTS.md](AGENTS.md)。下述时间均为 **北京时间（UTC+8）**。只有 Vercel 状态为 `READY` 才标记“部署成功”；实际业务验收另行记录。
 
+
+## 2026-10-19｜工作台：V3 视觉改版及双利润数据展示（预览分支）
+
+- **类型**：UI 优化 / 只读统计字段扩展 / 测试。
+- **需求**：按照已确认的浅灰蓝、白卡片、柔和图标与紧凑信息布局改造首页；同时突出展示「游戏业务利润」与「公司经营利润」，简化收付与待办信息。
+- **改动**：新增隔离的 `CoreDashboardV3.jsx` 和 `CoreDashboardV3.css`，首页导航入口指向 V3，保留原核心工作台组件供回退；从现有月度利润服务返回项目可归属毛利与公共成本（只读字段），延用既有费用归属、服务端利润、权限控制与财务待办接口；金额按万元展示，详细金额仍可查看；取消首页重复八宫格入口；账期利润与跨期未结待办分开标注。
+- **影响范围**：工作台及工作台激活期间的壳层视觉；月度利润接口增加可选兼容字段；不改变数据库、结算公式、资金核销、合同和发票操作规则。
+- **代码提交**：[页面与利润接入](https://github.com/wangmiao033/cf.hnchpower.cn/commit/02ad41c85da172a527f475bfbe870840f201cdc3)、[视觉样式](https://github.com/wangmiao033/cf.hnchpower.cn/commit/8cade024a14ff2acbf027580aac243590c708013)、[利润汇总字段](https://github.com/wangmiao033/cf.hnchpower.cn/commit/2431a6d3d054c564dae5f20199ca0ab610cb1009)、[桥接核算测试](https://github.com/wangmiao033/cf.hnchpower.cn/commit/140e327693973952cf77bd55c56f1186c13260d8)。
+- **验证**：GitHub [Production Quality Gate #1137](https://github.com/wangmiao033/cf.hnchpower.cn/actions/runs/39209835654) 的前端单元测试、浏览器回归测试、生产构建、后端及合同服务测试全部通过；真实账号业务金额尚未人工核验；不在日志中披露实际利润金额。
+- **发布环境与状态**：`ui/finance-workbench-v3-20261019` 分支，PR #262；Vercel 预览尝试 `dpl_DzsSBu7dEw1n22uJ1QdFsLxtSFNV` 为 `CANCELED`，原因是项目现有 `Ignored Build Step = exit 0`（未修改项目设置），不是编译失败；生产未发布。
+- **待确认事项**：预览真账号的利润与待办金额、点击导航、不同浏览器及移动端表现尚未人工验证；确认后再依正式发布流程操作。
+
 ## 2026-10-17｜渠道账单：广东安久/游戏fan 折扣与分行通道费（QD-20261015-B78B52）
 
 - **类型**：Bug 修复 / 功能。

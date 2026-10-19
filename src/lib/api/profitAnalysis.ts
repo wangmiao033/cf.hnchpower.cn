@@ -14,6 +14,7 @@ export type ProfitTrendRow = {
   server_cost: number
   operating_expense: number
   operating_profit: number
+  project_gross_profit?: number | null
   profit_margin: number
 }
 
@@ -50,6 +51,8 @@ export type ProfitAnalysis = {
   operating_expense: ProfitMetric
   pre_expense_contribution: ProfitMetric
   operating_profit: ProfitMetric
+  project_gross_profit?: ProfitMetric
+  shared_cost_total?: ProfitMetric
   profit_margin: ProfitMetric
   shared_expense: ProfitMetric
   attributed_expense: ProfitMetric
