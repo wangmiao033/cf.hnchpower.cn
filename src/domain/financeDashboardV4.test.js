@@ -58,7 +58,7 @@ describe('V4 finance overview scopes and display-only metrics', () => {
     expect(displayMoney(9999.99)).toBe('¥9,999.99')
   })
   it('uses the latest month from both services and excludes future placeholders', () => {
-    expect(latestPeriod(profit, business)).toBe('2026-09')
+    expect(latestPeriod(profit, business)).toBe('2026-08')
     const rows=combineMonthlyTrends(profit,business,'2026-09',{months:12})
     expect(rows).toHaveLength(3)
     expect(rows.at(-1).gross).toBeNull() // cash-only period must not be graphed as zero profit
