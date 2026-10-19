@@ -1,0 +1,115 @@
+/* Voucher cell UI only — existing voucher state, formula, confirmations and persistence remain untouched.
+   One game stays one table row; switch voucher mode only when the recorded scheme needs changing. */
+.core-bill-form-page--channel .channel-line-items-table th.channel-voucher-heading,
+.core-bill-form-page--channel .channel-line-items-table td.channel-voucher-cell {
+  width: 188px;
+  min-width: 188px !important;
+}
+.core-bill-form-page--channel .channel-voucher-editor {
+  display: block;
+  width: 100%;
+  min-width: 0;
+}
+.core-bill-form-page--channel .channel-voucher-editor__inline {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 5px;
+  min-width: 0;
+  min-height: 28px;
+}
+.core-bill-form-page--channel .channel-voucher-editor__amount {
+  width: auto !important;
+  min-width: 0 !important;
+  flex: 1 1 74px;
+  height: 28px;
+  padding: 3px 7px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  border-radius: 6px;
+}
+.core-bill-form-page--channel .channel-voucher-editor__mode {
+  display: block;
+  min-width: 63px;
+  width: 63px;
+  height: 28px;
+  flex: 0 0 63px;
+  padding: 3px 2px;
+  border: 1px solid #d6e3f6;
+  border-radius: 6px;
+  outline-offset: 1px;
+  background: #f0f5ff;
+  color: #39639b;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.core-bill-form-page--channel .channel-voucher-editor__mode:hover,
+.core-bill-form-page--channel .channel-voucher-editor__mode:focus-visible {
+  background: #e8f0ff;
+  border-color: #86acec;
+}
+.core-bill-form-page--channel .channel-voucher-editor__dual-inputs {
+  display: flex;
+  gap: 3px;
+  flex: 1 1 75px;
+  min-width: 0;
+}
+.core-bill-form-page--channel .channel-voucher-editor__dual-inputs label {
+  display: flex;
+  align-items: center;
+  flex: 1 1 0;
+  gap: 2px;
+  min-width: 0;
+  height: 28px;
+  padding: 2px 3px;
+  border: 1px solid #dbe3ee;
+  border-radius: 6px;
+  background: #fff;
+}
+.core-bill-form-page--channel .channel-voucher-editor__dual-inputs label:focus-within {
+  border-color: #83a8ed;
+}
+.core-bill-form-page--channel .channel-voucher-editor__dual-inputs label span {
+  display: inline;
+  flex: 0 0 auto;
+  color: #8294ac;
+  font-size: 9px;
+  font-weight: 600;
+}
+.core-bill-form-page--channel .channel-voucher-editor__dual-inputs input[type="number"] {
+  display: block;
+  width: 100% !important;
+  min-width: 0 !important;
+  flex: 1 1 0;
+  height: 23px !important;
+  min-height: 23px !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  background: transparent;
+  padding: 0 1px !important;
+  text-align: right;
+  font-size: 10px !important;
+  font-variant-numeric: tabular-nums;
+}
+.core-bill-form-page--channel .channel-voucher-editor__preview {
+  /* Calculation preview stays readable to screen readers and as the cell tooltip,
+     but cannot force a second visual line in the spreadsheet. */
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  white-space: nowrap !important;
+  clip-path: inset(50%);
+  border: 0 !important;
+}
+@media (max-width: 760px) {
+  .core-bill-form-page--channel .channel-line-items-table th.channel-voucher-heading,
+  .core-bill-form-page--channel .channel-line-items-table td.channel-voucher-cell {
+    width: 186px;
+    min-width: 186px !important;
+  }
+}
