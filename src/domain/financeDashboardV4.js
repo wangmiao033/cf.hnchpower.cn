@@ -27,10 +27,15 @@ export const monthText = month => /^\d{4}-\d{2}$/.test(month || '')
   : '未选择账期'
 
 export function latestPeriod(profit, business) {
-  const recorded = [...(profit?.available_months || []), ...(business?.available_months || [])]
+  // V4 prioritizes the latest month that actually has profit source records.
+  // Cash-only activity can make the cockpit's latest month newer; choosing
+  // that by default would show two missing-profit cards on first login.
+  const profitMonths = (profit?.available_months || [])
+    .filter(month => /^\d{4}-\d{2}$/.test(month || ''))
+  const businessMonths = (business?.available_months || [])
     .filter(month => /^\d{4}-\d{2}$/.test(month || ''))
   const fallback = [profit?.month, business?.month].filter(month => /^\d{4}-\d{2}$/.test(month || ''))
-  return (recorded.length ? recorded : fallback).sort().at(-1) || ''
+  return (profitMonths.length ? profitMonths : businessMonths.length ? businessMonths : fallback).sort().at(-1) || ''
 }
 
 const hasActualMonth = (response, month) => Boolean(response && (response.available_months || []).includes(month))
