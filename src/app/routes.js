@@ -44,17 +44,13 @@ export const SIDEBAR_GROUPS = [
     id: 'workbench',
     label: '工作台',
     items: [
-      { view: VIEWS.DASHBOARD, label: '总览' },
-      { view: VIEWS.FINANCE_WORKBENCH, label: '财务待办' },
-      { view: VIEWS.ANOMALIES, label: '待办与异常' }
+      { view: VIEWS.DASHBOARD, label: '经营工作台' }
     ]
   },
   {
     id: 'analysis',
-    label: '经营分析',
+    label: '运营费用',
     items: [
-      { view: VIEWS.BUSINESS_DASHBOARD, label: '经营驾驶舱' },
-      { view: VIEWS.PROFIT_ANALYSIS, label: '利润分析' },
       { view: VIEWS.SERVER_COSTS, label: '服务器成本' }
     ]
   },
@@ -81,7 +77,8 @@ export const SIDEBAR_GROUPS = [
     label: '发票',
     items: [
       { view: VIEWS.INVOICE_MANAGE, label: '销项发票' },
-      { view: VIEWS.INVOICE_INPUT, label: '进项发票' }
+      { view: VIEWS.INVOICE_INPUT, label: '进项发票' },
+      { view: VIEWS.FINANCE_WORKBENCH, label: '开票任务' }
     ]
   },
   {
@@ -98,14 +95,15 @@ export const SIDEBAR_GROUPS = [
       { view: VIEWS.QUICKSDK_LIBRARY, label: '数据库' },
       { view: VIEWS.PRODUCT_SOURCES, label: '数据源' },
       { view: VIEWS.QUICKSDK_GAMES, label: '游戏数据' },
-      { view: VIEWS.QUICKSDK_CHANNELS, label: '渠道数据' }
+      { view: VIEWS.QUICKSDK_CHANNELS, label: '渠道数据' },
+      { view: VIEWS.ANOMALIES, label: '待办与异常' }
     ]
   }
 ]
 
 const VIEW_TITLES = {
-  [VIEWS.DASHBOARD]: '财务工作台',
-  [VIEWS.FINANCE_WORKBENCH]: '财务待办',
+  [VIEWS.DASHBOARD]: '经营工作台',
+  [VIEWS.FINANCE_WORKBENCH]: '开票任务',
   [VIEWS.SERVER_COSTS]: '服务器成本',
   [VIEWS.BUSINESS_DASHBOARD]: '月度经营驾驶舱',
   [VIEWS.PROFIT_ANALYSIS]: '利润分析',
@@ -134,7 +132,7 @@ const VIEW_TITLES = {
 }
 
 const VIEW_DESCRIPTIONS = {
-  [VIEWS.DASHBOARD]: '经营利润、资金状况与待办进度，一屏掌握。',
+  [VIEWS.DASHBOARD]: '游戏利润、公司经营、结算与现金流一屏掌握。',
   [VIEWS.FINANCE_WORKBENCH]: '集中处理业务提交的开票任务，跟踪领取、驳回、完成与真实发票关联。',
   [VIEWS.SERVER_COSTS]: '独立维护云服务器、CDN、数据库、带宽和域名等成本，并自动进入利润分析。',
   [VIEWS.BUSINESS_DASHBOARD]: '按月区分权责结算与实际现金口径，查看渠道应收、研发应付、现金收支、结算贡献、产品排行与账单完成度。',

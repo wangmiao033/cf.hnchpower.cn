@@ -20,12 +20,20 @@ function patchRoutes() {
     'VIEWS'
   )
 
-  source = replaceRequired(
-    source,
-    "      { view: VIEWS.PROFIT_ANALYSIS, label: '利润分析' },\n      { view: VIEWS.SERVER_COSTS, label: '服务器成本' }\n",
-    "      { view: VIEWS.PROFIT_ANALYSIS, label: '利润分析' }\n",
-    'analysis group server move'
-  )
+  // Legacy navigation kept the report and server-cost link in the analysis group.
+  // V4 displays the reports on the homepage and moves server costs to the
+  // dedicated operating ledger sidebar. Support both source layouts safely.
+  const v4Placeholder = "  {\n    id: 'analysis',\n    label: '运营费用',\n    items: [\n      { view: VIEWS.SERVER_COSTS, label: '服务器成本' }\n    ]\n  },\n"
+  if (source.includes(v4Placeholder)) {
+    source = source.replace(v4Placeholder, '')
+  } else {
+    source = replaceRequired(
+      source,
+      "      { view: VIEWS.PROFIT_ANALYSIS, label: '利润分析' },\n      { view: VIEWS.SERVER_COSTS, label: '服务器成本' }\n",
+      "      { view: VIEWS.PROFIT_ANALYSIS, label: '利润分析' }\n",
+      'analysis group server move'
+    )
+  }
 
   const operatingGroup = `  {\n    id: 'operating',\n    label: '运营费用',\n    items: [\n      { view: VIEWS.OPERATING_EXPENSES, label: '费用总览' },\n      { view: VIEWS.OFFICE_RENT, label: '办公室租金' },\n      { view: VIEWS.SERVER_COSTS, label: '服务器 / 云服务' },\n      { view: VIEWS.SOFTWARE_EXPENSES, label: '软件订阅' },\n      { view: VIEWS.PAYROLL_EXPENSES, label: '人工费用' },\n      { view: VIEWS.DEPOSITS, label: '押金 / 保证金' },\n      { view: VIEWS.OTHER_EXPENSES, label: '其他费用' }\n    ]\n  },\n`
   source = replaceRequired(source, "  {\n    id: 'funds',\n", `${operatingGroup}  {\n    id: 'funds',\n`, 'operating sidebar group')

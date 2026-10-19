@@ -25,7 +25,7 @@ import { apiChannelRowToFrontend, getChannelRecord } from '@/lib/api/channel.ts'
 import { getBillInvoiceSummary } from '@/lib/api/billInvoiceAllocations.ts'
 import { prefetchEditRecord } from '@/lib/api/editRecordCache.js'
 import Bill360WorkspaceBar from './components/reconciliation/Bill360WorkspaceBar.jsx'
-import CoreDashboardPage from './pages/CoreDashboardV3.jsx'
+import CoreDashboardPage from './pages/CoreDashboardV4.jsx'
 import InvoicePage from './pages/InvoicePage.jsx'
 import LoginPage from './pages/LoginPage.jsx'
 import '@/styles/admin-polish.css'
@@ -222,9 +222,10 @@ function App() {
     if (!isAuthenticated || loading || !user?.id) return
     if (roleLandingUserRef.current === String(user.id)) return
     roleLandingUserRef.current = String(user.id)
-    if (user.role === 'finance' && canOpenView(can, VIEWS.FINANCE_WORKBENCH)) {
-      setActiveViewState(VIEWS.FINANCE_WORKBENCH)
-      setOpenTabs((current) => current.includes(VIEWS.FINANCE_WORKBENCH) ? current : [...current, VIEWS.FINANCE_WORKBENCH])
+    // V4: even finance-role users land on the consolidated homepage.
+    // The audited invoice task workflow remains accessible through 发票 → 开票任务.
+    if (user.role === 'finance') {
+      setActiveViewState(VIEWS.DASHBOARD)
     }
   }, [isAuthenticated, loading, user?.id, user?.role, can])
 
@@ -347,7 +348,7 @@ function App() {
       const closedIndex = groupTabs.indexOf(view)
       const previousTab = [...groupTabs.slice(0, Math.max(closedIndex, 0))].reverse().find((tab) => remainingTabs.includes(tab) && canOpenView(can, tab))
       const nextTab = groupTabs.slice(Math.max(closedIndex + 1, 0)).find((tab) => remainingTabs.includes(tab) && canOpenView(can, tab))
-      setActiveViewState(previousTab || nextTab || (user?.role === 'finance' ? VIEWS.FINANCE_WORKBENCH : VIEWS.DASHBOARD))
+      setActiveViewState(previousTab || nextTab || VIEWS.DASHBOARD)
     })
   }, [activeView, openTabs, confirmLeaveCurrentView, can, user?.role])
 
