@@ -27,11 +27,10 @@ export const monthText = month => /^\d{4}-\d{2}$/.test(month || '')
   : '未选择账期'
 
 export function latestPeriod(profit, business) {
-  return [...(profit?.available_months || []), ...(business?.available_months || []),
-    profit?.month, business?.month]
+  const recorded = [...(profit?.available_months || []), ...(business?.available_months || [])]
     .filter(month => /^\d{4}-\d{2}$/.test(month || ''))
-    .sort()
-    .at(-1) || ''
+  const fallback = [profit?.month, business?.month].filter(month => /^\d{4}-\d{2}$/.test(month || ''))
+  return (recorded.length ? recorded : fallback).sort().at(-1) || ''
 }
 
 const hasActualMonth = (response, month) => Boolean(response && (response.available_months || []).includes(month))
@@ -100,8 +99,15 @@ export function summarizeFinancePeriod(profit, business, period) {
 }
 
 export function combineMonthlyTrends(profit, business, selectedMonth, { annual = false, year = '', months = 6 } = {}) {
-  const p = new Map((profit?.trend || []).map(row => [row.month, row]))
-  const b = new Map((business?.trend || []).map(row => [row.month, row]))
+  // Trend endpoints contain zero-filled placeholders for months without
+  // accounting records. Exclude placeholders instead of drawing fictitious
+  // zero-profit or zero-cash datapoints.
+  const pReported = new Set(profit?.available_months || [])
+  const bReported = new Set(business?.available_months || [])
+  const p = new Map((profit?.trend || [])
+    .filter(row => pReported.has(row.month)).map(row => [row.month, row]))
+  const b = new Map((business?.trend || [])
+    .filter(row => bReported.has(row.month)).map(row => [row.month, row]))
   const all = [...new Set([...p.keys(), ...b.keys()])]
     .filter(key => /^\d{4}-\d{2}$/.test(key))
     .filter(key => annual ? key.startsWith(year + '-') : (!selectedMonth || key <= selectedMonth))
