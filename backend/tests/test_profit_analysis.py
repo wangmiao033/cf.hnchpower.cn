@@ -1,6 +1,7 @@
 import unittest
 from collections import defaultdict
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from app.services.profit_analysis import (
     ProfitGameBucket,
@@ -10,6 +11,7 @@ from app.services.profit_analysis import (
     _add_rd_costs,
     _derive,
     _game_rows,
+    build_profit_analysis,
 )
 
 
@@ -122,6 +124,39 @@ class ProfitAnalysisTest(unittest.TestCase):
         rows = _game_rows(games)
         self.assertEqual(rows[0]["attributable_profit"], 380)
         self.assertEqual(rows[0]["attributable_margin"], 38)
+
+    def test_dashboard_profit_bridge_uses_same_month_and_only_shared_costs(self):
+        rd = SimpleNamespace(
+            id="rd-1", status="confirmed", settlement_month="2026-07",
+            settlement_amount=400, game_name="A", game_flow=1500, line_items=[],
+        )
+        channel = SimpleNamespace(
+            id="channel-1", status="confirmed", settlement_month="2026-07",
+            settlement_amount=1000, game_name="A", billing_flow=2000,
+            server_cost=50, settlement_adjustment_amount=0,
+            settlement_final_override=None, line_items=[],
+        )
+        shared_server = SimpleNamespace(
+            id="server-1", status="confirmed", expense_month="2026-07",
+            amount=30, game_name=None,
+        )
+        expenses = [
+            SimpleNamespace(expense_month="2026-07", amount=80, category="marketing", game_name="A"),
+            SimpleNamespace(expense_month="2026-07", amount=20, category="office", game_name=None),
+        ]
+        with patch(
+            "app.services.profit_analysis.load_profit_records",
+            return_value=([rd], [channel], [shared_server], expenses),
+        ):
+            result = build_profit_analysis(object(), requested_month="2026-07", trend_months=1)
+        self.assertEqual(result["operating_profit"]["value"], 420)
+        self.assertEqual(result["project_gross_profit"]["value"], 470)
+        self.assertEqual(result["shared_cost_total"]["value"], 50)
+        self.assertEqual(result["trend"][0]["project_gross_profit"], 470)
+        self.assertEqual(
+            result["project_gross_profit"]["value"] - result["shared_cost_total"]["value"],
+            result["operating_profit"]["value"],
+        )
 
     def test_cancelled_channel_bill_is_excluded(self):
         records = [
