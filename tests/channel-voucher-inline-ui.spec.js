@@ -29,13 +29,13 @@ test('voucher input stays on one game row and reuses original voucher handlers',
 
   // Normal entry requires only one amount; its persisted face-value field is unchanged.
   await amount.fill('648')
-  await expect.poll(async () => (await getVoucherRecord(page)).voucherFaceValue).toBe('648')
+  await expect.poll(async () => (await getVoucherRecord(page)).voucherFaceValue).toBe(648)
   await expect.poll(async () => (await getVoucherRecord(page)).voucherDirectCost).toBeNull()
 
   // Switching mode must call the existing adapter; it is not a new formula.
   await mode.selectOption('direct')
   await expect(mode).toHaveValue('direct')
-  await expect.poll(async () => (await getVoucherRecord(page)).voucherDirectCost).toBe('648')
+  await expect.poll(async () => (await getVoucherRecord(page)).voucherDirectCost).toBe(648)
   await expect.poll(async () => (await getVoucherRecord(page)).voucherFaceValue).toBeNull()
 
   // Dual vouchers remain two inputs inside the SAME game row, never a new card/row.
@@ -45,18 +45,18 @@ test('voucher input stays on one game row and reuses original voucher handlers',
   await expect(cell.getByRole('spinbutton', {name: '第1行直扣券实际金额'})).toBeVisible()
   await expect(rows).toHaveCount(1)
   await cell.getByRole('spinbutton', {name: '第1行折算券原始面额'}).fill('100')
-  await expect.poll(async () => (await getVoucherRecord(page)).voucherFaceValue).toBe('100')
-  await expect.poll(async () => (await getVoucherRecord(page)).voucherDirectCost).toBe('648')
+  await expect.poll(async () => (await getVoucherRecord(page)).voucherFaceValue).toBe(100)
+  await expect.poll(async () => (await getVoucherRecord(page)).voucherDirectCost).toBe(648)
 
   // Existing safety confirmation is preserved when changing a populated two-voucher row.
   page.once('dialog', dialog => dialog.dismiss())
   await mode.selectOption('discount')
-  await expect.poll(async () => (await getVoucherRecord(page)).voucherDirectCost).toBe('648')
+  await expect.poll(async () => (await getVoucherRecord(page)).voucherDirectCost).toBe(648)
   await expect(mode).toHaveValue('both')
 
   page.once('dialog', dialog => dialog.accept())
   await mode.selectOption('discount')
   await expect.poll(async () => (await getVoucherRecord(page)).voucherDirectCost).toBeNull()
-  await expect.poll(async () => (await getVoucherRecord(page)).voucherFaceValue).toBe('100')
+  await expect.poll(async () => (await getVoucherRecord(page)).voucherFaceValue).toBe(100)
   await expect(rows).toHaveCount(1)
 })
