@@ -710,3 +710,50 @@
     scroll-behavior: auto !important;
   }
 }
+
+
+/* 第二阶段A：订单文件仅浏览器核对预览，不会保存到财务库。 */
+.so-tools .so-import-launch {
+  background: #316bd7;
+  border-color: #316bd7;
+  color: #fff;
+  font-weight: 730;
+  cursor: pointer;
+}
+.so-tools .so-import-launch:hover {
+  background: #285ec6;
+  border-color: #285ec6;
+}
+.so-import-active {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 13px;
+  border: 1px solid #e4d4a5;
+  border-radius: 9px;
+  background: #fff9e9;
+  padding: 13px 16px;
+  margin: 0 0 15px;
+  line-height: 1.55;
+  font-size: 13px;
+  color: #7a6633;
+}
+.so-import-active strong {
+  flex: 0 0 auto;
+  color: #946520;
+  font-weight: 760;
+}
+.so-import-active span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+@container daxiong (max-width: 620px) {
+  .so-tools .so-import-launch {
+    flex: 1 1 100%;
+  }
+  .so-import-active {
+    align-items: start;
+    padding: 12px;
+    font-size: 12px;
+  }
+}
