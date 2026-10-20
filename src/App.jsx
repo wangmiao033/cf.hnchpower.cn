@@ -46,6 +46,7 @@ const PAGE_LOADERS = Object.freeze({
   reconciliationCreate: () => import('./pages/ReconciliationCreatePage.jsx'),
   reconciliationEdit: () => import('./pages/ReconciliationEditPage.jsx'),
   channelReconciliation: () => import('./pages/CoreChannelReconciliationPage.jsx'),
+  selfOperatedPreview: () => import('./pages/SelfOperatedPreviewPage.jsx'),
   channelReconciliationCreate: () => import('./pages/ChannelReconciliationCreatePage.jsx'),
   channelReconciliationEdit: () => import('./pages/ChannelReconciliationEditPage.jsx'),
   contracts: () => import('./pages/ContractManagementPage.jsx'),
@@ -72,6 +73,7 @@ const RdReconciliationProgressPage = lazy(PAGE_LOADERS.reconciliationProgress)
 const ReconciliationCreatePage = lazy(PAGE_LOADERS.reconciliationCreate)
 const ReconciliationEditPage = lazy(PAGE_LOADERS.reconciliationEdit)
 const CoreChannelReconciliationPage = lazy(PAGE_LOADERS.channelReconciliation)
+const SelfOperatedPreviewPage = lazy(PAGE_LOADERS.selfOperatedPreview)
 const ChannelReconciliationCreatePage = lazy(PAGE_LOADERS.channelReconciliationCreate)
 const ChannelReconciliationEditPage = lazy(PAGE_LOADERS.channelReconciliationEdit)
 const ContractManagementPage = lazy(PAGE_LOADERS.contracts)
@@ -308,6 +310,10 @@ function App() {
 
   const openView = useCallback((view, options = null) => {
     const nextView = view || VIEWS.DASHBOARD
+    if (nextView === VIEWS.SELF_OPERATED && user?.role !== 'admin') {
+      showToast('自营渠道第一阶段仅对管理员开放', 'error')
+      return false
+    }
     if (!canOpenView(can, nextView)) {
       showToast('当前账号没有访问该模块的权限', 'error')
       return false
@@ -326,7 +332,7 @@ function App() {
       setActiveViewState(nextView)
     })
     return true
-  }, [can, confirmLeaveCurrentView, showToast])
+  }, [can, confirmLeaveCurrentView, showToast, user?.role])
 
   const setActiveViewRaw = openView
   const navigate = openView
@@ -460,6 +466,7 @@ function App() {
       case VIEWS.RECON_CREATE: return <ReconciliationCreatePage />
       case VIEWS.RECON_EDIT: return <ReconciliationEditPage />
       case VIEWS.RECON_CHANNEL: return <CoreChannelReconciliationPage />
+      case VIEWS.SELF_OPERATED: return user?.role === 'admin' ? <SelfOperatedPreviewPage /> : <CoreDashboardPage />
       case VIEWS.CHANNEL_RECON_CREATE: return <ChannelReconciliationCreatePage />
       case VIEWS.CHANNEL_RECON_EDIT: return <ChannelReconciliationEditPage />
       case VIEWS.CONTRACTS: return <ContractManagementPage />
