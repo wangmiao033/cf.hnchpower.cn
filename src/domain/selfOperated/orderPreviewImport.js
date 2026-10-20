@@ -43,11 +43,13 @@ export function suggestFieldMapping(headers) {
   const mapping={}
   ORDER_FIELDS.forEach(field=>{
     let chosen=''
-    const alias=FIELD_ALIASES[field.key]
-    for(let i=0;i<headers.length;i++){
-      const normalized=normalizeHeader(headers[i])
-      if(!normalized||used.has(i))continue
-      if(alias.has(normalized)){chosen=String(i);break}
+    // 优先选实付金额而非面额/充值金额，避免列顺序导致现金误算。
+    for(const alias of field.aliases){
+      for(let i=0;i<headers.length;i++){
+        if(used.has(i))continue
+        if(normalizeHeader(headers[i])===alias){chosen=String(i);break}
+      }
+      if(chosen!=='')break
     }
     if(chosen!=='')used.add(Number(chosen))
     mapping[field.key]=chosen
@@ -148,10 +150,10 @@ export function inspectOrderRows(matrix,{ headerRow=detectOrderHeader(matrix), m
       month:paidDate?.slice(0,7)||'',kind:kind.kind,payment:pay.status,
       disposition:'ready',reason:''
     }
-    if(!orderId||amountCents===null||!paidDate||(!gameName&&!gameId)){
+    if(!orderId||/e\+\d+/i.test(orderId)||amountCents===null||!paidDate||(!gameName&&!gameId)){
       record.disposition='invalid'
       record.reason=[
-        !orderId&&'缺少订单编号',amountCents===null&&'实付金额格式无效',
+        !orderId&&'缺少订单编号',/e\+\d+/i.test(orderId)&&'订单号疑似被 Excel 科学计数法截断，请以文本导出CSV',amountCents===null&&'实付金额格式无效',
         !paidDate&&'日期无法识别',!gameName&&!gameId&&'缺少游戏'
       ].filter(Boolean).join('、')
     }else if(pay.status==='excluded'||kind.kind==='excluded'||amountCents<0){
@@ -215,29 +217,78 @@ export function reportFromInspectedRows(preview,month) {
   }
 }
 
+/**
+ * 解析带引号、多行和双引号转义的分隔文本。
+ * 不将订单编号转换成 Number：保留前导零与18位以上订单号。
+ */
+export function parseDelimitedText(content,forcedDelimiter=null) {
+  const text=String(content??'').replace(/^\uFEFF/,'')
+  const allowed=[',','\t',';']
+  let delimiter=forcedDelimiter
+  if(!delimiter) {
+    let quoted=false
+    const counts={',':0,'\t':0,';':0}
+    for(let i=0;i<text.length;i++){
+      const c=text[i]
+      if(c==='"'){
+        if(quoted&&text[i+1]==='"'){i++;continue}
+        quoted=!quoted;continue
+      }
+      if(!quoted&&(c==='\n'||c==='\r'))break
+      if(!quoted&&allowed.includes(c))counts[c]++
+    }
+    delimiter=allowed.sort((a,b)=>counts[b]-counts[a])[0]
+  }
+  const rows=[]
+  let row=[],value='',quoted=false
+  function pushCell(){row.push(value);value=''}
+  function pushRow(){
+    pushCell()
+    if(row.some(v=>String(v).trim()!==''))rows.push(row)
+    row=[]
+    if(rows.length>MAX_IMPORT_ROWS+12)throw new Error('单次最多预览30,000行，请按月份拆分原始报表')
+  }
+  for(let i=0;i<text.length;i++){
+    const c=text[i]
+    if(c==='"'){
+      if(quoted&&text[i+1]==='"'){value+='"';i++}
+      else quoted=!quoted
+    }else if(c===delimiter&&!quoted){
+      pushCell()
+    }else if((c==='\n'||c==='\r')&&!quoted){
+      if(c==='\r'&&text[i+1]==='\n')i++
+      pushRow()
+    }else value+=c
+  }
+  if(quoted)throw new Error('CSV 引号没有正常闭合，请核对原始文件')
+  if(value!==''||row.length)pushRow()
+  return rows
+}
+
 export async function readOrderFile(file) {
   if(!file)throw new Error('请选择 CSV 或 Excel 文件')
   if(file.size>MAX_IMPORT_FILE_BYTES)throw new Error('文件超过12MB，请按月份拆分再试')
   if(!/\.(csv|tsv|xlsx|xls)$/i.test(file.name))throw new Error('仅支持 .csv、.tsv、.xlsx、.xls')
-  const XLSX=await import('xlsx')
   const buffer=await file.arrayBuffer()
-  let book
+  let sheets
   if(/\.(csv|tsv)$/i.test(file.name)){
     let content
     try{content=new TextDecoder('utf-8',{fatal:true}).decode(buffer)}
     catch{content=new TextDecoder('gb18030').decode(buffer)}
-    const sep=/\.tsv$/i.test(file.name)?'\t':undefined
-    book=XLSX.read(content.replace(/^\uFEFF/,''),{type:'string',...(sep?{FS:sep}:{})})
-  }else{
-    book=XLSX.read(buffer,{type:'array',cellDates:false,bookVBA:false})
-  }
-  const sheets=book.SheetNames.map(name=>{
-    const matrix=XLSX.utils.sheet_to_json(book.Sheets[name],{header:1,defval:'',raw:false,blankrows:false})
+    const matrix=parseDelimitedText(content,/\.tsv$/i.test(file.name)?'\t':null)
     const headerRow=matrix.length?detectOrderHeader(matrix):0
-    const mapping=suggestFieldMapping(matrix[headerRow]||[])
-    const mapped=7-getMissingMapping(mapping).length
-    return {name,matrix,headerRow,score:mapped}
-  }).filter(sheet=>sheet.matrix.length>0)
+    sheets=[{name:'订单明细',matrix,headerRow,score:7-getMissingMapping(suggestFieldMapping(matrix[headerRow]||[])).length}]
+  }else{
+    const XLSX=await import('xlsx')
+    const book=XLSX.read(buffer,{type:'array',cellDates:false,bookVBA:false})
+    sheets=book.SheetNames.map(name=>{
+      const matrix=XLSX.utils.sheet_to_json(book.Sheets[name],{header:1,defval:'',raw:false,blankrows:false})
+      const headerRow=matrix.length?detectOrderHeader(matrix):0
+      const mapping=suggestFieldMapping(matrix[headerRow]||[])
+      const mapped=7-getMissingMapping(mapping).length
+      return {name,matrix,headerRow,score:mapped}
+    }).filter(sheet=>sheet.matrix.length>0)
+  }
   if(!sheets.length)throw new Error('文件没有有效工作表')
   sheets.sort((a,b)=>b.score-a.score)
   return {fileName:file.name,sheets}
