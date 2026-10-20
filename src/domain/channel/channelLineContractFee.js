@@ -47,6 +47,8 @@ function stampRowWithResolvedRule(row, resolved) {
  * align under share_only while the header rule would apply a gateway percent.
  */
 export function inferLineContractFeeFromPlatform(row, header = initialHeaderForm) {
+  // A verified chosen cooperation item is authority; an amount coincidence is not.
+  if (row?.contractAccessItemId) return row
   const platformRaw = row?.platformSettlementAmount
   if (platformRaw === '' || platformRaw == null) return row
 

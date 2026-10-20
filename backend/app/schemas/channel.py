@@ -67,6 +67,9 @@ class ChannelReceiptListResponse(BaseModel):
 
 
 class ChannelLineItemCreate(BaseModel):
+    # Transport-only evidence fields; never forwarded into the line ORM.
+    id: str | None = Field(default=None, max_length=200)
+    contract_access_item_id: str | None = Field(default=None, max_length=200)
     settlement_cycle: str | None = None
     game_name: str | None = None
     billing_flow: float = Field(default=0, allow_inf_nan=False, description="原始后台流水：正数为收入，负数为退款/冲销")
@@ -105,6 +108,7 @@ class ChannelLineItemCreate(BaseModel):
 class ChannelLineItemRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: str
+    contract_access_item_id: str | None = None
     channel_record_id: str
     sort_order: int
     settlement_cycle: str | None = None

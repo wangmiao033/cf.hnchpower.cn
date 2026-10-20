@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import {
   CHANNEL_RULE_PRESETS,
   XIAN_WEIZHEN_9917_RULE,
@@ -24,6 +24,7 @@ import {
 } from '@/domain/channel/channelBillingForm.js'
 import { applyCommercialDiscountFromGameName } from '@/domain/channel/channelLineDefaults.js'
 import { linesWithChannelLineContractFees } from '@/domain/channel/channelLineContractFee.js'
+import { isSameCustomerRestoration } from '@/domain/channel/channelContractInlineReview.js'
 import { recommendChannelContractRules } from '@/lib/api/contractTerms.ts'
 import {
   channelDifferenceLabel,
@@ -130,6 +131,7 @@ function canAutoApplyContractRules(mode, status) {
 function identityRows(lines) {
   return (lines || []).map((row, index) => ({
     line_index: index,
+    ...(row.contractAccessItemId ? { access_item_id: row.contractAccessItemId } : {}),
     game_name: String(row.gameName || '').trim(),
     settlement_cycle: normalizeChannelSettlementCycle(row.settlementCycle)
   })).filter((row) => row.game_name && row.settlement_cycle)
@@ -140,7 +142,7 @@ function recommendationFingerprint(partnerName, channelName, lines, partnerId = 
     partnerId: String(partnerId || '').trim(),
     partnerName: String(partnerName || '').trim(),
     channelName: String(channelName || '').trim(),
-    lines: identityRows(lines).map((row) => [row.line_index, row.game_name, row.settlement_cycle])
+    lines: identityRows(lines).map((row) => [row.line_index, row.game_name, row.settlement_cycle, row.access_item_id || null])
   })
 }
 
@@ -164,42 +166,6 @@ function clearLineContractRule(row) {
     channelFeeRate: '',
     taxMode: '',
     validationTolerance: ''
-  }
-}
-
-function recommendationFromAccessItem(item) {
-  const feeRaw = item?.channel_fee_rate
-  const shareRaw = item?.share_rate
-  const taxRaw = item?.invoice_tax_rate
-  const fee = feeRaw == null || String(feeRaw).trim() === '' ? null : Number(feeRaw)
-  const share = shareRaw == null || String(shareRaw).trim() === '' ? null : Number(shareRaw)
-  const tax = taxRaw == null || String(taxRaw).trim() === '' ? null : Number(taxRaw)
-  if (share == null || !Number.isFinite(share) || fee == null || !Number.isFinite(fee)) return null
-
-  let settlement_rule_code = 'custom'
-  let channel_fee_mode = 'none'
-  let channel_fee_rate = null
-  if (fee <= 0.01) {
-    settlement_rule_code = 'share_only'
-    channel_fee_mode = 'none'
-    channel_fee_rate = 0
-  } else if (Math.abs(fee - 5) <= 0.01) {
-    settlement_rule_code = 'five_percent_gateway_share'
-    channel_fee_mode = 'percent'
-    channel_fee_rate = Number(fee.toFixed(4))
-  } else {
-    settlement_rule_code = 'custom'
-    channel_fee_mode = 'percent'
-    channel_fee_rate = Number(fee.toFixed(4))
-  }
-  return {
-    settlement_rule_code,
-    channel_fee_mode,
-    channel_fee_rate,
-    tax_mode: 'none',
-    tax_rate: tax != null && Number.isFinite(tax) ? Number(tax.toFixed(4)) : 0,
-    share_rate: Number(share.toFixed(4)),
-    validation_tolerance: 0.05
   }
 }
 
@@ -267,6 +233,8 @@ function ChannelBillingForm({
   const [differenceReviewReason, setDifferenceReviewReason] = useState('')
   const [differenceNoteWritten, setDifferenceNoteWritten] = useState(false)
   const currentMonthKey = currentMonth()
+  const liveContractForm = useRef(null)
+  liveContractForm.current = { header, lines, partnerId }
 
   const linesForSettlement = useMemo(
     () => linesWithChannelLineContractFees(lines, header),
@@ -601,19 +569,27 @@ function ChannelBillingForm({
   }
 
   const handlePartnerChange = (partnerName, nextPartnerId = '', selected = null) => {
+    // PartnerPicker restores the exact customer ID after edit hydration. This
+    // is not a customer change and must not erase saved contract evidence.
+    const restoringSameCustomer = isSameCustomerRestoration({
+      mode, currentName: header.partnerName, nextName: partnerName,
+      currentId: partnerId, nextId: nextPartnerId,
+      resolvedCurrentId: selectedPartner?.id, selected
+    })
     setPartnerId(nextPartnerId)
     setLastContractRuleKey('')
     setContractRuleState(emptyContractRuleState())
     setContractOverrideReason('')
-    if (mode === 'add' || (selected && nextPartnerId)) {
-      setLines((current) => current.map(clearLineContractRule))
+    if (!restoringSameCustomer) {
+      setLines((current) => current.map(row => ({ ...clearLineContractRule(row), contractAccessItemId: null })))
     }
-    const channelName = selected && nextPartnerId ? selected.shortName || selected.name : partnerName
+    const channelName = restoringSameCustomer ? header.channelName : selected && nextPartnerId ? selected.shortName || selected.name : partnerName
     const preset = detectChannelRulePreset(channelName || partnerName)
     if (mode === 'add' && preset !== XIAN_WEIZHEN_9917_RULE) {
       setLines((current) => current.map((row) => ({ ...clearLineContractRule(row), shareRate: '', taxRate: '' })))
     }
     setHeader((current) => {
+      if (restoringSameCustomer) return current
       const base = { ...current, partnerName, channelName }
       if (mode !== 'add') return applyTargetedChannelRule(base)
       if (preset === XIAN_WEIZHEN_9917_RULE) return applyChannelRulePreset(base, preset)
@@ -632,7 +608,7 @@ function ChannelBillingForm({
     setLines((current) => current.map((row, rowIndex) => {
       if (rowIndex !== index) return row
       const identityChanged = field === 'gameName' || field === 'settlementCycle'
-      const next = identityChanged ? clearLineContractRule(row) : row
+      const next = identityChanged ? { ...clearLineContractRule(row), contractAccessItemId: null } : row
       if (field === 'voucherAmount') return setVoucherEntryAmount(next, value)
       if (field === 'voucherMode') {
         return setVoucherEntryMode(next, value, resolveChannelLineRuleHeader(next, effectiveRuleHeader))
@@ -815,7 +791,12 @@ function ChannelBillingForm({
       status: channelStatusForSubmit(header.status, intent),
       remark: [String(header.remark || '').trim(), overrideNote].filter(Boolean).join('；')
     }
-    const record = buildFullChannelRecord(recordHeader, linesWithChannelLineContractFees(lines, header))
+    const submissionLines = linesWithChannelLineContractFees(lines, header).map(line => {
+      if (mode === 'edit') return line
+      const { id, ...newLine } = line
+      return newLine
+    })
+    const record = buildFullChannelRecord(recordHeader, submissionLines)
     try {
       if (mode === 'edit' && recordId != null) {
         const pendingResult = onUpdateRecord?.(recordId, { ...record, id: recordId })
@@ -1160,39 +1141,36 @@ function ChannelBillingForm({
                 normalizeChannelSettlementCycle(row.settlementCycle) !== normalizeChannelSettlementCycle(contractIssueTarget.settlement_cycle)) {
               throw new Error('账单游戏或结算月份已经变化，请关闭窗口重新核对当前明细。')
             }
-            // Prefer the selected list channel when re-verifying so customer aliases
-            // like 巴掌(7723\集网) ↔ 7723 are evaluated against the chosen row.
+            // Verify the selected ID against the actual bill identity. Never replace
+            // its channel with the candidate channel or trust client-side rate data.
             const response = await recommendChannelContractRules({
               partner_id: partnerId,
               partner_name: header.partnerName,
-              channel_name: String(item.channel_name || header.channelName || '').trim(),
+              channel_name: String(header.channelName || '').trim(),
               lines: [{
                 line_index: 0,
+                access_item_id: String(item.id),
                 game_name: row.gameName,
                 settlement_cycle: normalizeChannelSettlementCycle(row.settlementCycle)
               }]
             })
             const verified = (response.lines || []).find(candidate => Number(candidate.line_index) === 0)
             const sameAccess = String(verified?.match?.access_item_id || '') === String(item.id)
-            const sameFinancialRule = Boolean(verified?.recommended) &&
-              sameNumber(verified.recommended.share_rate, item.share_rate) &&
-              sameNumber(verified.recommended.channel_fee_rate, item.channel_fee_rate)
-            // User explicitly picked this cooperation item. Apply server recommendation
-            // when it points at the same item / same money fields; otherwise fall back
-            // to the selected item's structured share + channel fee (do not require auto_apply).
-            let recommended = null
-            if (verified?.recommended && (verified?.auto_apply || sameAccess || sameFinancialRule)) {
-              recommended = verified.recommended
-            } else {
-              recommended = recommendationFromAccessItem(item)
+            if (!verified?.auto_apply || !sameAccess || !verified?.recommended) {
+              throw new Error(verified?.message || '所选清单未通过当前客户、渠道、版本与账期校验，未应用或保存。')
             }
-            if (!recommended) {
-              throw new Error(verified?.message || '所选合作清单缺少分成或通道费，不能套用结算规则。')
+            // Object identity also protects new, unsaved duplicate rows. Reject
+            // stale responses rather than applying by array position after edits.
+            const live = liveContractForm.current
+            if (live.partnerId !== partnerId || live.header.partnerName !== header.partnerName ||
+                live.header.channelName !== header.channelName || !live.lines.includes(row)) {
+              throw new Error('账单或客户已变化，本次引用未应用，请重新选择当前明细。')
             }
-            setLines(current => current.map((line, rowIndex) => rowIndex === index &&
+            const recommended = verified.recommended
+            setLines(current => current.map(line => line === row &&
               line.gameName === row.gameName &&
               normalizeChannelSettlementCycle(line.settlementCycle) === normalizeChannelSettlementCycle(row.settlementCycle)
-                ? applyContractRecommendationToLine(line, recommended)
+                ? { ...applyContractRecommendationToLine(line, recommended), contractAccessItemId: String(item.id) }
                 : line))
             setLastContractRuleKey('')
             setContractRuleRevision(value => value + 1)

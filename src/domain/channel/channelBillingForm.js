@@ -290,6 +290,8 @@ export function buildLineRecordFromForm(fd, headerForm = initialHeaderForm) {
   const effectiveHeader = resolveChannelLineRuleHeader(fd, headerForm)
   const details = calculateSettlementDetails(fd, effectiveHeader)
   return {
+    ...(fd.id ? { id: String(fd.id) } : {}),
+    ...(Object.prototype.hasOwnProperty.call(fd, 'contractAccessItemId') ? { contractAccessItemId: fd.contractAccessItemId } : {}),
     settlementCycle: normalizeChannelSettlementCycle(fd.settlementCycle || fd.settlementMonth), gameName: fd.gameName != null ? String(fd.gameName) : '',
     flow: Number(fd.flow || 0), discountFactor: resolveDiscountFactor(fd), effectiveFlow: effectiveLineFlowFromFormData(fd),
     voucherCost: voucherCostForStorage(fd, effectiveHeader),
@@ -355,6 +357,7 @@ export function recordToLineForms(record) {
   const header = recordToHeaderForm(record)
   return getChannelLineItems(record).map((line) => {
     const base = {
+      ...(Object.prototype.hasOwnProperty.call(line, 'contractAccessItemId') ? { contractAccessItemId: line.contractAccessItemId } : {}),
       id: line.id != null ? String(line.id) : '', settlementCycle: normalizeChannelSettlementCycle(line.settlementCycle || record.settlementMonth), gameName: line.gameName || '', flow: String(line.flow ?? ''), discountFactor: line.discountFactor != null ? String(line.discountFactor) : '1', voucherCost: String(line.voucherCost ?? ''), voucherFaceValue: line.voucherFaceValue == null ? null : String(line.voucherFaceValue), voucherDirectCost: line.voucherDirectCost == null ? null : String(line.voucherDirectCost), noWorryCost: String(line.noWorryCost ?? ''), refundCost: String(line.refundCost ?? ''), testCost: String(line.testCost ?? ''), welfareCost: String(line.welfareCost ?? ''), coinCost: String(line.coinCost ?? ''), shareRate: String(line.shareRate ?? '30'), taxRate: String(line.taxRate ?? '5'), gatewayCost: String(line.gatewayCost ?? ''), platformSettlementAmount: line.platformSettlementAmount != null ? String(line.platformSettlementAmount) : '', systemSettlementAmount: String(line.systemSettlementAmount ?? ''), settlementDifference: line.settlementDifference != null ? String(line.settlementDifference) : '', validationStatus: line.validationStatus || 'unvalidated', settlementAmount: String(line.settlementAmount ?? ''),
       settlementRuleCode: line.settlementRuleCode || '', channelFeeMode: line.channelFeeMode || '', channelFeeRate: line.channelFeeRate != null ? String(line.channelFeeRate) : '', taxMode: line.taxMode || '', validationTolerance: line.validationTolerance != null ? String(line.validationTolerance) : ''
     }

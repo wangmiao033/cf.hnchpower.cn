@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { CONTRACT_ACCESS_FIELDS, fullContractAccessUpdate, cleanContractDate,
   checkContractAuthorizationForMonth, accessDataModified, withContractReviewNote,
-  comparableCommercialGameName, sameCommercialGameName } from './channelContractInlineReview.js'
+  comparableCommercialGameName, sameCommercialGameName, contractAccessMatchesLine, isSameCustomerRestoration } from './channelContractInlineReview.js'
 
 const old = {
   id: 'item-A', contract_id: 'contract-A',
@@ -59,4 +59,42 @@ describe('当前账单页安全核对候选合同', () => {
     expect(sameCommercialGameName('一起来修仙(0.05折)', '圣树唤歌(0.05折)')).toBe(false)
   })
 
+})
+
+
+describe('设备平台不是商业折扣版本', () => {
+  const item = { product_name: '一起来修仙005折', platform: '全版本' }
+  it('全版本清单覆盖同SKU的iOS与Android', () => {
+    expect(contractAccessMatchesLine('一起来修仙005折-ios', item)).toBe(true)
+    expect(contractAccessMatchesLine('一起来修仙005折-ios', { ...item, platform: 'Android/iOS' })).toBe(true)
+    expect(contractAccessMatchesLine('一起来修仙005折-ios', { ...item, platform: 'iOS / Android' })).toBe(true)
+    expect(contractAccessMatchesLine('一起来修仙（0.05折）-Android', item)).toBe(true)
+    expect(contractAccessMatchesLine('一起来修仙005折', item)).toBe(true)
+  })
+  it('不同设备和商业版本仍拒绝', () => {
+    expect(contractAccessMatchesLine('一起来修仙005折-ios', { ...item, platform: 'Android' })).toBe(false)
+    expect(contractAccessMatchesLine('一起来修仙01折-ios', item)).toBe(false)
+    expect(contractAccessMatchesLine('一起来修仙005折红包版-ios', item)).toBe(false)
+    expect(contractAccessMatchesLine('一起来修仙005折', { ...item, platform: 'iOS' })).toBe(false)
+    expect(contractAccessMatchesLine('一起来修仙005折-ios', { ...item, platform: '' })).toBe(false)
+  })
+  it('设备产品后缀不能被全版本字段扩张', () => {
+    expect(contractAccessMatchesLine('一起来修仙005折-ios', { ...item, product_name: '一起来修仙005折-Android' })).toBe(false)
+    expect(contractAccessMatchesLine('一起来修仙005折-ios', { ...item, product_name: '一起来修仙005折-ios' })).toBe(true)
+  })
+})
+
+describe('exact customer hydration preserves evidence only for the same identity', () => {
+  const same = { mode: 'edit', currentName: '客户A', nextName: '客户A', currentId: '', nextId: 'a', resolvedCurrentId: 'a', selected: {} }
+  it('restores missing ID for one unique exact current customer', () => {
+    expect(isSameCustomerRestoration(same)).toBe(true)
+    expect(isSameCustomerRestoration({ ...same, currentId: 'a' })).toBe(true)
+  })
+  it.each([
+    { currentId: 'b' }, { resolvedCurrentId: 'b' }, { resolvedCurrentId: '' },
+    { nextName: '客户B' }, { currentName: '客户B', currentId: 'a' },
+    { selected: null, nextId: '' }, { nextName: '' }, { mode: 'add' }
+  ])('does not preserve evidence for changed, ambiguous or unlinked identity %j', changes => {
+    expect(isSameCustomerRestoration({ ...same, ...changes })).toBe(false)
+  })
 })

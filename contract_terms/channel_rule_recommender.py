@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import math
+from datetime import date
 from typing import Any
 
 try:
     from .matcher import commercial_game_variant, normalize_channel, normalize_company, normalize_game, score_candidate
+    from .game_platform_identity import contract_access_matches_line
 except ImportError:  # Vercel service-root import.
     from matcher import commercial_game_variant, normalize_channel, normalize_company, normalize_game, score_candidate
+    from game_platform_identity import contract_access_matches_line
 
 EPS = 0.01
 ALWAYS_DISABLED_STATUSES = {
@@ -324,6 +328,63 @@ def _rank_candidates(bill: dict, line: dict, candidates: list[dict]) -> list[tup
     return ranked
 
 
+def _explicit_channel_compatible(bill_channel: Any, candidate_channel: Any, partner_short_name: Any = "") -> bool:
+    """The production entrypoint upgrades this with its trusted customer aliases."""
+    left, right = normalize_channel(bill_channel), normalize_channel(candidate_channel)
+    return not (left and right and left != right)
+
+
+def _selected_candidate_pool(
+    bill: dict, line: dict, candidates: list[dict], selected_id: str,
+) -> tuple[list[tuple[dict, dict, dict]], str]:
+    """Validate one requested item, never substitute a different candidate.
+
+    The caller already scopes candidates by the verified customer ID. Exact
+    original commercial identity is additionally required before invoking the
+    same production ranker as automatic recommendation.
+    """
+    selected = next(
+        (candidate for candidate in candidates if str(candidate.get("access_item_id") or "") == selected_id),
+        None,
+    )
+    verified_partner_id = str(bill.get("verified_partner_id") or "").strip()
+    if not verified_partner_id:
+        return [], "当前客户身份尚未核实，请从客户库重新选择后再引用合同合作项"
+    if selected is not None and str(selected.get("partner_id") or "") != verified_partner_id:
+        return [], "所选合同尚未关联当前客户或属于其他客户，不能保存为本账单依据"
+    if selected is None or not _partner_matches(bill["partner_name"], selected, bill["channel_name"]):
+        return [], "所选合同合作项不存在或不属于当前合作方，请重新选择"
+    # The channel bill persists its original game name, not a separate device
+    # column. Metadata-only device claims cannot certify a durable selection.
+    if not contract_access_matches_line(
+        line.get("input_game_name") or line.get("game_name"), selected,
+    ):
+        return [], "所选合同合作项与当前游戏、商业版本或设备平台不一致，请重新选择"
+    if not _explicit_channel_compatible(
+        bill["channel_name"], selected.get("channel_name"), selected.get("partner_short_name"),
+    ):
+        return [], "所选合同合作项与当前渠道不一致，请重新选择"
+    if _candidate_statuses(selected) & ALWAYS_DISABLED_STATUSES:
+        return [], "所选合同合作项已停用、取消或作废，不能应用"
+    try:
+        start = date.fromisoformat(str(selected["authorization_start"])[:10]) if selected.get("authorization_start") else None
+        end = date.fromisoformat(str(selected["authorization_end"])[:10]) if selected.get("authorization_end") else None
+    except ValueError:
+        return [], "所选合同合作项的授权日期无效，请先核对原合同"
+    if start and end and start > end:
+        return [], "所选合同合作项的授权开始晚于结束日期，请先核对原合同"
+    for field in ("share_rate", "channel_fee_rate"):
+        rate = _number(selected.get(field))
+        if rate is None or not math.isfinite(rate) or not 0 <= rate <= 100:
+            return [], "所选合同合作项缺少有效分成或通道费，不能应用"
+    ranked = _rank_candidates(bill, line, [selected])
+    if not ranked:
+        return [], "所选合同合作项的游戏身份、授权期或状态未通过校验，不能应用"
+    if ranked[0][1].get("authorization_status") != "covered":
+        return [], "所选合同合作项的授权期未覆盖当前账期或尚未明确，不能应用"
+    return ranked, ""
+
+
 def _selection_pool(ranked: list[tuple[dict, dict, dict]], game_name: str) -> list[tuple[dict, dict, dict]]:
     if not ranked:
         return []
@@ -360,6 +421,8 @@ def recommend_channel_rules(
     channel_name: str,
     lines: list[dict],
     candidates: list[dict],
+    *,
+    verified_partner_id: str = "",
 ) -> dict:
     """Return contract-authoritative recommendations for a draft channel bill.
 
@@ -391,15 +454,24 @@ def recommend_channel_rules(
             "partner_name": partner_name,
             "channel_name": channel_name,
             "settlement_month": cycle,
+            "verified_partner_id": verified_partner_id,
         }
         line = {
             "line_id": str(raw.get("line_id") or raw.get("id") or f"draft-{source_index}"),
             "game_name": game_name,
             "input_game_name": raw.get("input_game_name"),
+            "game_id": raw.get("game_id") or raw.get("gameId"),
+            "platform": raw.get("platform") or raw.get("device_platform"),
             "settlement_cycle": cycle,
         }
-        ranked = _rank_candidates(bill, line, candidates)
-        pool = _selection_pool(ranked, game_name)
+        selected_id = str(raw.get("access_item_id") or "").strip()
+        selection_error = ""
+        if selected_id:
+            ranked, selection_error = _selected_candidate_pool(bill, line, candidates, selected_id)
+            pool = ranked
+        else:
+            ranked = _rank_candidates(bill, line, candidates)
+            pool = _selection_pool(ranked, game_name)
         display_game_name = str(raw.get("input_game_name") or game_name).strip()
         if not pool:
             results.append(
@@ -415,7 +487,12 @@ def recommend_channel_rules(
                     "tax_rate_warning": False,
                     "rule_fields_complete": False,
                     "financially_unambiguous": False,
-                    "message": "该游戏/账期未找到匹配的可用合同合作清单",
+                    "message": selection_error or (
+                        "已有同客户、游戏及渠道的合同合作清单，但设备平台不兼容或账单平台不明确，不能自动带入"
+                        if line.get("platform_conflict") else "该游戏/账期未找到匹配的可用合同合作清单"
+                    ),
+                    **({"platform_conflict": True} if line.get("platform_conflict") else {}),
+                    **({"selection_error": selection_error, "selected_access_item_id": selected_id} if selected_id else {}),
                     "match": None,
                     "recommended": None,
                 }
@@ -501,6 +578,7 @@ def recommend_channel_rules(
                 "candidate_count": len(ranked),
                 "usable_candidate_count": len(pool),
                 "message": line_message,
+                **({"selected_access_item_id": selected_id, "selection_validated": True} if selected_id else {}),
                 "match": {
                     "contract_id": candidate.get("contract_id"),
                     "contract_name": candidate.get("contract_name"),
@@ -508,6 +586,7 @@ def recommend_channel_rules(
                     "access_item_id": candidate.get("access_item_id"),
                     "product_name": candidate.get("product_name"),
                     "channel_name": candidate.get("channel_name"),
+                    "platform": candidate.get("platform"),
                     "authorization_start": candidate.get("authorization_start"),
                     "authorization_end": candidate.get("authorization_end"),
                     "share_rate": candidate.get("share_rate"),

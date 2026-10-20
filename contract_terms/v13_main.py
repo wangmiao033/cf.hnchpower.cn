@@ -28,7 +28,9 @@ app = _v12.app
 _extended = _v12._extended
 _CHANNEL_RULE_PATH = _v12._CHANNEL_RULE_PATH
 
-def _verified_partner_selection(conn, partner_id: str, partner_name: str) -> dict | None:
+def _verified_partner_selection(
+    conn, partner_id: str, partner_name: str, *, for_binding: bool = False,
+) -> dict | None:
     """Use a selected customer ID only after verifying its current legal identity.
 
     Never let a stale/forged ID silently borrow a different customer's contracts.
@@ -50,7 +52,33 @@ def _verified_partner_selection(conn, partner_id: str, partner_name: str) -> dic
     keys.discard("")
     if normalize_company(partner_name) not in keys:
         raise HTTPException(status_code=409, detail="客户名称与客户库关联 ID 不一致，请重新选择合作方后匹配合同。")
+    if for_binding:
+        # Core persistence resolves the bill's stored name by exact equality,
+        # not fuzzy aliases, and refuses duplicate customer names. Certify only
+        # the same identity here without changing legacy automatic matching.
+        exact_names = {str(selected.get(key) or "").strip() for key in ("name", "short_name")}
+        exact_names.discard("")
+        if partner_name.strip() not in exact_names:
+            raise HTTPException(status_code=409, detail="引用合同需使用客户库原始名称或简称，请重新选择当前客户。")
+        exact_rows = conn.execute(
+            "SELECT id FROM cf_partner_records WHERE name = %s OR short_name = %s",
+            [partner_name.strip(), partner_name.strip()],
+        ).fetchall()
+        if len(exact_rows) != 1 or str(exact_rows[0].get("id") or "") != str(selected["id"]):
+            raise HTTPException(status_code=409, detail="当前名称未唯一关联客户库，不能认证合同引用，请先核对同名客户。")
     return selected
+
+
+def _prepare_explicit_selection_lines(lines: list[dict]) -> list[dict]:
+    """Only the server may supply registry/original-name evidence for a binding."""
+    prepared = []
+    for source in lines:
+        row = dict(source)
+        if str(row.get("access_item_id") or "").strip():
+            for key in ("input_game_name", "game_identity_source", "game_id", "gameId"):
+                row.pop(key, None)
+        prepared.append(row)
+    return prepared
 
 
 def _scope_linked_candidates(candidates: list[dict], selected: dict | None) -> list[dict]:
@@ -133,11 +161,12 @@ def _explain_missing_contract_list(result: dict, catalog: dict) -> dict:
     updated["contract_catalog"] = catalog
     updated["lines"] = [
         {**line, "message": reason}
-        if not line.get("match") and not line.get("auto_apply")
+        if not line.get("match") and not line.get("auto_apply") and not line.get("selection_error") and not line.get("platform_conflict")
         else line
         for line in (result.get("lines") or [])
     ]
-    if any(not line.get("match") and not line.get("auto_apply") for line in (result.get("lines") or [])):
+    if any(not line.get("match") and not line.get("auto_apply") and not line.get("selection_error") and not line.get("platform_conflict")
+           for line in (result.get("lines") or [])):
         updated["message"] = reason
     return updated
 
@@ -168,13 +197,19 @@ def contract_first_registry_fallback_channel_rule(request: Request, payload: dic
     trace_target = _v12._is_3733_trace_target(partner_name, channel_name, lines)
     partner_id = str(payload.get("partner_id") or "").strip()[:128]
     with psycopg.connect(_extended._database_url(), connect_timeout=15, row_factory=dict_row) as conn:
-        selected = _verified_partner_selection(conn, partner_id, partner_name)
+        selected = _verified_partner_selection(
+            conn, partner_id, partner_name,
+            for_binding=any(str(line.get("access_item_id") or "").strip() for line in lines),
+        )
         candidates = _scope_linked_candidates(
             _v12.enrich_candidates_with_game_ids(conn, _extended._candidate_rows(conn)),
             selected,
         )
-        resolved_lines = _v12.enrich_lines_with_game_ids(conn, lines)
-        result = _extended.recommend_channel_rules(partner_name, channel_name, resolved_lines, candidates)
+        resolved_lines = _v12.enrich_lines_with_game_ids(conn, _prepare_explicit_selection_lines(lines))
+        result = _extended.recommend_channel_rules(
+            partner_name, channel_name, resolved_lines, candidates,
+            verified_partner_id=str(selected["id"]) if selected else "",
+        )
         result = apply_game_registry_fallback(
             result,
             partner_name=partner_name,

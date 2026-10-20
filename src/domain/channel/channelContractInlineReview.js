@@ -21,6 +21,30 @@ export function sameCommercialGameName(left, right) {
   return Boolean(a && a === comparableCommercialGameName(right))
 }
 
+/** Separate an explicit terminal device suffix from the financial SKU.
+ * Never strip marketing editions or discounts. A platform-specific contract
+ * cannot supply another platform; only an explicitly all-platform list can.
+ */
+export function splitContractGamePlatform(value) {
+  const raw = String(value ?? '').normalize('NFKC').trim()
+  const match = raw.match(/(?:[-_\s](ios|android)|\((ios|android)\))$/i)
+  return { name: match ? raw.slice(0, match.index).trim() : raw, platform: match ? (match[1] || match[2]).toLowerCase() : '' }
+}
+
+export function contractAccessMatchesLine(gameName, item = {}) {
+  const line = splitContractGamePlatform(gameName)
+  const product = splitContractGamePlatform(item.product_name)
+  if (!sameCommercialGameName(line.name, product.name)) return false
+  const declared = String(item.platform || '').normalize('NFKC').trim().toLowerCase()
+  const allPlatforms = ['全版本', 'all', 'all platforms'].includes(declared)
+  const declaredPlatforms = /^(?:android\s*\/\s*ios|ios\s*\/\s*android)$/.test(declared) ? ['android', 'ios'] : [declared]
+  // An explicit product suffix is narrower than a generic platform field.
+  if (product.platform) return Boolean(line.platform && line.platform === product.platform &&
+    (!declared || allPlatforms || declaredPlatforms.includes(line.platform)))
+  if (!line.platform) return !['android', 'ios'].includes(declared)
+  return allPlatforms || declaredPlatforms.includes(line.platform)
+}
+
 /**
  * Contract access items use a REPLACE-style PUT endpoint (not PATCH).
  * Copying only product_name/share_rate dates deletes every other field.
@@ -96,4 +120,12 @@ export function withContractReviewNote(row, note, month) {
   const result = [previous, addition].filter(Boolean).join('\n')
   if (result.length > 1950) throw new Error('合作项原备注过长，不能安全追加核对记录')
   return result
+}
+
+/** Exact edit hydration only; never preserve evidence across identity changes. */
+export function isSameCustomerRestoration({ mode, currentName, nextName, currentId, nextId, resolvedCurrentId, selected }) {
+  const text = value => String(value || '').trim()
+  return Boolean(mode === 'edit' && selected && text(nextId) && text(currentName) &&
+    text(currentName) === text(nextName) && text(resolvedCurrentId) === text(nextId) &&
+    (!text(currentId) || text(currentId) === text(nextId)))
 }
