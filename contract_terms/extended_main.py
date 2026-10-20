@@ -206,6 +206,7 @@ _CANDIDATE_SQL = """
       contract.partner_id AS partner_id,
       access.channel_name,
       access.product_name,
+      access.platform,
       access.authorization_start,
       access.authorization_end,
       access.share_rate,

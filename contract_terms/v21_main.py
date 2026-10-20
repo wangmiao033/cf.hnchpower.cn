@@ -24,11 +24,13 @@ try:
     from . import channel_rule_recommender as _channel
     from . import matcher as _matcher
     from .game_identity import normalize_registry_game
+    from .game_platform_identity import financial_game_key, platform_compatible
 except ImportError:  # Vercel imports modules from the service root.
     import v20_main as _v20
     import channel_rule_recommender as _channel
     import matcher as _matcher
     from game_identity import normalize_registry_game
+    from game_platform_identity import financial_game_key, platform_compatible
 
 app = _v20.app
 
@@ -41,13 +43,7 @@ def _formatted_contract_game_key(value: Any) -> str:
     Preserve every other suffix (e.g. 红包版), so distinct commercial editions
     never collapse merely because their base title and discount are identical.
     """
-    raw = normalize_registry_game(value)
-    raw = re.sub(r"[()（）\[\]【】]", "", raw)
-
-    def normalize_discount(match: re.Match) -> str:
-        return _matcher.commercial_game_variant(match.group(0)) or match.group(0)
-
-    return re.sub(r"(?<!\d)\d+(?:\.\d+)?折", normalize_discount, raw)
+    return financial_game_key(value)
 
 
 def _discount_game_prefix(value: Any) -> str:
@@ -62,9 +58,8 @@ def _discount_game_prefix(value: Any) -> str:
 def _exact_identity_candidate(partner_name: str, game_name: str, candidate: dict[str, Any]) -> bool:
     if not _channel._partner_matches(partner_name, candidate):
         return False
-    if not (
-        _channel._exact_game_matches(game_name, candidate)
-        or _formatted_contract_game_key(game_name) == _formatted_contract_game_key(candidate.get("product_name"))
+    if not _formatted_contract_game_key(game_name) or (
+        _formatted_contract_game_key(game_name) != _formatted_contract_game_key(candidate.get("product_name"))
     ):
         return False
 
@@ -259,6 +254,31 @@ def _direct_exact_rank(
 
 
 def rank_candidates_v21(bill: dict, line: dict, candidates: list[dict]) -> list[tuple[dict, dict, dict]]:
+    # Platform evidence is an eligibility boundary, including the legacy fuzzy
+    # fallback. Never revive an incompatible platform merely via a registry name.
+    input_name = line.get("input_game_name") or line.get("game_name")
+    same_identity = [
+        candidate for candidate in candidates
+        if _channel._partner_matches(str(bill.get("partner_name") or ""), candidate)
+        and _formatted_contract_game_key(input_name)
+        == _formatted_contract_game_key(candidate.get("original_product_name") or candidate.get("product_name"))
+        and _channel_compatible(
+            bill.get("channel_name"), candidate.get("channel_name"), candidate.get("partner_short_name"),
+        )
+    ]
+    candidates = [
+        candidate for candidate in candidates
+        if platform_compatible(
+            input_name,
+            candidate.get("original_product_name") or candidate.get("product_name"),
+            line.get("platform"),
+            candidate.get("platform"),
+        )
+    ]
+    if same_identity and not any(candidate in candidates for candidate in same_identity):
+        # Communicate this narrow refusal to the registry fallback. An unrelated
+        # game's platform must never turn an ordinary "not found" into a block.
+        line["platform_conflict"] = True
     exact = _direct_exact_rank(bill, line, candidates)
     if exact is not None:
         return exact
@@ -269,3 +289,4 @@ def rank_candidates_v21(bill: dict, line: dict, candidates: list[dict]) -> list[
 # globals on every call, so replacing the binding upgrades the inherited route
 # without duplicating the API surface.
 _channel._rank_candidates = rank_candidates_v21
+_channel._explicit_channel_compatible = _channel_compatible

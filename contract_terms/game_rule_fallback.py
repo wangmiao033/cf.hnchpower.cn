@@ -303,6 +303,12 @@ def apply_game_registry_fallback(
     for original in list(out.get("lines") or []):
         item = dict(original)
         game_name = str(item.get("game_name") or "").strip() or "未命名游戏"
+        # An explicit contract selection is authoritative even when invalid.
+        # Registry rules must not turn a rejected selection into silent success.
+        if item.get("selection_error") or item.get("platform_conflict"):
+            diagnostics.append(f"{game_name}：{item.get('selection_error') or item.get('message')}")
+            next_rows.append(item)
+            continue
         if item.get("auto_apply") and item.get("recommended"):
             item.setdefault("rule_source", "contract")
             diagnostics.append(f"{game_name}：合同规则已应用")

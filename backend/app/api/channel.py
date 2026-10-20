@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
+from types import SimpleNamespace
 import re
 import unicodedata
 from uuid import uuid4
@@ -35,7 +36,12 @@ from app.services.channel_cumulative_batch import refresh_batches_for_bill
 from app.services.channel_cumulative_invoice import assert_single_bill_collection_allowed
 from app.services.channel_settlement_engine import apply_bill_adjustment, aggregate_validation, calculate_channel_line, voucher_cost_for_storage
 from app.services.bill_write_preflight import prepare_bill_financial_update, set_bill_audit_reason
+from app.services.bill_lifecycle import normalize_status
 from app.services.bill_partner_search import matching_customer_keyword_exists
+from app.services.channel_contract_binding import (
+    LINE_BINDING_FIELDS, load_channel_contract_links,
+    prepare_channel_contract_bindings, save_channel_contract_bindings,
+)
 
 router = APIRouter()
 RECEIPT_EPS = 0.01
@@ -195,9 +201,14 @@ def _legacy_items_from_row(row: ChannelRecord) -> list[ChannelLineItemRead]:
     ]
 
 
-def _to_read(row: ChannelRecord) -> ChannelRecordRead:
+def _to_read(row: ChannelRecord, db: Session | None = None, links: dict | None = None) -> ChannelRecordRead:
     li = list(row.line_items or [])
     item_reads = [ChannelLineItemRead.model_validate(x) for x in sorted(li, key=lambda x: x.sort_order)] if li else _legacy_items_from_row(row)
+    if links is None and db is not None:
+        links = load_channel_contract_links(db, [str(row.id)]).get(str(row.id), {})
+    item_reads = [item.model_copy(update={
+        "contract_access_item_id": (links or {}).get(str(item.id), {}).get("access_item_id"),
+    }) for item in item_reads]
     base = ChannelRecordRead.model_validate(row)
     return base.model_copy(update={"items": item_reads})
 
@@ -208,7 +219,7 @@ def _to_read(row: ChannelRecord) -> ChannelRecordRead:
 _CHANNEL_COMPUTED_LINE_FIELDS = {
     "billing_amount", "share_amount", "system_settlement_amount",
     "settlement_difference", "validation_status", "settlement_amount",
-}
+} | LINE_BINDING_FIELDS
 _CHANNEL_RULE_CONTEXT_FIELDS = {
     "channel_name", "partner_name", "settlement_month",
     "settlement_rule_code", "channel_fee_mode", "tax_mode",
@@ -237,17 +248,64 @@ def _channel_line_inputs_match(
     for idx, (saved, item) in enumerate(zip(saved_lines, submitted)):
         if int(saved.sort_order) != idx:
             return False
+        if item.id and str(item.id) != str(saved.id):
+            return False
         inputs = item.model_dump(exclude=_CHANNEL_COMPUTED_LINE_FIELDS)
         if any(not _channel_inputs_equal(getattr(saved, key, None), value) for key, value in inputs.items()):
             return False
     return True
 
 
-def _replace_line_items(db: Session, parent: ChannelRecord, items: list[ChannelLineItemCreate]) -> None:
+def _remark_only_channel_update(db: Session, row: ChannelRecord, incoming: dict) -> dict:
+    """Reduce a provably unchanged full-form save to the existing remark PATCH.
+
+    This preserves existing evidence, including stale evidence, without claiming
+    to revalidate it. It never changes amounts, line IDs, bindings, or status.
+    All substantive changes still pass through the normal financial preflight.
+    """
+    raw_items = incoming.get("items")
+    if "remark" not in incoming or not isinstance(raw_items, list) or not raw_items:
+        return incoming
+    if "status" in incoming and normalize_status(incoming["status"]) != normalize_status(row.status):
+        return incoming
+    metadata = {"remark", "audit_reason", "expected_updated_at", "status"}
+    if any(
+        not _channel_inputs_equal(getattr(row, key, None), value)
+        for key, value in incoming.items() if key not in metadata | {"items"}
+    ):
+        return incoming
+    submitted = [ChannelLineItemCreate(**item) for item in raw_items]
+    if any(not item.id for item in submitted):
+        return incoming
+    existing = db.execute(
+        select(ChannelRecordLineItem).where(ChannelRecordLineItem.channel_record_id == row.id)
+        .order_by(ChannelRecordLineItem.sort_order, ChannelRecordLineItem.id)
+    ).scalars().all()
+    if not _channel_line_inputs_match(existing, submitted):
+        return incoming
+    # Even computed/display fields must be unchanged to qualify for this narrow
+    # compatibility path. They never authorize changing a persisted calculation.
+    for saved, item in zip(existing, submitted):
+        if any(
+            not _channel_inputs_equal(getattr(saved, key, None), value)
+            for key, value in item.model_dump(exclude_unset=True, exclude=LINE_BINDING_FIELDS).items()
+        ):
+            return incoming
+    links = load_channel_contract_links(db, [str(row.id)]).get(str(row.id), {})
+    for item in submitted:
+        prior = str(links.get(str(item.id), {}).get("access_item_id") or "")
+        if ("contract_access_item_id" in item.model_fields_set
+                and str(item.contract_access_item_id or "").strip() != prior):
+            return incoming
+    return {key: value for key, value in incoming.items() if key in metadata}
+
+
+def _replace_line_items(db: Session, parent: ChannelRecord, items: list[ChannelLineItemCreate]) -> list[ChannelRecordLineItem]:
     db.execute(delete(ChannelRecordLineItem).where(ChannelRecordLineItem.channel_record_id == parent.id))
     db.flush()
+    saved = []
     for idx, it in enumerate(items):
-        raw = it.model_dump(exclude={"billing_amount", "share_amount", "system_settlement_amount", "settlement_difference", "validation_status", "settlement_amount"})
+        raw = it.model_dump(exclude=_CHANNEL_COMPUTED_LINE_FIELDS)
         line = ChannelRecordLineItem(id=str(uuid4()), channel_record_id=parent.id, sort_order=idx, **raw)
         # Never trust a client-submitted voucher_cost for a split row; preserve
         # the old column as an auditable derived value with legacy-compatible semantics.
@@ -256,7 +314,9 @@ def _replace_line_items(db: Session, parent: ChannelRecord, items: list[ChannelL
         for key, value in computed.items():
             setattr(line, key, value)
         db.add(line)
+        saved.append(line)
     db.flush()
+    return saved
 
 
 # Search-only legacy terminology; never change the bill's legal owner.
@@ -321,7 +381,8 @@ def list_channel_records(db: Session = Depends(get_db), search: str | None = Que
     count_stmt = _apply_filters(select(func.count(ChannelRecord.id)), search=search, settlement_month=settlement_month, channel_name=channel_name, game_name=game_name, status=status)
     total = int(db.execute(count_stmt).scalar_one())
     rows = db.execute(base.order_by(ChannelRecord.created_at.desc(), ChannelRecord.id.desc()).limit(limit).offset(offset)).scalars().all()
-    return ChannelRecordListResponse(items=[_to_read(r) for r in rows], total=total)
+    links = load_channel_contract_links(db, [str(row.id) for row in rows])
+    return ChannelRecordListResponse(items=[_to_read(r, links=links.get(str(r.id), {})) for r in rows], total=total)
 
 
 @router.post("/receipt-attachment", status_code=status.HTTP_201_CREATED)
@@ -399,7 +460,7 @@ async def delete_channel_receipt(record_id: str, receipt_id: str, db: Session = 
 def get_channel_record(record_id: str, db: Session = Depends(get_db)) -> ChannelRecordRead:
     row = db.execute(select(ChannelRecord).options(selectinload(ChannelRecord.line_items)).where(ChannelRecord.id == record_id)).scalar_one_or_none()
     if row is None: raise HTTPException(status_code=404, detail={"error": "not_found", "id": record_id})
-    return _to_read(row)
+    return _to_read(row, db)
 
 
 @router.post("/{record_id}/receipts", response_model=ChannelRecordRead, status_code=status.HTTP_201_CREATED)
@@ -451,7 +512,7 @@ def create_channel_receipt(record_id: str, payload: ChannelReceiptCreate, db: Se
         db.rollback()
         raise HTTPException(status_code=409, detail={"error": "conflict"}) from None
     row = db.execute(select(ChannelRecord).options(selectinload(ChannelRecord.line_items)).where(ChannelRecord.id == record_id)).scalar_one()
-    return _to_read(row)
+    return _to_read(row, db)
 
 
 @router.post("", response_model=ChannelRecordRead, status_code=status.HTTP_201_CREATED)
@@ -463,12 +524,16 @@ def create_channel_record(payload: ChannelRecordCreate, db: Session = Depends(ge
     )
     if not payload.items: raise HTTPException(status_code=422, detail={"error": "items_required", "message": "至少录入一行游戏明细"})
     row = ChannelRecord(id=str(uuid4()), **payload.model_dump(exclude={"items"}))
-    db.add(row); db.flush(); _replace_line_items(db, row, payload.items); _sync_denormalized_totals(row, db); _recompute_receipt_rollup(db, row)
+    desired, previous = prepare_channel_contract_bindings(db, row, payload.items, [], preserve_ids=False)
+    db.add(row); db.flush()
+    saved_lines = _replace_line_items(db, row, payload.items)
+    save_channel_contract_bindings(db, row.id, saved_lines, desired, previous)
+    _sync_denormalized_totals(row, db); _recompute_receipt_rollup(db, row)
     try: db.commit()
     except IntegrityError:
         db.rollback(); raise HTTPException(status_code=409, detail={"error": "conflict"}) from None
     row = db.execute(select(ChannelRecord).options(selectinload(ChannelRecord.line_items)).where(ChannelRecord.id == row.id)).scalar_one()
-    return _to_read(row)
+    return _to_read(row, db)
 
 
 @router.put("/{record_id}", response_model=ChannelRecordRead)
@@ -479,18 +544,17 @@ def update_channel_record(record_id: str, payload: ChannelRecordUpdate, db: Sess
     if row is None: raise HTTPException(status_code=404, detail={"error": "not_found", "id": record_id})
     # Check the current DB status and editor revision while holding the row lock.
     # Do not touch ORM fields or child lines before this unified check succeeds.
-    data = prepare_bill_financial_update("channel", row, payload.model_dump(exclude_unset=True))
+    incoming = _remark_only_channel_update(db, row, payload.model_dump(exclude_unset=True))
+    data = prepare_bill_financial_update("channel", row, incoming)
     set_bill_audit_reason(db, data.pop("audit_reason", None))
     items_payload = data.pop("items", None)
     adjustment_touched = bool(SETTLEMENT_ADJUSTMENT_FIELDS.intersection(data))
     prior_rule_context = {field: getattr(row, field) for field in _CHANNEL_RULE_CONTEXT_FIELDS}
-    for key, value in data.items(): setattr(row, key, value)
     rule_context_changed = any(
-        not _channel_inputs_equal(prior_rule_context[field], getattr(row, field))
+        field in data and not _channel_inputs_equal(prior_rule_context[field], data[field])
         for field in _CHANNEL_RULE_CONTEXT_FIELDS
     )
-    _validate_settlement_adjustment_row(row)
-    row.updated_at = datetime.now(timezone.utc)
+    parsed_items, existing_lines, binding_plan = None, [], None
     if items_payload is not None:
         if not items_payload: raise HTTPException(status_code=422, detail={"error": "items_required", "message": "至少保留一行游戏明细"})
         parsed_items = [ChannelLineItemCreate(**x) for x in items_payload]
@@ -498,11 +562,45 @@ def update_channel_record(record_id: str, payload: ChannelRecordUpdate, db: Sess
             select(ChannelRecordLineItem).where(ChannelRecordLineItem.channel_record_id == record_id)
             .order_by(ChannelRecordLineItem.sort_order, ChannelRecordLineItem.id)
         ).scalars().all()
-        if rule_context_changed or not _channel_line_inputs_match(existing_lines, parsed_items):
-            _replace_line_items(db, row, parsed_items)
+        preserve_ids = not rule_context_changed and _channel_line_inputs_match(existing_lines, parsed_items)
+        projected = SimpleNamespace(id=row.id, **{
+            field: data.get(field, getattr(row, field))
+            for field in _CHANNEL_RULE_CONTEXT_FIELDS
+        })
+        with db.no_autoflush:
+            binding_plan = prepare_channel_contract_bindings(
+                db, projected, parsed_items, existing_lines, preserve_ids=preserve_ids,
+            )
+    elif rule_context_changed:
+        # A header-only client must not bypass contract identity validation.
+        existing_lines = db.execute(
+            select(ChannelRecordLineItem).where(ChannelRecordLineItem.channel_record_id == record_id)
+            .order_by(ChannelRecordLineItem.sort_order, ChannelRecordLineItem.id)
+        ).scalars().all()
+        existing_payload = [ChannelLineItemCreate(id=str(line.id), **{
+            field: getattr(line, field) for field in ChannelLineItemCreate.model_fields
+            if field not in LINE_BINDING_FIELDS
+        }) for line in existing_lines]
+        projected = SimpleNamespace(id=row.id, **{
+            field: data.get(field, getattr(row, field))
+            for field in _CHANNEL_RULE_CONTEXT_FIELDS
+        })
+        with db.no_autoflush:
+            prepare_channel_contract_bindings(
+                db, projected, existing_payload, existing_lines, preserve_ids=True,
+            )
+    for key, value in data.items(): setattr(row, key, value)
+    _validate_settlement_adjustment_row(row)
+    row.updated_at = datetime.now(timezone.utc)
+    if items_payload is not None:
+        if not preserve_ids:
+            saved_lines = _replace_line_items(db, row, parsed_items)
             _sync_denormalized_totals(row, db)
-        elif adjustment_touched:
-            _sync_denormalized_totals(row, db)
+        else:
+            saved_lines = existing_lines
+            if adjustment_touched:
+                _sync_denormalized_totals(row, db)
+        save_channel_contract_bindings(db, row.id, saved_lines, *binding_plan)
         # Identical line inputs: keep their IDs and accepted contract case links.
     elif adjustment_touched:
         _sync_denormalized_totals(row, db)
@@ -524,7 +622,7 @@ def update_channel_record(record_id: str, payload: ChannelRecordUpdate, db: Sess
     except IntegrityError:
         db.rollback(); raise HTTPException(status_code=409, detail={"error": "conflict"}) from None
     row = db.execute(select(ChannelRecord).options(selectinload(ChannelRecord.line_items)).where(ChannelRecord.id == record_id)).scalar_one()
-    return _to_read(row)
+    return _to_read(row, db)
 
 
 @router.delete("/{record_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -560,4 +658,6 @@ def delete_channel_record(record_id: str, db: Session = Depends(get_db)) -> None
                 "received_amount": round(received, 2),
             },
         )
+    previous = load_channel_contract_links(db, [str(row.id)]).get(str(row.id), {})
+    save_channel_contract_bindings(db, row.id, [], [], previous)
     db.delete(row); db.commit()

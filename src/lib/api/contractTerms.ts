@@ -371,7 +371,7 @@ export function recommendChannelContractRules(payload: {
   partner_name: string
   partner_id?: string
   channel_name?: string
-  lines: Array<{ game_name: string; settlement_cycle: string }>
+  lines: Array<{ line_index?: number; access_item_id?: string; game_name: string; settlement_cycle: string }>
 }) {
   return apiPost<ChannelContractRuleRecommendation>(`${PATH}/channel-rule-recommendation`, payload)
 }
