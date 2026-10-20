@@ -10,6 +10,9 @@ on:
   push:
     branches:
       - main
+    # A changelog-only commit records a release; it must not release again.
+    paths-ignore:
+      - 'CHANGELOG.md'
   workflow_dispatch:
 
 permissions:
