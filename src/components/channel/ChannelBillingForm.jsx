@@ -24,6 +24,7 @@ import {
 } from '@/domain/channel/channelBillingForm.js'
 import { applyCommercialDiscountFromGameName } from '@/domain/channel/channelLineDefaults.js'
 import { linesWithChannelLineContractFees } from '@/domain/channel/channelLineContractFee.js'
+import { isSameCustomerRestoration } from '@/domain/channel/channelContractInlineReview.js'
 import { recommendChannelContractRules } from '@/lib/api/contractTerms.ts'
 import {
   channelDifferenceLabel,
@@ -568,19 +569,27 @@ function ChannelBillingForm({
   }
 
   const handlePartnerChange = (partnerName, nextPartnerId = '', selected = null) => {
+    // PartnerPicker restores the exact customer ID after edit hydration. This
+    // is not a customer change and must not erase saved contract evidence.
+    const restoringSameCustomer = isSameCustomerRestoration({
+      mode, currentName: header.partnerName, nextName: partnerName,
+      currentId: partnerId, nextId: nextPartnerId,
+      resolvedCurrentId: selectedPartner?.id, selected
+    })
     setPartnerId(nextPartnerId)
     setLastContractRuleKey('')
     setContractRuleState(emptyContractRuleState())
     setContractOverrideReason('')
-    if (mode === 'add' || (selected && nextPartnerId)) {
+    if (!restoringSameCustomer) {
       setLines((current) => current.map(row => ({ ...clearLineContractRule(row), contractAccessItemId: null })))
     }
-    const channelName = selected && nextPartnerId ? selected.shortName || selected.name : partnerName
+    const channelName = restoringSameCustomer ? header.channelName : selected && nextPartnerId ? selected.shortName || selected.name : partnerName
     const preset = detectChannelRulePreset(channelName || partnerName)
     if (mode === 'add' && preset !== XIAN_WEIZHEN_9917_RULE) {
       setLines((current) => current.map((row) => ({ ...clearLineContractRule(row), shareRate: '', taxRate: '' })))
     }
     setHeader((current) => {
+      if (restoringSameCustomer) return current
       const base = { ...current, partnerName, channelName }
       if (mode !== 'add') return applyTargetedChannelRule(base)
       if (preset === XIAN_WEIZHEN_9917_RULE) return applyChannelRulePreset(base, preset)

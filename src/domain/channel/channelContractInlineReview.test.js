@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { CONTRACT_ACCESS_FIELDS, fullContractAccessUpdate, cleanContractDate,
   checkContractAuthorizationForMonth, accessDataModified, withContractReviewNote,
-  comparableCommercialGameName, sameCommercialGameName, contractAccessMatchesLine } from './channelContractInlineReview.js'
+  comparableCommercialGameName, sameCommercialGameName, contractAccessMatchesLine, isSameCustomerRestoration } from './channelContractInlineReview.js'
 
 const old = {
   id: 'item-A', contract_id: 'contract-A',
@@ -81,5 +81,20 @@ describe('设备平台不是商业折扣版本', () => {
   it('设备产品后缀不能被全版本字段扩张', () => {
     expect(contractAccessMatchesLine('一起来修仙005折-ios', { ...item, product_name: '一起来修仙005折-Android' })).toBe(false)
     expect(contractAccessMatchesLine('一起来修仙005折-ios', { ...item, product_name: '一起来修仙005折-ios' })).toBe(true)
+  })
+})
+
+describe('exact customer hydration preserves evidence only for the same identity', () => {
+  const same = { mode: 'edit', currentName: '客户A', nextName: '客户A', currentId: '', nextId: 'a', resolvedCurrentId: 'a', selected: {} }
+  it('restores missing ID for one unique exact current customer', () => {
+    expect(isSameCustomerRestoration(same)).toBe(true)
+    expect(isSameCustomerRestoration({ ...same, currentId: 'a' })).toBe(true)
+  })
+  it.each([
+    { currentId: 'b' }, { resolvedCurrentId: 'b' }, { resolvedCurrentId: '' },
+    { nextName: '客户B' }, { currentName: '客户B', currentId: 'a' },
+    { selected: null, nextId: '' }, { nextName: '' }, { mode: 'add' }
+  ])('does not preserve evidence for changed, ambiguous or unlinked identity %j', changes => {
+    expect(isSameCustomerRestoration({ ...same, ...changes })).toBe(false)
   })
 })

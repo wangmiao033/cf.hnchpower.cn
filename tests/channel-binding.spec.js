@@ -39,5 +39,5 @@ test('server rejection never falls back to local selected rates or claims select
   await setup(page, true)
   await page.getByRole('button', { name: '使用已有清单重新匹配本行' }).click()
   await expect(page.getByRole('dialog')).toContainText('不适用于当前渠道')
-  expect(JSON.parse(await page.getByTestId('current').textContent()).items[0].contractAccessItemId).toBeUndefined()
+  expect(JSON.parse(await page.getByTestId('current').textContent()).items[0].contractAccessItemId ?? null).toBeNull()
 })

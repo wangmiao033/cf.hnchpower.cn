@@ -121,3 +121,11 @@ export function withContractReviewNote(row, note, month) {
   if (result.length > 1950) throw new Error('合作项原备注过长，不能安全追加核对记录')
   return result
 }
+
+/** Exact edit hydration only; never preserve evidence across identity changes. */
+export function isSameCustomerRestoration({ mode, currentName, nextName, currentId, nextId, resolvedCurrentId, selected }) {
+  const text = value => String(value || '').trim()
+  return Boolean(mode === 'edit' && selected && text(nextId) && text(currentName) &&
+    text(currentName) === text(nextName) && text(resolvedCurrentId) === text(nextId) &&
+    (!text(currentId) || text(currentId) === text(nextId)))
+}

@@ -68,6 +68,8 @@ describe('channel contract safety guards', () => {
     expect(billingSource).toContain('setContractIssueTarget(item)')
     expect(billingSource).toContain('onUseExisting={async ({ item }) => {')
     expect(billingSource).toContain('partner_id: partnerId')
+    expect(billingSource).toContain('if (!restoringSameCustomer)')
+    expect(billingSource).toContain('if (restoringSameCustomer) return current')
     expect(billingSource).toContain('verified?.auto_apply')
     expect(billingSource).not.toContain('recommendationFromAccessItem(item)')
     expect(billingSource).toContain('access_item_id: String(item.id)')
