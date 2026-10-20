@@ -341,6 +341,16 @@ class ChannelContractBindingTests(unittest.TestCase):
             with self.subTest(game=game), self.assertRaises(HTTPException):
                 self.create([self.line(game_name=game)])
 
+    def test_unknown_device_keeps_single_android_binding_on_save_and_reopen(self):
+        self.db.execute(text("UPDATE cf_contract_access_items SET platform='Android' WHERE id='a1'"))
+        self.db.commit()
+        original = self.create([self.line(game_name="一起来修仙（0.05折）")])
+        self.assertEqual(get_channel_record(original.id, self.db).items[0].contract_access_item_id, "a1")
+        saved = update_channel_record(original.id, ChannelRecordUpdate(items=[self.saved_payload(original)]), self.db)
+        self.assertEqual(saved.items[0].contract_access_item_id, "a1")
+        with self.assertRaises(HTTPException):
+            self.create([self.line(game_name="一起来修仙（0.05折）-ios")])
+
     def test_invalid_status_dates_platform_and_missing_fields_block_bindings(self):
         for field, value in (("status", "作废"), ("authorization_end", "2025-12-31"),
                              ("platform", "Android"), ("share_rate", None), ("channel_name", "另一渠道")):

@@ -57,7 +57,7 @@ class ChannelSelectedAccessPlatformTests(unittest.TestCase):
                 self.assertEqual(row["recommended"]["channel_fee_rate"], 0)
 
     def test_automatic_platform_conflict_never_reenters_fuzzy_fallback(self):
-        for game, platform in (("一起来修仙005折-ios", "Android"), ("一起来修仙005折", "iOS")):
+        for game, platform in (("一起来修仙005折-ios", "Android"), ("一起来修仙005折-Android", "iOS")):
             with self.subTest(game=game, platform=platform):
                 row = self.result(game, [self.candidate(platform=platform)])["lines"][0]
                 self.assertFalse(row["auto_apply"])
@@ -162,7 +162,7 @@ class ChannelSelectedAccessPlatformTests(unittest.TestCase):
         )
 
     def test_platform_conflict_blocks_registry_fallback_only_for_same_identity(self):
-        for game, platform in (("一起来修仙005折-ios", "Android"), ("一起来修仙005折", "iOS")):
+        for game, platform in (("一起来修仙005折-ios", "Android"), ("一起来修仙005折-Android", "iOS")):
             with self.subTest(game=game, platform=platform):
                 result = self.with_registry_fallback(
                     self.result(game, [self.candidate(platform=platform)], game_id="game-1"),
@@ -174,6 +174,118 @@ class ChannelSelectedAccessPlatformTests(unittest.TestCase):
                 self.assertIn("平台", row["message"])
                 self.assertIsNone(row["match"])
                 self.assertEqual(result["registry_fallback_count"], 0)
+
+    def test_bamen_unique_android_candidate_accepts_unspecified_bill_device(self):
+        candidate = self.candidate(
+            partner_id="bamen", partner_name="长沙掌控智能科技有限公司",
+            partner_short_name="掌控智能（八门助手）", counterparty="长沙掌控智能科技有限公司",
+            channel_name="", platform="Android", authorization_start="2023-07-05",
+            authorization_end="2028-12-31", share_rate=30, channel_fee_rate=5,
+        )
+        for selected in ("", candidate["access_item_id"]):
+            with self.subTest(selected=selected):
+                row = channel.recommend_channel_rules(
+                    candidate["partner_name"], candidate["partner_short_name"],
+                    [{"game_name": "一起来修仙（0.05折）", "settlement_cycle": "2026-09", "access_item_id": selected}],
+                    [candidate], verified_partner_id="bamen",
+                )["lines"][0]
+                self.assertTrue(row["auto_apply"], row["message"])
+                self.assertEqual(row["recommended"]["share_rate"], 30)
+                self.assertEqual(row["recommended"]["channel_fee_rate"], 5)
+                self.assertEqual(row["match"]["access_item_id"], candidate["access_item_id"])
+                self.assertTrue(row["platform_unspecified"])
+                self.assertNotIn("platform_conflict", row)
+                self.assertNotIn("platform", row["recommended"])
+                self.assertIn("账单设备未声明，未推断设备", row["message"])
+
+    def test_unknown_device_different_platform_or_terms_cannot_auto_choose(self):
+        base = self.candidate(access_item_id="android", platform="Android")
+        for other in (
+            self.candidate(access_item_id="other", platform="iOS"),
+            self.candidate(access_item_id="other", platform="全版本"),
+            self.candidate(access_item_id="other", platform="Android", share_rate=50),
+            # A higher score must not conceal a second relevant unknown-period
+            # candidate with different settlement terms.
+            self.candidate(access_item_id="other", platform="Android", share_rate=50,
+                           authorization_start=None, authorization_end=None),
+            # Completeness filtering cannot conceal a different platform.
+            self.candidate(access_item_id="other", platform="iOS", share_rate=None),
+        ):
+            with self.subTest(other=other):
+                result = self.with_registry_fallback(self.result(candidates=[base, other], game_id="game-1"))
+                row = result["lines"][0]
+                self.assertFalse(row["auto_apply"])
+                self.assertTrue(row["platform_ambiguity"])
+                self.assertFalse(row["financially_unambiguous"])
+                self.assertFalse(result["partner_auto_apply"])
+                self.assertIn("账单设备未声明", row["message"])
+                self.assertEqual(result["registry_fallback_count"], 0)
+                # Explicit selection identifies the contract, not a guessed
+                # device; all the existing identity/authorization checks apply.
+                selected = self.result(candidates=[base, other], access_item_id="android")["lines"][0]
+                self.assertTrue(selected["auto_apply"], selected["message"])
+                self.assertTrue(selected["platform_unspecified"])
+
+    def test_unknown_device_same_platform_same_terms_keeps_consensus(self):
+        rows = [self.candidate(access_item_id=str(index), platform="Android") for index in range(2)]
+        result = self.result(candidates=rows)["lines"][0]
+        self.assertTrue(result["auto_apply"], result["message"])
+        self.assertFalse(result["platform_ambiguity"])
+        self.assertTrue(result["rule_consensus"])
+        self.assertTrue(result["platform_unspecified"])
+
+    def test_all_platform_and_dual_device_are_distinct_unknown_device_scopes(self):
+        candidates = [
+            self.candidate(access_item_id="all", platform="全版本"),
+            self.candidate(access_item_id="dual", platform="Android/iOS"),
+        ]
+        row = self.result(candidates=candidates)["lines"][0]
+        self.assertFalse(row["auto_apply"])
+        self.assertTrue(row["platform_ambiguity"])
+        self.assertIn("平台范围不同", row["message"])
+        self.assertTrue(self.result(candidates=candidates, access_item_id="all")["lines"][0]["auto_apply"])
+
+    def test_platform_ambiguity_flag_alone_blocks_registry_and_missing_list_explanation(self):
+        result = self.result(candidates=[
+            self.candidate(platform="Android"),
+            self.candidate(access_item_id="ios", platform="iOS"),
+        ], game_id="game-1")
+        original_message = result["lines"][0]["message"]
+        # The protection must not depend on keeping the first candidate as a
+        # display match; a future API may omit that display-only object.
+        result["lines"][0]["match"] = None
+        result["lines"][0]["recommended"] = None
+        result = self.with_registry_fallback(result)
+        result = _explain_missing_contract_list(result, {"contract_count": 1, "access_item_count": 2})
+        row = result["lines"][0]
+        self.assertFalse(row["auto_apply"])
+        self.assertTrue(row["platform_ambiguity"])
+        self.assertEqual(row["message"], original_message)
+        self.assertIsNone(row["recommended"])
+        self.assertEqual(result["registry_fallback_count"], 0)
+
+    def test_unknown_device_same_platform_incomplete_duplicate_does_not_invent_terms_conflict(self):
+        result = self.result(candidates=[
+            self.candidate(platform="Android"),
+            self.candidate(access_item_id="incomplete", platform="Android", share_rate=None),
+        ])["lines"][0]
+        self.assertTrue(result["auto_apply"], result["message"])
+        self.assertFalse(result["platform_ambiguity"])
+
+    def test_expired_other_platform_does_not_block_live_unique_candidate(self):
+        result = self.result(candidates=[
+            self.candidate(platform="Android"),
+            self.candidate(access_item_id="expired-ios", platform="iOS", authorization_end="2025-12-31"),
+        ])["lines"][0]
+        self.assertTrue(result["auto_apply"], result["message"])
+        self.assertFalse(result["platform_ambiguity"])
+
+    def test_unknown_device_does_not_accept_self_contradictory_candidate(self):
+        result = self.result(candidates=[
+            self.candidate(product_name="一起来修仙005折-ios", platform="Android"),
+        ])["lines"][0]
+        self.assertFalse(result["auto_apply"])
+        self.assertTrue(result["platform_conflict"])
 
     def test_unrelated_platform_candidate_does_not_block_ordinary_registry_fallback(self):
         for overrides in (

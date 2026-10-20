@@ -130,7 +130,10 @@ class SelectedAccessCoreParityTests(unittest.TestCase):
             ("双平台声明", "测试游戏005折-ios", "测试游戏005折", "iOS / Android", True),
             ("同设备后缀", "测试游戏005折-ios", "测试游戏005折_ios", "", True),
             ("跨设备", "测试游戏005折-ios", "测试游戏005折", "Android", False),
-            ("未知账单设备", "测试游戏005折", "测试游戏005折", "iOS", False),
+            ("未知账单设备", "测试游戏005折", "测试游戏005折", "iOS", True),
+            ("未知账单Android", "测试游戏005折", "测试游戏005折", "Android", True),
+            ("未知账单候选后缀", "测试游戏005折", "测试游戏005折-ios", "全版本", True),
+            ("候选自身平台矛盾", "测试游戏005折", "测试游戏005折-ios", "Android", False),
             ("未知合同设备", "测试游戏005折-ios", "测试游戏005折", "", False),
             ("后缀不可扩张", "测试游戏005折-Android", "测试游戏005折-ios", "全版本", False),
             ("不同折扣", "测试游戏005折-ios", "测试游戏01折", "全版本", False),
@@ -175,11 +178,20 @@ class SelectedAccessCoreParityTests(unittest.TestCase):
                 self.assertFalse(saved)
                 self.assertTrue(row["selection_error"])
 
-    def test_metadata_only_device_cannot_certify_a_nonpersisted_platform(self):
-        row, saved = self.both("测试游戏005折", self.candidate(platform="iOS"), line_platform="iOS")
+    def test_metadata_only_device_is_not_used_as_persisted_device_evidence(self):
+        row, saved = self.both("测试游戏005折", self.candidate(platform="Android"), line_platform="Android")
+        self.assertTrue(row["auto_apply"], row["message"])
+        self.assertTrue(saved)
+        self.assertTrue(row["platform_unspecified"])
+        self.assertIn("未推断设备", row["message"])
+        # A supplied contradictory declaration is still negative evidence for
+        # recommendation; the core sees only the durable original game name.
+        row, saved = self.both("测试游戏005折", self.candidate(platform="Android"), line_platform="iOS")
+        self.assertFalse(row["auto_apply"])
+        self.assertTrue(saved)
+        row, saved = self.both("测试游戏005折-ios", self.candidate(platform="Android"), line_platform="Android")
         self.assertFalse(row["auto_apply"])
         self.assertFalse(saved)
-        self.assertIn("平台", row["selection_error"])
 
     def test_missing_verified_customer_id_is_not_inferred_from_display_name(self):
         row = recommend_channel_rules(

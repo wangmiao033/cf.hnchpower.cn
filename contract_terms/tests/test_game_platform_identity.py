@@ -31,19 +31,25 @@ class GamePlatformIdentityTests(unittest.TestCase):
                 with self.subTest(platform=platform, game=game):
                     self.assertTrue(contract_access_matches_line(game, {"product_name": "游戏005折", "platform": platform}))
 
-    def test_specific_or_unknown_platform_is_not_inferred(self):
+    def test_explicit_platform_conflicts_are_not_relaxed(self):
         for line, product, platform in (
             ("游戏-ios", "游戏", "Android"),
             ("游戏-Android", "游戏", "iOS"),
-            ("游戏", "游戏", "iOS"),
-            ("游戏", "游戏", "Android"),
             ("游戏-ios", "游戏", ""),
             ("游戏-ios", "游戏-Android", "全版本"),
-            ("游戏", "游戏-ios", "全版本"),
             ("游戏-ios", "游戏-ios", "Android"),
+            ("游戏", "游戏-ios", "Android"),
         ):
             with self.subTest(line=line, product=product, platform=platform):
                 self.assertFalse(platform_compatible(line, product, candidate_platform=platform))
+
+    def test_unspecified_bill_device_is_compatible_not_inferred(self):
+        for product, platform in (
+            ("游戏", "iOS"), ("游戏", "Android"), ("游戏", "全版本"),
+            ("游戏-ios", "全版本"), ("游戏-Android", "Android"),
+        ):
+            with self.subTest(product=product, platform=platform):
+                self.assertTrue(platform_compatible("游戏", product, candidate_platform=platform))
 
     def test_explicit_device_metadata_is_usable_but_cannot_conflict_with_name(self):
         self.assertTrue(platform_compatible("游戏", "游戏", "iOS", "iOS"))

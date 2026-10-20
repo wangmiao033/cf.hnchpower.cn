@@ -161,11 +161,11 @@ def _explain_missing_contract_list(result: dict, catalog: dict) -> dict:
     updated["contract_catalog"] = catalog
     updated["lines"] = [
         {**line, "message": reason}
-        if not line.get("match") and not line.get("auto_apply") and not line.get("selection_error") and not line.get("platform_conflict")
+        if not line.get("match") and not line.get("auto_apply") and not line.get("selection_error") and not line.get("platform_conflict") and not line.get("platform_ambiguity")
         else line
         for line in (result.get("lines") or [])
     ]
-    if any(not line.get("match") and not line.get("auto_apply") and not line.get("selection_error") and not line.get("platform_conflict")
+    if any(not line.get("match") and not line.get("auto_apply") and not line.get("selection_error") and not line.get("platform_conflict") and not line.get("platform_ambiguity")
            for line in (result.get("lines") or [])):
         updated["message"] = reason
     return updated

@@ -65,10 +65,10 @@ def contract_game_matches(game_name, candidate: dict) -> bool:
     all_platforms = declared in {"全版本", "all", "all platforms"}
     platforms = {"android", "ios"} if re.fullmatch(r"(?:android\s*/\s*ios|ios\s*/\s*android)", declared) else {declared}
     if product_device:
-        return bool(device and device == product_device and
-                    (not declared or all_platforms or device in platforms))
+        return bool((not device or device == product_device) and
+                    (not declared or all_platforms or product_device in platforms))
     if not device:
-        return declared not in {"android", "ios"}
+        return True  # Undeclared bill device is unknown, not incompatible.
     return all_platforms or device in platforms
 
 

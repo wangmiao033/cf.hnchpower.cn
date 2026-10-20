@@ -39,9 +39,10 @@ export function contractAccessMatchesLine(gameName, item = {}) {
   const allPlatforms = ['全版本', 'all', 'all platforms'].includes(declared)
   const declaredPlatforms = /^(?:android\s*\/\s*ios|ios\s*\/\s*android)$/.test(declared) ? ['android', 'ios'] : [declared]
   // An explicit product suffix is narrower than a generic platform field.
-  if (product.platform) return Boolean(line.platform && line.platform === product.platform &&
-    (!declared || allPlatforms || declaredPlatforms.includes(line.platform)))
-  if (!line.platform) return !['android', 'ios'].includes(declared)
+  if (product.platform) return Boolean((!line.platform || line.platform === product.platform) &&
+    (!declared || allPlatforms || declaredPlatforms.includes(product.platform)))
+  // Unknown bill device preserves legacy compatibility; it is not a claim of Android/iOS.
+  if (!line.platform) return true
   return allPlatforms || declaredPlatforms.includes(line.platform)
 }
 

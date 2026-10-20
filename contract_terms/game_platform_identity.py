@@ -50,17 +50,40 @@ def _declared_devices(value: Any) -> set[str]:
     return set()
 
 
+def declared_line_device(line_name: Any, line_platform: Any = "") -> str:
+    """Return only supplied device evidence, never a candidate-derived guess."""
+    _, suffix = split_device_suffix(line_name)
+    declared = _declared_devices(line_platform)
+    return suffix or (next(iter(declared)) if len(declared) == 1 else "")
+
+
+def candidate_platform_scope(candidate: dict) -> tuple[str, ...]:
+    """Comparable coverage for detecting ambiguous unknown-device candidates."""
+    _, suffix = split_device_suffix(candidate.get("original_product_name") or candidate.get("product_name"))
+    if suffix:
+        return (suffix,)
+    label = _platform(candidate.get("platform"))
+    devices = _declared_devices(label)
+    if label in _ALL_PLATFORMS:
+        return ("all",)
+    if devices:
+        return tuple(sorted(devices))
+    return ("unspecified", label)
+
+
 def platform_compatible(
     line_name: Any,
     candidate_name: Any,
     line_platform: Any = "",
     candidate_platform: Any = "",
 ) -> bool:
-    """Check device evidence without inferring a platform for an ambiguous bill.
+    """Reject contradictory device evidence without inventing missing evidence.
 
     A product suffix is narrower than even an all-platform declaration. Blank
     legacy metadata is not evidence that an unsuffixed item covers iOS/Android.
     Explicit bill metadata is usable, but cannot contradict its own name suffix.
+    A bill with no device evidence retains legacy compatibility. The caller must
+    separately guard multiple differing candidates; compatibility is not a guess.
     """
     _, line_suffix = split_device_suffix(line_name)
     _, candidate_suffix = split_device_suffix(candidate_name)
@@ -73,7 +96,7 @@ def platform_compatible(
     line_device = line_suffix or (next(iter(line_declared)) if len(line_declared) == 1 else "")
     if candidate_suffix:
         return bool(
-            line_device == candidate_suffix
+            (not line_device or line_device == candidate_suffix)
             and (
                 not candidate_label
                 or candidate_label in _ALL_PLATFORMS
@@ -81,7 +104,7 @@ def platform_compatible(
             )
         )
     if not line_device:
-        return len(candidate_declared) != 1
+        return True
     return candidate_label in _ALL_PLATFORMS or line_device in candidate_declared
 
 
