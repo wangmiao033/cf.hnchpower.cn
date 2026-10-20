@@ -1,11 +1,12 @@
-## 2026-10-20｜大熊游戏：自营渠道第一阶段只读页面与生产迁移解耦（待正式发布）
-- **类型与需求**：业务模块渐进式发布 / 财务数据保护。优先在原对账系统增加大熊游戏的原生入口，暂不备份或修改数据库；未来真实写入另行评审。
-- **功能与影响范围**：新增「对账中心 → 自营渠道 · 大熊游戏」，仅管理员可见；包含经营总览、游戏利润、买量管理、合同关联四个只读页签；明确标注模拟现金订单和买量数据，广告账户充值不当作消耗，未核实研发分成和费用时真实利润显示「待核算」。沿用原系统左侧菜单和工作区；原研发账单、渠道账单、合同、银行、发票、运营费用页面与业务处理保持不变。
-- **财务安全措施**：不新增表或数据库迁移，不读取、不写入真实订单/合同/账单/银行流水/发票；生产 Vercel 构建脚本从自动执行 schema migrations 改为仅执行应用构建。数据库升级必须独立审核、独立备份后执行；新增防回归单测。同时防止仅补写本更新日志就再次触发生产部署。
-- **代码记录**：[PR #270](https://github.com/wangmiao033/cf.hnchpower.cn/pull/270)；开发分支 `feature/daxiong-readonly-phase1-20261020`。实际正式提交待合并后补记。
-- **自动验证**：前版 PR 前端构建、浏览器回归及后端合同测试均通过；本轮增补迁移安全测试及生产工作流调整，仍以最新提交的 CI 最终结论为准。
-- **部署状态**：截至记录时未合并、未发布生产。独立 Vercel Preview `dpl_F3YmqPhg5p19BkpF8JTt5tX23M6Y` 被原 Ignored Build Step（`exit 0`）取消，属于部署配置跳过而非应用测试失败；现有正式系统未变更。
-- **待验证/已知问题**：需核实正式发布 READY、生产构建日志明确跳过数据库迁移、站点及健康接口响应；管理员实际登录验收待做。本阶段只有只读演示数据，真实 CSV 持久化、研发合同关联与应付草稿均未上线。
+## 2026-10-20 12:19（北京时间）｜大熊游戏：自营渠道第一阶段只读页面正式上线，生产构建与数据库迁移解耦
+- **类型与需求**：自营渠道首阶段功能 / 数据安全发布。按用户要求小批量上线，不为纯页面开发操作生产数据库；真实数据读写按后续阶段独立推进。
+- **变更内容**：在原后台「对账中心」新增「自营渠道 · 大熊游戏」，仅管理员可见；原生 React 四个页签：经营总览、游戏利润、买量管理、合同关联。样例金额明确标注为演示，广告账户充值与实际消耗分离；没有研发合同或运营费用依据时，真实利润不显示臆造结果。支持月份切换、游戏搜索与跳回原有服务器成本、合同台账、研发账单。
+- **影响范围与财务安全**：仅新增前端只读页面、样例数据和导航/权限控制；不对生产数据库迁移、写入或批量重算，不新增真实订单、研发账单、合同、银行流水或发票记录。保留原合同、研发结算、渠道对账、费用、银行资金、发票等业务服务和页面。
+- **发布流程安全改造**：`scripts/vercel-production-build-v2.sh` 已从自动执行数据库 schema migrations 改为仅构建应用；生产日志明确出现 `Production application build: skipping database schema migrations`，未出现运行迁移器的记录。数据库 schema 迁移以后须独立执行和备份。GitHub 部署工作流针对纯 `CHANGELOG.md` 更新禁止重复部署；新增迁移禁用测试。
+- **代码提交**：[PR #270](https://github.com/wangmiao033/cf.hnchpower.cn/pull/270)；正式合并提交 [9096276](https://github.com/wangmiao033/cf.hnchpower.cn/commit/9096276cc1adeeb78aed32c5ba294b593a38e78f)。相对上一生产版仅新增本次前端只读/部署安全改动与此前的日志更新，不更改业务后端数据库程序及 SQL 迁移文件。
+- **验证结果**：[PR Quality Gate #39368542691](https://github.com/wangmiao033/cf.hnchpower.cn/actions/runs/39368542691) 前端单测、浏览器回归、构建、后端及合同服务全部成功；[合并后 Quality Gate #39368812933](https://github.com/wangmiao033/cf.hnchpower.cn/actions/runs/39368812933) 也全部成功。[Production Deploy #39368812800](https://github.com/wangmiao033/cf.hnchpower.cn/actions/runs/39368812800) 前后端检查、正式构建、健康检查全部成功。独立访问 `/`、`/health`、`/health/db` 均返回 HTTP 200；健康响应分别为 `{"ok":true}`、`{"ok":true,"database":"connected"}`。正式 JS 资源返回 200，包含 `self-operated-daxiong` 路由和 `SelfOperatedPreviewPage` 懒加载引用。
+- **正式发布信息**：北京时间 2026-10-20 12:19:37，Vercel `production / READY`，Deployment ID `dpl_2X5k7uXCKLjXu2kWD21DVVgvt5fu`，SHA `9096276cc1adeeb78aed32c5ba294b593a38e78f`，别名 <https://cf.hnchpower.cn/> 已由 Vercel 部署元数据确认指向该版本。上一生产 `dpl_3GpUgL37fTaRGUfMi9XqvE5rvvsp` 为可回退候选。
+- **预览历史与待验收**：此前独立 Vercel Preview `dpl_F3YmqPhg5p19BkpF8JTt5tX23M6Y` 因已有 Ignored Build Step `exit 0` 被取消，非代码构建失败。生产管理员真实登录、页面视觉与权限实机验证尚待人工确认；本阶段未导入正式 CSV、未连接真实合同或生成研发应付账单。后续涉及正式财务写入须先有可恢复数据库快照。
 
 ## 2026-10-20 00:10（北京时间）｜核对记录独立只读面板正式上线
 - **类型与原因**：审计入口修复；旧 index.html 明确停用完整 Bill360 工作区，导致原核对记录内容已挂载但被全局 CSS 隐藏。
