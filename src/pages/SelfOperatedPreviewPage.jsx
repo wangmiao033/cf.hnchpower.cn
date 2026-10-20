@@ -247,7 +247,7 @@ export default function SelfOperatedPreviewPage(){
    </div>}
    {serverSaved&&<p role="status" className="so-server-success">正式订单保存成功：新增{serverSaved.inserted}笔，历史重复跳过{serverSaved.skipped_existing}笔；已经留存导入批次审计。</p>}
    {serverError&&<p role="alert" className="so-draft-error">{serverError}</p>}
-   {draftError&&<p role="alert" className="so-draft-error">{draftError}</p>
+   {draftError&&<p role="alert" className="so-draft-error">{draftError}</p>}
    {draftLoading&&<p role="status" className="so-draft-loading">正在检查本机草稿…</p>}
   <div className="so-metrics">{kpis.map(k=><article key={k.name} className="so-metric"><span>{k.name}</span><strong title={k.value===null?'尚未核算':exactMoney(k.value)}>{k.value===null?'待核算':<Cash compact amount={k.value}/>}</strong><small>{k.note}</small></article>)}</div>
   <div className="so-tabs" role="tablist" aria-label="大熊游戏模块">{TABS.map(([id,label])=><button type="button" key={id} role="tab" aria-selected={tab===id} className={tab===id?'active':''} onClick={()=>{setTab(id);setQuery('')}}>{label}</button>)}</div>
