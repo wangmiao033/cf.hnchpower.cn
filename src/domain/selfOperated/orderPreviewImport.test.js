@@ -1,7 +1,7 @@
 import {describe,it,expect} from 'vitest'
 import {
   detectOrderHeader,suggestFieldMapping,getMissingMapping,
-  readAmountCents,normalizePaidDate,inspectOrderRows,reportFromInspectedRows
+  readAmountCents,normalizePaidDate,inspectOrderRows,reportFromInspectedRows,parseDelimitedText
 } from './orderPreviewImport.js'
 
 const headers=['订单编号','游戏名称','游戏ID','实际支付金额','支付时间','支付状态','业务类型']
@@ -102,4 +102,27 @@ describe('大熊游戏订单导入只读核对',()=>{
     expect(reportFromInspectedRows(report,'2026-09').cash).toBe(0.03)
     expect(reportFromInspectedRows(report,'2026-10').cash).toBe(1)
   })
+  it('原始CSV保留18位订单号和前导零，正确处理引号和单元格换行',()=>{
+    const matrix=parseDelimitedText('订单号,游戏名称,金额,订单时间\n"000123456789012345","帝国,雄师",12.03,2026-09-01\n"ABC\n123","雷鸣""三国",1.01,2026-09-02\n')
+    expect(matrix[1]).toEqual(['000123456789012345','帝国,雄师','12.03','2026-09-01'])
+    expect(matrix[2]).toEqual(['ABC\n123','雷鸣"三国','1.01','2026-09-02'])
+    expect(parseDelimitedText('A\tB\n001\t1', '\t')[1][0]).toBe('001')
+    expect(()=>parseDelimitedText('a,b\n"unclosed,xx')).toThrow('引号')
+  })
+
+  it('有面额和实付两列时优先选择实付，不按列出现顺序误选充值面额',()=>{
+    const mapping=suggestFieldMapping(['订单号','充值金额','游戏名','订单时间','实际支付金额'])
+    expect(mapping.paidAmount).toBe('4')
+    expect(mapping.gameName).toBe('2')
+  })
+
+  it('疑似Excel科学计数法订单号直接排除，不允许与真实订单混淆',()=>{
+    const result=inspectOrderRows([headers,
+      ['1.23456E+17','帝国雄师','893','90.00','2026-09-05','成功','游戏充值']
+    ])
+    expect(result.summary.invalid).toBe(1)
+    expect(result.summary.gameCents).toBe(0)
+    expect(result.issues[0].reason).toContain('科学计数法')
+  })
+
 })
