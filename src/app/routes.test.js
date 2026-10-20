@@ -58,7 +58,8 @@ describe('统一对账进度路由', () => {
     ])
     expect(getTabView(VIEWS.RECON_PROGRESS)).toBe(VIEWS.RECON_PROGRESS)
     expect(getGroupForView(VIEWS.SELF_OPERATED)?.id).toBe('reconciliation')
-    expect(getPageTitle(VIEWS.SELF_OPERATED)).toBe('自营渠道')
+    expect(getPageTitle(VIEWS.SELF_OPERATED)).toBe('大熊游戏')
+    expect(getGroupForView(VIEWS.SELF_OPERATED)?.items.find(item => item.view === VIEWS.SELF_OPERATED)?.label).toBe('大熊游戏')
   })
 
   it('渠道智能补齐留在新增账单页，左侧不再显示重复入口', () => {
