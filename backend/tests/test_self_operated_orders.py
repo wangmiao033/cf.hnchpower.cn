@@ -90,9 +90,11 @@ class SelfOperatedLedgerTest(unittest.TestCase):
             "DAXIONG_VERIFIED_BACKUP_AT": datetime.now(timezone.utc).isoformat(),
         })
         self.flags.start()
-        self.addCleanup(self.flags.stop)
-        self.addCleanup(self.db.close)
+        # unittest cleanup callbacks run in LIFO order: close Session first,
+        # then dispose the engine to avoid closing an active SQLite connection.
         self.addCleanup(self.engine.dispose)
+        self.addCleanup(self.db.close)
+        self.addCleanup(self.flags.stop)
 
     def commit(self, request):
         result = confirm_order_import(self.db, request, user_id="admin-1")
