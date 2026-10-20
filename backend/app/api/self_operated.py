@@ -7,11 +7,13 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_db
 from app.core.security import require_admin
 from app.models.user import AuthUser
+from app.models.self_operated import SelfOperatedOrder
 from app.schemas.self_operated import (
     SelfOperatedConfirmRequest,
     SelfOperatedConfirmResult,
@@ -31,10 +33,20 @@ router = APIRouter(dependencies=[Depends(require_admin)])
 @router.get("/status")
 def self_operated_status(db: Session = Depends(get_db)) -> dict:
     schema_ready, write_ready, reason = readiness(db)
+    months = []
+    if schema_ready:
+        months = db.execute(
+            select(SelfOperatedOrder.settlement_month)
+            .where(SelfOperatedOrder.source_label == "daxiong")
+            .distinct()
+            .order_by(SelfOperatedOrder.settlement_month.desc())
+            .limit(48)
+        ).scalars().all()
     return {
         "schema_ready": schema_ready,
         "write_ready": write_ready,
         "reason": reason,
+        "months": months,
         "source": "daxiong",
         "note": "订单数据库入账需生产备份核实后显式启用。",
     }
