@@ -14,7 +14,7 @@ async function openReadOnly(page) {
   })
   await page.goto('/tests/fixtures/daxiong-responsive.html')
   await expect(page.locator('.so-page')).toBeVisible()
-  await expect(page.getByRole('button', { name: '经营总览' })).toBeVisible()
+  await expect(page.getByRole('tab', { name: '经营总览' })).toBeVisible()
   return methods
 }
 
@@ -84,7 +84,7 @@ test('resizes without reloading or losing current month and active tab', async (
   await page.getByLabel('账期').selectOption('2026-08')
   await page.getByRole('tab', { name: '游戏利润' }).click()
   await expect(page.getByRole('tabpanel', { name: '游戏利润' })).toBeVisible()
-  await expect(page.getByText('¥16,500.20').first()).toBeVisible()
+  await expect(page.locator('.so-metric strong').first()).toHaveAttribute('title', '¥16,500.20')
   await page.setViewportSize({ width: 390, height: 844 })
   await expect(page.getByLabel('账期')).toHaveValue('2026-08')
   await expect(page.getByRole('tab', { name: '游戏利润' })).toHaveAttribute('aria-selected', 'true')
