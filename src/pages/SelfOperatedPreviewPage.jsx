@@ -5,6 +5,10 @@ import { loadLocalDraft, saveLocalDraft, deleteLocalDraft } from '@/domain/selfO
 import { VIEWS } from '@/app/routes.js'
 import { compactMoney, exactMoney, previewFor, PREVIEW_MONTHS } from '@/domain/selfOperated/readonlySample.js'
 import { reportFromInspectedRows } from '@/domain/selfOperated/orderPreviewImport.js'
+import {
+ getDaxiongServerStatus, getDaxiongServerMonth, confirmDaxiongServerImport,
+ prepareDaxiongServerImport, daxiongServerSummaryToReport
+} from '@/lib/api/selfOperatedOrders.js'
 import DaxiongOrderImportDialog from './DaxiongOrderImportDialog.jsx'
 import './SelfOperatedPreviewPage.css'
 
@@ -16,15 +20,15 @@ function Cash({amount,compact=false}){
  return <span title={exactMoney(amount)}>{compact?compactMoney(amount):exactMoney(amount)}</span>
 }
 function Status({children='待接入'}){return <span className="so-status">{children}</span>}
-function GameTable({report,profit,query,setQuery,imported=false,storedLocally=false}){
+function GameTable({report,profit,query,setQuery,imported=false,storedLocally=false,serverLedger=false}){
  const visible=report.games.filter(g=>`${g.name} ${g.id}`.toLowerCase().includes(query.trim().toLowerCase()))
  return <section className="so-panel so-table-panel">
-  <div className="so-panel-head"><div><h2>{profit?'逐游戏经营贡献':'游戏经营概览'}</h2><p>{imported?(storedLocally?'本机草稿里的已核对现金订单 · 未入正式账本':'本次文件有效现金订单 · 浏览器临时预览，未保存'):'游戏ID汇总 · 演示现金实付，非充值面额'}</p></div><input value={query} onChange={e=>setQuery(e.target.value)} type="search" placeholder="搜索游戏 / ID" aria-label="搜索游戏"/></div>
+  <div className="so-panel-head"><div><h2>{profit?'逐游戏经营贡献':'游戏经营概览'}</h2><p>{serverLedger?'服务器正式订单记录 · 按支付日期归属账期':imported?(storedLocally?'本机草稿里的已核对现金订单 · 未入正式账本':'本次文件有效现金订单 · 浏览器临时预览，未保存'):'游戏ID汇总 · 演示现金实付，非充值面额'}</p></div><input value={query} onChange={e=>setQuery(e.target.value)} type="search" placeholder="搜索游戏 / ID" aria-label="搜索游戏"/></div>
   <div className="so-scroll"><table className="so-table so-game-table"><thead><tr><th>游戏 / 占比</th><th className="so-right">现金实付</th><th className="so-right">买量成本</th><th className="so-right">{profit?'经营贡献':'研发应付'}</th><th>合同状态</th></tr></thead>
   <tbody>{visible.map(g=><tr key={g.id+'-'+g.name}><td><strong>{g.name}</strong><small>ID {g.id} · {report.cash?(g.cash/report.cash*100).toFixed(1):'0.0'}%</small></td><td data-label="现金实付" className="so-right"><Cash amount={g.cash}/></td><td data-label="买量成本" className="so-right so-muted">待接入</td><td data-label={profit?"经营贡献":"研发应付"} className="so-right so-muted">待核算</td><td data-label="合同状态"><Status>待关联合同</Status></td></tr>)}
    {!visible.length&&<tr><td colSpan={5} className="so-empty">未找到对应游戏</td></tr>}
   </tbody></table></div>
-  <div className="so-table-foot">显示 {visible.length}/{report.games.length} 款 · 当前数据仅用于界面确认</div>
+  <div className="so-table-foot">显示 {visible.length}/{report.games.length} 款 · {serverLedger?"来自正式服务器订单台账":"当前数据仅用于界面确认"}</div>
  </section>
 }
 
@@ -41,9 +45,25 @@ export default function SelfOperatedPreviewPage(){
  const [draftLoading,setDraftLoading]=useState(true)
  const [draftBusy,setDraftBusy]=useState(false)
  const [draftError,setDraftError]=useState('')
+ const [serverStatus,setServerStatus]=useState(null)
+ const [serverMonth,setServerMonth]=useState(null)
+ const [serverBusy,setServerBusy]=useState(false)
+ const [serverError,setServerError]=useState('')
+ const [serverSaved,setServerSaved]=useState(null)
+ const [verifiedStatus,setVerifiedStatus]=useState(false)
+ const [verifiedType,setVerifiedType]=useState(false)
  const savedHere=Boolean(imported&&localDraft?.payload?.draftId===imported.draftId)
- const months=imported?.months?.length?imported.months:Object.keys(PREVIEW_MONTHS)
- const report=useMemo(()=>imported?reportFromInspectedRows(imported,month):previewFor(month),[month,imported])
+ const hasOfficialSchema=Boolean(serverStatus?.schema_ready)
+ const officialView=!imported&&hasOfficialSchema
+ const months=imported?.months?.length?imported.months:(serverStatus?.months?.length?serverStatus.months:Object.keys(PREVIEW_MONTHS))
+ const report=useMemo(()=>{
+   if(imported)return reportFromInspectedRows(imported,month)
+   if(hasOfficialSchema){
+     const actual=serverMonth?.settlement_month===month?daxiongServerSummaryToReport(serverMonth):null
+     return actual||{label:month,orders:0,cash:0,coinCash:0,spent:null,topup:null,ads:[],games:[],source:'server-loading'}
+   }
+   return previewFor(month)
+ },[month,imported,hasOfficialSchema,serverMonth])
  useEffect(()=>{
    let active=true
    setDraftLoading(true)
@@ -68,8 +88,35 @@ export default function SelfOperatedPreviewPage(){
    return ()=>{active=false}
  },[accountId])
 
+ useEffect(()=>{
+   let live=true
+   if(!accountId){setServerStatus(null);setServerMonth(null);return()=>{live=false}}
+   getDaxiongServerStatus().then(status=>{
+     if(live)setServerStatus(status&&typeof status==='object'?status:null)
+   }).catch(()=>{if(live)setServerStatus(null)})
+   return()=>{live=false}
+ },[accountId])
+
+ useEffect(()=>{
+   let live=true
+   if(!hasOfficialSchema||!accountId){
+     setServerMonth(null)
+     return()=>{live=false}
+   }
+   getDaxiongServerMonth(month).then(summary=>{
+     if(live)setServerMonth(summary?.settlement_month===month?summary:null)
+   }).catch(error=>{
+     if(live)setServerError('读取正式订单失败：'+(error?.message||'请稍后重试'))
+   })
+   return()=>{live=false}
+ },[hasOfficialSchema,accountId,month])
+
  const acceptPreview=parsed=>{
    if(!parsed?.months?.length)return
+   setVerifiedStatus(false)
+   setVerifiedType(false)
+   setServerError('')
+   setServerSaved(null)
    setImported({...parsed,draftId:crypto.randomUUID()})
    setMonth(parsed.months[0])
    setTab('overview')
@@ -118,12 +165,44 @@ export default function SelfOperatedPreviewPage(){
    setTab('overview');setQuery('')
    setDraftError('')
  }
+ const confirmOfficialSave=async()=>{
+   if(!imported||!serverStatus?.write_ready||serverBusy)return
+   setServerError('');setServerSaved(null)
+   try{
+     if(!verifiedStatus||!verifiedType){
+       throw new Error('正式入账前需要确认原文件的支付状态和游戏/竹B业务类型两项。')
+     }
+     const payload=prepareDaxiongServerImport(imported,{
+       statusConfirmed:verifiedStatus,typeConfirmed:verifiedType
+     })
+     const count=payload.rows.length
+     if(!window.confirm('确认正式保存'+count+'笔大熊游戏现金订单到服务器？订单号会做永久去重，任何金额冲突将整批拒绝；此操作有审计记录。'))return
+     setServerBusy(true)
+     const fresh=await getDaxiongServerStatus()
+     if(!fresh?.write_ready)throw new Error('服务器尚未完成生产数据库备份验证，正式保存没有开放。')
+     const result=await confirmDaxiongServerImport(payload)
+     setServerSaved(result)
+     const status=await getDaxiongServerStatus()
+     setServerStatus(status)
+     const after=await getDaxiongServerMonth(month)
+     setServerMonth(after)
+     setImported(null)
+     setQuery('')
+   }catch(error){
+     setServerError('正式保存未完成：'+(error?.message||'请保留原始文件和本机草稿'))
+   }finally{setServerBusy(false)}
+ }
  const go=view=>setActiveView?.(view)
  const kpis=imported?[
   {name:savedHere?'游戏现金实付（本机草稿）':'游戏现金实付（未保存）',value:report.cash,note:report.orders+' 笔有效游戏订单 · 非正式入账'},
   {name:'竹B现金充值（独立）',value:report.coinCash,note:'单列核对，不与游戏充值重复合计'},
   {name:'研发应付测算',value:null,note:'未关联合同，暂不生成应付'},
   {name:'本月经营利润',value:null,note:'尚未接入真实买量及运营费用'}
+ ]:officialView?[
+  {name:'游戏现金实付（已入账）',value:report.cash,note:report.orders+' 笔已保存现金游戏订单'},
+  {name:'竹B现金充值（已入账）',value:report.coinCash,note:'独立收款统计，不重复计游戏充值'},
+  {name:'研发应付测算',value:null,note:'尚未关联合同与研发账单'},
+  {name:'本月经营利润',value:null,note:'未接入买量和费用，暂不核算'}
  ]:[
   {name:'游戏现金订单实付',value:report.cash,note:`${report.orders} 笔现金订单 · 示例`},
   {name:'买量实际消耗',value:report.spent,note:'不含广告账户充值'},
@@ -134,12 +213,13 @@ export default function SelfOperatedPreviewPage(){
   <div className="so-top">
    <div role="status" className="so-notice"><span>大熊游戏 · 第二阶段B</span> {imported
      ? (savedHere?'本机草稿：'+imported.fileName+'（非正式入账）':'文件预览：'+imported.fileName+'（未保存，刷新会丢失）')
-     : (localDraft?'当前展示演示数据，可恢复本机草稿':'示例数据；支持文件核对与手动保存本机草稿，不会正式入账。')}</div>
+     : (officialView?'正在查看服务器正式订单台账':localDraft?'当前展示演示数据，可恢复本机草稿':'示例数据；支持文件核对与手动保存本机草稿，不会正式入账。')}</div>
    <div className="so-tools">
     <label htmlFor="so-month">账期</label>
-    <select id="so-month" value={month} onChange={e=>{setMonth(e.target.value);setQuery('')}}>{months.map(key=><option key={key} value={key}>{imported?key.replace(/^(\d{4})-(\d{2})$/,(s,y,m)=>y+'年'+Number(m)+'月'):PREVIEW_MONTHS[key].label}</option>)}</select>
+    <select id="so-month" value={month} onChange={e=>{setMonth(e.target.value);setQuery('')}}>{months.map(key=><option key={key} value={key}>{imported||hasOfficialSchema?key.replace(/^(\d{4})-(\d{2})$/,(s,y,m)=>y+'年'+Number(m)+'月'):PREVIEW_MONTHS[key].label}</option>)}</select>
     <button type="button" className="so-import-launch" onClick={()=>setImportOpen(true)} disabled={draftLoading}>导入订单 · 先核对</button>
     {!imported&&localDraft&&<button type="button" onClick={restoreView}>恢复本机草稿</button>}
+    {imported&&hasOfficialSchema&&<button type="button" onClick={resetView}>查看正式订单台账</button>}
     <a href={DEMO_URL} target="_blank" rel="noopener noreferrer">完整原型 ↗</a>
    </div>
   </div>
@@ -155,15 +235,25 @@ export default function SelfOperatedPreviewPage(){
        {!savedHere&&<button type="button" className="so-device-save" disabled={draftLoading||draftBusy||!accountId} onClick={saveDraftToDevice}>{draftBusy?'正在保存…':'保存本机草稿（非正式入账）'}</button>}
        <button type="button" onClick={resetView}>清除当前预览</button>
        {localDraft&&<button type="button" className="so-device-delete" disabled={draftBusy} onClick={removeDraftFromDevice}>删除本机草稿</button>}
+       <button type="button" className="so-device-save" disabled={!serverStatus?.write_ready||serverBusy} onClick={confirmOfficialSave}>
+         {serverBusy?'正式保存中…':serverStatus?.write_ready?'确认正式保存到服务器':'正式入账 · 待备份'}
+       </button>
      </div>
    </div>}
-   {draftError&&<p role="alert" className="so-draft-error">{draftError}</p>}
+   {imported&&serverStatus?.write_ready&&<div className="so-server-confirm">
+     <strong>正式入账前核对：</strong>本次只会保存已支付、已确认类型的有效现金订单，重复订单跳过，金额冲突整批拒绝。
+     <label><input type="checkbox" checked={verifiedStatus} onChange={event=>setVerifiedStatus(event.target.checked)}/>原始文件已核对支付状态列</label>
+     <label><input type="checkbox" checked={verifiedType} onChange={event=>setVerifiedType(event.target.checked)}/>原始文件已核对业务类型列（游戏/竹B）</label>
+   </div>}
+   {serverSaved&&<p role="status" className="so-server-success">正式订单保存成功：新增{serverSaved.inserted}笔，历史重复跳过{serverSaved.skipped_existing}笔；已经留存导入批次审计。</p>}
+   {serverError&&<p role="alert" className="so-draft-error">{serverError}</p>}
+   {draftError&&<p role="alert" className="so-draft-error">{draftError}</p>
    {draftLoading&&<p role="status" className="so-draft-loading">正在检查本机草稿…</p>}
   <div className="so-metrics">{kpis.map(k=><article key={k.name} className="so-metric"><span>{k.name}</span><strong title={k.value===null?'尚未核算':exactMoney(k.value)}>{k.value===null?'待核算':<Cash compact amount={k.value}/>}</strong><small>{k.note}</small></article>)}</div>
   <div className="so-tabs" role="tablist" aria-label="大熊游戏模块">{TABS.map(([id,label])=><button type="button" key={id} role="tab" aria-selected={tab===id} className={tab===id?'active':''} onClick={()=>{setTab(id);setQuery('')}}>{label}</button>)}</div>
   <div role="tabpanel" aria-label={TABS.find(([id])=>id===tab)?.[1]}>
    {(tab==='overview'||tab==='profit')&&<div className="so-columns">
-    <GameTable report={report} profit={tab==='profit'} query={query} setQuery={setQuery} imported={Boolean(imported)} storedLocally={savedHere}/>
+    <GameTable report={report} profit={tab==='profit'} query={query} setQuery={setQuery} imported={Boolean(imported)} storedLocally={savedHere} serverLedger={officialView}/>
     <aside className="so-aside">
      {tab==='overview'?<>
       <section className="so-panel so-pad"><h2>本月待办</h2>
@@ -174,8 +264,8 @@ export default function SelfOperatedPreviewPage(){
       <section className="so-panel so-pad"><h2>账户与费用归属</h2><p>公司主体：广州熊动科技有限公司</p><p>收款账户：网商银行对公账户</p><p>服务器、CDN、域名依旧在原「运营费用」管理。</p></section>
      </>:<>
       <section className="so-panel so-pad"><h2>平台经营贡献</h2>
-       <div className="so-ledger"><span>现金订单实付（{imported?'未保存':'示例'}）</span><Cash compact amount={report.cash}/></div>
-       <div className="so-ledger"><span>广告实际消耗（{imported?'未接入':'示例'}）</span>{imported?<em>待接入</em>:<Cash compact amount={report.spent}/>}</div>
+       <div className="so-ledger"><span>现金订单实付（{imported?'未保存':officialView?'已入账':'示例'}）</span><Cash compact amount={report.cash}/></div>
+       <div className="so-ledger"><span>广告实际消耗（{imported||officialView?'未接入':'示例'}）</span>{imported||officialView?<em>待接入</em>:<Cash compact amount={report.spent}/>}</div>
        <div className="so-ledger"><span>研发分成</span><em>待关联合同</em></div>
        <div className="so-ledger"><span>运营费用</span><em>待核实</em></div>
        <div className="so-profit-total"><span>本月利润</span><strong>待核算</strong></div>
@@ -187,15 +277,15 @@ export default function SelfOperatedPreviewPage(){
    </div>}
    {tab==='ads'&&<div className="so-columns">
     <section className="so-panel so-table-panel">
-     <div className="so-panel-head"><div><h2>买量及相关记录</h2><p>{imported?'订单文件不包含可核验的真实买量记录，暂不显示模拟广告费用':'TapTap 等广告账户充值与消耗分开管理'}</p></div><Status>{imported?'待接入':'演示数据'}</Status></div>
+     <div className="so-panel-head"><div><h2>买量及相关记录</h2><p>{imported||officialView?'订单台账不包含真实买量记录，暂不展示模拟费用':'TapTap 等广告账户充值与消耗分开管理'}</p></div><Status>{imported||officialView?'待接入':'演示数据'}</Status></div>
      <div className="so-scroll"><table className="so-table so-ads-table"><thead><tr><th>日期</th><th>记录类型</th><th>广告平台 / 游戏归属</th><th className="so-right">金额</th></tr></thead><tbody>
       {report.ads.map(a=><tr key={a.id}><td data-label="日期">{month.slice(0,4)}-{a.date}</td><td data-label="记录类型"><span className={a.kind==='topup'?'so-topup':'so-spend'}>{a.kind==='topup'?'账户充值':'实际消耗'}</span></td><td data-label="平台与归属">{a.platform} · {a.game}</td><td data-label="金额" className="so-right"><Cash amount={a.amount}/></td></tr>)}
-     {imported&&!report.ads.length&&<tr><td colSpan={4} className="so-empty">真实买量数据未接入，游戏充值不可当作广告消耗。</td></tr>}
+     {(imported||officialView)&&!report.ads.length&&<tr><td colSpan={4} className="so-empty">真实买量数据未接入，游戏充值不可当作广告消耗。</td></tr>}
      </tbody></table></div>
-     <div className="so-table-foot">{imported?'买量来源等待单独核对；不与充值订单合并':'仅作演示，不写入运营费用或银行系统'}</div>
+     <div className="so-table-foot">{imported||officialView?'买量来源等待单独核对；不与充值订单合并':'仅作演示，不写入运营费用或银行系统'}</div>
     </section>
     <aside className="so-aside">
-     <section className="so-panel so-pad"><h2>本月买量金额</h2><div className="so-ledger"><span>广告账户充值</span>{imported?<em>待接入</em>:<Cash compact amount={report.topup}/>}</div><div className="so-ledger"><span>广告实际消耗</span>{imported?<em>待接入</em>:<Cash compact amount={report.spent}/>}</div><p>账户充值是预付，实际消耗才是游戏买量成本。</p></section>
+     <section className="so-panel so-pad"><h2>本月买量金额</h2><div className="so-ledger"><span>广告账户充值</span>{imported||officialView?<em>待接入</em>:<Cash compact amount={report.topup}/>}</div><div className="so-ledger"><span>广告实际消耗</span>{imported||officialView?<em>待接入</em>:<Cash compact amount={report.spent}/>}</div><p>账户充值是预付，实际消耗才是游戏买量成本。</p></section>
      <section className="so-panel so-pad"><h2>平台服务器成本</h2><p>归属原有「运营费用」，此处不再建立服务器管理栏目。</p><button type="button" onClick={()=>go(VIEWS.SERVER_COSTS)}>打开原服务器成本 →</button></section>
     </aside>
    </div>}
@@ -212,7 +302,7 @@ export default function SelfOperatedPreviewPage(){
     </aside>
    </div>}
   </div>
-  <footer className="so-footer">大熊游戏 · 第二阶段B · {savedHere?'仅在本机浏览器保存订单草稿，正式数据库尚未写入':imported?'文件数据仅当前页面暂存，未正式入账':'当前金额为演示数据；本机草稿与正式账本严格区分'}</footer>
+  <footer className="so-footer">大熊游戏 · {officialView?'服务器正式订单台账 · 当前仅订单收入，未计买量、研发分成和运营费用':savedHere?'本机草稿，非正式入账':imported?'文件仅临时预览，尚未正式入账':'演示数据，尚未正式入账'}</footer>
   {importOpen&&<DaxiongOrderImportDialog onClose={()=>setImportOpen(false)} onApply={acceptPreview}/>}
  </div>
 }
