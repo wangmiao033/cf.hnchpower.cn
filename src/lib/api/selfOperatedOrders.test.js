@@ -44,7 +44,7 @@ describe('大熊游戏正式入账请求，只发送已核实的现金订单',()
     expect(()=>prepareDaxiongServerImport(p)).toThrow('金额')
     p.summary.gameCents=10003
     p.records.find(r=>r.disposition==='ready').amountCents=20.12
-    expect(()=>prepareDaxiongServerImport(p)).toThrow('整数')
+    expect(()=>prepareDaxiongServerImport(p)).toThrow('精确到分')
     p.records.find(r=>r.disposition==='ready').amountCents=10001
     p.records.find(r=>r.disposition==='ready').orderId=''
     expect(()=>prepareDaxiongServerImport(p)).toThrow('订单编号')
