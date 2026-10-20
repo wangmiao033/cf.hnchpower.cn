@@ -1,3 +1,4 @@
+import type { ContractStandardSettlementAmount } from '@/lib/api/contractTerms.ts'
 import { apiGet, apiPost } from '@/lib/api/client.ts'
 
 export type ContractDifferenceStatus = 'pending' | 'processing' | 'resolved'
@@ -33,8 +34,11 @@ export type ContractDifferenceCase = {
   description: string
   owner: string
   evidence: string[]
+  amount_is_reference?: boolean
+  amount_certainty?: 'reference' | 'deterministic' | 'legacy'
   // Server includes the audited contract field checks for rate-only differences.
   source_snapshot?: {
+    contract_amount?: Partial<ContractStandardSettlementAmount> | null
     checks?: Array<{
       key?: string
       label?: string

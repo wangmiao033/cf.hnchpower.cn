@@ -183,6 +183,9 @@ def _raw_channel_bill(conn: psycopg.Connection, bill_id: str) -> tuple[dict, dic
             str(row["id"]): {
                 "line_id": str(row["id"]),
                 "billing_flow": _float(row.get("billing_flow")),
+                # Persisted line flow is converted by its stored factor, just as
+                # the channel settlement engine does; game names are not input.
+                "billing_flow_basis": "raw",
                 "discount_factor": _float(row.get("discount_factor"), 1.0),
                 "voucher_cost": _float(row.get("voucher_cost")),
                 "no_worry_cost": _float(row.get("no_worry_cost")),
@@ -210,6 +213,7 @@ def _raw_channel_bill(conn: psycopg.Connection, bill_id: str) -> tuple[dict, dic
             # Header billing_flow is already the compatibility aggregate. Legacy
             # rows have no separate discount factor, so use 1.
             "billing_flow": _float(record.get("billing_flow")),
+            "billing_flow_basis": "actual_paid",
             "discount_factor": 1.0,
             "voucher_cost": _float(record.get("voucher_cost")),
             "no_worry_cost": _float(record.get("no_worry_cost")),

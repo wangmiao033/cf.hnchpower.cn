@@ -1,3 +1,4 @@
+import { differenceAmountPresentation } from '@/domain/contract/differenceAmountPresentation.js'
 import { apiGet, apiPost } from '@/lib/api/client.ts'
 import {
   createContractReconciliationSnapshot,
@@ -173,6 +174,7 @@ const BLOCKED_AUTHORIZATION = new Set([
 /** Line fails only on share/fee/tax metadata while contract amount already matches the bill. */
 export function isRateOnlyLineContractFailure(line: ContractBillLineCheck): boolean {
   const amount = line.contract_amount
+  if (amount?.status === 'manual' || amount?.deterministic === false) return false
   const expected = finiteNumber(amount?.expected_amount)
   const actual = finiteNumber(amount?.actual_amount)
   const amountAligned = amount?.status === 'pass' || (
@@ -187,7 +189,7 @@ export function isRateOnlyLineContractFailure(line: ContractBillLineCheck): bool
 }
 
 export function isRateOnlyUnresolvedContractCase(item: ContractDifferenceCase): boolean {
-  if (item.status === 'resolved') return false
+  if (item.status === 'resolved' || differenceAmountPresentation(item).isReference) return false
   const expected = finiteNumber(item.expected_amount)
   const actual = finiteNumber(item.actual_amount)
   if (
@@ -331,14 +333,20 @@ function failedContractFields(checks: ContractFieldForDisplay[] | undefined): st
 
 function describeDifferenceCase(item: ContractDifferenceCase, currentLine?: ContractBillLineCheck): string {
   const prefix = linePrefix(item.game_name, item.settlement_cycle)
-  const expected = finiteNumber(item.expected_amount)
-  const actual = finiteNumber(item.actual_amount)
-  const variance = finiteNumber(item.variance_abs)
+  const presentation = differenceAmountPresentation(item, currentLine)
+  const expected = finiteNumber(presentation.amount?.expected_amount)
+  const actual = finiteNumber(presentation.amount?.actual_amount)
+  const variance = finiteNumber(presentation.amount?.variance_abs)
   // A rate-only mismatch can have an exactly zero amount difference. Prefer the
   // latest verified fields; fall back to the original case's audit snapshot.
   const failedFields = failedContractFields(
     currentLine ? currentLine.checks : item.source_snapshot?.checks
   )
+  if (presentation.isReference) {
+    const fieldText = failedFields.length ? failedFields.join('、') + '；' : ''
+    return prefix + '：' + fieldText + presentation.label + ' ' + money(expected) +
+      '，账单实际 ' + money(actual) + '；金额尚待人工核验，不能据此认定少结或多结'
+  }
   if (failedFields.length) {
     const amountText = expected !== null && actual !== null
       ? Math.round(expected * 100) === Math.round(actual * 100)
@@ -354,7 +362,7 @@ function describeDifferenceCase(item: ContractDifferenceCase, currentLine?: Cont
     }
     const tail = variance === null
       ? ''
-      : '，' + varianceLabel(item.variance_direction) + ' ' + money(Math.abs(variance))
+      : '，' + varianceLabel(presentation.amount?.variance_direction) + ' ' + money(Math.abs(variance))
     return prefix + '：合同应结 ' + money(expected) + '，账单实际 ' + money(actual) + tail
   }
   return prefix + '：合同核验存在明确差异'
@@ -364,6 +372,11 @@ function describeFailedCheck(line: ContractBillLineCheck): string {
   const prefix = linePrefix(line.game_name, line.settlement_cycle)
   const amount = line.contract_amount
   const failedFields = failedContractFields(line.checks)
+  if (amount?.status === 'manual' || amount?.deterministic === false) {
+    const fieldText = failedFields.length ? failedFields.join('、') + '；' : ''
+    return prefix + '：' + fieldText + '合同参考金额（非应结依据） ' + money(amount.expected_amount) +
+      '，账单实际 ' + money(amount.actual_amount) + '；金额尚待人工核验，不能据此认定少结或多结'
+  }
   if (
     amount?.status === 'fail' &&
     finiteNumber(amount.expected_amount) !== null &&
@@ -418,7 +431,14 @@ export function buildContractDifferenceBlockedMessage(
     finiteNumber(item.actual_amount) !== null &&
     Math.round(Number(item.expected_amount) * 100) === Math.round(Number(item.actual_amount) * 100)
   )
-  const actionText = amountEqualCases
+  const hasReferenceAmount = unresolvedCases.some((item) =>
+    differenceAmountPresentation(item, currentLines.get(String(item.line_id || ''))).isReference
+  ) || (!unresolvedCases.length && (preflight?.lines || []).some((line) =>
+    line.contract_amount?.status === 'manual' || line.contract_amount?.deterministic === false
+  ))
+  const actionText = hasReferenceAmount
+    ? '请核对失败的合同条款并补充金额计算依据；参考金额不能直接用于补差或冲抵。'
+    : amountEqualCases
     ? '请核对合同条款与账单规则；合同记录有误时应核实更正，真实特殊结算则使用“特殊结算确认”留痕。'
     : '请直接修改上述明细；如果这就是双方确认的特殊结算，再使用“特殊结算确认”留痕。'
 
