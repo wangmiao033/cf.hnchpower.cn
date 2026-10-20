@@ -25,6 +25,8 @@ class SelfOperatedOrderInput(BaseModel):
     def validate_identity(self):
         if not self.order_id.strip() or self.order_id != self.order_id.strip():
             raise ValueError("订单编号必须保留原始文本，不能包含首尾空白")
+        if "e+" in self.order_id.lower() or "e-" in self.order_id.lower():
+            raise ValueError("订单编号疑似被Excel科学计数法截断，请重新导出文本CSV")
         if self.kind == "game" and not (self.game_id.strip() or self.game_name.strip()):
             raise ValueError("游戏充值订单必须提供游戏名称或游戏ID")
         if self.paid_date.year < 2020 or self.paid_date.year > 2100:
