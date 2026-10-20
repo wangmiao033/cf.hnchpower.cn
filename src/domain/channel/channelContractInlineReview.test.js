@@ -75,7 +75,7 @@ describe('设备平台不是商业折扣版本', () => {
     expect(contractAccessMatchesLine('一起来修仙005折-ios', { ...item, platform: 'Android' })).toBe(false)
     expect(contractAccessMatchesLine('一起来修仙01折-ios', item)).toBe(false)
     expect(contractAccessMatchesLine('一起来修仙005折红包版-ios', item)).toBe(false)
-    expect(contractAccessMatchesLine('一起来修仙005折', { ...item, platform: 'iOS' })).toBe(false)
+    expect(contractAccessMatchesLine('一起来修仙005折', { ...item, platform: 'iOS' })).toBe(true)
     expect(contractAccessMatchesLine('一起来修仙005折-ios', { ...item, platform: '' })).toBe(false)
   })
   it('设备产品后缀不能被全版本字段扩张', () => {
@@ -96,5 +96,15 @@ describe('exact customer hydration preserves evidence only for the same identity
     { selected: null, nextId: '' }, { nextName: '' }, { mode: 'add' }
   ])('does not preserve evidence for changed, ambiguous or unlinked identity %j', changes => {
     expect(isSameCustomerRestoration({ ...same, ...changes })).toBe(false)
+  })
+})
+
+describe('undeclared bill device preserves legacy matching', () => {
+  it.each(['Android', 'iOS', '全版本'])('accepts one exact SKU without inventing device: %s', platform => {
+    expect(contractAccessMatchesLine('一起来修仙（0.05折）', { product_name: '一起来修仙（0.05折）', platform })).toBe(true)
+  })
+  it('allows unknown against a suffix but rejects contradictory candidate evidence', () => {
+    expect(contractAccessMatchesLine('游戏005折', { product_name: '游戏005折-Android', platform: 'Android' })).toBe(true)
+    expect(contractAccessMatchesLine('游戏005折', { product_name: '游戏005折-Android', platform: 'iOS' })).toBe(false)
   })
 })

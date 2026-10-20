@@ -241,10 +241,11 @@ export default function ChannelContractIssueEditor({ issue, partnerName, partner
               </div>
               {!contractAccessMatchesLine(issue.game_name, selected.item) ? (
                 <div role="status" className="channel-contract-inline__error">
-                  当前选择的合作游戏“{selected.item.product_name}”与账单游戏“{issue.game_name}”不是同一商业版本，不能自动带入。
+                  当前选择的合作游戏“{selected.item.product_name}”与账单游戏“{issue.game_name}”商业版本或明确设备信息不兼容，不能自动带入。
                 </div>
               ) : null}
               <div className="channel-contract-inline__readonly">
+                <span>合同设备平台 <strong>{selected.item.platform || '未注明'}</strong></span>
                 <span>合同渠道 <strong>{selected.item.channel_name || '未注明'}</strong></span>
                 <span>当前合同分成 <strong>{selected.item.share_rate == null ? '未填' : selected.item.share_rate + '%'}</strong></span>
                 <span>合同通道费 <strong>{selected.item.channel_fee_rate == null ? '未填' : selected.item.channel_fee_rate + '%'}</strong></span>

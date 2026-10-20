@@ -8,10 +8,14 @@ from typing import Any
 
 try:
     from .matcher import commercial_game_variant, normalize_channel, normalize_company, normalize_game, score_candidate
-    from .game_platform_identity import contract_access_matches_line
+    from .game_platform_identity import (
+        candidate_platform_scope, contract_access_matches_line, declared_line_device, financial_game_key,
+    )
 except ImportError:  # Vercel service-root import.
     from matcher import commercial_game_variant, normalize_channel, normalize_company, normalize_game, score_candidate
-    from game_platform_identity import contract_access_matches_line
+    from game_platform_identity import (
+        candidate_platform_scope, contract_access_matches_line, declared_line_device, financial_game_key,
+    )
 
 EPS = 0.01
 ALWAYS_DISABLED_STATUSES = {
@@ -488,7 +492,7 @@ def recommend_channel_rules(
                     "rule_fields_complete": False,
                     "financially_unambiguous": False,
                     "message": selection_error or (
-                        "已有同客户、游戏及渠道的合同合作清单，但设备平台不兼容或账单平台不明确，不能自动带入"
+                        "已有同客户、游戏及渠道的合同合作清单，但设备平台声明存在明确冲突，不能自动带入"
                         if line.get("platform_conflict") else "该游戏/账期未找到匹配的可用合同合作清单"
                     ),
                     **({"platform_conflict": True} if line.get("platform_conflict") else {}),
@@ -517,6 +521,32 @@ def recommend_channel_rules(
         }
         rule_consensus = bool(complete_rule_signatures) and len(complete_rule_signatures) == 1
         financially_unambiguous = contract_identity_unambiguous or rule_consensus
+
+        # Missing bill-device evidence is not a contradiction. It also cannot
+        # select one platform/rate from several otherwise relevant contracts,
+        # even when a score margin or financial consensus would normally win.
+        original_name = line.get("input_game_name") or game_name
+        platform_unspecified = not declared_line_device(
+            original_name, None if selected_id else line.get("platform"),
+        )
+        unknown_device_candidates = [
+            item for item in ranked
+            if item[1].get("authorization_status") != "out_of_range"
+            and financial_game_key(original_name)
+            == financial_game_key(item[0].get("original_product_name") or item[0].get("product_name"))
+        ]
+        differing_platforms = len({candidate_platform_scope(item[0]) for item in unknown_device_candidates}) > 1
+        differing_terms = len({
+            _rule_signature(item[2]) for item in unknown_device_candidates
+            if item[2].get("fields_complete")
+        }) > 1
+        platform_ambiguity = bool(
+            platform_unspecified and not selected_id and len(unknown_device_candidates) > 1
+            and (differing_platforms or differing_terms)
+        )
+        if platform_ambiguity:
+            contract_identity_unambiguous = False
+            financially_unambiguous = False
 
         authorization_status = scored.get("authorization_status")
         exact_identity = _partner_matches(partner_name, candidate, channel_name) and _exact_game_matches(game_name, candidate)
@@ -554,10 +584,19 @@ def recommend_channel_rules(
             line_message = "已找到合同，但当前账期明确不在授权期内，不能自动带入"
         elif not recommended.get("fields_complete"):
             line_message = "已找到具体合同，但该合作项的分成或通道费结构化字段不完整"
+        elif platform_ambiguity:
+            conflicts = "、".join(
+                text for present, text in (
+                    (differing_platforms, "平台范围不同"), (differing_terms, "结算规则不一致"),
+                ) if present
+            )
+            line_message = f"账单设备未声明，存在{conflicts}的合同候选；未推断设备，请核对并明确选择合同合作项"
         elif not financially_unambiguous:
             line_message = "当前游戏/账期存在多个有效合同候选，且结算规则不一致，需要先确认合同归属"
         else:
             line_message = "已找到合同，但候选身份仍需人工确认"
+        if platform_unspecified and not platform_ambiguity:
+            line_message += "；账单设备未声明，未推断设备"
 
         results.append(
             {
@@ -575,6 +614,8 @@ def recommend_channel_rules(
                 "contract_identity_unambiguous": contract_identity_unambiguous,
                 "rule_consensus": rule_consensus,
                 "financially_unambiguous": financially_unambiguous,
+                "platform_unspecified": platform_unspecified,
+                "platform_ambiguity": platform_ambiguity,
                 "candidate_count": len(ranked),
                 "usable_candidate_count": len(pool),
                 "message": line_message,
@@ -645,6 +686,8 @@ def recommend_channel_rules(
             warning_bits.append("授权期未结构化")
         if any(item.get("tax_rate_warning") for item in auto_lines):
             warning_bits.append("发票税率未结构化（按0记录，不参与结算）")
+        if any(item.get("platform_unspecified") for item in auto_lines):
+            warning_bits.append("账单设备未声明，未推断设备")
         if warning_bits:
             message = f"当前游戏的结算数字可自动带入；{'、'.join(warning_bits)}"
         else:
