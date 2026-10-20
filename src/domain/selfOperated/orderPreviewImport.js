@@ -8,7 +8,7 @@ export const MAX_IMPORT_ROWS = 30000
 
 export const ORDER_FIELDS = Object.freeze([
   { key: 'orderId', label: '订单编号', required: true, aliases: ['订单号','订单编号','订单id','交易订单号','商户订单号','平台订单号','第三方订单号','支付订单号','订单流水号','outtradeno','orderid','orderno','tradeid','transactionid'] },
-  { key: 'paidAmount', label: '实付金额', required: true, aliases: ['实付金额','现金实付','实付','支付金额','付款金额','实际支付','实际支付金额','实收金额','实际收款','人民币金额','充值金额','订单金额','交易金额','amount','paidamount','payamount','totalamount'] },
+  { key: 'paidAmount', label: '实付金额', required: true, aliases: ['实付金额','现金实付','实付','支付金额','付款金额','实际支付','实际支付金额','实收金额','实际收款','人民币金额','充值金额','订单金额','交易金额','金额','amount','paidamount','payamount','totalamount'] },
   { key: 'paidAt', label: '支付日期', required: true, aliases: ['支付时间','支付日期','付款时间','充值时间','订单时间','下单时间','完成时间','创建时间','到账时间','交易时间','日期','paytime','paidat','createtime','ordertime','tradetime','date'] },
   { key: 'gameName', label: '游戏名称', required: false, aliases: ['游戏名称','游戏名','游戏','产品名称','产品名','产品','game','gamename','productname'] },
   { key: 'gameId', label: '游戏 ID', required: false, aliases: ['游戏id','游戏编号','产品id','产品编号','gameid','productid','appid'] },
