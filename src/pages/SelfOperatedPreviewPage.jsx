@@ -169,6 +169,9 @@ export default function SelfOperatedPreviewPage(){
    if(!imported||!serverStatus?.write_ready||serverBusy)return
    setServerError('');setServerSaved(null)
    try{
+     if(!verifiedStatus||!verifiedType){
+       throw new Error('正式入账前需要确认原文件的支付状态和游戏/竹B业务类型两项。')
+     }
      const payload=prepareDaxiongServerImport(imported,{
        statusConfirmed:verifiedStatus,typeConfirmed:verifiedType
      })
