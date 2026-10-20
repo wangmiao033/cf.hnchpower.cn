@@ -1,23 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# IMPORTANT: Vercel deployments must remain data-preserving.
+# Database schema migrations are NOT part of frontend or backend application
+# builds; production migrations must be planned, backed up and run separately
+# using backend/scripts/run_schema_migrations.py under an approved procedure.
+# Never add database migration invocations to this build script.
 if [ "${VERCEL_ENV:-}" = "production" ]; then
-  if [ -z "${DATABASE_URL:-}" ] && [ -z "${QUICKSDK_DATABASE_URL:-}" ]; then
-    echo "ERROR: Production build is missing DATABASE_URL/QUICKSDK_DATABASE_URL." >&2
-    exit 1
-  fi
-
-  echo "Running serialized production database migrations inside Vercel build..."
-  MIGRATION_VENV="/tmp/cf-schema-migration-venv"
-  rm -rf "$MIGRATION_VENV"
-  python -m venv "$MIGRATION_VENV"
-  "$MIGRATION_VENV/bin/python" -m pip install --disable-pip-version-check --quiet -r backend/requirements-migrations.txt
-  export PYTHONPATH="backend:."
-  export MIGRATION_EXECUTION_CONTEXT="deploy"
-  "$MIGRATION_VENV/bin/python" backend/scripts/run_schema_migrations.py
-  rm -rf "$MIGRATION_VENV"
+  echo "Production application build: skipping database schema migrations. No database writes are performed by this build script."
 else
-  echo "Skipping production database migrations for VERCEL_ENV=${VERCEL_ENV:-local}."
+  echo "Non-production application build: database schema migrations are not invoked."
 fi
 
 npm run build
