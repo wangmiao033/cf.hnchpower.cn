@@ -11,10 +11,10 @@ function Sidebar({ activeView, onNavigate, collapsed = false }) {
     () => SIDEBAR_GROUPS
       .map((group) => ({
         ...group,
-        items: group.items.filter((item) => canOpenView(can, item.view))
+        items: group.items.filter((item) => canOpenView(can, item.view) && (item.view !== VIEWS.SELF_OPERATED || user?.role === 'admin'))
       }))
       .filter((group) => group.items.length > 0),
-    [can]
+    [can, user?.role]
   )
   const activeGroup = useMemo(() => getGroupForView(activeView), [activeView])
   const activeGroupId = activeGroup?.id

@@ -17,6 +17,7 @@ export const VIEWS = {
   RECON_CREATE: 'recon-create',
   RECON_EDIT: 'recon-edit',
   RECON_CHANNEL: 'recon-channel',
+  SELF_OPERATED: 'self-operated-daxiong',
   CHANNEL_RECON_CREATE: 'channel-recon-create',
   CHANNEL_RECON_EDIT: 'channel-recon-edit',
   CONTRACTS: 'contracts',
@@ -60,7 +61,8 @@ export const SIDEBAR_GROUPS = [
     items: [
       { view: VIEWS.RECON_RD, label: '研发账单' },
       { view: VIEWS.RECON_PROGRESS, label: '对账进度' },
-      { view: VIEWS.RECON_CHANNEL, label: '渠道账单' }
+      { view: VIEWS.RECON_CHANNEL, label: '渠道账单' },
+      { view: VIEWS.SELF_OPERATED, label: '自营渠道 · 大熊游戏' }
     ]
   },
   {
@@ -115,6 +117,7 @@ const VIEW_TITLES = {
   [VIEWS.RECON_CREATE]: '新增研发账单',
   [VIEWS.RECON_EDIT]: '编辑研发账单',
   [VIEWS.RECON_CHANNEL]: '渠道账单',
+  [VIEWS.SELF_OPERATED]: '自营渠道',
   [VIEWS.CHANNEL_RECON_CREATE]: '新增渠道账单',
   [VIEWS.CHANNEL_RECON_EDIT]: '编辑渠道账单',
   [VIEWS.CONTRACTS]: '合同台账',
@@ -145,6 +148,7 @@ const VIEW_DESCRIPTIONS = {
   [VIEWS.RECON_CREATE]: '按合同和结算依据新增研发账单。',
   [VIEWS.RECON_EDIT]: '维护研发账单及其结算依据。',
   [VIEWS.RECON_CHANNEL]: '统一查看渠道应收、收款进度、异常和账单闭环状态。',
+  [VIEWS.SELF_OPERATED]: '大熊游戏第一阶段只读演示，暂不接入真实财务数据。',
   [VIEWS.CHANNEL_RECON_CREATE]: '按合同和平台结算依据新增渠道账单。',
   [VIEWS.CHANNEL_RECON_EDIT]: '维护渠道账单及其结算依据。',
   [VIEWS.CONTRACTS]: '统一维护合同、合作清单、履约状态、到期提醒和客户关联。',
@@ -175,6 +179,7 @@ export const VIEW_ICONS = {
   [VIEWS.RECON_CREATE]: '增',
   [VIEWS.RECON_EDIT]: '编',
   [VIEWS.RECON_CHANNEL]: '渠',
+  [VIEWS.SELF_OPERATED]: '熊',
   [VIEWS.CHANNEL_RECON_CREATE]: '增',
   [VIEWS.CHANNEL_RECON_EDIT]: '编',
   [VIEWS.CONTRACTS]: '合',

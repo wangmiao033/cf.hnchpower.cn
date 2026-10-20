@@ -10,6 +10,9 @@ on:
   push:
     branches:
       - main
+    # A changelog-only commit records a release; it must not release again.
+    paths-ignore:
+      - 'CHANGELOG.md'
   workflow_dispatch:
 
 permissions:
@@ -256,7 +259,7 @@ jobs:
             echo '- Git SHA: `${{ github.sha }}`'
             echo '- Production URL: `${{ steps.vercel.outputs.url }}`'
             echo '- Domain: `https://cf.hnchpower.cn`'
-            echo '- Database migrations: executed inside the Vercel Production build using sensitive env.'
+            echo '- Database migrations: NOT executed during this application release; schema migrations require a separately approved procedure and a verified backup.'
             echo '- Contract AI provider: `Cloudflare Workers AI`.'
             echo '- Git auto-deployments: disabled; this workflow is the only release path.'
           } >> "$GITHUB_STEP_SUMMARY"

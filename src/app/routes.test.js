@@ -53,9 +53,12 @@ describe('统一对账进度路由', () => {
     expect(group.items.map((item) => item.view)).toEqual([
       VIEWS.RECON_RD,
       VIEWS.RECON_PROGRESS,
-      VIEWS.RECON_CHANNEL
+      VIEWS.RECON_CHANNEL,
+      VIEWS.SELF_OPERATED
     ])
     expect(getTabView(VIEWS.RECON_PROGRESS)).toBe(VIEWS.RECON_PROGRESS)
+    expect(getGroupForView(VIEWS.SELF_OPERATED)?.id).toBe('reconciliation')
+    expect(getPageTitle(VIEWS.SELF_OPERATED)).toBe('自营渠道')
   })
 
   it('渠道智能补齐留在新增账单页，左侧不再显示重复入口', () => {
