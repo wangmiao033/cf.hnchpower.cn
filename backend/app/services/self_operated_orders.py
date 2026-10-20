@@ -232,7 +232,9 @@ def confirm_order_import(
         source_label=_SOURCE,
         submitted_by_user_id=user_id,
         submitted_count=len(payload.rows),
-        inserted_count=0,
+        # The audit CHECK is non-deferrable: stage counts that already balance.
+        # Final inserted/duplicate counts are set before transaction commit.
+        inserted_count=len(payload.rows),
         duplicate_count=0,
         inserted_game_cents=0,
         inserted_coin_cents=0,
