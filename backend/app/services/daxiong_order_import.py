@@ -23,7 +23,7 @@ _ORDER_ALIASES: dict[str, tuple[str, ...]] = {
     "game_id": ("游戏ID", "游戏编号", "产品ID", "产品编号"),
     "status": ("支付状态", "订单状态", "交易状态", "充值状态", "状态"),
     "kind": ("订单类型", "业务类型", "交易类型", "充值类型", "类型"),
-    "payment_method": ("支付方式", "付款方式", "支付渠道", "支付类型"),
+    "payment_method": ("支付方式", "原支付方式", "付款方式", "支付渠道", "支付类型"),
 }
 
 _STRICT_REQUIRED = ("order_id", "paid_cents", "paid_date", "status", "kind")
