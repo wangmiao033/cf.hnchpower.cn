@@ -16,8 +16,8 @@ function GameTable({report,profit,query,setQuery}){
  const visible=report.games.filter(g=>`${g.name} ${g.id}`.toLowerCase().includes(query.trim().toLowerCase()))
  return <section className="so-panel so-table-panel">
   <div className="so-panel-head"><div><h2>{profit?'逐游戏经营贡献':'游戏经营概览'}</h2><p>游戏ID汇总 · 演示现金实付，非充值面额</p></div><input value={query} onChange={e=>setQuery(e.target.value)} type="search" placeholder="搜索游戏 / ID" aria-label="搜索游戏"/></div>
-  <div className="so-scroll"><table className="so-table"><thead><tr><th>游戏 / 占比</th><th className="so-right">现金实付</th><th className="so-right">买量成本</th><th className="so-right">{profit?'经营贡献':'研发应付'}</th><th>合同状态</th></tr></thead>
-  <tbody>{visible.map(g=><tr key={g.id}><td><strong>{g.name}</strong><small>ID {g.id} · {report.cash?(g.cash/report.cash*100).toFixed(1):'0.0'}%</small></td><td className="so-right"><Cash amount={g.cash}/></td><td className="so-right so-muted">待接入</td><td className="so-right so-muted">待核算</td><td><Status>待关联合同</Status></td></tr>)}
+  <div className="so-scroll"><table className="so-table so-game-table"><thead><tr><th>游戏 / 占比</th><th className="so-right">现金实付</th><th className="so-right">买量成本</th><th className="so-right">{profit?'经营贡献':'研发应付'}</th><th>合同状态</th></tr></thead>
+  <tbody>{visible.map(g=><tr key={g.id}><td><strong>{g.name}</strong><small>ID {g.id} · {report.cash?(g.cash/report.cash*100).toFixed(1):'0.0'}%</small></td><td data-label="现金实付" className="so-right"><Cash amount={g.cash}/></td><td data-label="买量成本" className="so-right so-muted">待接入</td><td data-label={profit?"经营贡献":"研发应付"} className="so-right so-muted">待核算</td><td data-label="合同状态"><Status>待关联合同</Status></td></tr>)}
    {!visible.length&&<tr><td colSpan={5} className="so-empty">未找到对应游戏</td></tr>}
   </tbody></table></div>
   <div className="so-table-foot">显示 {visible.length}/{report.games.length} 款 · 当前数据仅用于界面确认</div>
@@ -76,8 +76,8 @@ export default function SelfOperatedPreviewPage(){
    {tab==='ads'&&<div className="so-columns">
     <section className="so-panel so-table-panel">
      <div className="so-panel-head"><div><h2>买量及相关记录</h2><p>TapTap 等广告账户充值与消耗分开管理</p></div><Status>演示数据</Status></div>
-     <div className="so-scroll"><table className="so-table"><thead><tr><th>日期</th><th>记录类型</th><th>广告平台 / 游戏归属</th><th className="so-right">金额</th></tr></thead><tbody>
-      {report.ads.map(a=><tr key={a.id}><td>{month.slice(0,4)}-{a.date}</td><td><span className={a.kind==='topup'?'so-topup':'so-spend'}>{a.kind==='topup'?'账户充值':'实际消耗'}</span></td><td>{a.platform} · {a.game}</td><td className="so-right"><Cash amount={a.amount}/></td></tr>)}
+     <div className="so-scroll"><table className="so-table so-ads-table"><thead><tr><th>日期</th><th>记录类型</th><th>广告平台 / 游戏归属</th><th className="so-right">金额</th></tr></thead><tbody>
+      {report.ads.map(a=><tr key={a.id}><td data-label="日期">{month.slice(0,4)}-{a.date}</td><td data-label="记录类型"><span className={a.kind==='topup'?'so-topup':'so-spend'}>{a.kind==='topup'?'账户充值':'实际消耗'}</span></td><td data-label="平台与归属">{a.platform} · {a.game}</td><td data-label="金额" className="so-right"><Cash amount={a.amount}/></td></tr>)}
      </tbody></table></div>
      <div className="so-table-foot">仅作演示，不写入运营费用或银行系统</div>
     </section>
@@ -89,8 +89,8 @@ export default function SelfOperatedPreviewPage(){
    {tab==='contract'&&<div className="so-columns">
     <section className="so-panel so-table-panel">
      <div className="so-panel-head"><div><h2>游戏与合同映射</h2><p>正式接入时按游戏 ID 和合同有效期关联</p></div><Status>只读</Status></div>
-     <div className="so-scroll"><table className="so-table"><thead><tr><th>游戏 / ID</th><th className="so-right">现金实付</th><th>合同状态</th><th className="so-right">预计研发应付</th></tr></thead><tbody>
-      {report.games.map(g=><tr key={g.id}><td><strong>{g.name}</strong><small>ID {g.id}</small></td><td className="so-right"><Cash amount={g.cash}/></td><td><Status/></td><td className="so-right so-muted">—</td></tr>)}
+     <div className="so-scroll"><table className="so-table so-contract-table"><thead><tr><th>游戏 / ID</th><th className="so-right">现金实付</th><th>合同状态</th><th className="so-right">预计研发应付</th></tr></thead><tbody>
+      {report.games.map(g=><tr key={g.id}><td><strong>{g.name}</strong><small>ID {g.id}</small></td><td data-label="现金实付" className="so-right"><Cash amount={g.cash}/></td><td data-label="合同状态"><Status/></td><td data-label="预计研发应付" className="so-right so-muted">—</td></tr>)}
      </tbody></table></div><div className="so-table-foot">不会自动修改合同或创建真实研发账单</div>
     </section>
     <aside className="so-aside">
