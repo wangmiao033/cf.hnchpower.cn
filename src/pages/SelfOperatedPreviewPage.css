@@ -535,7 +535,7 @@
   }
 }
 
-@container daxiong (max-width: 780px) {
+@container daxiong (max-width: 900px) {
   .so-metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
