@@ -319,18 +319,21 @@ def monthly_summary(db: Session, month: str) -> SelfOperatedMonthlySummary:
             summary.coin_orders = int(count)
             summary.coin_cents = int(total)
 
+    # Same stable game ID can have multiple legacy display names. Group by
+    # ID first so one game is not split across rows when a title is renamed.
+    game_identity = func.coalesce(func.nullif(order.game_id, ""), order.game_name)
     games = db.execute(
         select(
-            order.game_id,
-            order.game_name,
+            func.max(order.game_id),
+            func.min(order.game_name),
             func.count(order.id),
             func.sum(order.amount_cents),
         ).where(
             order.source_label == _SOURCE,
             order.settlement_month == month,
             order.order_kind == "game",
-        ).group_by(order.game_id, order.game_name)
-        .order_by(func.sum(order.amount_cents).desc(), order.game_id, order.game_name)
+        ).group_by(game_identity)
+        .order_by(func.sum(order.amount_cents).desc(), game_identity)
     ).all()
     summary.games = [
         SelfOperatedGameSummary(
