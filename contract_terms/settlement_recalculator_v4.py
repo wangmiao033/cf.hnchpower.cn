@@ -1,9 +1,9 @@
 """V3.0 settlement-basis guard for contract standard amount recomputation.
 
 The product/version discount shown on a bill is not automatically a settlement
-multiplier. In particular, contracts that say settlement is based on actual paid
-/ actual received amount must not multiply the already-paid flow by 0.1/0.05 a
-second time. Ambiguous contract bases are downgraded to manual review instead of
+multiplier. Already-paid flow must not be discounted a second time, whereas
+channel raw billing flow still needs its explicit conversion to paid flow.
+Contract basis and input-flow representation are separate facts. Ambiguous contract bases are downgraded to manual review instead of
 creating a false blocking variance.
 """
 
@@ -85,6 +85,63 @@ def _with_assumption(result: dict, message: str) -> dict:
     return updated
 
 
+def _calculate_channel_amount(
+    bill: dict, line: dict, candidate: dict, *, tolerance: float
+) -> dict:
+    """Keep storage representation separate from the contract settlement basis.
+
+    The caller supplies billing_flow_basis from the data source, never from a
+    product name: raw line items need conversion; actual_paid aggregates do not.
+    A contract saying "actual paid" alone cannot establish that representation.
+    """
+    basis_mode = _basis_mode(candidate)
+    flow_basis = _text(line.get("billing_flow_basis"))
+    discount = _number(line.get("discount_factor"), 1.0)
+    guarded_line = dict(line)
+    representation_known = flow_basis in {"raw", "actual_paid"}
+    if flow_basis == "actual_paid" or not representation_known:
+        guarded_line["discount_factor"] = 1.0
+
+    result = _calculate_base(
+        "channel", bill, guarded_line, candidate, tolerance=tolerance
+    )
+    breakdown = dict(result.get("breakdown") or {})
+    breakdown["bill_discount_reference"] = discount
+    breakdown["billing_flow_basis"] = flow_basis if representation_known else "unknown"
+    breakdown["contract_settlement_basis"] = basis_mode
+    result["breakdown"] = breakdown
+    if flow_basis == "raw" and abs(discount - 1.0) > EPS:
+        result = _with_assumption(
+            result,
+            f"渠道原始流水按账单转换系数 {discount:g} 折算一次为结算流水，合同实付口径不取消该转换",
+        )
+    elif flow_basis == "actual_paid" and abs(discount - 1.0) > EPS:
+        result = _with_assumption(
+            result,
+            f"渠道流水已为实付/折后金额，账单折扣系数 {discount:g} 不重复乘入结算流水",
+        )
+
+    unknown_representation = not representation_known and abs(discount - 1.0) > EPS
+    if result.get("expected_amount") is not None and (
+        basis_mode == "ambiguous" or unknown_representation
+    ):
+        result["status"] = "manual"
+        result["deterministic"] = False
+        if unknown_representation:
+            result["message"] = (
+                "渠道账单存在折扣系数，但未明确流水是原始流水还是已折算实付金额；"
+                "当前金额仅作参考，必须人工确认后才能形成合同差异。"
+            )
+        else:
+            result["message"] = (
+                "合同未明确结算基数；当前仅按账单流水口径生成参考金额，"
+                "必须人工确认后才能形成合同差异。"
+            )
+        if basis_mode == "ambiguous":
+            result["breakdown"]["contract_settlement_basis"] = "ambiguous_manual_review"
+    return result
+
+
 def calculate_contract_standard_amount_v4(
     bill_type: str,
     bill: dict,
@@ -93,6 +150,9 @@ def calculate_contract_standard_amount_v4(
     *,
     tolerance: float = DEFAULT_TOLERANCE,
 ) -> dict:
+    if bill_type == "channel":
+        return _calculate_channel_amount(bill, line, candidate, tolerance=tolerance)
+
     basis_mode = _basis_mode(candidate)
     guarded_line = dict(line)
     discount_key = "discount_rate" if bill_type == "rd" else "discount_factor"

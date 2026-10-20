@@ -7,6 +7,7 @@ import {
 } from '@/lib/api/contractDifferences.ts'
 import { groupResolvedDifferenceHistory } from '@/domain/contract/resolvedDifferenceHistory.js'
 import './ContractDifferenceActionPanel.css'
+import { differenceAmountPresentation } from '@/domain/contract/differenceAmountPresentation.js'
 
 const STATUS_LABELS = {
   pending: '待处理',
@@ -25,7 +26,9 @@ const SPECIAL_SETTLEMENT_REASON = '商务特殊约定'
 const REASON_OPTIONS = ['商务协商', '四舍五入', '历史遗留', '特殊活动', '其他']
 
 function money(value) {
-  const number = Number(value || 0)
+  if (value === null || value === undefined || value === '') return '-'
+  const number = Number(value)
+  if (!Number.isFinite(number)) return '-'
   return `¥${number.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
@@ -38,6 +41,7 @@ function directionText(item) {
   return item.variance_direction === 'under' ? '少结' : item.variance_direction === 'over' ? '多结' : '差异'
 }
 function caseIssueTitle(item) {
+  if (differenceAmountPresentation(item).isReference) return '合同条款 / 金额依据待核对'
   const difference = Number(item?.difference_amount ?? item?.variance_abs)
   if (Number.isFinite(difference) && Math.round(Math.abs(difference) * 100) === 0) {
     return '金额一致 · 合同条款待核对'
@@ -336,6 +340,7 @@ export default function ContractDifferenceActionPanel({
           const isEditing = editor?.caseId === item.id
           const isExpanded = expandedId === item.id
           const specialSettlement = isSpecialSettlement(item)
+          const presentation = differenceAmountPresentation(item)
           const isHistoricalDuplicate = groupedHistory.hiddenIds.has(String(item.id))
           return (
             <article key={item.id} className={`contract-difference-card is-${item.status}`}>
@@ -344,8 +349,9 @@ export default function ContractDifferenceActionPanel({
                   <span>{item.game_name || '账单明细'} · {item.settlement_cycle || '-'}</span>
                   <strong>{caseIssueTitle(item)}</strong>
                   <small>
-                    合同应结 {money(item.expected_amount)} · 账单实际 {money(item.actual_amount)}
+                    {presentation.label} {money(presentation.amount?.expected_amount)} · 账单实际 {money(presentation.amount?.actual_amount)}
                   </small>
+                  {presentation.isReference ? <small>金额尚待人工核验，不能据此认定少结或多结；请核对合同条款及计算依据。</small> : null}
                   {failedCaseChecks(item).map((check, index) => (
                     <small key={(check.key || 'field') + '-' + index}>
                       {check.label || check.key || '合同条款'}：账单 {displayFieldValue(check.bill_value)} / 合同 {displayFieldValue(check.contract_value)}
@@ -376,8 +382,8 @@ export default function ContractDifferenceActionPanel({
                     <button type="button" disabled={workingId === item.id} onClick={() => void markEditBill(item)}>修改当前账单</button>
                     <button type="button" className="is-primary" disabled={workingId === item.id} onClick={() => startEditor(item, 'special_settlement')}>特殊结算确认</button>
                     <button type="button" disabled={workingId === item.id} onClick={() => startEditor(item, 'accept_difference')}>接受差异</button>
-                    <button type="button" disabled={workingId === item.id} onClick={() => startEditor(item, 'create_adjustment')}>生成补差项</button>
-                    <button type="button" disabled={workingId === item.id} onClick={() => startEditor(item, 'carry_forward')}>转下月冲抵</button>
+                    <button type="button" disabled={workingId === item.id || presentation.isReference} onClick={() => startEditor(item, 'create_adjustment')}>生成补差项</button>
+                    <button type="button" disabled={workingId === item.id || presentation.isReference} onClick={() => startEditor(item, 'carry_forward')}>转下月冲抵</button>
                   </>
                 ) : null}
                 {item.status === 'resolved' && !isHistoricalDuplicate ? (
@@ -401,12 +407,12 @@ export default function ContractDifferenceActionPanel({
                         <input value={money(editor.item?.actual_amount)} readOnly />
                       </label>
                       <label>
-                        <span>合同理论金额</span>
-                        <input value={money(editor.item?.expected_amount)} readOnly />
+                        <span>{presentation.isReference ? presentation.label : '合同理论金额'}</span>
+                        <input value={money(presentation.amount?.expected_amount)} readOnly />
                       </label>
                       <label>
                         <span>本期差异</span>
-                        <input value={`${directionText(editor.item)} ${money(editor.item?.variance_abs)}`} readOnly />
+                        <input value={presentation.isReference ? '待核验，参考金额不作为差额依据' : `${directionText(editor.item)} ${money(editor.item?.variance_abs)}`} readOnly />
                       </label>
                     </>
                   ) : null}

@@ -64,9 +64,20 @@ def _financial_field_failures(bill_type: str, line: dict) -> list[dict]:
     ]
 
 
+def _amount_is_reference(amount: dict) -> bool:
+    # Old snapshots did not always record determinism. Preserve that legacy
+    # behavior, but explicit uncertainty must never become a payable amount.
+    return amount.get("status") == "manual" or amount.get("deterministic") is False
+
+
+def _case_amount_is_reference(case: dict) -> bool:
+    snapshot = case.get("source_snapshot_json") or case.get("source_snapshot") or {}
+    return _amount_is_reference(snapshot.get("contract_amount") or {})
+
+
 def _requires_difference_case(bill_type: str, line: dict) -> bool:
     amount = line.get("contract_amount") or {}
-    if amount.get("status") == "fail" and amount.get("expected_amount") is not None:
+    if not _amount_is_reference(amount) and amount.get("status") == "fail" and amount.get("expected_amount") is not None:
         return True
     return bool(_financial_field_failures(bill_type, line))
 
@@ -270,6 +281,12 @@ def _case_payload(row: dict) -> dict:
     payload["variance_abs"] = round(abs(payload["difference_amount"]), 2)
     payload["evidence"] = payload.pop("evidence_json", []) or []
     payload["source_snapshot"] = payload.pop("source_snapshot_json", {}) or {}
+    amount = payload["source_snapshot"].get("contract_amount") or {}
+    payload["amount_is_reference"] = _amount_is_reference(amount)
+    payload["amount_certainty"] = (
+        "reference" if payload["amount_is_reference"] else
+        "deterministic" if amount.get("deterministic") is True else "legacy"
+    )
     return payload
 
 
@@ -660,9 +677,13 @@ def list_difference_cases(
               COUNT(*) FILTER (WHERE status = 'resolved') AS resolved_count,
               COALESCE(SUM(ABS(difference_amount)) FILTER (
                 WHERE status <> 'resolved' AND variance_direction = 'under'
+                  AND COALESCE(source_snapshot_json #>> '{{contract_amount,status}}', '') <> 'manual'
+                  AND COALESCE(source_snapshot_json #>> '{{contract_amount,deterministic}}', '') <> 'false'
               ), 0) AS under_total,
               COALESCE(SUM(ABS(difference_amount)) FILTER (
                 WHERE status <> 'resolved' AND variance_direction = 'over'
+                  AND COALESCE(source_snapshot_json #>> '{{contract_amount,status}}', '') <> 'manual'
+                  AND COALESCE(source_snapshot_json #>> '{{contract_amount,deterministic}}', '') <> 'false'
               ), 0) AS over_total
             FROM cf_contract_difference_cases
             {where}
@@ -741,6 +762,9 @@ def handle_difference_case(request: Request, case_id: str, payload: dict) -> dic
         case = _case_by_id(conn, case_id, for_update=True)
         if case.get("status") == "resolved" and action not in {"reopen"}:
             raise HTTPException(status_code=409, detail="该差异已解决，如需继续处理请先重新打开")
+
+        if action in {"create_adjustment", "carry_forward"} and _case_amount_is_reference(case):
+            raise HTTPException(status_code=409, detail="合同金额仍为参考试算，不能生成补差或冲抵；请先明确结算口径并重新核验。")
 
         if action == "edit_bill":
             conn.execute(

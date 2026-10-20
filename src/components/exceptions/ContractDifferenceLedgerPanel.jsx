@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { listContractDifferenceCases } from '@/lib/api/contractDifferences.ts'
 import './ContractDifferenceLedgerPanel.css'
+import { differenceAmountPresentation } from '@/domain/contract/differenceAmountPresentation.js'
 
 const STATUS_LABELS = {
   pending: '待处理',
@@ -16,7 +17,9 @@ const HANDLING_LABELS = {
 }
 
 function money(value) {
-  const number = Number(value || 0)
+  if (value === null || value === undefined || value === '') return '-'
+  const number = Number(value)
+  if (!Number.isFinite(number)) return '-'
   return `¥${number.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
@@ -28,6 +31,7 @@ function monthText(value) {
 }
 
 function varianceText(item) {
+  if (differenceAmountPresentation(item).isReference) return '金额依据待核验'
   return item.variance_direction === 'under'
     ? `少结 ${money(item.variance_abs)}`
     : item.variance_direction === 'over'
@@ -98,7 +102,7 @@ export default function ContractDifferenceLedgerPanel({
         <div>
           <span>异常中心 · 合同差异</span>
           <h2>合同差异台账</h2>
-          <p>合同应结与账单实际金额的处理总账；不另建复杂模块，直接在异常中心闭环。</p>
+          <p>合同核验与账单实际金额的处理总账；参考金额不作为补差或冲抵依据。</p>
         </div>
         <button type="button" onClick={() => void load()} disabled={loading}>
           {loading ? '刷新中…' : '刷新台账'}
@@ -141,7 +145,7 @@ export default function ContractDifferenceLedgerPanel({
             <tr>
               <th>合作方 / 游戏</th>
               <th>账期</th>
-              <th className="is-right">合同应结</th>
+              <th className="is-right">合同金额 / 依据</th>
               <th className="is-right">实际结算</th>
               <th className="is-right">差额</th>
               <th>处理方式</th>
@@ -166,9 +170,9 @@ export default function ContractDifferenceLedgerPanel({
                   <strong>{monthText(item.settlement_cycle)}</strong>
                   <span>{item.statement_no || '-'}</span>
                 </td>
-                <td className="is-right">{money(item.expected_amount)}</td>
+                <td className="is-right">{money(differenceAmountPresentation(item).amount?.expected_amount)}<span>{differenceAmountPresentation(item).label}</span></td>
                 <td className="is-right">{money(item.actual_amount)}</td>
-                <td className={`is-right is-variance is-${item.variance_direction}`}>
+                <td className={`is-right is-variance is-${differenceAmountPresentation(item).isReference ? 'reference' : item.variance_direction}`}>
                   {varianceText(item)}
                 </td>
                 <td>
