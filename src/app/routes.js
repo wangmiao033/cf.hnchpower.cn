@@ -62,7 +62,7 @@ export const SIDEBAR_GROUPS = [
       { view: VIEWS.RECON_RD, label: '研发账单' },
       { view: VIEWS.RECON_PROGRESS, label: '对账进度' },
       { view: VIEWS.RECON_CHANNEL, label: '渠道账单' },
-      { view: VIEWS.SELF_OPERATED, label: '自营渠道 · 大熊游戏' }
+      { view: VIEWS.SELF_OPERATED, label: '大熊游戏' }
     ]
   },
   {
@@ -117,7 +117,7 @@ const VIEW_TITLES = {
   [VIEWS.RECON_CREATE]: '新增研发账单',
   [VIEWS.RECON_EDIT]: '编辑研发账单',
   [VIEWS.RECON_CHANNEL]: '渠道账单',
-  [VIEWS.SELF_OPERATED]: '自营渠道',
+  [VIEWS.SELF_OPERATED]: '大熊游戏',
   [VIEWS.CHANNEL_RECON_CREATE]: '新增渠道账单',
   [VIEWS.CHANNEL_RECON_EDIT]: '编辑渠道账单',
   [VIEWS.CONTRACTS]: '合同台账',

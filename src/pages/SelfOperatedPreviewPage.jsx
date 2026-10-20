@@ -39,7 +39,7 @@ export default function SelfOperatedPreviewPage(){
  ]
  return <div className="so-page">
   <div className="so-top">
-   <div role="status" className="so-notice"><span>自营渠道 · 第一阶段</span> 只读演示，不读取、不修改正式财务数据。</div>
+   <div role="status" className="so-notice"><span>大熊游戏 · 第一阶段</span> 只读演示，不读取、不修改正式财务数据。</div>
    <div className="so-tools">
     <label htmlFor="so-month">账期</label>
     <select id="so-month" value={month} onChange={e=>{setMonth(e.target.value);setQuery('')}}>{Object.keys(PREVIEW_MONTHS).map(key=><option key={key} value={key}>{PREVIEW_MONTHS[key].label}</option>)}</select>
@@ -48,7 +48,7 @@ export default function SelfOperatedPreviewPage(){
    </div>
   </div>
   <div className="so-metrics">{kpis.map(k=><article key={k.name} className="so-metric"><span>{k.name}</span><strong title={k.value===null?'尚未核算':exactMoney(k.value)}>{k.value===null?'待核算':<Cash compact amount={k.value}/>}</strong><small>{k.note}</small></article>)}</div>
-  <div className="so-tabs" role="tablist" aria-label="自营渠道模块">{TABS.map(([id,label])=><button type="button" key={id} role="tab" aria-selected={tab===id} className={tab===id?'active':''} onClick={()=>{setTab(id);setQuery('')}}>{label}</button>)}</div>
+  <div className="so-tabs" role="tablist" aria-label="大熊游戏模块">{TABS.map(([id,label])=><button type="button" key={id} role="tab" aria-selected={tab===id} className={tab===id?'active':''} onClick={()=>{setTab(id);setQuery('')}}>{label}</button>)}</div>
   <div role="tabpanel" aria-label={TABS.find(([id])=>id===tab)?.[1]}>
    {(tab==='overview'||tab==='profit')&&<div className="so-columns">
     <GameTable report={report} profit={tab==='profit'} query={query} setQuery={setQuery}/>
