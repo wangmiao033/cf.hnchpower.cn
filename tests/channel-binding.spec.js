@@ -43,13 +43,26 @@ test('server rejection never falls back to local selected rates or claims select
 })
 
 test('undeclared device may explicitly bind an Android list without rewriting game or inventing platform', async ({ page }) => {
-  await setup(page, false, 'Android')
+  const requests = await setup(page, false, 'Android')
   await expect(page.getByRole('dialog')).toContainText('合同设备平台 Android')
   await page.getByRole('button', { name: '使用已有清单重新匹配本行' }).click()
   await expect(page.getByTestId('current')).toContainText('"contractAccessItemId":"access-a"')
   await expect(page.locator('.channel-contract-rule-status')).toContainText('已按当前游戏和账期自动套用合同规则并重新计算')
   await page.getByRole('button', { name: '测试保存', exact: true }).click()
+  await expect(page.getByTestId('saved')).toContainText('"contractAccessItemId":"access-a"')
+  const beforeReopen = requests.length
   await page.getByRole('button', { name: '测试重新打开' }).click()
+  await expect(page.getByTestId('current')).toContainText('"id":"saved-line-a"')
+  await expect.poll(() => requests.length).toBeGreaterThan(beforeReopen)
+  await expect(page.locator('.channel-contract-rule-status')).toContainText('已按当前游戏和账期自动套用合同规则并重新计算')
+  // Read after hydration and follow-up recommendation, then prove the persisted
+  // association is stable rather than observing one transient matching frame.
+  const expected = { id: 'saved-line-a', gameName: '测试游戏3折', contractAccessItemId: 'access-a', channelFeeRate: 5 }
+  await expect.poll(async () => JSON.parse(await page.getByTestId('current').textContent()).items[0]).toMatchObject(expected)
+  for (let sample = 0; sample < 3; sample++) {
+    await page.waitForTimeout(100)
+    expect(JSON.parse(await page.getByTestId('current').textContent()).items[0]).toMatchObject(expected)
+  }
   const current = JSON.parse(await page.getByTestId('current').textContent())
   expect(current.items[0]).toMatchObject({ gameName: '测试游戏3折', contractAccessItemId: 'access-a', channelFeeRate: 5 })
   expect(current.items[0].platform).toBeUndefined()
