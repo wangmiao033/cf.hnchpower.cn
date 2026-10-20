@@ -5,6 +5,8 @@ async function setup(page, deny = false) {
   const requests = []
   await page.route('**/api/**', route => {
     const path = new URL(route.request().url()).pathname
+    // Vite source imports also contain /api/; only intercept HTTP API routes.
+    if (!path.startsWith('/api/')) return route.continue()
     if (path === '/api/contracts') return route.fulfill({ json: { items: [{ id: 'contract-a', partner_id: 'partner-a', partner_name: '测试客户有限公司', contract_name: '测试合同', access_items: [item] }], total: 1 } })
     if (path === '/api/contract-terms/channel-rule-recommendation') {
       const body = route.request().postDataJSON(); requests.push(body)
