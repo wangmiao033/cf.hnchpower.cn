@@ -13,13 +13,13 @@ const lines=[
 function csvPayload(content=lines.join('\n')) {
   return {name:'daxiong-september.csv',mimeType:'text/csv',buffer:Buffer.from('\uFEFF'+content,'utf-8')}
 }
-async function openPage(page) {
+async function openPage(page, account = { id: 'admin-import-test' }) {
   const writes=[]
   await page.route(url=>url.pathname.startsWith('/api/'),route=>{
     const req=route.request()
     if(!['GET','HEAD'].includes(req.method()))writes.push(req.method()+' '+new URL(req.url()).pathname)
     if(new URL(req.url()).pathname==='/api/auth/me'){
-      return route.fulfill({json:{id:'admin-import-test',role:'admin',display_name:'导入核对测试',permissions:[]}})
+      return route.fulfill({json:{id:account.id,role:'admin',display_name:'导入核对测试',permissions:[]}})
     }
     return route.fulfill({json:{items:[],permissions:[],roles:[]}})
   })
@@ -104,5 +104,67 @@ test('invalid file is rejected without changing existing demo summary',async({pa
   await expect(dialog.getByRole('button',{name:'在页面查看有效订单（不保存）'})).toBeDisabled()
   await dialog.getByRole('button',{name:'取消'}).click()
   await expect(page.locator('.so-metric').first()).toContainText('¥2.49万')
+  expect(writes).toEqual([])
+})
+
+
+test('explicit local save survives page refresh and can be deleted without database writes', async ({page}) => {
+  const writes = await openPage(page)
+  await page.getByRole('button',{name:'导入订单 · 先核对'}).click()
+  const dialog = page.getByRole('dialog',{name:'大熊游戏订单导入预览'})
+  await dialog.locator('#so-import-file').setInputFiles(csvPayload())
+  await dialog.getByRole('button',{name:'在页面查看有效订单（不保存）'}).click()
+  await expect(page.getByText('已加载文件（未保存）')).toBeVisible()
+  await page.getByRole('button',{name:'保存本机草稿（非正式入账）'}).click()
+  await expect(page.getByText('本机草稿已保存 · 非正式入账')).toBeVisible()
+  await expect(page.locator('.so-metric').first()).toContainText('¥100.03')
+  await page.reload()
+  await expect(page.getByText('本机草稿已保存 · 非正式入账')).toBeVisible()
+  await expect(page.locator('.so-metric').first()).toContainText('¥100.03')
+  await expect(page.locator('.so-metric').nth(1)).toContainText('¥50.00')
+  await page.getByRole('button',{name:'清除当前预览'}).click()
+  await expect(page.getByRole('button',{name:'恢复本机草稿'})).toBeVisible()
+  await expect(page.locator('.so-metric').first()).toContainText('¥2.49万')
+  await page.getByRole('button',{name:'恢复本机草稿'}).click()
+  await expect(page.getByText('本机草稿已保存 · 非正式入账')).toBeVisible()
+  page.once('dialog',nativeDialog=>nativeDialog.accept())
+  await page.getByRole('button',{name:'删除本机草稿'}).click()
+  await expect(page.getByText('本机草稿已保存 · 非正式入账')).toHaveCount(0)
+  await page.reload()
+  await expect(page.getByRole('button',{name:'恢复本机草稿'})).toHaveCount(0)
+  await expect(page.locator('.so-metric').first()).toContainText('¥2.49万')
+  expect(writes).toEqual([])
+})
+
+test('device draft is isolated by the logged-in account; an unsaved import does not replace the saved one', async ({page}) => {
+  const account = { id:'draft-account-a' }
+  const writes = await openPage(page, account)
+  await page.getByRole('button',{name:'导入订单 · 先核对'}).click()
+  const dialog = page.getByRole('dialog',{name:'大熊游戏订单导入预览'})
+  await dialog.locator('#so-import-file').setInputFiles(csvPayload())
+  await dialog.getByRole('button',{name:'在页面查看有效订单（不保存）'}).click()
+  await page.getByRole('button',{name:'保存本机草稿（非正式入账）'}).click()
+  await expect(page.getByText('本机草稿已保存 · 非正式入账')).toBeVisible()
+  await page.getByRole('button',{name:'导入订单 · 先核对'}).click()
+  const replacement = page.getByRole('dialog',{name:'大熊游戏订单导入预览'})
+  await replacement.locator('#so-import-file').setInputFiles(csvPayload([
+    '订单号,游戏名称,游戏ID,实付金额,支付时间,支付状态,订单类型',
+    'NEW001,六界仙尊,880,1.50,2026-08-12,成功,游戏充值'
+  ].join('\n')))
+  await replacement.getByRole('button',{name:'在页面查看有效订单（不保存）'}).click()
+  await expect(page.getByText('已加载文件（未保存）')).toBeVisible()
+  await expect(page.locator('.so-metric').first()).toContainText('¥1.50')
+  // Do not save the replacement: an ordinary refresh must restore the older explicit draft.
+  await page.reload()
+  await expect(page.getByText('本机草稿已保存 · 非正式入账')).toBeVisible()
+  await expect(page.locator('.so-metric').first()).toContainText('¥100.03')
+  account.id = 'draft-account-b'
+  await page.reload()
+  await expect(page.getByText('本机草稿已保存 · 非正式入账')).toHaveCount(0)
+  await expect(page.locator('.so-metric').first()).toContainText('¥2.49万')
+  account.id = 'draft-account-a'
+  await page.reload()
+  await expect(page.getByText('本机草稿已保存 · 非正式入账')).toBeVisible()
+  await expect(page.locator('.so-metric').first()).toContainText('¥100.03')
   expect(writes).toEqual([])
 })
