@@ -18,6 +18,7 @@ from app.api.anomaly import router as anomaly_router
 from app.api.bill360_performance import router as bill360_performance_router
 from app.api.bill_lifecycle import router as bill_lifecycle_router
 from app.api.business_dashboard import router as business_dashboard_router
+from app.api.daxiong_orders import router as daxiong_orders_router
 from app.api.channel import router as channel_router
 from app.api.channel_invoice_merge import router as channel_invoice_merge_router
 from app.api.rd_invoice_merge import router as rd_invoice_merge_router
@@ -231,6 +232,8 @@ audit_access = Depends(require_module_access("audit.view"))
 
 app.include_router(health_router)
 app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
+# Independent, administrator-only and explicitly disabled until verified DB backup.
+app.include_router(daxiong_orders_router, prefix="/api/daxiong-orders", tags=["daxiong-orders"])
 app.include_router(workbench_router, prefix="/api/workbench", tags=["workbench"])
 app.include_router(global_search_router, prefix="/api/global-search", tags=["global-search"])
 app.include_router(finance_invoice_task_router, prefix="/api/finance-tasks", tags=["finance-tasks"])
