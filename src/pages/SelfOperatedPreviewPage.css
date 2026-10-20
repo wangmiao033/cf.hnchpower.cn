@@ -757,3 +757,117 @@
     font-size: 12px;
   }
 }
+
+
+/* 第二阶段 B：本机草稿仅保存到当前浏览器，不代表正式财务入账。 */
+.so-import-active {
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.so-draft-description {
+  display: grid;
+  min-width: min(520px, 100%);
+  flex: 1 1 480px;
+  gap: 5px;
+  line-height: 1.6;
+}
+
+.so-draft-description strong {
+  color: #845b21;
+  font-size: 14px;
+}
+
+.so-draft-description > span {
+  color: #64582f;
+  font-size: 12px;
+}
+
+.so-draft-description small {
+  color: #796b4c;
+  font-size: 11px;
+}
+
+.so-draft-actions {
+  flex: 0 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-width: 100%;
+}
+
+.so-draft-actions button {
+  min-height: 38px;
+  border: 1px solid #d1b982;
+  border-radius: 8px;
+  padding: 7px 12px;
+  background: #fff;
+  color: #71521e;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 690;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.so-draft-actions button:disabled {
+  opacity: .55;
+  cursor: not-allowed;
+}
+
+.so-draft-actions .so-device-save {
+  background: #2e68c9;
+  border-color: #2e68c9;
+  color: #fff;
+}
+
+.so-draft-actions .so-device-delete {
+  background: #fff5f2;
+  border-color: #efcfca;
+  color: #a75044;
+}
+
+.so-draft-actions button:not(:disabled):hover {
+  filter: brightness(.96);
+}
+
+.so-draft-error,
+.so-draft-loading {
+  margin: 0 0 15px;
+  padding: 10px 14px;
+  border: 1px solid #ecb9b1;
+  border-radius: 8px;
+  color: #a33f37;
+  background: #fff3f1;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.so-draft-loading {
+  border-color: #d1e0f3;
+  color: #526b91;
+  background: #f0f6ff;
+}
+
+@container daxiong (max-width: 800px) {
+  .so-draft-actions {
+    flex: 1 1 100%;
+    justify-content: flex-start;
+  }
+}
+
+@container daxiong (max-width: 420px) {
+  .so-draft-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    width: 100%;
+  }
+
+  .so-draft-actions button {
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+}
