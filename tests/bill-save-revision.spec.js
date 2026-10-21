@@ -33,3 +33,19 @@ test('a receipt-only server revision still protects the unsaved edit draft', asy
   const after = await page.evaluate(() => Object.entries(localStorage).find(([k]) => k.includes('REV-1'))?.[1])
   expect(after).toBe(before)
 })
+
+
+test('a conflict draft survives the loading gap without a server baseline', async ({page}) => {
+  await page.goto('/tests/fixtures/bill-save-revision.html')
+  await page.getByRole('button', {name:'edit-draft'}).click()
+  // Flush immediately, before the 650ms autosave debounce, just like preflight.
+  await page.getByRole('button', {name:'reload-starts'}).click()
+  await expect(page.getByTestId('server-status')).toHaveText('loading')
+  const draft = () => page.evaluate(() => Object.entries(localStorage).find(([k]) => k.includes('REV-1'))?.[1])
+  expect(await draft()).toContain('99')
+  await page.getByRole('button', {name:'reload-finishes'}).click()
+  await expect(page.getByTestId('draft-status')).toContainText('旧草稿已保留')
+  await page.waitForTimeout(900)
+  expect(await draft()).toContain('99')
+  expect(await draft()).toContain('v1')
+})

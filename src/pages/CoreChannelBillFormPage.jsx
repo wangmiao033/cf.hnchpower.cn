@@ -233,7 +233,12 @@ function CoreChannelBillFormPage({ mode }) {
           const row = await getChannelRecord(recordId)
           return apiChannelRowToFrontend(row)
         }, { force: true })
-        if (!cancelled) setRemoteRecord(record)
+        if (!cancelled) {
+          setRemoteRecord(record)
+          // A successfully refreshed snapshot resolves only the old revision alert.
+          // Failed reloads keep the issue; unrelated validation errors remain.
+          setInlineIssue((issue) => issue?.kind === 'stale-status' ? null : issue)
+        }
       } catch (error) {
         if (!cancelled) {
           const message =
@@ -372,7 +377,7 @@ function CoreChannelBillFormPage({ mode }) {
         ...record,
         auditReason,
         updatedAt: stableRecord?.updatedAt || record?.updatedAt
-      })
+      }, { returnSavedRecord: true })
       if (!isCurrentAttempt()) return false
       if (result === false) {
         const serverMessage = getRecentApiErrorMessage()
@@ -385,8 +390,24 @@ function CoreChannelBillFormPage({ mode }) {
         })
         return false
       }
+      if (!result || typeof result !== 'object' || String(result.id) !== String(recordId)
+        || !result.updated_at || !Number.isFinite(new Date(result.updated_at).getTime())) {
+        reportIssue('未能验证服务器保存结果，本机修改会保留。本次不继续核对，请重新读取账单状态。',
+          { kind: 'stale-status', title: '保存结果待确认', autoLocate: false })
+        return false
+      }
+      const persistedRecord = apiChannelRowToFrontend(result)
+      if (JSON.stringify(normalizeChannelDraft(record)) !== JSON.stringify(normalizeChannelDraft(persistedRecord))
+        || normalizedAmount(record.settlementAmount) !== normalizedAmount(persistedRecord.settlementAmount)) {
+        reportIssue('服务器返回的账单内容与本次提交不一致，已暂停核对。本机修改仍保留，请重新读取并核对最新内容。',
+          { kind: 'stale-status', title: '保存后的内容需要重新核对', autoLocate: false })
+        return false
+      }
       setInlineIssue(null)
-      if (result === true) setAuditReason('')
+      // Only this PUT's acknowledged snapshot may advance our edit baseline.
+      // Never adopt an unrelated GET revision just to make a retry pass.
+      setRemoteRecord(persistedRecord)
+      setAuditReason('')
       return result
     } catch (error) {
       if (!isCurrentAttempt()) return false
@@ -512,6 +533,7 @@ function CoreChannelBillFormPage({ mode }) {
     setInlineIssue(null)
     const billId = String(channelEditRecordId)
     let savedSuccessfully = false
+    let acknowledgedRecord = stableRecord
     let confirmedSuccessfully = false
     let completedSuccessfully = false
     try {
@@ -527,6 +549,7 @@ function CoreChannelBillFormPage({ mode }) {
           title: preflight.kind === 'locked' ? '服务器已锁单 · 不可覆盖金额' : '服务器版本已变化',
           saved: false, autoLocate: false
         })
+        safety.flushDraft()
         retryLoad()
         return
       }
@@ -544,8 +567,12 @@ function CoreChannelBillFormPage({ mode }) {
         if (saved === false) {
           // A concurrent update may have happened between preflight and PUT.
           // Reload safely, keeping an incompatible local draft for recovery.
+          safety.flushDraft()
           retryLoad()
           return
+        }
+        if (saved && typeof saved === 'object' && saved.updated_at) {
+          acknowledgedRecord = apiChannelRowToFrontend(saved)
         }
         savedSuccessfully = true
         safety.clearAfterSubmit()
@@ -572,8 +599,8 @@ function CoreChannelBillFormPage({ mode }) {
         )
         return
       }
-      if (!safety.dirty && stableRecord?.updatedAt && savedBill.updated_at
-        && new Date(stableRecord.updatedAt).getTime() !== new Date(savedBill.updated_at).getTime()) {
+      if (acknowledgedRecord?.updatedAt && savedBill.updated_at
+        && new Date(acknowledgedRecord.updatedAt).getTime() !== new Date(savedBill.updated_at).getTime()) {
         reportIssue(
           '本张账单已由其他操作更新，当前页面的数据不是最新版本。本次没有确认；请重新读取服务器账单再操作。',
           { kind: 'stale-status', title: '账单版本已变化 · 本次未确认', saved: false, autoLocate: false }

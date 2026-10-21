@@ -746,7 +746,7 @@ export function useReconciliationStore(settings, showToast, options = {}) {
   )
 
   const onChannelUpdateRecord = useCallback(
-    async (id, record) => {
+    async (id, record, options = {}) => {
       const sid = String(id)
       const merged = {
         ...record,
@@ -760,15 +760,27 @@ export function useReconciliationStore(settings, showToast, options = {}) {
           const payload = frontendChannelRecordToPayload(merged)
           if (merged.updatedAt) payload.expected_updated_at = String(merged.updatedAt)
           if (merged.auditReason) payload.audit_reason = String(merged.auditReason)
-          await updateChannelRecord(sid, payload)
-          await refetchChannelFromApi()
+          const savedRecord = await updateChannelRecord(sid, payload)
+          try {
+            await refetchChannelFromApi()
+          } catch (refreshError) {
+            if (!options.returnSavedRecord) throw refreshError
+            // The PUT succeeded. Do not discard its authoritative revision just
+            // because a secondary list refresh failed.
+            showToast('账单已保存，但列表刷新失败；请以账单最新状态为准。', 'error')
+            return savedRecord
+          }
           showToast('渠道记录更新成功', 'success')
-          return true
+          return options.returnSavedRecord ? savedRecord : true
         } catch (e) {
           console.error(e)
           showToast(e instanceof Error && e.message ? e.message : '渠道账单保存失败，请稍后重试', 'error')
           return false
         }
+      }
+      if (options.returnSavedRecord) {
+        showToast('服务器保存服务暂不可用，本机修改尚未提交，请稍后重试。', 'error')
+        return false
       }
       setChannelRecords((prev) => prev.map((r) => (String(r.id) === sid ? { ...merged, id: sid } : r)))
       showToast('渠道记录更新成功', 'success')
