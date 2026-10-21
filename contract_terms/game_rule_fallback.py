@@ -305,7 +305,8 @@ def apply_game_registry_fallback(
         game_name = str(item.get("game_name") or "").strip() or "未命名游戏"
         # An explicit contract selection is authoritative even when invalid.
         # Registry rules must not turn a rejected selection into silent success.
-        if item.get("selection_error") or item.get("platform_conflict") or item.get("platform_ambiguity"):
+        if (item.get("selection_error") or item.get("platform_conflict")
+                or item.get("platform_ambiguity") or item.get("commercial_identity_conflict")):
             diagnostics.append(f"{game_name}：{item.get('selection_error') or item.get('message')}")
             next_rows.append(item)
             continue

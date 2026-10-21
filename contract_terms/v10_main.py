@@ -106,6 +106,8 @@ def _canonical_variant(value) -> str:
     match = re.search(r"\d+(?:[.]\d+)?折", raw)
     if match:
         number = match.group(0)[:-1]
+        if "." not in number and len(number) > 1 and number.startswith("0"):
+            number = f"0.{number[1:]}"
         try:
             normalized = f"{float(number):g}"
         except ValueError:
@@ -121,15 +123,23 @@ def _canonical_variant(value) -> str:
 
 
 def _project_variant_into_name(candidate: dict) -> dict:
-    """Make the structured settlement variant authoritative for legacy matchers."""
-    variant = _canonical_variant(candidate.get("commercial_variant"))
+    """Project legacy scoring text without changing the source SKU identity."""
+    original_variant = candidate.get("original_commercial_variant", candidate.get("commercial_variant"))
+    variant = _canonical_variant(original_variant)
     if not variant:
         return candidate
-    original = str(candidate.get("product_name") or "").strip()
+    original = str(candidate.get("original_product_name") or candidate.get("product_name") or "").strip()
+    projected = dict(
+        candidate, original_product_name=original,
+        original_commercial_variant=original_variant, commercial_variant=variant,
+    )
+    # An already-declared discount needs no projection. In particular, preserve
+    # named editions and terminal devices, and never append the discount twice.
+    if _canonical_variant(original) == variant:
+        projected["product_name"] = original
+        return projected
     base = _VARIANT_BRACKET_RE.sub("", original)
     base = _VARIANT_SUFFIX_RE.sub("", base).strip(" -_/（）()【】[]") or original
-    projected = dict(candidate)
-    projected["commercial_variant"] = variant
     projected["product_name"] = f"{base}（{variant}）" if base else variant
     return projected
 

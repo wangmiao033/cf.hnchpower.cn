@@ -492,10 +492,13 @@ def recommend_channel_rules(
                     "rule_fields_complete": False,
                     "financially_unambiguous": False,
                     "message": selection_error or (
+                        "合同原始游戏名称或商业版本存在明确冲突，不能自动带入；请核对真实合作清单"
+                        if line.get("commercial_identity_conflict") else
                         "已有同客户、游戏及渠道的合同合作清单，但设备平台声明存在明确冲突，不能自动带入"
                         if line.get("platform_conflict") else "该游戏/账期未找到匹配的可用合同合作清单"
                     ),
                     **({"platform_conflict": True} if line.get("platform_conflict") else {}),
+                    **({"commercial_identity_conflict": True} if line.get("commercial_identity_conflict") else {}),
                     **({"selection_error": selection_error, "selected_access_item_id": selected_id} if selected_id else {}),
                     "match": None,
                     "recommended": None,

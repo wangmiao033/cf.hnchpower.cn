@@ -119,7 +119,8 @@ def enrich_candidates_with_game_ids(conn, candidates: list[dict]) -> list[dict]:
     enriched: list[dict] = []
     for item, key in zip(candidates, normalized):
         row = dict(item)
-        original_name = str(row.get("product_name") or "")
+        # A legacy scoring projection is not the contract's source name.
+        original_name = str(row.get("original_product_name") or row.get("product_name") or "")
         access_id = str(row.get("access_item_id") or "")
         game_id = explicit_links.get(access_id)
         if game_id:

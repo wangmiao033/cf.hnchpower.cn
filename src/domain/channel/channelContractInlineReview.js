@@ -28,6 +28,10 @@ export function sameCommercialGameName(left, right) {
 export function splitContractGamePlatform(value) {
   const raw = String(value ?? '').normalize('NFKC').trim()
   const match = raw.match(/(?:[-_\s](ios|android)|\((ios|android)\))$/i)
+  if (!match) {
+    const compact = raw.match(/(\d+(?:\.\d+)?折)(ios|android)$/i)
+    if (compact) return { name: raw.slice(0, compact.index + compact[1].length).trim(), platform: compact[2].toLowerCase() }
+  }
   return { name: match ? raw.slice(0, match.index).trim() : raw, platform: match ? (match[1] || match[2]).toLowerCase() : '' }
 }
 
