@@ -107,6 +107,9 @@ export function useBillFormSafety({
   }, [dirty, currentRecord, draftKey, baseVersion, staleDraft])
 
   useEffect(() => {
+    // A reload temporarily has no baseline; that is not proof of a clean form.
+    // Preserve a flushed conflict draft until the new revision can be compared.
+    if (mode === 'edit' && !initialRecord) return undefined
     if (staleDraft || !dirty || !currentRecord || suppressAutosaveRef.current) {
       if (!dirty && currentRecord && !staleDraft) {
         clearBillDraft(draftKey)
@@ -118,7 +121,7 @@ export function useBillFormSafety({
 
     const timer = window.setTimeout(flushDraft, 650)
     return () => window.clearTimeout(timer)
-  }, [dirty, currentRecord, flushDraft, draftKey, staleDraft])
+  }, [dirty, currentRecord, flushDraft, draftKey, staleDraft, mode, initialRecord])
 
   useEffect(() => {
     if (!dirty) {

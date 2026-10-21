@@ -22,12 +22,14 @@ function Fixture() {
   })
   const draftKey = billDraftKey('channel', 'edit', 'REV-1')
   return <main>
-    <div data-testid="server-status">{server.status}</div>
+    <div data-testid="server-status">{server?.status || 'loading'}</div>
     <div data-testid="draft-status">{safety.statusText}</div>
     <div data-testid="old-draft">{readBillDraft(draftKey)?.record?.settlementAmount || 'none'}</div>
     <button onClick={() => safety.onFormStateChange({ ...server, settlementAmount: 99 })}>edit-draft</button>
     <button onClick={() => setServer({ ...server, status: 'confirmed', updatedAt: 'v2', settlementAmount: 12 })}>server-confirms</button>
     <button onClick={() => setServer({ ...server, updatedAt: 'v2' })}>server-other-change</button>
+    <button onClick={() => { safety.flushDraft(); setServer(null) }}>reload-starts</button>
+    <button onClick={() => setServer({ ...initial, updatedAt: 'v2' })}>reload-finishes</button>
     <button onClick={() => safety.discardDraft()}>discard-on-purpose</button>
   </main>
 }

@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { AuthProvider } from '/src/features/auth/AuthContext.jsx'
 import { AppStateProvider } from '/src/app/AppStateContext.jsx'
+import { updateChannelRecord, frontendChannelRecordToPayload } from '/src/lib/api/channel.ts'
 import CoreChannelBillFormPage from '/src/pages/CoreChannelBillFormPage.jsx'
 const noop = () => {}
 window.reviewTest = { saves: [], toasts: [], navigations: [], failSave: false, failRefresh: false }
@@ -10,10 +11,11 @@ const value = {
   settings: { partners: [{id:'partner-test',name:'测试渠道'}] },
   recon: {
     channelRecords: [],
-    onChannelUpdateRecord: async (id, record) => {
+    onChannelUpdateRecord: async (id, record, options = {}) => {
       window.reviewTest.saves.push({id,record})
       if (window.reviewTest.failSave) throw new Error('测试保存失败')
-      return true
+      const saved = await updateChannelRecord(id, { ...frontendChannelRecordToPayload(record), expected_updated_at: record.updatedAt })
+      return options.returnSavedRecord ? saved : true
     },
     refetchChannelFromApi: async () => { if (window.reviewTest.failRefresh) throw new Error('测试列表刷新失败') }
   },
