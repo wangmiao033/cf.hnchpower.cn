@@ -269,7 +269,9 @@
   min-height: 22px;
   margin: -2px 2px -3px;
   padding: 0;
-  opacity: .94;
+  /* This header owns the game-presets modal. Wrapper opacity would trap it
+     in a stacking context below workspace navigation. */
+  opacity: 1;
 }
 
 .core-bill-form-page--rd .rd-recon-meta-header button {
