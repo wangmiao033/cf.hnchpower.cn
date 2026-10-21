@@ -563,7 +563,9 @@ def recommend_channel_rules(
         )
         tax_rate_warning = bool(recommended.get("tax_rate_missing"))
         public_recommended = _public_rule(recommended)
-        discount_factor = _discount_factor_from_game_name(game_name)
+        # Registry display names may omit or generalize a commercial label.
+        # Derive the coefficient from the preserved bill SKU, never that alias.
+        discount_factor = _discount_factor_from_game_name(display_game_name)
         if discount_factor is not None:
             public_recommended["discount_factor"] = discount_factor
 

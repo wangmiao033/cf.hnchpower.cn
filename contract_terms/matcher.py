@@ -79,8 +79,13 @@ def commercial_game_variant(value: Any) -> str:
     match = re.search(r"(?<!\d)(\d+(?:\.\d+)?)\s*折", text)
     if not match:
         return ""
+    # Keep direct imports on the same compact-label semantics as V19's
+    # runtime compatibility parser: 005折 = 0.05折, not 5折.
+    token = match.group(1)
+    if "." not in token and len(token) > 1 and token.startswith("0"):
+        token = f"0.{token[1:]}"
     try:
-        number = float(match.group(1))
+        number = float(token)
     except (TypeError, ValueError):
         return ""
     return f"{number:g}折"
