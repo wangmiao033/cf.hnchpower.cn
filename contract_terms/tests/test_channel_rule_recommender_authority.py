@@ -206,7 +206,7 @@ class ChannelContractAuthorityTests(unittest.TestCase):
         result = recommend_channel_rules(
             self.partner,
             "天盛（重庆天盛）",
-            [{"line_index": 0, "game_name": "龙吟大陆", "settlement_cycle": "2026-01"}],
+            [{"line_index": 0, "game_name": "龙吟大陆（内置0.1折正版放置手游）", "settlement_cycle": "2026-01"}],
             candidates,
         )
         self.assertTrue(result["auto_apply"])

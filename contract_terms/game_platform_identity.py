@@ -1,8 +1,8 @@
 """Pure contract SKU/device identity helpers, without service or database imports.
 
-Device suffixes are presentation metadata, not financial editions. Only an
-explicit terminal ``-ios``, ``_ios``, ``(ios)`` or whitespace + ``ios`` (and the
-same Android spellings) is separated. Every other commercial suffix is retained.
+Device suffixes are presentation metadata, not financial editions. Delimited
+terminal iOS/Android and a device directly following a numeric discount (for
+example ``0.05折iOS``) are separated. Other commercial suffixes are retained.
 """
 
 from __future__ import annotations
@@ -12,6 +12,7 @@ import unicodedata
 from typing import Any
 
 _DEVICE_SUFFIX = re.compile(r"(?:[-_\s](ios|android)|\((ios|android)\))$", re.IGNORECASE)
+_COMPACT_DEVICE_SUFFIX = re.compile(r"\d+(?:\.\d+)?折(?P<device>ios|android)$", re.IGNORECASE)
 _ALL_PLATFORMS = {"全版本", "all", "all platforms"}
 
 
@@ -19,6 +20,12 @@ def split_device_suffix(value: Any) -> tuple[str, str]:
     raw = unicodedata.normalize("NFKC", str(value or "")).strip()
     match = _DEVICE_SUFFIX.search(raw)
     if not match:
+        # Source statements also use "0.05折iOS". Only a numeric discount
+        # directly followed by a terminal device is unambiguous; do not strip
+        # generic title text such as "游戏ios" or non-terminal marketing words.
+        compact = _COMPACT_DEVICE_SUFFIX.search(raw)
+        if compact:
+            return raw[:compact.start("device")].strip(), compact.group("device").lower()
         return raw, ""
     return raw[:match.start()].strip(), (match.group(1) or match.group(2)).lower()
 

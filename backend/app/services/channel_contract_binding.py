@@ -40,6 +40,10 @@ def _label(value) -> str:
 def _split_platform(value) -> tuple[str, str]:
     raw = _normalized(value)
     match = re.search(r"(?:[-_\s](ios|android)|\((ios|android)\))$", raw)
+    if not match:
+        compact = re.search(r"\d+(?:\.\d+)?折(?P<device>ios|android)$", raw)
+        if compact:
+            return raw[:compact.start("device")].strip(), compact.group("device")
     return (raw[:match.start()].strip(), match.group(1) or match.group(2)) if match else (raw, "")
 
 
@@ -55,11 +59,27 @@ def _game_key(value) -> str:
     return re.sub(r"(?<!\d)\d+(?:\.\d+)?折", discount, raw)
 
 
+def _commercial_variant(value) -> str:
+    raw = _game_key(value)
+    match = re.search(r"(?<!\d)\d+(?:\.\d+)?折", raw)
+    if match:
+        return match.group(0)
+    return next((word for word in ("折扣版", "折服", "折版") if word in raw), "")
+
+
 def contract_game_matches(game_name, candidate: dict) -> bool:
     """Formatting/platform aliases cannot erase a distinct commercial edition."""
     game, device = _split_platform(game_name)
     product, product_device = _split_platform(candidate.get("product_name"))
     if not _game_key(game) or _game_key(game) != _game_key(product):
+        return False
+    raw_variant = candidate.get("commercial_variant")
+    variant = _commercial_variant(raw_variant)
+    if variant and variant != _commercial_variant(product):
+        return False
+    named_editions = set(re.findall(r"红包版|普通版", str(raw_variant or "")))
+    product_editions = set(re.findall(r"红包版|普通版", product))
+    if named_editions and (len(named_editions) > 1 or named_editions != product_editions):
         return False
     declared = _normalized(candidate.get("platform"))
     all_platforms = declared in {"全版本", "all", "all platforms"}
@@ -153,6 +173,14 @@ def _has_links(db) -> bool:
     return inspect(db.connection()).has_table("cf_bill_contract_links")
 
 
+def _has_contract_terms(db) -> bool:
+    # Legacy installations may lack optional structured terms. Never create
+    # schema while saving a bill, but validate available version evidence.
+    if db.get_bind().dialect.name == "postgresql":
+        return bool(db.execute(text("SELECT to_regclass('public.cf_contract_access_terms')")).scalar())
+    return inspect(db.connection()).has_table("cf_contract_access_terms")
+
+
 def load_channel_contract_links(db, bill_ids: list[str]) -> dict[str, dict[str, dict]]:
     if not bill_ids or not _has_links(db):
         return {}
@@ -212,6 +240,7 @@ def prepare_channel_contract_bindings(db, bill, submitted, existing_lines, *, pr
     if len(partners) != 1:
         _blocked("channel_contract_customer_ambiguous", "当前合作方未唯一关联客户库，请重新选择准确客户后保存。")
     partner = dict(partners[0])
+    has_terms = _has_contract_terms(db)
     cache = {}
     for item, link in zip(submitted, desired):
         if not link:
@@ -232,6 +261,13 @@ def prepare_channel_contract_bindings(db, bill, submitted, existing_lines, *, pr
             if row is None:
                 _blocked("channel_contract_missing", "原合同合作清单已删除，请重新选择或解除本行关联后保存。")
             cache[access_id] = dict(row)
+            if has_terms:
+                terms = db.execute(text("""
+                    SELECT commercial_variant FROM cf_contract_access_terms
+                    WHERE access_item_id = :id
+                """ + lock), {"id": access_id}).mappings().first()
+                if terms:
+                    cache[access_id]["commercial_variant"] = terms.get("commercial_variant")
         validate_contract_binding(bill, item, cache[access_id], partner)
     return desired, old
 

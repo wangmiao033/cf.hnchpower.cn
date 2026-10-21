@@ -166,6 +166,7 @@ def _direct_exact_rank(
         canonical_variants = (
             _matcher.commercial_game_variant(game_name),
             _matcher.commercial_game_variant(candidate.get("product_name")),
+            _matcher.commercial_game_variant(candidate.get("commercial_variant")),
         )
         if any(value and value != variant for value in canonical_variants):
             original_variant_conflict = True
@@ -177,6 +178,9 @@ def _direct_exact_rank(
     # the SKU, but the registry points at a different explicit discount SKU,
     # do not fall back to the wrong canonical name and silently apply its rate.
     if original_variant_conflict and not original_candidates:
+        # The caller's registry fallback must not rescue an identity rejection
+        # merely because both source names share a broad game registry ID.
+        line["commercial_identity_conflict"] = True
         return []
 
     identity_candidates = original_candidates or [
@@ -257,6 +261,42 @@ def rank_candidates_v21(bill: dict, line: dict, candidates: list[dict]) -> list[
     # Platform evidence is an eligibility boundary, including the legacy fuzzy
     # fallback. Never revive an incompatible platform merely via a registry name.
     input_name = line.get("input_game_name") or line.get("game_name")
+    # Broad registry aliases may rename an ordinary title, but cannot erase an
+    # explicit discount or named financial edition from either source name.
+    # Apply this before BOTH exact-canonical and historical fuzzy fallbacks.
+    def declares_commercial_identity(name):
+        return bool(_matcher.commercial_game_variant(name) or re.search(r"红包版|普通版", str(name or "")))
+
+    source_conflict = False
+    safe_candidates = []
+    for candidate in candidates:
+        original = candidate.get("original_product_name") or candidate.get("product_name")
+        raw_variant = candidate.get("original_commercial_variant", candidate.get("commercial_variant"))
+        variant = _matcher.commercial_game_variant(raw_variant)
+        # The legacy discount parser intentionally extracts only a discount.
+        # Preserve and compare explicit named editions before that extraction
+        # can silently erase a contradictory structured value.
+        named_editions = set(re.findall(r"红包版|普通版", str(raw_variant or "")))
+        product_editions = set(re.findall(r"红包版|普通版", str(original or "")))
+        structured_conflict = bool(
+            (variant and variant != _matcher.commercial_game_variant(original))
+            or (named_editions and (len(named_editions) > 1 or named_editions != product_editions))
+        )
+        source_differs = _formatted_contract_game_key(input_name) != _formatted_contract_game_key(original)
+        if structured_conflict or (
+            source_differs and (declares_commercial_identity(input_name) or declares_commercial_identity(original))
+        ):
+            same_registry = bool(line.get("game_id") and line.get("game_id") == candidate.get("game_id"))
+            same_canonical = _formatted_contract_game_key(line.get("game_name")) == _formatted_contract_game_key(candidate.get("product_name"))
+            prefix = _discount_game_prefix(input_name)
+            related_source = not source_differs or bool(prefix and prefix == _discount_game_prefix(original)) or (
+                _matcher.normalize_game(input_name) == _matcher.normalize_game(original)
+            )
+            if _channel._partner_matches(str(bill.get("partner_name") or ""), candidate) and (same_registry or same_canonical or related_source):
+                source_conflict = True
+            continue
+        safe_candidates.append(candidate)
+    candidates = safe_candidates
     same_identity = [
         candidate for candidate in candidates
         if _channel._partner_matches(str(bill.get("partner_name") or ""), candidate)
@@ -280,9 +320,10 @@ def rank_candidates_v21(bill: dict, line: dict, candidates: list[dict]) -> list[
         # game's platform must never turn an ordinary "not found" into a block.
         line["platform_conflict"] = True
     exact = _direct_exact_rank(bill, line, candidates)
-    if exact is not None:
-        return exact
-    return _ORIGINAL_RANK_CANDIDATES(bill, line, candidates)
+    ranked = exact if exact is not None else _ORIGINAL_RANK_CANDIDATES(bill, line, candidates)
+    if not ranked and source_conflict:
+        line["commercial_identity_conflict"] = True
+    return ranked
 
 
 # recommend_channel_rules() looks up _rank_candidates through this module's
