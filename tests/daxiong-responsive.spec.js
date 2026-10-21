@@ -1,11 +1,12 @@
 import { test, expect } from '@playwright/test'
 
-async function openReadOnly(page) {
+async function openReadOnly(page, { authReady = Promise.resolve() } = {}) {
   const methods = []
   await page.route(url => url.pathname.startsWith('/api/'), async route => {
     const request = route.request()
     methods.push({ method: request.method(), path: new URL(request.url()).pathname })
     if (new URL(request.url()).pathname === '/api/auth/me') {
+      await authReady
       return route.fulfill({
         json: { id: 'daxiong-layout-admin', display_name: '布局测试管理员', role: 'admin', permissions: [] }
       })
@@ -15,6 +16,9 @@ async function openReadOnly(page) {
   await page.goto('/tests/fixtures/daxiong-responsive.html')
   await expect(page.locator('.so-page')).toBeVisible()
   await expect(page.getByRole('tab', { name: '经营总览' })).toBeVisible()
+  // Auth response completion alone does not mean React effects / IndexedDB
+  // initialization have settled. This existing UI state is the ready signal.
+  await expect(page.getByRole('button', { name: '导入订单 · 先核对' })).toBeEnabled()
   return methods
 }
 
@@ -95,6 +99,29 @@ test('resizes without reloading or losing current month and active tab', async (
   const desktop = await measure(page)
   expect(desktop.columns).toBe(2)
   expect(desktop.rootOverflow).toBeLessThanOrEqual(2)
+  expect(requests.filter(x => !['GET', 'HEAD'].includes(x.method))).toEqual([])
+})
+
+test('waits for delayed authentication before accepting month selection', async ({ page }) => {
+  let releaseAuth
+  const authReady = new Promise(resolve => { releaseAuth = resolve })
+  const opening = openReadOnly(page, { authReady })
+  try {
+    await expect(page.getByTestId('fixture-auth-loading')).toBeVisible()
+    await expect(page.locator('.so-page')).toHaveCount(0)
+    await expect(page.getByLabel('账期')).toHaveCount(0)
+  } finally {
+    releaseAuth()
+  }
+  const requests = await opening
+  await page.getByLabel('账期').selectOption('2026-08')
+  await page.getByRole('tab', { name: '游戏利润' }).click()
+  await expect(page.getByLabel('账期')).toHaveValue('2026-08')
+  await expect(page.locator('.so-metric strong').first()).toHaveAttribute('title', '¥16,500.20')
+  await page.setViewportSize({ width: 390, height: 844 })
+  await expect(page.getByLabel('账期')).toHaveValue('2026-08')
+  await expect(page.getByRole('tab', { name: '游戏利润' })).toHaveAttribute('aria-selected', 'true')
+  await expect(page.locator('.so-metric strong').first()).toHaveAttribute('title', '¥16,500.20')
   expect(requests.filter(x => !['GET', 'HEAD'].includes(x.method))).toEqual([])
 })
 
