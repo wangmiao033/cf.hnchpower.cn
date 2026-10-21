@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import {
   createContractAccessItem,
   deleteContractAccessItem,
@@ -273,6 +274,28 @@ function ContractAccessEditor({ contract, item, onClose, onSaved, onToast }) {
   const [dirty, setDirty] = useState(false)
   const [changed, setChanged] = useState(false)
   const [createdCount, setCreatedCount] = useState(0)
+  const maskRef = useRef(null)
+  const dialogRef = useRef(null)
+  const closeButtonRef = useRef(null)
+  // Capture before React commits the existing autoFocus input inside this editor.
+  const previousFocusRef = useRef(document.activeElement)
+
+  useEffect(() => {
+    const previousFocus = previousFocusRef.current
+    const previousOverflow = document.body.style.overflow
+    // Only isolate the background for this mounted modal; preserve existing inert state.
+    const background = [...document.body.children].filter(
+      (element) => element instanceof HTMLElement && element !== maskRef.current && !element.inert
+    )
+    background.forEach((element) => { element.inert = true })
+    document.body.style.overflow = 'hidden'
+    closeButtonRef.current?.focus({ preventScroll: true })
+    return () => {
+      background.forEach((element) => { element.inert = false })
+      document.body.style.overflow = previousOverflow
+      if (previousFocus?.isConnected) previousFocus.focus?.({ preventScroll: true })
+    }
+  }, [])
 
   useEffect(() => {
     if (!contract?.id) return undefined
@@ -347,6 +370,7 @@ function ContractAccessEditor({ contract, item, onClose, onSaved, onToast }) {
   }
 
   const finish = async () => {
+    if (saving || deletingId) return
     if (dirty && !window.confirm('当前填写还没有保存，确定关闭并放弃这些修改吗？')) return
     if (changed) {
       await onSaved?.()
@@ -467,11 +491,39 @@ function ContractAccessEditor({ contract, item, onClose, onSaved, onToast }) {
     }
   }
 
-  return (
-    <div className="contract-editor-mask contract-access-workbench-mask" onClick={() => void finish()}>
+  const handleDialogKeyDown = (event) => {
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      event.stopPropagation()
+      void finish()
+      return
+    }
+    if (event.key !== 'Tab') return
+    const controls = [...dialogRef.current.querySelectorAll(
+      'button, input, select, textarea, a[href], summary, [tabindex]'
+    )].filter((element) => !element.disabled && element.tabIndex >= 0 && element.getClientRects().length)
+    const first = controls[0]
+    const last = controls[controls.length - 1]
+    if (!first) {
+      event.preventDefault()
+      dialogRef.current.focus()
+    } else if (event.shiftKey && (document.activeElement === first || document.activeElement === dialogRef.current)) {
+      event.preventDefault()
+      last.focus()
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault()
+      first.focus()
+    }
+  }
+
+  // Escape the page's z-index: 1 stacking context instead of raising global navigation layers.
+  return createPortal(
+    <div ref={maskRef} className="contract-editor-mask contract-access-workbench-mask" onClick={() => void finish()} onKeyDown={handleDialogKeyDown}>
       <div
+        ref={dialogRef}
         className="contract-editor contract-access-workbench"
         role="dialog"
+        tabIndex={-1}
         aria-modal="true"
         aria-label="合同合作清单"
         onClick={(event) => event.stopPropagation()}
@@ -486,7 +538,7 @@ function ContractAccessEditor({ contract, item, onClose, onSaved, onToast }) {
           <div className="contract-access-workbench__head-actions">
             <span className="contract-access-workbench__count">共 {items.length} 条</span>
             {createdCount ? <span className="contract-access-workbench__created">本次新增 {createdCount}</span> : null}
-            <button type="button" onClick={() => void finish()} disabled={saving}>关闭</button>
+            <button ref={closeButtonRef} type="button" onClick={() => void finish()} disabled={saving || Boolean(deletingId)}>关闭</button>
           </div>
         </header>
 
@@ -710,7 +762,8 @@ function ContractAccessEditor({ contract, item, onClose, onSaved, onToast }) {
           </form>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
 

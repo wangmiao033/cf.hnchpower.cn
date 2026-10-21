@@ -1,13 +1,19 @@
-.contract-access-workbench-mask {
+.contract-editor-mask.contract-access-workbench-mask {
+  /* Body portal: keep this modal above the shell without changing any global layers. */
+  position: fixed;
+  inset: 0;
   z-index: 1420;
   padding: 24px;
   overflow: hidden;
+  overscroll-behavior: contain;
 }
 
-.contract-access-workbench {
+.contract-editor.contract-access-workbench {
   width: min(1120px, calc(100vw - 48px));
   height: min(780px, calc(100vh - 48px));
+  height: min(780px, calc(100dvh - 48px));
   max-height: calc(100vh - 48px);
+  max-height: calc(100dvh - 48px);
   margin: 0 auto;
   padding: 0;
   overflow: hidden;
@@ -148,6 +154,7 @@
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding-right: 2px;
 }
 
@@ -273,6 +280,7 @@
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 14px 16px 22px;
 }
 
@@ -521,14 +529,16 @@
 }
 
 @media (max-width: 860px) {
-  .contract-access-workbench-mask {
+  .contract-editor-mask.contract-access-workbench-mask {
     padding: 10px;
   }
 
-  .contract-access-workbench {
+  .contract-editor.contract-access-workbench {
     width: calc(100vw - 20px);
     height: calc(100vh - 20px);
+    height: calc(100dvh - 20px);
     max-height: calc(100vh - 20px);
+    max-height: calc(100dvh - 20px);
   }
 
   .contract-access-workbench__body {

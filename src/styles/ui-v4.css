@@ -77,7 +77,8 @@ body {
 
 .app-workspace > * {
   position: relative;
-  z-index: 1;
+  /* Do not create a stacking context around a whole route. Its fixed dialogs
+     must share the shell's layers, not remain trapped below the workspace tabs. */
 }
 
 /* -------------------------------------------------------------------------- */

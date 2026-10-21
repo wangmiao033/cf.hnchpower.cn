@@ -189,6 +189,11 @@
     z-index: 40;
   }
 
+  /* The closed launcher stays below tabs; its open menu must cover them. */
+  .app-shell-mobile-navigation:has(.mobile-menu) {
+    z-index: 55;
+  }
+
   .app-shell-mobile-navigation .app-sidebar {
     display: block;
     width: 100%;
