@@ -6,6 +6,24 @@ import {
 } from './channelLineDefaults.js'
 
 describe('channelLineDefaults / commercial discount', () => {
+  it.each([
+    ['测试游戏005折混服', 0.005], ['测试游戏01折', 0.01],
+    ['测试游戏0050折', 0.005], ['测试游戏0005折', 0.0005],
+    ['测试游戏005折红包版', 0.005], ['测试游戏005折Android', 0.005],
+    ['测试游戏0折', null], ['测试游戏00折', null],
+    ['测试游戏05折', 0.05], ['测试游戏0.05折', 0.005],
+    ['测试游戏0.1折', 0.01], ['测试游戏3折', 0.3],
+    ['测试游戏0.005折', 0.0005], ['测试游戏0.01折', 0.001],
+    ['测试游戏10折', 1], ['测试游戏005折iOS', 0.005],
+    ['测试游戏００５折混服', 0.005], ['测试游戏005', null],
+    ['测试游戏ios', null], ['测试游戏', null]
+  ])('keeps source label %s consistent with the contract recommendation', (gameName, factor) => {
+    expect(commercialDiscountFactorFromGameName(gameName)).toBe(factor)
+    if (factor != null) {
+      const row = { gameName, discountFactor: String(factor) }
+      expect(applyCommercialDiscountFromGameName(row)).toEqual(row)
+    }
+  })
   it('parses decimal and compact 折 spellings', () => {
     expect(canonicalCommercialDiscountLabel('一起来修仙（0.05折）')).toBe('0.05折')
     expect(canonicalCommercialDiscountLabel('一起来修仙005折')).toBe('0.05折')
