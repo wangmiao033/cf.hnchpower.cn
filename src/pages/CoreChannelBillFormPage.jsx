@@ -3,6 +3,7 @@ import { useAppState } from '@/app/AppStateContext.jsx'
 import PageContainer from '@/components/layout/PageContainer.jsx'
 import BillScanAttachments from '@/components/billing/BillScanAttachments.jsx'
 import { listBillAttachments } from '@/lib/api/billAttachments.ts'
+import ChannelReviewConfirmation from '@/components/channel/ChannelReviewConfirmation.jsx'
 import ChannelBillingForm from '@/components/channel/ChannelBillingForm.jsx'
 import ChannelSmallVarianceApprovalPanel from '@/components/channel/ChannelSmallVarianceApprovalPanel.jsx'
 import ChannelBillReadonlyView from '@/components/channel/ChannelBillReadonlyView.jsx'
@@ -162,6 +163,17 @@ function CoreChannelBillFormPage({ mode }) {
   const [loadError, setLoadError] = useState('')
   const [loadAttempt, setLoadAttempt] = useState(0)
   const [reviewing, setReviewing] = useState(false)
+  const reviewInFlightRef = useRef(false)
+  const reviewGenerationRef = useRef(0)
+  const [reviewRequest, setReviewRequest] = useState(null)
+  const [reviewPhase, setReviewPhase] = useState('')
+  useEffect(() => {
+    reviewGenerationRef.current += 1
+    reviewInFlightRef.current = false
+    setReviewing(false)
+    setReviewPhase('')
+    return () => { reviewGenerationRef.current += 1 }
+  }, [mode, channelEditRecordId])
   const [inlineIssue, setInlineIssue] = useState(null)
   const [differenceSeedItems, setDifferenceSeedItems] = useState([])
   const [showSmallVariancePanel, setShowSmallVariancePanel] = useState(false)
@@ -186,6 +198,7 @@ function CoreChannelBillFormPage({ mode }) {
   useEffect(() => {
     authorityRequestRef.current += 1
     setSmartRecord(null)
+    setReviewRequest(null)
     setSmartRevision(0)
     setInlineIssue(null)
     setDifferenceSeedItems([])
@@ -353,13 +366,14 @@ function CoreChannelBillFormPage({ mode }) {
     return issue
   }
 
-  const handleChannelUpdateRecord = async (recordId, record) => {
+  const handleChannelUpdateRecord = async (recordId, record, isCurrentAttempt = () => true) => {
     try {
       const result = await recon.onChannelUpdateRecord?.(recordId, {
         ...record,
         auditReason,
         updatedAt: stableRecord?.updatedAt || record?.updatedAt
       })
+      if (!isCurrentAttempt()) return false
       if (result === false) {
         const serverMessage = getRecentApiErrorMessage()
         const reason = serverMessage || '服务器没有接受本次保存。请按提示处理后重新保存。'
@@ -375,6 +389,7 @@ function CoreChannelBillFormPage({ mode }) {
       if (result === true) setAuditReason('')
       return result
     } catch (error) {
+      if (!isCurrentAttempt()) return false
       const message = error instanceof Error && error.message
         ? error.message
         : '账单保存失败，请根据当前页提示修正后重试。'
@@ -463,8 +478,8 @@ function CoreChannelBillFormPage({ mode }) {
     }
   }
 
-  const confirmReview = async () => {
-    if (!isEdit || !channelEditRecordId || reviewing) return
+  const confirmReview = async (approvedRequest = null) => {
+    if (!isEdit || !channelEditRecordId || reviewing || reviewInFlightRef.current) return
     const candidate = safety.currentRecord || smartRecord || safety.draftRecord || stableRecord
     const validationMessage = reviewValidation(candidate)
     if (validationMessage) {
@@ -477,24 +492,34 @@ function CoreChannelBillFormPage({ mode }) {
     const hasPlatformDifference = String(candidate?.validationStatus ?? stableRecord?.validationStatus ?? '') === 'fail'
       && Number.isFinite(Number(candidate?.settlementDifference ?? stableRecord?.settlementDifference))
       && Math.abs(Number(candidate?.settlementDifference ?? stableRecord?.settlementDifference)) > 0.005
-    // When the saved bill has a platform discrepancy, the written evidence
-    // approval is the only human confirmation: do not show a redundant popup.
-    const confirmed = hasPlatformDifference || window.confirm(
-      zeroSettlement
-        ? `确认核对并结清这张零结算账单吗？\n\n结算金额：${money(settlementAmount)}\n\n本期无需开票和收款，确认后账单将直接完成并锁定。`
-        : `确认核对这张渠道账单吗？\n\n结算金额：${money(settlementAmount)}\n\n确认后账单会自动锁定；如合作方启用了累计结算，本期会进入累计池而不是立即催收/开票。`
-    )
-    if (!confirmed) return
-
+    // Platform discrepancies still use their existing written evidence approval.
+    // Ordinary confirmation is an accessible in-app dialog, never a bypass.
+    const signature = JSON.stringify(candidate)
+    if (!hasPlatformDifference && (approvedRequest?.signature !== signature || approvedRequest?.billId !== String(channelEditRecordId))) {
+      setReviewRequest({
+        signature, billId: String(channelEditRecordId), zeroSettlement,
+        partnerName: candidate?.partnerName || candidate?.channelName,
+        month: candidate?.settlementMonth, amountLabel: money(settlementAmount), dirty: safety.dirty
+      })
+      return
+    }
+    setReviewRequest(null)
+    const generation = reviewGenerationRef.current
+    const isCurrentAttempt = () => reviewGenerationRef.current === generation
+    reviewInFlightRef.current = true
     setReviewing(true)
+    setReviewPhase('正在检查服务器状态…')
     setInlineIssue(null)
     const billId = String(channelEditRecordId)
     let savedSuccessfully = false
+    let confirmedSuccessfully = false
+    let completedSuccessfully = false
     try {
       // One authoritative preflight BEFORE writing any amount. Previously
       // confirmation saved first and discovered an already-locked status after
       // the write had failed, trapping users between two contradictory views.
       const currentBill = await getChannelRecord(billId)
+      if (!isCurrentAttempt()) return
       const preflight = assessChannelSavePreflight(stableRecord, currentBill)
       if (!preflight.allowed) {
         reportIssue(preflight.message, {
@@ -506,6 +531,7 @@ function CoreChannelBillFormPage({ mode }) {
         return
       }
       if (safety.dirty) {
+        setReviewPhase('正在保存修改…')
         const saved = await handleChannelUpdateRecord(billId, {
           ...stableRecord,
           ...candidate,
@@ -513,7 +539,8 @@ function CoreChannelBillFormPage({ mode }) {
           status: currentBill.status || 'pending',
           // Keep the opened revision for backend optimistic concurrency.
           updatedAt: stableRecord?.updatedAt || currentBill.updated_at
-        })
+        }, isCurrentAttempt)
+        if (!isCurrentAttempt()) return
         if (saved === false) {
           // A concurrent update may have happened between preflight and PUT.
           // Reload safely, keeping an incompatible local draft for recovery.
@@ -533,7 +560,9 @@ function CoreChannelBillFormPage({ mode }) {
 
       // The initial edit snapshot may have been superseded in a second tab.
       // Verify the current persisted status before *any* confirmation attempt.
+      setReviewPhase('账单已保存，正在校验核对条件…')
       const savedBill = await getChannelRecord(billId)
+      if (!isCurrentAttempt()) return
       const savedStatus = String(savedBill.status || 'pending').trim().toLowerCase()
       if (savedStatus !== 'pending') {
         retryLoad()
@@ -561,6 +590,7 @@ function CoreChannelBillFormPage({ mode }) {
       // rather than a guaranteed-failing ordinary confirmed transition.
       if (String(savedBill.validation_status || '').toLowerCase() === 'fail') {
         const review = await assessCurrentPlatformReview(savedBill)
+        if (!isCurrentAttempt()) return
         if (review.eligible) {
           const documented = review.reviewKind === 'documented'
           setInlineIssue({
@@ -579,11 +609,18 @@ function CoreChannelBillFormPage({ mode }) {
         return
       }
 
+      setReviewPhase('正在执行核对并锁定账单…')
       const lifecycle = await transitionBillLifecycle('channel', billId, 'confirmed', '')
+      if (!isCurrentAttempt()) return
+      confirmedSuccessfully = true
       if (zeroSettlement) {
+        setReviewPhase('已核对，正在结清零结算账单…')
         await transitionBillLifecycle('channel', billId, 'completed', '')
+        if (!isCurrentAttempt()) return
+        completedSuccessfully = true
       }
       await recon.refetchChannelFromApi?.()
+      if (!isCurrentAttempt()) return
       const deferred = Boolean(lifecycle?.settlement_condition?.deferred)
       setInlineIssue(null)
       setDifferenceSeedItems([])
@@ -597,6 +634,14 @@ function CoreChannelBillFormPage({ mode }) {
       )
       goList()
     } catch (error) {
+      if (!isCurrentAttempt()) return
+      if (confirmedSuccessfully) {
+        reportIssue(zeroSettlement && !completedSuccessfully
+          ? '账单已核对并锁定，但零结算结清结果尚未确认。请重新读取服务器状态后处理，不要重复核对。'
+          : '账单核对已成功，但列表刷新失败。请重新读取服务器状态，不要重复核对。',
+        { kind: 'stale-status', title: '核对已成功 · 请刷新服务器状态', saved: true, autoLocate: false })
+        return
+      }
       const message = error instanceof Error && error.message
         ? error.message
         : savedSuccessfully
@@ -611,7 +656,9 @@ function CoreChannelBillFormPage({ mode }) {
       )) {
         try {
           const savedBill = await getChannelRecord(billId)
+          if (!isCurrentAttempt()) return
           const review = await assessCurrentPlatformReview(savedBill)
+          if (!isCurrentAttempt()) return
           if (review.eligible) {
             const documented = review.reviewKind === 'documented'
             setInlineIssue({
@@ -626,6 +673,7 @@ function CoreChannelBillFormPage({ mode }) {
           console.warn('读取平台金额差异核对依据失败', lookupError)
         }
       }
+      if (!isCurrentAttempt()) return
       const contractRelated = /合同|差异|核验|特殊结算|匹配/.test(message)
       const contractDifferences = error instanceof ContractDifferenceBlockedError
         ? error.contractDifferences || []
@@ -642,7 +690,11 @@ function CoreChannelBillFormPage({ mode }) {
       if (contractRelated) openContractDifferenceWorkbench()
       else window.setTimeout(() => locateIssue(issue), 70)
     } finally {
-      setReviewing(false)
+      if (isCurrentAttempt()) {
+        reviewInFlightRef.current = false
+        setReviewPhase('')
+        setReviewing(false)
+      }
     }
   }
 
@@ -1045,7 +1097,9 @@ function CoreChannelBillFormPage({ mode }) {
             <strong>{inlineIssue.title}</strong>
             <p>{inlineIssue.message}</p>
             <small>
-              {inlineIssue.saved
+              {inlineIssue.kind === 'stale-status'
+                ? '请先重新读取服务器状态；不会自动再次提交或覆盖账单。'
+                : inlineIssue.saved
                 ? inlineIssue.kind === 'contract'
                   ? '账单金额已保存，无需改成合同默认费率。若本期结算确认函属实，可直接确认特殊结算并锁单。'
                   : inlineIssue.kind === 'platform'
@@ -1078,7 +1132,7 @@ function CoreChannelBillFormPage({ mode }) {
             {inlineIssue.kind === 'contract' && isEdit ? (
               <button type="button" onClick={openContractDifferenceWorkbench} disabled={reviewing}>查看合同差异详情</button>
             ) : null}
-            {isEdit && inlineIssue.saved ? (
+            {isEdit && inlineIssue.saved && inlineIssue.kind !== 'stale-status' ? (
               <button type="button" disabled={reviewing} onClick={() => void confirmReview()}>重新检测合同</button>
             ) : null}
             <button type="button" className="is-quiet" onClick={() => setInlineIssue(null)}>关闭提示</button>
@@ -1108,8 +1162,9 @@ function CoreChannelBillFormPage({ mode }) {
         </div>
       ) : null}
 
-      {isEdit ? <label className="core-bill-card">修改原因（可选，随本次修改留档）<input value={auditReason} maxLength={2000} onChange={event => setAuditReason(event.target.value)} placeholder="说明本次调整的依据；不填写则明确记为未填写" /></label> : null}
+      {isEdit ? <label className="core-bill-card">修改原因（可选，随本次修改留档）<input disabled={reviewing} value={auditReason} maxLength={2000} onChange={event => setAuditReason(event.target.value)} placeholder="说明本次调整的依据；不填写则明确记为未填写" /></label> : null}
       <section className="core-bill-card core-bill-card--embedded">
+        <fieldset disabled={reviewing} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
         <ChannelBillingForm
           key={`${mode}-${channelEditRecordId || 'new'}-${safety.resetVersion}-${smartRevision}`}
           formId={FORM_ID}
@@ -1137,6 +1192,7 @@ function CoreChannelBillFormPage({ mode }) {
             if (ok) showToast(`客户「${name}」已加入服务器客户库`, 'success')
           }}
         />
+        </fieldset>
       </section>
 
       {isEdit ? (
@@ -1212,14 +1268,19 @@ function CoreChannelBillFormPage({ mode }) {
         />
       ) : null}
 
-      <section className="core-bill-footer">
+      <ChannelReviewConfirmation request={reviewRequest} onCancel={() => setReviewRequest(null)}
+        onConfirm={request => void confirmReview(request)} />
+      {reviewing && reviewPhase ? <div className="core-bill-review-progress" role="status" aria-live="polite">
+        {reviewPhase} 请勿重复提交。
+      </div> : null}
+      <section className="core-bill-footer" aria-busy={reviewing}>
         <div className="core-bill-footer-summary">
           <span>{zeroSettlementPreview ? '零结算' : '当前结算'}</span>
           <strong>{money(previewAmount)}</strong>
         </div>
         <div className="core-bill-footer-actions">
           {safety.dirty ? (
-            <button type="button" className="core-bill-draft-clear" onClick={discardDraft}>
+            <button type="button" className="core-bill-draft-clear" disabled={reviewing} onClick={discardDraft}>
               清除草稿
             </button>
           ) : null}
@@ -1249,7 +1310,7 @@ function CoreChannelBillFormPage({ mode }) {
           {isEdit ? (
             <>
               <button type="button" className="confirm-review" disabled={reviewing} onClick={() => void confirmReview()}>
-                {reviewing ? '正在确认…' : zeroSettlementPreview ? '确认核对并结清' : '保存并确认核对'}
+                {reviewing ? reviewPhase || '正在核对…' : zeroSettlementPreview ? '确认核对并结清' : safety.dirty ? '保存并确认核对' : '确认核对'}
               </button>
             </>
           ) : null}
