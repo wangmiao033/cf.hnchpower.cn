@@ -23,7 +23,19 @@ export default function ChannelReviewConfirmation({ request, onCancel, onConfirm
   if (!request) return null
   return (
     <dialog ref={dialogRef} className="channel-review-confirmation" aria-labelledby={titleId}
-      aria-describedby={descriptionId} onCancel={event => { event.preventDefault(); onCancel() }}>
+      aria-describedby={descriptionId} onKeyDown={event => {
+        if (event.key !== 'Tab') return
+        const buttons = [...dialogRef.current.querySelectorAll('button:not([disabled])')]
+        const first = buttons[0]
+        const last = buttons[buttons.length - 1]
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault()
+          last?.focus()
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault()
+          first?.focus()
+        }
+      }} onCancel={event => { event.preventDefault(); onCancel() }}>
       <h2 id={titleId}>{request.zeroSettlement ? '确认核对并结清' : '确认本张渠道账单'}</h2>
       <dl>
         <div><dt>合作方</dt><dd>{request.partnerName || '—'}</dd></div>

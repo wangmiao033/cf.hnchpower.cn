@@ -13,6 +13,8 @@ async function setup(page, options = {}) {
   const transitions = []
   await page.route('**/api/**', async route => {
     const path = new URL(route.request().url()).pathname
+    // Module paths such as /src/lib/api/channel.ts are source, not requests.
+    if (!path.startsWith('/api/')) return route.continue()
     if (path === '/api/auth/me') return route.fulfill({json:{id:'test',role:'admin',permissions:[]}})
     if (path === '/api/channel-records/UI-REVIEW') {
       recordReads++
@@ -42,6 +44,8 @@ test('actual page cancel preserves input and sends no save or transition', async
   const {transitions} = await setup(page)
   const trigger = page.locator('.core-bill-footer .confirm-review')
   await trigger.click()
+  await expect(page.getByRole('dialog')).toBeVisible()
+  await expect(page.getByRole('button', {name:'返回检查'})).toBeFocused()
   await page.keyboard.press('Escape')
   await expect(page.getByRole('dialog')).toHaveCount(0)
   await expect(trigger).toBeFocused()

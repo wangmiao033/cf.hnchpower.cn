@@ -40,8 +40,11 @@ test('rapid repeated confirmation submits once, and reopening can submit again',
 test('small screens keep confirmation controls visible and keyboard focus in the modal', async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 640 })
   await page.getByRole('button', { name: '保存并确认核对', exact: true }).click()
+  await expect(page.getByRole('button', { name: '返回检查' })).toBeFocused()
   await page.keyboard.press('Shift+Tab')
   await expect(page.getByRole('button', { name: '保存并开始核对' })).toBeFocused()
+  await page.keyboard.press('Tab')
+  await expect(page.getByRole('button', { name: '返回检查' })).toBeFocused()
   const box = await page.getByRole('dialog').boundingBox()
   expect(box.x).toBeGreaterThanOrEqual(0)
   expect(box.x + box.width).toBeLessThanOrEqual(360)
