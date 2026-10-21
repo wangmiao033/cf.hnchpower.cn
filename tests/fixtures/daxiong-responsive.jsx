@@ -4,7 +4,7 @@ import '/src/App.jsx'
 import AppShell from '/src/app/AppShell.jsx'
 import SelfOperatedPreviewPage from '/src/pages/SelfOperatedPreviewPage.jsx'
 import { AppStateProvider } from '/src/app/AppStateContext.jsx'
-import { AuthProvider } from '/src/features/auth/AuthContext.jsx'
+import { AuthProvider, useAuth } from '/src/features/auth/AuthContext.jsx'
 import { VIEWS } from '/src/app/routes.js'
 import mainSource from '/src/main.jsx?raw'
 
@@ -14,11 +14,15 @@ for (const [, path] of mainSource.matchAll(/import ['"](.+\.css)['"]/g)) {
 }
 
 function Fixture() {
+  const { loading, user } = useAuth()
   const [view, setView] = useState(VIEWS.SELF_OPERATED)
   const value = { activeView: view, setActiveView: setView }
 
+  // Match the production App's authentication gate. Mounting the business page
+  // before auth resolves lets its account-change reset race with test input.
+  if (loading || !user) return <p data-testid="fixture-auth-loading">正在加载测试账号…</p>
+
   return (
-    <AuthProvider>
       <AppStateProvider value={value}>
         <AppShell
           activeView={view}
@@ -32,8 +36,7 @@ function Fixture() {
         </AppShell>
         <output data-testid="view" hidden>{view}</output>
       </AppStateProvider>
-    </AuthProvider>
   )
 }
 
-createRoot(document.getElementById('fixture')).render(<Fixture />)
+createRoot(document.getElementById('fixture')).render(<AuthProvider><Fixture /></AuthProvider>)
