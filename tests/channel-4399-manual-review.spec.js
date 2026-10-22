@@ -69,6 +69,7 @@ test('single bill needs written basis and explicit consent; records exact revisi
   const {approvals,requests}=await setup(page)
   await start(page)
   await expect(page.getByRole('region',{name:'单笔免附件人工核对'})).toBeVisible()
+  await expect(page.getByRole('region',{name:'单笔免附件人工核对'}).locator('input[type="file"], select')).toHaveCount(0)
   await expect(confirmation(page)).toBeDisabled()
   await page.getByLabel('真实人工核对依据（必填，至少12个字）').fill('已逐项核实真实对账来源，本单按授权保留差异并人工确认。')
   await expect(confirmation(page)).toBeDisabled()
@@ -80,7 +81,9 @@ test('single bill needs written basis and explicit consent; records exact revisi
     expected_platform_amount:144.4,expected_settlement_amount:144.4,expected_signed_difference_cents:-855,
     evidence_attachment_id:null,evidence_confirmed:false})
   expect(approvals[0].reason).not.toContain('已按所选平台原始结算凭证')
-  expect(requests.some(r=>r.path.startsWith('/api/bill-attachments/'))).toBe(false)
+  // The existing page may list optional attachments. It must not upload,
+  // remove or require one for this explicit written-review exception.
+  expect(requests.filter(r=>r.path.startsWith('/api/bill-attachments/')).every(r=>r.method==='GET')).toBe(true)
   expect(requests.some(r=>r.method==='PUT'||r.method==='DELETE'||r.path.includes('/receipts'))).toBe(false)
 })
 
