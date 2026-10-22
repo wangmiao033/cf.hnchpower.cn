@@ -14,6 +14,7 @@ from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.exc import SQLAlchemyError
 
+from app.api.self_operated import router as self_operated_router
 from app.api.anomaly import router as anomaly_router
 from app.api.bill360_performance import router as bill360_performance_router
 from app.api.bill_lifecycle import router as bill_lifecycle_router
@@ -309,3 +310,5 @@ async def handle_unexpected_error(request: Request, exc: Exception) -> JSONRespo
 @app.get("/")
 def root() -> dict:
     return {"ok": True, "service": "caiwuapi"}
+
+app.include_router(self_operated_router, prefix="/api/self-operated", tags=["self-operated"])
