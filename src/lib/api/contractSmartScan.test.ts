@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { mergeContractScanResults, type SmartContractScanResult } from './contractSmartScan.ts'
+import { mergeContractScanResults, scanContractFile, type SmartContractScanResult } from './contractSmartScan.ts'
 
 function result(partial: Partial<SmartContractScanResult>): SmartContractScanResult {
   return {
@@ -72,5 +72,16 @@ describe('segmented contract smart scan', () => {
     expect(merged.access_items[0].values.product_name).toBe('异界深渊：大灵王')
     expect(merged.access_items[0].values.share_rate).toBe('20')
     expect(merged.access_items[0].values.authorization_end).toBe('2027-05-31')
+  })
+})
+
+describe('PDF scan removal', () => {
+  it('rejects PDF filenames and MIME types before making a request', async () => {
+    for (const file of [
+      { name: 'contract.PDF', type: 'application/octet-stream', size: 100 },
+      { name: 'contract.jpg', type: 'application/pdf', size: 100 }
+    ]) {
+      await expect(scanContractFile(file as File)).rejects.toThrow('已停用 PDF 自动解析')
+    }
   })
 })
