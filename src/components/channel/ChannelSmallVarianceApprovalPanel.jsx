@@ -1,5 +1,6 @@
 import React from 'react'
 import BillScanAttachments from '@/components/billing/BillScanAttachments.jsx'
+import { SINGLE_BILL_MANUAL_EXCEPTION } from '@/domain/channel/channelPlatformVarianceReview.js'
 import './ChannelSmallVarianceApprovalPanel.css'
 
 /** Explicit human approval; no automatic overrides or document fabrication. */
@@ -20,6 +21,8 @@ export default function ChannelSmallVarianceApprovalPanel({
   onAttachmentsChanged,
   officialConfirmedLineIds = [],
   onOfficialLineToggle,
+  manualReviewConfirmed = false,
+  onManualReviewConfirmedChange,
   attachmentsLoading = false
 }) {
   if (!open) return null
@@ -28,6 +31,7 @@ export default function ChannelSmallVarianceApprovalPanel({
   const officialLines = isHonorOfficial ? platformReview.officialLines || [] : []
   const allOfficialLinesConfirmed = officialLines.length > 0 && officialLines.every(line => officialConfirmedLineIds.includes(line.line_id))
   const isDocumented = isPlatform && platformReview?.reviewKind === 'documented'
+  const isManualException = isPlatform && platformReview?.manualException?.code === SINGLE_BILL_MANUAL_EXCEPTION
   const autoSelectedAttachmentId = selectedAttachmentId || (attachments.length === 1 ? attachments[0].id : '')
   const amount = Number(platformReview?.settlementAmount ?? settlementAmount ?? 0)
 
@@ -35,14 +39,16 @@ export default function ChannelSmallVarianceApprovalPanel({
     <section
       id="channel-small-variance-approval"
       className="channel-small-variance-panel"
-      aria-label={isPlatform ? (isDocumented ? '平台结算金额差异凭证审核' : '平台小额尾差核对') : '小额合同差异人工核对'}
+      aria-label={isManualException ? '单笔免附件人工核对' : isPlatform ? (isDocumented ? '平台结算金额差异凭证审核' : '平台小额尾差核对') : '小额合同差异人工核对'}
     >
       <header>
         <div>
           <span className="channel-small-variance-eyebrow">管理员人工确认 · 账单金额不改变</span>
-          <h2>{isHonorOfficial ? '荣耀官方结算单确认' : isDocumented ? '平台结算金额差异确认' : isPlatform ? '平台小额尾差确认' : '小额合同差异强制核对'}</h2>
+          <h2>{isManualException ? '4399 7月单笔人工核对' : isHonorOfficial ? '荣耀官方结算单确认' : isDocumented ? '平台结算金额差异确认' : isPlatform ? '平台小额尾差确认' : '小额合同差异强制核对'}</h2>
           {isPlatform ? (
-            <p>{isHonorOfficial
+            <p>{isManualException
+              ? '仅适用于本张2026年7月账单的当前保存版本。经授权免强制附件，但必须填写真实核对依据并主动确认；原金额、差异及已收款全部保留。其他账单规则不变。'
+              : isHonorOfficial
               ? '本规则仅用于已核实的荣耀客户。请逐游戏核对官方金额并保留原始凭证；公式计算与差异继续保留。'
               : isDocumented
               ? '请核对已上传的平台原始账单。点击下方确认即可完成核对，系统自动保存差异金额、凭证及审核人；无需再填写重复原因。'
@@ -61,7 +67,22 @@ export default function ChannelSmallVarianceApprovalPanel({
         </div>
       ) : null}
 
-      {isHonorOfficial ? (
+      {isManualException ? (
+        <div className="channel-single-bill-manual-review channel-platform-evidence">
+          <p>单号：{platformReview.manualException.statement_no} · {platformReview.manualException.partner_name}</p>
+          <label htmlFor="channel-small-variance-note">
+            <span>真实人工核对依据（必填，至少12个字）</span>
+            <textarea id="channel-small-variance-note" rows={3} value={note}
+              onChange={event => onNoteChange(event.target.value)} maxLength={500} disabled={busy}
+              placeholder="请说明实际核对的来源及本次同意按平台金额确认的依据；不要虚构附件或调整流水。" />
+          </label>
+          <label className="channel-platform-evidence__check">
+            <input type="checkbox" checked={manualReviewConfirmed} disabled={busy}
+              onChange={event => onManualReviewConfirmedChange?.(event.target.checked)} />
+            <span>我已核实上述依据，明确同意仅本单免附件按平台金额确认，保留差异和已收款。</span>
+          </label>
+        </div>
+      ) : isHonorOfficial ? (
         <div className="channel-honor-official-review">
           <strong>逐游戏确认官方结算金额（必选）</strong>
           {officialLines.map(line => (
@@ -112,7 +133,7 @@ export default function ChannelSmallVarianceApprovalPanel({
         />
       </label>
       )}
-      {isDocumented ? (
+      {isDocumented && !isManualException ? (
         <div className="channel-platform-evidence">
           <strong>平台结算凭证</strong>
           {attachmentsLoading ? (
@@ -164,10 +185,10 @@ export default function ChannelSmallVarianceApprovalPanel({
         <button
           type="button"
           className="is-primary"
-          disabled={busy || (!isPlatform && note.trim().length < 2) || (isDocumented && !autoSelectedAttachmentId) || (isHonorOfficial && (!allOfficialLinesConfirmed || note.trim().length < 6))}
+          disabled={busy || (!isPlatform && note.trim().length < 2) || (isDocumented && !isManualException && !autoSelectedAttachmentId) || (isManualException && (!manualReviewConfirmed || note.trim().length < 12)) || (isHonorOfficial && (!allOfficialLinesConfirmed || note.trim().length < 6))}
           onClick={onConfirm}
         >
-          {busy ? '正在核对并保存…' : isDocumented ? `我已核对凭证，按平台¥${amount.toFixed(2)}确认账单` : isPlatform ? `按平台¥${amount.toFixed(2)}确认账单` : '确认合同差异（保留原金额）'}
+          {busy ? '正在核对并保存…' : isManualException ? `按文字依据确认本单¥${amount.toFixed(2)}（免附件）` : isDocumented ? `我已核对凭证，按平台¥${amount.toFixed(2)}确认账单` : isPlatform ? `按平台¥${amount.toFixed(2)}确认账单` : '确认合同差异（保留原金额）'}
         </button>
       </footer>
     </section>

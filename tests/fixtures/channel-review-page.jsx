@@ -17,7 +17,11 @@ const value = {
       const saved = await updateChannelRecord(id, { ...frontendChannelRecordToPayload(record), expected_updated_at: record.updatedAt })
       return options.returnSavedRecord ? saved : true
     },
-    refetchChannelFromApi: async () => { if (window.reviewTest.failRefresh) throw new Error('测试列表刷新失败') }
+    refetchChannelFromApi: async () => {
+      window.reviewTest.refreshStarted = true
+      if (window.reviewTest.refreshGate) await window.reviewTest.refreshGate
+      if (window.reviewTest.failRefresh) throw new Error('测试列表刷新失败')
+    }
   },
   showToast: (message, tone) => window.reviewTest.toasts.push({message,tone}),
   setActiveView: view => window.reviewTest.navigations.push(view),
