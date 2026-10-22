@@ -3,14 +3,15 @@ import { test, expect } from '@playwright/test'
 // Entire API is isolated. These tests exercise the real page/API client but do
 // not represent production data, a database commit, or a real financial review.
 async function setup(page, options = {}) {
+  const month = options.record?.settlement_month || '2026-07'
   const record = {
     id:'UI-REVIEW',statement_no:'QD-20261015-041F2B',partner_name:'四三九九网络股份有限公司',channel_name:'4399',
-    settlement_month:'2026-07',status:'pending',updated_at:'2026-10-22T00:00:00Z',
+    settlement_month:month,status:'pending',updated_at:'2026-10-22T00:00:00Z',
     settlement_amount:144.4,system_settlement_amount:135.85,platform_settlement_amount:144.4,
     settlement_difference:-8.55,validation_status:'fail',billing_flow:135.85,share_rate:100,
     settlement_rule_code:'share_only',channel_fee_mode:'none',tax_mode:'none',tax_rate:0,
     received_amount:50,receipt_status:'partial',remark:'原始备注不改',
-    items:[{id:'J1',game_name:'测试游戏',settlement_cycle:'2026-07',billing_flow:135.85,
+    items:[{id:'J1',game_name:'测试游戏',settlement_cycle:month,billing_flow:135.85,
       discount_factor:1,share_rate:100,tax_rate:0,settlement_rule_code:'share_only',channel_fee_mode:'none',tax_mode:'none',
       settlement_amount:144.4,system_settlement_amount:135.85,platform_settlement_amount:144.4,
       settlement_difference:-8.55,validation_status:'fail'}], ...options.record
@@ -53,7 +54,10 @@ async function setup(page, options = {}) {
 }
 async function start(page) {
   await page.locator('.core-bill-footer .confirm-review').click()
-  await page.getByRole('dialog').getByRole('button',{name:/开始核对/}).click()
+  // Existing platform discrepancies enter their evidence panel directly, not
+  // the ordinary bill confirmation dialog. Keep the real workflow unchanged.
+  await expect(page.locator('#channel-small-variance-approval')).toBeVisible()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
 }
 async function fillBasis(page) {
   await page.getByLabel('真实人工核对依据（必填，至少12个字）').fill('已逐项核实真实对账来源，本单按授权保留差异并人工确认。')
