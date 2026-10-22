@@ -15,6 +15,8 @@ import ChannelReceiptDrawer from '@/components/channel/ChannelReceiptDrawer.jsx'
 import ChannelFlatLedger from '@/components/channel/ChannelFlatLedger.jsx'
 import ChannelInvoiceMergeDialog from '@/components/channel/ChannelInvoiceMergeDialog.jsx'
 import { matchesChannelLedgerFilters, ledgerBillGames, sortChannelLedgerRows } from '@/domain/channel/channelFlatLedgerFilters.js'
+import { useAuth } from '@/features/auth/AuthContext.jsx'
+import { isChannelBillReviewed, matchesChannelReviewFilter, loadChannelLedgerFilters, saveChannelLedgerFilters } from '@/domain/channel/channelLedgerReviewFilters.js'
 import { buildCustomerBillSearchIndex } from '@/domain/reconciliation/customerBillSearchIndex.js'
 import { resolveChannelCreatePrefill } from '@/domain/channel/channelCreatePrefill.js'
 import { buildChannelAuditGroupIndex, auditIdentityForBill } from '@/domain/channel/channelAuditGroups.js'
@@ -207,20 +209,24 @@ function CoreChannelReconciliationGroupedPage() {
     prefetchBill360
   } = useAppState()
 
+  const { user } = useAuth()
+  const accountKey = String(user?.id ?? user?.username ?? user?.account ?? 'default')
+  const [savedFilters] = useState(() => loadChannelLedgerFilters(accountKey))
   const fileRef = useRef(null)
-  const [month, setMonth] = useState('')
-  const [channel, setChannel] = useState('')
-  const [showMoreFilters, setShowMoreFilters] = useState(false)
-  const [status, setStatus] = useState('')
-  const [query, setQuery] = useState('')
-  const [quickFilter, setQuickFilter] = useState('all')
-  const [ledgerView, setLedgerView] = useState('detail')
-  const [fromMonth, setFromMonth] = useState('')
-  const [toMonth, setToMonth] = useState('')
-  const [gameQuery, setGameQuery] = useState('')
-  const [sortMode, setSortMode] = useState('month-desc')
+  const [month, setMonth] = useState(savedFilters.month)
+  const [channel, setChannel] = useState(savedFilters.channel)
+  const [showMoreFilters, setShowMoreFilters] = useState(savedFilters.showMoreFilters)
+  const [status, setStatus] = useState(savedFilters.status)
+  const [query, setQuery] = useState(savedFilters.query)
+  const [quickFilter, setQuickFilter] = useState(savedFilters.quickFilter)
+  const [reviewFilter, setReviewFilter] = useState(savedFilters.reviewFilter)
+  const [ledgerView, setLedgerView] = useState(savedFilters.ledgerView)
+  const [fromMonth, setFromMonth] = useState(savedFilters.fromMonth)
+  const [toMonth, setToMonth] = useState(savedFilters.toMonth)
+  const [gameQuery, setGameQuery] = useState(savedFilters.gameQuery)
+  const [sortMode, setSortMode] = useState(savedFilters.sortMode)
   const [flatPage, setFlatPage] = useState(1)
-  const [flatPageSize, setFlatPageSize] = useState(100)
+  const [flatPageSize, setFlatPageSize] = useState(savedFilters.flatPageSize)
   const [inspectedGap, setInspectedGap] = useState(null)
   const [selectedIds, setSelectedIds] = useState([])
   const [expandedKeys, setExpandedKeys] = useState([])
@@ -241,6 +247,16 @@ function CoreChannelReconciliationGroupedPage() {
   const [archiveLoading, setArchiveLoading] = useState(true)
   const [archiveWorkingId, setArchiveWorkingId] = useState('')
   const [cumulativeByChannel, setCumulativeByChannel] = useState({})
+
+  // Keep the user's selected channel, month, review status and view after
+  // editing a bill, switching modules or refreshing the same browser.
+  useEffect(() => {
+    saveChannelLedgerFilters(accountKey, {
+      month, channel, status, query, quickFilter, reviewFilter, ledgerView,
+      fromMonth, toMonth, gameQuery, sortMode, showMoreFilters, flatPageSize
+    })
+  }, [accountKey, month, channel, status, query, quickFilter, reviewFilter, ledgerView,
+    fromMonth, toMonth, gameQuery, sortMode, showMoreFilters, flatPageSize])
 
   const archivedIds = useMemo(() => new Set((archiveState.archived_ids || []).map(String)), [archiveState])
   const eligibleIds = useMemo(() => new Set((archiveState.eligible_ids || []).map(String)), [archiveState])
@@ -311,8 +327,8 @@ function CoreChannelReconciliationGroupedPage() {
     () => [...new Set((recon.channelRecords || []).flatMap(ledgerBillGames))].sort((a, b) => a.localeCompare(b, 'zh-CN')),
     [recon.channelRecords]
   )
-  useEffect(() => { setFlatPage(1) }, [month, fromMonth, toMonth, gameQuery, channel, status, query, quickFilter, sortMode])
-  useEffect(() => { setSelectedIds([]) }, [month, fromMonth, toMonth, gameQuery, channel, status, query, quickFilter])
+  useEffect(() => { setFlatPage(1) }, [month, fromMonth, toMonth, gameQuery, channel, status, query, quickFilter, reviewFilter, sortMode])
+  useEffect(() => { setSelectedIds([]) }, [month, fromMonth, toMonth, gameQuery, channel, status, query, quickFilter, reviewFilter])
 
   const inspectCoverageMonth = (channelName, period, { kind = 'gap', groupKey = '' } = {}) => {
     const relevant = (recon.channelRecords || []).filter(row =>
@@ -333,6 +349,7 @@ function CoreChannelReconciliationGroupedPage() {
     setStatus('')
     setQuery('')
     setQuickFilter(onlyArchived ? 'archived' : 'all')
+    setReviewFilter('all')
     setExpandedKeys([])
     setSelectedIds([])
     setInspectedGap({ channelName, month: period, kind, groupKey })
@@ -370,7 +387,8 @@ function CoreChannelReconciliationGroupedPage() {
     [scopedRows, archivedIds]
   )
 
-  const rows = useMemo(() => {
+  // Payment and review are independent, composable facets. Neither modifies data.
+  const paymentRows = useMemo(() => {
     if (quickFilter === 'trash') return trashRows
     if (quickFilter === 'archived') return archivedRows
     if (quickFilter === 'all') return activeRows
@@ -383,6 +401,10 @@ function CoreChannelReconciliationGroupedPage() {
       return true
     })
   }, [activeRows, archivedRows, trashRows, quickFilter, eligibleIds])
+  const rows = useMemo(
+    () => paymentRows.filter((row) => matchesChannelReviewFilter(row, reviewFilter)),
+    [paymentRows, reviewFilter]
+  )
 
   const sortedFlatRows = useMemo(() => sortChannelLedgerRows(rows, sortMode), [rows, sortMode])
   const selectableRows = useMemo(
@@ -463,25 +485,35 @@ function CoreChannelReconciliationGroupedPage() {
       })
   }, [rows, archivedIds, quickFilter])
 
-  const quickItems = useMemo(() => [
-    { key: 'all', label: '全部', count: activeRows.length },
-    {
-      key: 'unpaid', label: '未收款', count: activeRows.filter((row) => {
-        const amounts = channelPaymentAmounts(row)
-        return amounts.unpaid > 0.01 && amounts.received <= 0.01
-      }).length
-    },
-    {
-      key: 'partial', label: '部分收款', count: activeRows.filter((row) => {
-        const amounts = channelPaymentAmounts(row)
-        return amounts.received > 0.01 && amounts.unpaid > 0.01
-      }).length
-    },
-    { key: 'settled', label: '已结清', count: activeRows.filter((row) => eligibleIds.has(String(row.id))).length },
-    { key: 'data-diff', label: '数据差异', count: activeRows.filter(channelHasDataDifference).length },
-    { key: 'trash', label: '垃圾桶', count: trashRows.length },
-    { key: 'archived', label: '归档账单', count: archiveLoading ? null : archivedRows.length }
-  ], [activeRows, archivedRows, trashRows, eligibleIds, archiveLoading])
+  const reviewItems = useMemo(() => [
+    { key: 'all', label: '全部', count: paymentRows.length },
+    { key: 'pending', label: '未核对', count: paymentRows.filter(row => !isChannelBillReviewed(row)).length },
+    { key: 'reviewed', label: '已核对', count: paymentRows.filter(isChannelBillReviewed).length }
+  ], [paymentRows])
+  const quickItems = useMemo(() => {
+    const active = activeRows.filter(row => matchesChannelReviewFilter(row, reviewFilter))
+    const trash = trashRows.filter(row => matchesChannelReviewFilter(row, reviewFilter))
+    const archived = archivedRows.filter(row => matchesChannelReviewFilter(row, reviewFilter))
+    return [
+      { key: 'all', label: '全部', count: active.length },
+      {
+        key: 'unpaid', label: '未收款', count: active.filter(row => {
+          const amounts = channelPaymentAmounts(row)
+          return amounts.unpaid > 0.01 && amounts.received <= 0.01
+        }).length
+      },
+      {
+        key: 'partial', label: '部分收款', count: active.filter(row => {
+          const amounts = channelPaymentAmounts(row)
+          return amounts.received > 0.01 && amounts.unpaid > 0.01
+        }).length
+      },
+      { key: 'settled', label: '已结清', count: active.filter(row => eligibleIds.has(String(row.id))).length },
+      { key: 'data-diff', label: '数据差异', count: active.filter(channelHasDataDifference).length },
+      { key: 'trash', label: '垃圾桶', count: trash.length },
+      { key: 'archived', label: '归档账单', count: archiveLoading ? null : archived.length }
+    ]
+  }, [activeRows, archivedRows, trashRows, eligibleIds, archiveLoading, reviewFilter])
 
   const stats = useMemo(() => {
     const settlement = rows.reduce((sum, row) => sum + getChannelTotals(row).settlementAmount, 0)
@@ -737,7 +769,7 @@ function CoreChannelReconciliationGroupedPage() {
   const resetFilters = () => {
     setMonth(''); setFromMonth(''); setToMonth(''); setGameQuery('')
     setSortMode('month-desc'); setChannel(''); setStatus(''); setQuery('')
-    setQuickFilter('all'); setSelectedIds([]); setExpandedKeys([]); setInspectedGap(null)
+    setQuickFilter('all'); setReviewFilter('all'); setSelectedIds([]); setExpandedKeys([]); setInspectedGap(null)
     setShowMoreFilters(false)
   }
   const sortLabels = { 'month-asc': '最早月份优先', 'unpaid-desc': '未收金额最高', 'settlement-desc': '渠道应收最高', 'channel-asc': '渠道名称排序' }
@@ -766,6 +798,7 @@ function CoreChannelReconciliationGroupedPage() {
     gameQuery && { key: 'game', label: '游戏', value: gameQuery, clear: () => setGameQuery('') },
     (fromMonth || toMonth) && { key: 'range', label: '日期范围', value: `${fromMonth || '不限'} 至 ${toMonth || '不限'}`, clear: () => { setFromMonth(''); setToMonth('') } },
     status && { key: 'status', label: '账单状态', value: STATUS_LABELS[status], clear: () => { setStatus(''); if (quickFilter === 'trash') setQuickFilter('all') } },
+    reviewFilter !== 'all' && { key: 'review', label: '核对', value: reviewFilter === 'pending' ? '未核对' : '已核对', clear: () => setReviewFilter('all') },
     sortLabels[sortMode] && { key: 'sort', label: '排序', value: sortLabels[sortMode], clear: () => setSortMode('month-desc') }
   ].filter(Boolean)
 
@@ -865,6 +898,20 @@ function CoreChannelReconciliationGroupedPage() {
         </section>
       </section>
 
+      <div className="channel-ledger-review-filter" role="group" aria-label="核对进度筛选">
+        <span className="channel-ledger-review-filter__label">核对进度</span>
+        <div className="channel-ledger-review-filter__buttons">
+          {reviewItems.map(item => (
+            <button key={item.key} type="button" aria-pressed={reviewFilter === item.key}
+              className={reviewFilter === item.key ? 'is-active' : ''}
+              title={item.key === 'pending' ? '包含草稿和待核对账单，不以到账或金额一致作为已核对依据' : undefined}
+              onClick={() => setReviewFilter(item.key)}>
+              {item.label}<em>{item.count}</em>
+            </button>
+          ))}
+        </div>
+        <small>筛选条件自动保留</small>
+      </div>
       <BillQuickFilters value={quickFilter} items={quickItems} onChange={handleQuickFilter} />
 
       <section className="core-recon-stats core-channel-stats-compact" aria-label="渠道账单概览">
