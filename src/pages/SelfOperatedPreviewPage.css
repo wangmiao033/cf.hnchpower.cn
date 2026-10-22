@@ -871,3 +871,16 @@
     overflow-wrap: anywhere;
   }
 }
+
+/* 简版月度表保留七列，小屏只在表格内部滚动，不影响系统侧栏。 */
+.so-page .so-game-table { display: table; min-width: 850px; }
+.so-page .so-game-table thead { display: table-header-group; }
+.so-page .so-game-table tbody { display: table-row-group; padding: 0; }
+.so-page .so-game-table tbody tr { display: table-row; }
+.so-page .so-game-table tbody td { display: table-cell; padding: 16px; border-bottom: 1px solid #e9eef5; white-space: nowrap; }
+.so-page .so-game-table tbody td:first-child { min-width: 170px; white-space: normal; }
+.so-page .so-game-table tbody td::before { content: none; }
+.so-page .so-game-table .so-right { text-align: right; }
+.so-page .so-scroll { overflow-x: auto; }
+.so-page .so-tools .so-device-save { background: #316bd7; color: #fff; border-color: #316bd7; }
+.so-page .so-tools .so-import-launch { background: #fff; color: #315fd0; border-color: #d6e0ed; }
