@@ -105,3 +105,40 @@ describe('automated audit note for explicit human platform confirmation', () => 
     expect(buildChannelPlatformApprovalNote(null)).toBe('')
   })
 })
+
+describe('single authorized July bill attachment exception', () => {
+  const single = () => ({
+    id: 'single', statement_no: 'QD-20261015-041F2B', partner_name: '四三九九网络股份有限公司',
+    channel_name: '4399', settlement_month: '2026-07', status: 'pending', validation_status: 'fail',
+    system_settlement_amount: 135.85, platform_settlement_amount: 144.4, settlement_amount: 144.4,
+    items: [{id:'J1',settlement_cycle:'2026-07',system_settlement_amount:135.85,platform_settlement_amount:144.4}]
+  })
+  const exception = () => ({code:'4399_july_2026_single_bill_v1',bill_id:'single',statement_no:'QD-20261015-041F2B',
+    partner_name:'四三九九网络股份有限公司',partner_id:'customer-id',settlement_month:'2026-07',review_revision:'a'.repeat(64)})
+  it('retains documented difference and only attaches a server-authorized single-bill review', () => {
+    expect(assessSavedChannelPlatformDifference(single(),null,exception())).toMatchObject({
+      reviewKind:'documented',differenceCents:-855,manualException:exception()
+    })
+    expect(assessSavedChannelPlatformDifference(single()).manualException).toBeUndefined()
+  })
+  it.each([
+    {statement_no:'another'}, {partner_name:'4399'}, {channel_name:'other'}, {settlement_month:'2026-08'},
+    {id:'other'}, {status:'confirmed'}, {platform_settlement_amount:144.41}
+  ])('does not extend to another identity or amount %j', changes => {
+    expect(assessSavedChannelPlatformDifference({...single(),...changes},null,exception()).manualException).toBeUndefined()
+  })
+  it.each([{code:'other'},{review_revision:''},{partner_id:''},{statement_no:'other'},{settlement_month:'2026-08'}])('fails closed on invalid server scope %j', changes => {
+    expect(assessSavedChannelPlatformDifference(single(),null,{...exception(),...changes}).manualException).toBeUndefined()
+  })
+  it('does not claim that an original attachment was reviewed', () => {
+    const review = assessSavedChannelPlatformDifference(single(),null,exception())
+    const note = buildChannelPlatformApprovalNote(review,'已按真实来源逐项核对，本次保留差异并人工确认')
+    expect(note).toContain('文字依据')
+    expect(note).toContain('8.55')
+    expect(note).not.toContain('已按所选平台原始结算凭证')
+  })
+  it('does not apply to a line from another month', () => {
+    const row=single();row.items[0].settlement_cycle='2026-08'
+    expect(assessSavedChannelPlatformDifference(row,null,exception()).manualException).toBeUndefined()
+  })
+})

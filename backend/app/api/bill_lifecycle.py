@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select, text
@@ -21,6 +22,10 @@ from app.services.channel_platform_variance_approval import (
     assess_channel_platform_variance,
     assert_no_open_contract_exceptions,
 )
+from app.services.channel_manual_review_exception import (
+    resolve_manual_review_exception, validate_manual_review_exception,
+)
+from app.services.bill_write_preflight import _as_utc
 from app.services.honor_official_statement import (
     POLICY_CODE as HONOR_OFFICIAL_POLICY, resolve_honor_policy,
     validate_official_line_confirmations, load_and_validate_contract_snapshot,
@@ -201,6 +206,24 @@ class OfficialLineConfirmation(BaseModel):
     platform_amount: float
 
 
+@router.get("/channel/{bill_id}/manual-review-exception")
+def get_channel_manual_review_exception(
+    bill_id: str, expected_updated_at: datetime,
+    db: Session = Depends(get_db), user: AuthUser = Depends(require_current_user),
+) -> dict:
+    if str(user.role or "").strip().lower() != "admin":
+        raise HTTPException(403, detail={"error": "admin_only", "message": "单笔人工核对需要管理员权限"})
+    bill = db.execute(select(ChannelRecord).where(ChannelRecord.id == bill_id).with_for_update()).scalar_one_or_none()
+    if bill is None:
+        raise HTTPException(404, detail={"error": "bill_not_found", "message": "账单不存在"})
+    if not isinstance(bill.updated_at, datetime) or _as_utc(expected_updated_at) != _as_utc(bill.updated_at):
+        raise HTTPException(409, detail={"error": "manual_review_revision_changed", "message": "账单版本已变化，请重新打开并人工核对"})
+    lines = db.execute(select(ChannelRecordLineItem).where(
+        ChannelRecordLineItem.channel_record_id == bill_id
+    ).with_for_update()).scalars().all()
+    return {"exception": resolve_manual_review_exception(db, bill, lines)}
+
+
 class ApprovedPlatformVarianceRequest(BaseModel):
     """Explicit approval of the already-saved, recomputed platform amount."""
     reason: str = Field(min_length=6, max_length=500)
@@ -216,6 +239,10 @@ class ApprovedPlatformVarianceRequest(BaseModel):
     official_statement_reason: str = Field(default="", max_length=250)
     official_line_confirmations: list[OfficialLineConfirmation] = Field(default_factory=list, max_length=100)
     contract_snapshot_id: str | None = Field(default=None, max_length=128)
+    manual_review_exception: str | None = Field(default=None, max_length=80)
+    manual_review_revision: str | None = Field(default=None, max_length=64)
+    manual_review_confirmed: bool = False
+    manual_review_reason: str = Field(default="", max_length=500)
 
 
 @router.post("/channel/{bill_id}/confirm-platform-variance", response_model=BillLifecycleRead)
@@ -228,7 +255,8 @@ def confirm_approved_channel_platform_variance(
     """Confirm a verified platform amount with explicit human accountability.
 
     <= 50 cents: short remark. Larger discrepancies: uploaded source statement,
-    explicit attestation, and substantive justification. The original amounts,
+    explicit attestation, and substantive justification, except for the separately
+    authorized, origin-bound single-bill written-review exception. Original amounts,
     contract, lines, invoice, receipts, and validation status remain unchanged.
     """
     if str(user.role or "").strip().lower() != "admin":
@@ -256,8 +284,18 @@ def confirm_approved_channel_platform_variance(
         select(ChannelRecordLineItem)
         .where(ChannelRecordLineItem.channel_record_id == bill_id)
         .order_by(ChannelRecordLineItem.sort_order, ChannelRecordLineItem.id)
+        .with_for_update()
     ).scalars().all()
     official = bool(payload.official_statement_policy)
+    manual_exception = None
+    if payload.manual_review_exception:
+        if official:
+            raise HTTPException(409, detail={"error": "manual_review_exception_invalid", "message": "单笔例外不能与其他专属政策混用"})
+        manual_exception = validate_manual_review_exception(
+            db, bill, rows, code=payload.manual_review_exception,
+            revision=payload.manual_review_revision, partner_id=payload.expected_partner_id,
+            confirmed=payload.manual_review_confirmed, reason=payload.manual_review_reason,
+        )
     policy = None
     if official:
         policy = resolve_honor_policy(db, bill)
@@ -272,7 +310,7 @@ def confirm_approved_channel_platform_variance(
     )
     documented = assessment["review_kind"] == "documented"
     evidence_attachment = None
-    if documented:
+    if documented and not manual_exception:
         if len(reason) < 12:
             raise HTTPException(422, detail={
                 "error": "documented_platform_reason_required",
@@ -379,21 +417,25 @@ def confirm_approved_channel_platform_variance(
     db.add(OperationLog(
         id=str(uuid4()), entity_type="channel", entity_id=str(bill.id),
         entity_number=bill.statement_no,
-        action="honor_official_statement_confirm" if official else "platform_documented_variance_confirm" if documented else "platform_small_variance_confirm",
+        action="channel_single_bill_manual_confirm" if manual_exception else "honor_official_statement_confirm" if official else "platform_documented_variance_confirm" if documented else "platform_small_variance_confirm",
         summary=(
-            ("管理员按荣耀官方逐游戏结算单确认" if official else "管理员凭平台原始结算单核准大额金额差异" if documented else "管理员人工核准平台小额尾差")
+            ("管理员按单笔文字依据核准平台金额差异（免附件）" if manual_exception else "管理员按荣耀官方逐游戏结算单确认" if official else "管理员凭平台原始结算单核准大额金额差异" if documented else "管理员人工核准平台小额尾差")
             + f"，系统与平台差额 {assessment['signed_difference_cents'] / 100:+.2f} 元；实际应收未修改"
         ),
         actor_user_id=str(user.id), actor_email=str(user.email or ""),
         changes={},
         metadata_json={
             "reason": reason,
-            "approval_source": "attached_platform_statement" if documented else "saved_channel_platform_bill",
+            "approval_source": "single_bill_manual_basis" if manual_exception else "attached_platform_statement" if documented else "saved_channel_platform_bill",
             "max_small_variance_cents": 50,
             "evidence_attachment_id": str(evidence_attachment.id) if evidence_attachment else None,
             "evidence_file_name": str(evidence_attachment.file_name) if evidence_attachment else None,
-            "evidence_confirmed": bool(payload.evidence_confirmed) if documented else None,
+            "evidence_confirmed": bool(payload.evidence_confirmed) if documented and not manual_exception else None,
             **assessment,
+            **({"manual_review_exception": manual_exception,
+                "manual_review_reason": payload.manual_review_reason.strip(),
+                "manual_review_confirmed": True,
+                "attachment_exempted": True} if manual_exception else {}),
             **({"official_statement_policy": policy,
                 "official_statement_reason": payload.official_statement_reason.strip(),
                 "official_line_confirmations": [row.model_dump() for row in payload.official_line_confirmations],

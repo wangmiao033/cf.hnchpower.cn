@@ -91,7 +91,20 @@ export function getChannelOfficialStatementPolicy(billId: string) {
   )
 }
 
+export type SingleBillManualException = {
+  code: string; partner_id: string; partner_name: string; bill_id: string
+  statement_no: string; settlement_month: string; review_revision: string; updated_at: string
+}
+
+export function getChannelManualReviewException(billId: string, updatedAt: string) {
+  return apiGet<{ exception: SingleBillManualException | null }>(
+    '/api/bill-lifecycle/channel/' + encodeURIComponent(billId)
+    + '/manual-review-exception?expected_updated_at=' + encodeURIComponent(updatedAt)
+  )
+}
+
 export type ChannelPlatformVarianceReview = {
+  manualException?: SingleBillManualException
   policyCode?: string
   partnerId?: string
   officialLines?: OfficialStatementLine[]
@@ -114,7 +127,9 @@ export async function confirmReviewedChannelPlatformVariance(
   evidenceAttachmentId = '',
   evidenceConfirmed = false,
   officialLineConfirmations: OfficialStatementLine[] = [],
-  officialReason = ''
+  officialReason = '',
+  manualConfirmed = false,
+  manualReason = ''
 ): Promise<BillLifecycle> {
   const official = review.policyCode === 'honor_official_statement_v1'
   // This existing endpoint generates the snapshot on the contract server; the
@@ -133,6 +148,13 @@ export async function confirmReviewedChannelPlatformVariance(
       expected_line_ids: review.lineIds,
       evidence_attachment_id: evidenceAttachmentId || null,
       evidence_confirmed: evidenceConfirmed,
+      ...(review.manualException ? {
+        manual_review_exception: review.manualException.code,
+        manual_review_revision: review.manualException.review_revision,
+        expected_partner_id: review.manualException.partner_id,
+        manual_review_confirmed: manualConfirmed,
+        manual_review_reason: manualReason
+      } : {}),
       ...(official ? {
         official_statement_policy: review.policyCode,
         expected_partner_id: review.partnerId,

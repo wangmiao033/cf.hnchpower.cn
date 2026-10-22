@@ -23,13 +23,14 @@ import {
   confirmApprovedChannelSmallVariance,
   confirmReviewedChannelPlatformVariance,
   assertContractReadyForPlatformTail,
-  getChannelOfficialStatementPolicy
+  getChannelOfficialStatementPolicy,
+  getChannelManualReviewException
 } from '@/lib/api/billLifecycle.ts'
 import { getContractBillReconciliation } from '@/lib/api/contractTerms.ts'
 import { listContractDifferenceCases, handleContractDifferenceCase } from '@/lib/api/contractDifferences.ts'
 import { prepareChannelSpecialSettlement } from '@/domain/channel/channelSpecialSettlement.js'
 import { assessChannelSmallVariancePreflight } from '@/domain/channel/channelSmallVarianceReview.js'
-import { assessSavedChannelPlatformDifference, buildChannelPlatformApprovalNote } from '@/domain/channel/channelPlatformVarianceReview.js'
+import { assessSavedChannelPlatformDifference, buildChannelPlatformApprovalNote, isSingleBillManualReviewCandidate } from '@/domain/channel/channelPlatformVarianceReview.js'
 import { assessChannelSavePreflight } from '@/domain/channel/channelSavePreflight.js'
 import { getRecentApiErrorMessage } from '@/lib/api/client.ts'
 import {
@@ -54,7 +55,9 @@ import './ChannelBillCompact.css'
 async function assessCurrentPlatformReview(savedBill) {
   const honor = savedBill.partner_name === '荣耀' && (!savedBill.channel_name || savedBill.channel_name === '荣耀')
   const policy = honor ? (await getChannelOfficialStatementPolicy(String(savedBill.id))).policy : null
-  return assessSavedChannelPlatformDifference(savedBill, policy)
+  const exception = isSingleBillManualReviewCandidate(savedBill)
+    ? (await getChannelManualReviewException(String(savedBill.id), savedBill.updated_at)).exception : null
+  return assessSavedChannelPlatformDifference(savedBill, policy, exception)
 }
 
 const FORM_ID = 'core-channel-bill-form'
@@ -184,6 +187,7 @@ function CoreChannelBillFormPage({ mode }) {
   const [platformEvidenceId, setPlatformEvidenceId] = useState('')
   const [officialConfirmedLineIds, setOfficialConfirmedLineIds] = useState([])
   const [smallVarianceNote, setSmallVarianceNote] = useState('')
+  const [manualReviewConfirmed, setManualReviewConfirmed] = useState(false)
   const [smartRecord, setSmartRecord] = useState(null)
   const [smartRevision, setSmartRevision] = useState(0)
   const [compactMode, setCompactMode] = useState(true)
@@ -205,6 +209,7 @@ function CoreChannelBillFormPage({ mode }) {
     setShowSmallVariancePanel(false)
     setSmallVarianceKind('contract')
     setPlatformVarianceReview(null)
+    setManualReviewConfirmed(false)
     setPlatformEvidenceAttachments([])
     setPlatformEvidenceId('')
     setSmallVarianceNote('')
@@ -622,7 +627,7 @@ function CoreChannelBillFormPage({ mode }) {
           const documented = review.reviewKind === 'documented'
           setInlineIssue({
             kind: 'platform',
-            title: documented ? '账单已保存 · 核对平台原始结算单' : '账单已保存 · 小额平台尾差',
+            title: review.manualException ? '账单已保存 · 单笔人工核对' : documented ? '账单已保存 · 核对平台原始结算单' : '账单已保存 · 小额平台尾差',
             saved: true,
             message: `系统计算 ${money(review.systemAmount)}，平台实结 ${money(review.platformAmount)}，差额 ${money(Math.abs(review.differenceCents / 100))}。请按下方提示核对并留痕；不修改真实金额。`
           })
@@ -690,8 +695,8 @@ function CoreChannelBillFormPage({ mode }) {
             const documented = review.reviewKind === 'documented'
             setInlineIssue({
               kind: 'platform', saved: true,
-              title: documented ? '账单已保存 · 等待平台原始凭证核对' : '账单已保存 · 仅剩平台小额尾差',
-              message: `系统计算 ${money(review.systemAmount)}，平台结算 ${money(review.platformAmount)}，差额 ${money(Math.abs(review.differenceCents / 100))}。${documented ? '请上传平台原始结算单并填写人工审核原因。' : '填写人工核对说明即可继续。'}原账单金额不会被修改。`
+              title: review.manualException ? '账单已保存 · 单笔人工核对' : documented ? '账单已保存 · 等待平台原始凭证核对' : '账单已保存 · 仅剩平台小额尾差',
+              message: `系统计算 ${money(review.systemAmount)}，平台结算 ${money(review.platformAmount)}，差额 ${money(Math.abs(review.differenceCents / 100))}。${review.manualException ? '请填写真实文字依据并明确确认本次单笔免附件例外。' : documented ? '请上传平台原始结算单并填写人工审核原因。' : '填写人工核对说明即可继续。'}原账单金额不会被修改。`
             })
             openSmallVariancePanel('platform', review)
             return
@@ -823,7 +828,8 @@ function CoreChannelBillFormPage({ mode }) {
     setOfficialConfirmedLineIds([])
     setPlatformEvidenceAttachments([])
     setPlatformEvidenceId('')
-    if (kind === 'platform' && review?.reviewKind === 'documented') {
+    setManualReviewConfirmed(false)
+    if (kind === 'platform' && review?.reviewKind === 'documented' && !review.manualException) {
       void refreshPlatformEvidence().catch((error) => {
         console.warn('读取已上传的渠道原始结算凭证失败', error)
         showToast('账单凭证列表暂时读取失败，可以上传后重新尝试', 'error')
@@ -840,11 +846,12 @@ function CoreChannelBillFormPage({ mode }) {
   }
 
   const confirmSmallApprovedVariance = async () => {
-    if (!isEdit || !channelEditRecordId || reviewing) return
+    if (!isEdit || !channelEditRecordId || reviewing || reviewInFlightRef.current) return
     const note = smallVarianceNote.trim()
     if (smallVarianceKind === 'platform') {
       const documented = platformVarianceReview?.reviewKind === 'documented'
       const official = platformVarianceReview?.policyCode === 'honor_official_statement_v1'
+      const manual = Boolean(platformVarianceReview?.manualException)
       if (!platformVarianceReview) {
         showToast('平台结算数据尚未就绪，请重新打开本张账单', 'error')
         return
@@ -852,8 +859,12 @@ function CoreChannelBillFormPage({ mode }) {
       const effectiveEvidenceId = platformEvidenceId || (
         platformEvidenceAttachments.length === 1 ? platformEvidenceAttachments[0].id : ''
       )
-      if (documented && !effectiveEvidenceId) {
+      if (documented && !manual && !effectiveEvidenceId) {
         showToast('请先上传或选择平台原始结算凭证', 'error')
+        return
+      }
+      if (manual && (!manualReviewConfirmed || note.length < 12)) {
+        showToast('请填写至少12个字的真实核对依据，并勾选单笔人工确认', 'error')
         return
       }
       if (official && (note.length < 6 || officialConfirmedLineIds.length !== platformVarianceReview.officialLines.length)) {
@@ -866,20 +877,25 @@ function CoreChannelBillFormPage({ mode }) {
         showToast('有尚未保存的修改，请先保存后重新核对尾差', 'error')
         return
       }
+      const generation = reviewGenerationRef.current
+      const isCurrent = () => reviewGenerationRef.current === generation
+      reviewInFlightRef.current = true
       setReviewing(true)
       try {
         // Strict contract preflight: neither unknown authorization nor
         // unresolved contract deviations can be waived by platform approval.
         await assertContractReadyForPlatformTail(String(channelEditRecordId), platformVarianceReview)
+        if (!isCurrent()) return
         // The backend checks document ownership, current line IDs, balances and
         // contract history atomically. Do not block the user with a redundant
         // second attachment-list fetch before the actual confirmation.
         const lifecycle = await confirmReviewedChannelPlatformVariance(
           String(channelEditRecordId), auditNote, platformVarianceReview,
-          documented ? effectiveEvidenceId : '', documented,
+          documented && !manual ? effectiveEvidenceId : '', documented && !manual,
           official ? platformVarianceReview.officialLines.filter(line => officialConfirmedLineIds.includes(line.line_id)) : [],
-          official ? note : ''
+          official ? note : '', manualReviewConfirmed, manual ? note : ''
         )
+        if (!isCurrent()) return
         safety.clearAfterSubmit()
         invalidateEditRecord('channel', String(channelEditRecordId))
         setInlineIssue(null)
@@ -894,20 +910,31 @@ function CoreChannelBillFormPage({ mode }) {
         } catch (refreshError) {
           console.warn('平台金额差异核对已完成，渠道列表刷新暂不可用', refreshError)
         }
+        if (!isCurrent()) return
         showToast(lifecycle?.settlement_condition?.deferred
           ? '账单已核对、进入累计待结算池；未达到门槛前不催收，不代表实际到账'
-          : '平台实结金额已凭证核对并确认，原始规则与金额保留；请核实累计结算策略',
+          : manual ? '本单已按文字依据人工核对，原始金额、差异及收款保留；不适用于其他账单'
+            : '平台实结金额已凭证核对并确认，原始规则与金额保留；请核实累计结算策略',
           'success')
         goList()
       } catch (error) {
+        if (!isCurrent()) return
+        setManualReviewConfirmed(false)
+        if (error?.errorCode === 'manual_review_revision_changed') {
+          setShowSmallVariancePanel(false)
+          setPlatformVarianceReview(null)
+        }
         const message = error instanceof Error ? error.message : '平台金额核对失败'
         reportIssue(message, {
-          kind: 'platform', title: '金额已保存，人工凭证核对尚未确认',
+          kind: 'platform', title: '金额已保存，人工核对尚未确认',
           saved: true, toast: false, autoLocate: false
         })
         showToast(message, 'error')
       } finally {
-        setReviewing(false)
+        if (isCurrent()) {
+          reviewInFlightRef.current = false
+          setReviewing(false)
+        }
       }
       return
     }
@@ -1271,7 +1298,9 @@ function CoreChannelBillFormPage({ mode }) {
         <ChannelSmallVarianceApprovalPanel
           open={showSmallVariancePanel}
           note={smallVarianceNote}
-          onNoteChange={setSmallVarianceNote}
+          onNoteChange={value => { setSmallVarianceNote(value); setManualReviewConfirmed(false) }}
+          manualReviewConfirmed={manualReviewConfirmed}
+          onManualReviewConfirmedChange={setManualReviewConfirmed}
           onConfirm={() => void confirmSmallApprovedVariance()}
           onCancel={() => setShowSmallVariancePanel(false)}
           busy={reviewing}
