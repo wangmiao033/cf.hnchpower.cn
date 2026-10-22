@@ -3,6 +3,15 @@
  * 使用容器查询（页面真正可用宽度），而非仅根据窗口宽度。
  * 不影响其他财务页面、计算逻辑或数据库。
  */
+.so-month-ledger .so-toolbar { display:flex; flex-wrap:wrap; gap:10px; margin:18px 0; }
+.so-month-ledger input, .so-month-ledger select { max-width:100%; box-sizing:border-box; padding:8px; border:1px solid #d9e2ef; border-radius:6px; background:white; }
+.so-month-ledger .so-game-table input { width:112px; }
+.so-month-ledger .so-game-table td:first-child input { width:170px; }
+.so-month-ledger .so-game-table select { width:150px; }
+.so-month-ledger button { padding:8px 12px; border:1px solid #d9e2ef; border-radius:6px; background:white; color:#315fd0; cursor:pointer; }
+.so-month-ledger button:disabled { opacity:.5; cursor:default; }
+.so-month-ledger [role=alert] { color:#b42318; overflow-wrap:anywhere; }
+.so-page.so-month-ledger { display:block; }
 .so-page {
   container: daxiong / inline-size;
   --so-line: #e2e9f2;
