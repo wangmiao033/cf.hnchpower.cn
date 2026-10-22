@@ -71,3 +71,47 @@
   .core-channel-recon-page .channel-ledger-filters { padding: 8px; }
   .core-channel-recon-page .channel-ledger-filters__more { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* Verification shortcuts sit above the independent collection status filters. */
+.core-channel-recon-page .channel-ledger-review-filter {
+  display: flex; align-items: center; gap: 10px; min-width: 0;
+  padding: 6px 10px; min-height: 42px;
+  border: 1px solid #dfe7f1; border-radius: 8px; background: #fff;
+}
+.core-channel-recon-page .channel-ledger-review-filter__label {
+  flex: 0 0 auto; font-size: 12px; font-weight: 750; color: #637992;
+}
+.core-channel-recon-page .channel-ledger-review-filter__buttons {
+  display: flex; gap: 7px; min-width: 0; overflow-x: auto;
+}
+.core-channel-recon-page .channel-ledger-review-filter__buttons button {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  flex: 0 0 auto; min-height: 29px; padding: 0 12px;
+  border: 1px solid #e2e8f0; border-radius: 7px;
+  background: #f7f9fc; color: #52677e;
+  font-size: 12px; font-weight: 700; white-space: nowrap; cursor: pointer;
+}
+.core-channel-recon-page .channel-ledger-review-filter__buttons button:hover {
+  border-color: #c4daf3; background: #f1f7ff;
+}
+.core-channel-recon-page .channel-ledger-review-filter__buttons button.is-active {
+  border-color: #95bfe8; background: #e8f3ff; color: #235e9c;
+}
+.core-channel-recon-page .channel-ledger-review-filter__buttons button:focus-visible {
+  outline: 2px solid #71a4d4; outline-offset: 2px;
+}
+.core-channel-recon-page .channel-ledger-review-filter__buttons em {
+  font-size: 11px; font-style: normal; font-variant-numeric: tabular-nums;
+  min-width: 17px; text-align: center;
+}
+.core-channel-recon-page .channel-ledger-review-filter > small {
+  margin-left: auto; color: #8091a5; font-size: 11px; white-space: nowrap;
+}
+@media (max-width: 700px) {
+  .core-channel-recon-page .channel-ledger-review-filter {
+    flex-wrap: wrap; column-gap: 8px; row-gap: 4px;
+  }
+  .core-channel-recon-page .channel-ledger-review-filter__buttons { flex: 1 1 auto; }
+  .core-channel-recon-page .channel-ledger-review-filter > small { display: none; }
+  .core-channel-recon-page .channel-ledger-review-filter__buttons button { padding: 0 9px; }
+}
