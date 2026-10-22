@@ -1,3 +1,4 @@
+import { revenueMultiplier } from './channelRevenueBasis.js'
 /**
  * 渠道对账：多游戏明细聚合（列表/筛选/导出用）
  */
@@ -12,7 +13,7 @@ export function getLineDiscountFactor(line) {
 /** 总流水 = 后台流水(flow) × 折扣系数，2 位小数 */
 export function getLineEffectiveFlow(line) {
   const raw = parseFloat(line.flow) || 0
-  return Math.round(raw * getLineDiscountFactor(line) * 100) / 100
+  return Math.round(raw * revenueMultiplier(line) * 100) / 100
 }
 
 /** @param {Record<string, unknown>} record */
@@ -25,7 +26,7 @@ export function getChannelLineItems(record) {
         id: record._legacyLineId || `legacy-${record.id}`,
         gameName: record.gameName,
         flow: record.flow,
-        discountFactor: record.discountFactor ?? 1,
+        discountFactor: record.discountFactor ?? 1, revenueBasis: record.revenueBasis ?? 'pre_discount',
         voucherCost: record.voucherCost,
         noWorryCost: record.noWorryCost,
         refundCost: record.refundCost,
@@ -53,7 +54,7 @@ export function expandChannelRecordByGameLines(record) {
     _virtualLineKey: `${record.id}::${line.id ?? idx}`,
     gameName: line.gameName,
     flow: line.flow,
-    discountFactor: line.discountFactor ?? 1,
+    discountFactor: line.discountFactor ?? 1, revenueBasis: line.revenueBasis ?? 'pre_discount',
     channelFlow: getLineEffectiveFlow(line),
     voucherCost: line.voucherCost,
     noWorryCost: line.noWorryCost,
@@ -84,7 +85,7 @@ export function getChannelTotals(record) {
   const persistedSettlement = recordSettlementTotal(record)
   if (lines.length === 0) {
     const raw = parseFloat(record.flow) || 0
-    const fac = getLineDiscountFactor(record)
+    const fac = revenueMultiplier(record)
     return {
       flow: Math.round(raw * fac * 100) / 100,
       voucherCost: parseFloat(record.voucherCost) || 0,

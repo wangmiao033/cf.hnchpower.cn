@@ -23,6 +23,13 @@ import {
   ruleFormulaText
 } from '@/domain/channel/channelBillingForm.js'
 import { applyCommercialDiscountFromGameName } from '@/domain/channel/channelLineDefaults.js'
+import {
+  isAiquChannel,
+  resolveRevenueBasis,
+  previewRevenueBasisChange,
+  applyRevenueBasisChange
+} from '@/domain/channel/channelRevenueBasis.js'
+import { isBillLockedStatus } from '@/domain/reconciliation/billLifecycle.js'
 import { linesWithChannelLineContractFees } from '@/domain/channel/channelLineContractFee.js'
 import { isSameCustomerRestoration } from '@/domain/channel/channelContractInlineReview.js'
 import { recommendChannelContractRules } from '@/lib/api/contractTerms.ts'
@@ -198,6 +205,80 @@ function clearHeaderChannelFeeForMixedLines(header) {
   }
 }
 
+// Use immutable loaded records, never the editable header status, to decide
+// whether an existing financial record may change its monetary input basis.
+export function isRevenueBasisChangeLocked({ mode = 'add', sourceRecord, draftRecord, recordId } = {}) {
+  if (!['add', 'edit'].includes(mode)) return true
+  if (mode === 'edit' && recordId && !sourceRecord) return true
+  return [sourceRecord, draftRecord].filter(Boolean).some((record) => (
+    isBillLockedStatus(record.status)
+    || Number(record.receivedAmount ?? record.received_amount ?? 0) > 0
+    // A zero receivable may be labelled paid without any cash receipt.
+    // Display-only receiptStatus is not evidence of received/核销 funds.
+    || (Array.isArray(record.receipts) && record.receipts.length > 0)
+    || (Array.isArray(record.bankMatches) && record.bankMatches.some(match => match.status === 'confirmed'))
+  ))
+}
+
+export function ChannelRevenueBasisSelector({ row, header, index, locked, onRequest }) {
+  if (!isAiquChannel(header)) return null
+  const basis = resolveRevenueBasis(row)
+  return (
+    <div style={{ display: 'grid', gap: 3, marginTop: 4 }}>
+      <select
+        value={basis}
+        disabled={locked}
+        aria-label={`第${index + 1}行流水口径`}
+        title={locked ? '已确认、已收款或已核销账单不能转换流水口径' : '选择后先预览，点击应用才更改本行口径；不换算录入数字'}
+        style={{ width: '100%', minWidth: 118, fontSize: 11 }}
+        onChange={(event) => onRequest(event.target.value)}
+      >
+        <option value="pre_discount">折前原始流水</option>
+        <option value="post_discount">已折后流水</option>
+      </select>
+      <small style={{ fontSize: 10, color: '#596579', whiteSpace: 'normal' }}>
+        {basis === 'post_discount' ? '不再乘游戏折扣' : '录入流水 × 游戏折扣'}
+      </small>
+    </div>
+  )
+}
+
+export function ChannelRevenueBasisPreview({ row, header, index, nextBasis, voucherFaceReviewed = false, locked = false, onVoucherReview, onApply, onCancel }) {
+  if (!row || !isAiquChannel(header)) return null
+  const preview = previewRevenueBasisChange(row, nextBasis, header)
+  const changed = applyRevenueBasisChange(row, nextBasis, header)
+  const before = calculateSettlementDetails(row, header)
+  const after = calculateSettlementDetails(changed, header)
+  const needsVoucherReview = nextBasis === 'post_discount' && preview.requiresVoucherReview
+  const money = (value) => `¥${Number(value || 0).toFixed(2)}`
+  const label = (basis) => basis === 'post_discount' ? '已折后流水' : '折前原始流水'
+  return (
+    <section className="channel-rule-panel" aria-label={`第${index + 1}行流水口径变更预览`}>
+      <div style={{ display: 'grid', gap: 8, padding: 12 }}>
+        <strong>第{index + 1}行 · {row.gameName || '未填写游戏'}：{label(preview.fromBasis)} → {label(preview.toBasis)}（尚未应用）</strong>
+        <span>录入流水保持 {money(preview.inputFlow)}；游戏折扣保留 {row.discountFactor || '1'}，不改成 1，也不自动换算录入数字。</span>
+        <span>参与结算流水：{money(preview.beforeEffectiveFlow)} → {money(preview.afterEffectiveFlow)}</span>
+        <span>系统结算：{money(before.systemSettlementAmount)} → {money(after.systemSettlementAmount)}</span>
+        <small>{nextBasis === 'post_discount' ? '输入已折后流水，游戏折扣仅版本参考；代金券若已折后请选择直扣；其他扣减均实际金额。' : '输入折前原始流水，参与结算流水将按保留的游戏折扣换算；代金券口径不随流水口径自动改变。'}</small>
+        {needsVoucherReview ? (
+          <div style={{ display: 'grid', gap: 6, padding: 10, background: '#fff8e6', color: '#775517' }}>
+            <span>本行仍有折算券原始面额 {money(row.voucherFaceValue)}。若这笔券已经折后，请先在本行「代金券口径」单独选择「直扣」，再应用流水口径。</span>
+            <label style={{ display: 'flex', gap: 6, alignItems: 'flex-start' }}>
+              <input type="checkbox" checked={voucherFaceReviewed} disabled={locked} onChange={(event) => onVoucherReview(event.target.checked)} />
+              <span>我确认现有折算券是原始面额，继续按游戏折扣换算，不改为直扣。</span>
+            </label>
+          </div>
+        ) : null}
+        {locked ? <span role="alert">已确认、已收款或已核销账单不能转换流水口径，原值保持不变。</span> : null}
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button type="button" className="rec-btn rec-btn--primary rec-btn--small" disabled={locked || (needsVoucherReview && !voucherFaceReviewed)} onClick={onApply}>应用本行流水口径</button>
+          <button type="button" className="rec-btn rec-btn--ghost rec-btn--small" onClick={onCancel}>取消，保留原口径</button>
+        </div>
+      </div>
+    </section>
+  )
+}
+
 function ChannelBillingForm({
   formId,
   mode = 'add',
@@ -221,6 +302,8 @@ function ChannelBillingForm({
   // Expanded editor is ephemeral UI state; the persisted two voucher fields
   // remain the source of truth, and existing mixed rows always show both.
   const [expandedVoucherRows, setExpandedVoucherRows] = useState({})
+  const [revenueBasisChange, setRevenueBasisChange] = useState(null)
+  const revenueBasisPreviewRef = useRef(null)
   const [adjustmentExpanded, setAdjustmentExpanded] = useState(false)
   const [remarksExpanded, setRemarksExpanded] = useState(false)
   const [partnerId, setPartnerId] = useState('')
@@ -279,6 +362,8 @@ function ChannelBillingForm({
   }, [partners, partnerId, header.partnerName, header.channelName, mode])
 
   const effectiveRuleHeader = applyTargetedChannelRule(header)
+  const aiquChannel = isAiquChannel(header)
+  const revenueBasisLocked = isRevenueBasisChangeLocked({ mode, sourceRecord, draftRecord, recordId })
   const feeMode = effectiveRuleHeader.channelFeeMode || 'fixed'
   const targetedRuleLocked = effectiveRuleHeader.settlementRuleCode === XIAN_WEIZHEN_9917_RULE
   const contractAwareMode = mode === 'add' || mode === 'edit'
@@ -319,6 +404,7 @@ function ChannelBillingForm({
   useEffect(() => { onPreviewChange?.(previewSettlement) }, [previewSettlement, onPreviewChange])
 
   useEffect(() => {
+    setRevenueBasisChange(null)
     const stateRecord = draftRecord || (mode === 'edit' ? sourceRecord : null)
     if (stateRecord) {
       // Restoring from a filtered channel list is an explicit customer choice,
@@ -349,6 +435,13 @@ function ChannelBillingForm({
     setDifferenceReviewReason('')
     setDifferenceNoteWritten(false)
   }, [mode, sourceRecord?.id, draftRecord, createPrefillPartner?.partnerId])
+
+  useEffect(() => {
+    if (revenueBasisChange) {
+      revenueBasisPreviewRef.current?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' })
+      revenueBasisPreviewRef.current?.focus?.({ preventScroll: true })
+    }
+  }, [revenueBasisChange?.index, revenueBasisChange?.nextBasis])
 
   useEffect(() => {
     // Legacy/edit records only: recover their stable customer link from the persisted
@@ -576,6 +669,14 @@ function ChannelBillingForm({
       currentId: partnerId, nextId: nextPartnerId,
       resolvedCurrentId: selectedPartner?.id, selected
     })
+    const nextChannelName = restoringSameCustomer ? header.channelName : selected && nextPartnerId ? selected.shortName || selected.name : partnerName
+    if (!isAiquChannel({ partnerName, channelName: nextChannelName }) && lines.some(row => resolveRevenueBasis(row) === 'post_discount')) {
+      const message = '已折后流水仅适用于爱趣指定主体。请先逐行预览并切回折前原始流水，再更换合作方；当前账单未改变。'
+      if (onError) onError(message)
+      else window.alert(message)
+      return
+    }
+    setRevenueBasisChange(null)
     setPartnerId(nextPartnerId)
     setLastContractRuleKey('')
     setContractRuleState(emptyContractRuleState())
@@ -605,6 +706,9 @@ function ChannelBillingForm({
 
   const handleLineChange = (index, field, value) => {
     setDifferenceNoteWritten(false)
+    // A changed voucher amount/mode needs a fresh acknowledgement. An old
+    // checkbox must never approve a different monetary value.
+    if (field.startsWith('voucher')) setRevenueBasisChange(current => current?.index === index ? { ...current, voucherFaceReviewed: false } : current)
     setLines((current) => current.map((row, rowIndex) => {
       if (rowIndex !== index) return row
       const identityChanged = field === 'gameName' || field === 'settlementCycle'
@@ -632,6 +736,24 @@ function ChannelBillingForm({
   }
 
   const voucherUiKey = (row, index) => row?.id ? 'saved:' + row.id : 'new:' + index
+
+  const requestRevenueBasisChange = (index, nextBasis) => {
+    if (revenueBasisLocked || !aiquChannel || !lines[index]) return
+    if (resolveRevenueBasis(lines[index]) === nextBasis) return
+    setRevenueBasisChange({ index, nextBasis, voucherFaceReviewed: false })
+  }
+
+  const applyPendingRevenueBasisChange = () => {
+    if (!revenueBasisChange || revenueBasisLocked || !aiquChannel) return
+    const { index, nextBasis, voucherFaceReviewed } = revenueBasisChange
+    const row = lines[index]
+    if (!row) return
+    const preview = previewRevenueBasisChange(row, nextBasis, header)
+    if (nextBasis === 'post_discount' && preview.requiresVoucherReview && !voucherFaceReviewed) return
+    setLines(current => current.map((line, rowIndex) => rowIndex === index ? applyRevenueBasisChange(line, nextBasis, header) : line))
+    setDifferenceNoteWritten(false)
+    setRevenueBasisChange(null)
+  }
 
   const handleVoucherModeChange = (index, newMode) => {
     const row = lines[index]
@@ -688,6 +810,7 @@ function ChannelBillingForm({
   }
   const removeLine = (index) => {
     setDifferenceNoteWritten(false)
+    setRevenueBasisChange(null)
     setLines((current) => current.length <= 1 ? current : current.filter((_, rowIndex) => rowIndex !== index))
   }
 
@@ -715,6 +838,12 @@ function ChannelBillingForm({
 
   const handleSubmit = async (event) => {
     event.preventDefault()
+    if (revenueBasisChange) {
+      const message = '流水口径变更仍在预览中，请先应用本行口径或取消，再保存账单。'
+      if (onError) onError(message)
+      else window.alert(message)
+      return
+    }
     if (!(header.partnerName || header.channelName)?.trim()) {
       const msg = '请填写合作方'; onError?.(msg) ?? window.alert(msg); return
     }
@@ -895,9 +1024,16 @@ function ChannelBillingForm({
 
       <div className="channel-form-section">
         <div className="form-section-title channel-bill-detail-title"><span>2）游戏明细</span><span className="channel-bill-period-badge">{periodSummary(lines)}</span></div>
+        {aiquChannel ? (
+          <div className="channel-rule-formula" style={{ flexWrap: 'wrap', marginBottom: 10 }}>
+            <strong>爱趣独立流水口径</strong>
+            <span>每行单独选择并预览应用，历史数据不自动转换。折后流水不再乘游戏折扣；折算券填原始面额，直扣券填实际金额，其他扣减均填实际金额。</span>
+            {revenueBasisLocked ? <span>已确认、已收款或已核销记录：流水口径只读。</span> : null}
+          </div>
+        ) : null}
         <LineItemsTable onAddRow={addLine} showAddButton={false} hint="结算月份只能选择本月或过去月份；历史账期允许保存但会提醒核对，未来账期会被前后端同时拦截。">
           <table className="channel-line-items-table">
-            <thead><tr><th>结算月份</th><th>游戏名称</th><th>后台流水</th><th>折扣系数</th><th>总流水</th><th className="channel-voucher-heading" title="录入代金券金额即可；当前口径显示在右侧小选择器，仅需特殊处理时更改。所有计算规则保持不变。">代金券</th><th>无忧试</th><th>玩家退款</th><th>测试费</th><th>福利币</th><th>其他扣减</th><th>分成%</th><th>税率%</th><th>通道费</th><th>计费额</th><th>分成额</th><th>系统结算</th><th>平台结算</th><th>差异</th><th>校验</th><th>操作</th></tr></thead>
+            <thead><tr><th>结算月份</th><th>游戏名称</th><th>{aiquChannel ? '录入流水 / 口径' : '后台流水'}</th><th>{aiquChannel ? '游戏折扣' : '折扣系数'}</th><th>{aiquChannel ? '参与结算流水' : '总流水'}</th><th className="channel-voucher-heading" title="折算券录入原始面额，直扣券录入实际金额；代金券口径独立选择，不随流水口径自动改变。">代金券</th><th>无忧试</th><th>玩家退款</th><th>测试费</th><th>福利币</th><th>其他扣减</th><th>分成%</th><th>税率%</th><th>通道费</th><th>计费额</th><th>分成额</th><th>系统结算</th><th>平台结算</th><th>差异</th><th>校验</th><th>操作</th></tr></thead>
             <tbody>{linesForSettlement.map((row, index) => {
               const rowRuleHeader = resolveChannelLineRuleHeader(row, effectiveRuleHeader)
               const rowFeeMode = rowRuleHeader.channelFeeMode || 'fixed'
@@ -916,8 +1052,14 @@ function ChannelBillingForm({
                     </div>
                   </td>
                   <td><input type="text" className="admin-input" value={row.gameName} onChange={(e) => handleLineChange(index, 'gameName', e.target.value)} placeholder="必填" /></td>
-                  <td><input type="number" step="0.01" className="admin-input" value={row.flow} onChange={(e) => handleLineChange(index, 'flow', e.target.value)} /></td>
-                  <td><input type="number" step="0.000001" min="0" className="admin-input" value={row.discountFactor} onChange={(e) => handleLineChange(index, 'discountFactor', e.target.value)} placeholder="默认1" /></td>
+                  <td>
+                    <input type="number" step="0.01" className="admin-input" value={row.flow} onChange={(e) => handleLineChange(index, 'flow', e.target.value)} aria-label={`第${index + 1}行录入流水`} />
+                    <ChannelRevenueBasisSelector row={row} header={header} index={index} locked={revenueBasisLocked} onRequest={(basis) => requestRevenueBasisChange(index, basis)} />
+                  </td>
+                  <td>
+                    <input type="number" step="0.000001" min="0" className="admin-input" value={row.discountFactor} onChange={(e) => handleLineChange(index, 'discountFactor', e.target.value)} placeholder="默认1" aria-label={`第${index + 1}行游戏折扣`} />
+                    {aiquChannel && resolveRevenueBasis(row) === 'post_discount' ? <small style={{ display: 'block', fontSize: 10, color: '#596579', whiteSpace: 'normal' }}>版本参考，不再乘流水</small> : null}
+                  </td>
                   <td className="channel-line-num">{effectiveLineFlowFromFormData(row).toFixed(2)}</td>
                   <td className="channel-voucher-cell">
                     <div className="channel-voucher-editor" title={voucherPreview.label}>
@@ -928,7 +1070,7 @@ function ChannelBillingForm({
                             <label title="直扣券实际金额"><span aria-hidden="true">直</span><input type="number" step="0.01" className="admin-input" value={row.voucherDirectCost ?? '0'} onChange={(e) => handleLineChange(index, 'voucherDirectCost', e.target.value)} aria-label={`第${index + 1}行直扣券实际金额`} placeholder="0" /></label>
                           </div>
                         ) : (
-                          <input type="number" step="0.01" className="admin-input channel-voucher-editor__amount" value={voucher.amount} onChange={(e) => handleLineChange(index, 'voucherAmount', e.target.value)} aria-label={`第${index + 1}行代金券金额`} title={voucher.isLegacy ? '历史账单：未转换口径时仍按原结算规则计算' : '代金券金额'} placeholder="0" />
+                          <input type="number" step="0.01" className="admin-input channel-voucher-editor__amount" value={voucher.amount} onChange={(e) => handleLineChange(index, 'voucherAmount', e.target.value)} aria-label={`第${index + 1}行代金券金额`} title={voucher.isLegacy ? '历史账单：未转换口径时仍按原结算规则计算' : voucher.mode === 'direct' ? '直扣券实际金额（已折后）' : '折算券原始面额（按游戏折扣换算）'} placeholder="0" />
                         )}
                         <select
                           className="channel-voucher-editor__mode"
@@ -974,6 +1116,21 @@ function ChannelBillingForm({
             })}</tbody>
           </table>
         </LineItemsTable>
+        {revenueBasisChange && linesForSettlement[revenueBasisChange.index] ? (
+          <div ref={revenueBasisPreviewRef} tabIndex={-1} style={{ marginTop: 12 }}>
+            <ChannelRevenueBasisPreview
+              row={linesForSettlement[revenueBasisChange.index]}
+              header={resolveChannelLineRuleHeader(linesForSettlement[revenueBasisChange.index], effectiveRuleHeader)}
+              index={revenueBasisChange.index}
+              nextBasis={revenueBasisChange.nextBasis}
+              voucherFaceReviewed={revenueBasisChange.voucherFaceReviewed}
+              locked={revenueBasisLocked}
+              onVoucherReview={(checked) => setRevenueBasisChange(current => current ? { ...current, voucherFaceReviewed: checked } : null)}
+              onApply={applyPendingRevenueBasisChange}
+              onCancel={() => setRevenueBasisChange(null)}
+            />
+          </div>
+        ) : null}
       </div>
 
       <div className="channel-form-section">

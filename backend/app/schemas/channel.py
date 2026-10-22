@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Literal
 from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -74,6 +74,9 @@ class ChannelLineItemCreate(BaseModel):
     game_name: str | None = None
     billing_flow: float = Field(default=0, allow_inf_nan=False, description="原始后台流水：正数为收入，负数为退款/冲销")
     discount_factor: float = Field(default=1, ge=0, le=1)
+    revenue_basis: Literal["pre_discount", "post_discount"] = Field(
+        default="pre_discount", description="流水金额口径；折后实付仅限爱趣及其明确法人主体，游戏折扣系数不变",
+    )
     # Optional metadata: omitted/null means a legacy voucher_cost.
     voucher_face_value: float | None = Field(default=None, allow_inf_nan=False)
     voucher_direct_cost: float | None = Field(default=None, allow_inf_nan=False)
@@ -115,6 +118,7 @@ class ChannelLineItemRead(BaseModel):
     game_name: str | None
     billing_flow: float
     discount_factor: float = 1
+    revenue_basis: Literal["pre_discount", "post_discount"] = "pre_discount"
     voucher_face_value: float | None = None
     voucher_direct_cost: float | None = None
     voucher_cost: float

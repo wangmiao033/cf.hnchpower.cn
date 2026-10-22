@@ -17,7 +17,7 @@ function lineFlow(line) {
   const rawFlow = numberValue(line?.flow ?? line?.backendFlow ?? line?.rechargeFlow ?? line?.originalFlow)
   const factorValue = Number(line?.discountFactor ?? line?.discount ?? 1)
   const factor = Number.isFinite(factorValue) && factorValue > 0 ? factorValue : 1
-  return rawFlow * factor
+  return rawFlow * (line?.revenueBasis === 'post_discount' ? 1 : factor)
 }
 
 function recordTotals(record) {

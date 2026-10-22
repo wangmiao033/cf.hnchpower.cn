@@ -80,6 +80,21 @@ class SettlementBasisGuardTests(unittest.TestCase):
 
 
 class ChannelFlowRepresentationTests(unittest.TestCase):
+    def test_explicit_revenue_basis_beats_conflicting_transport_basis(self):
+        for explicit, transport, flow in (
+            ("pre_discount", "actual_paid", 6),
+            ("post_discount", "raw", 1.8),
+        ):
+            with self.subTest(explicit=explicit):
+                result = self.calculate(line={
+                    "revenue_basis": explicit, "billing_flow_basis": transport,
+                    "billing_flow": flow,
+                })
+                self.assertEqual(result["expected_amount"], 0)
+                self.assertEqual(result["breakdown"]["effective_flow"], 1.8)
+                self.assertEqual(result["breakdown"]["revenue_basis"], explicit)
+                self.assertEqual(result["breakdown"]["discount_factor"], .3)
+
     def calculate(self, *, line=None, candidate=None):
         values = {
             "billing_flow": 6,

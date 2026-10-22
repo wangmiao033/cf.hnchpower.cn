@@ -1,3 +1,4 @@
+import { isAiquChannel } from './channelRevenueBasis.js'
 /**
  * Persist per-line settlement rule fields so mixed-fee channel bills do not
  * fall back to the bill header (e.g. 5% gateway) after save/confirm.
@@ -48,7 +49,7 @@ function stampRowWithResolvedRule(row, resolved) {
  */
 export function inferLineContractFeeFromPlatform(row, header = initialHeaderForm) {
   // A verified chosen cooperation item is authority; an amount coincidence is not.
-  if (row?.contractAccessItemId) return row
+  if (row?.contractAccessItemId || isAiquChannel(header)) return row
   const platformRaw = row?.platformSettlementAmount
   if (platformRaw === '' || platformRaw == null) return row
 

@@ -95,11 +95,14 @@ def _calculate_channel_amount(
     A contract saying "actual paid" alone cannot establish that representation.
     """
     basis_mode = _basis_mode(candidate)
-    flow_basis = _text(line.get("billing_flow_basis"))
+    explicit_basis = _text(line.get("revenue_basis"))
+    flow_basis = {
+        "pre_discount": "raw", "post_discount": "actual_paid",
+    }.get(explicit_basis, _text(line.get("billing_flow_basis")))
     discount = _number(line.get("discount_factor"), 1.0)
     guarded_line = dict(line)
     representation_known = flow_basis in {"raw", "actual_paid"}
-    if flow_basis == "actual_paid" or not representation_known:
+    if (flow_basis == "actual_paid" and explicit_basis != "post_discount") or not representation_known:
         guarded_line["discount_factor"] = 1.0
 
     result = _calculate_base(
@@ -108,6 +111,8 @@ def _calculate_channel_amount(
     breakdown = dict(result.get("breakdown") or {})
     breakdown["bill_discount_reference"] = discount
     breakdown["billing_flow_basis"] = flow_basis if representation_known else "unknown"
+    if explicit_basis in {"pre_discount", "post_discount"}:
+        breakdown["revenue_basis"] = explicit_basis
     breakdown["contract_settlement_basis"] = basis_mode
     result["breakdown"] = breakdown
     if flow_basis == "raw" and abs(discount - 1.0) > EPS:
