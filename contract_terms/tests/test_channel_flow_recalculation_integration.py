@@ -71,6 +71,47 @@ class ChannelFlowRecalculationIntegrationTests(unittest.TestCase):
         self.assertEqual(line["contract_amount"]["status"], "fail")
         self.assertTrue(_requires_difference_case("channel", line))
 
+    def test_explicit_post_discount_persists_through_loader_and_contract_check(self):
+        result = self.calculate(
+            row={"billing_flow": 371.56, "discount_factor": .005,
+                 "revenue_basis": "post_discount", "voucher_cost": 3.24,
+                 "voucher_face_value": 648, "voucher_direct_cost": 0,
+                 "test_cost": 0, "settlement_amount": 104.97},
+            candidate={"testing_fee": 0},
+        )
+        amount = result["lines"][0]["contract_amount"]
+        self.assertEqual(amount["expected_amount"], 104.97)
+        self.assertEqual(amount["difference_amount"], 0)
+        self.assertEqual(amount["breakdown"]["revenue_basis"], "post_discount")
+        self.assertEqual(amount["breakdown"]["billing_flow_basis"], "actual_paid")
+        self.assertEqual(amount["breakdown"]["discount_factor"], .005)
+        self.assertEqual(amount["breakdown"]["effective_flow"], 371.56)
+        self.assertEqual(amount["breakdown"]["voucher_cost"], 3.24)
+
+    def test_post_discount_split_voucher_does_not_use_stale_compatibility_total(self):
+        result = self.calculate(
+            row={"billing_flow": 371.56, "discount_factor": .005,
+                 "revenue_basis": "post_discount", "voucher_cost": 999,
+                 "voucher_face_value": 648, "voucher_direct_cost": 10,
+                 "test_cost": 0, "settlement_amount": 102.12},
+            candidate={"testing_fee": 0, "settlement_basis": "折后流水作为结算基数"},
+        )
+        amount = result["lines"][0]["contract_amount"]
+        self.assertEqual(amount["expected_amount"], 102.12)
+        self.assertEqual(amount["breakdown"]["voucher_cost"], 13.24)
+        self.assertEqual(amount["breakdown"]["discount_factor"], .005)
+
+    def test_post_discount_legacy_coupon_is_not_converted(self):
+        result = self.calculate(
+            row={"billing_flow": 371.56, "discount_factor": .005,
+                 "revenue_basis": "post_discount", "voucher_cost": 3.24,
+                 "test_cost": 0, "settlement_amount": 104.97},
+            candidate={"testing_fee": 0},
+        )
+        amount = result["lines"][0]["contract_amount"]
+        self.assertEqual(amount["expected_amount"], 104.97)
+        self.assertEqual(amount["breakdown"]["voucher_cost"], 3.24)
+
 
 if __name__ == "__main__":
     unittest.main()

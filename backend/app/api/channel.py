@@ -12,7 +12,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy import delete, exists, func, or_, select
+from sqlalchemy import delete, exists, func, inspect, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
@@ -34,7 +34,14 @@ from app.schemas.channel import (
 )
 from app.services.channel_cumulative_batch import refresh_batches_for_bill
 from app.services.channel_cumulative_invoice import assert_single_bill_collection_allowed
-from app.services.channel_settlement_engine import apply_bill_adjustment, aggregate_validation, calculate_channel_line, voucher_cost_for_storage
+from app.services.channel_settlement_engine import (
+    ANJIU_PRE_DISCOUNT_DEDUCTION_RULE, HONOR_UPFRONT_PERCENT_FEE_RULE,
+    XIAN_WEIZHEN_9917_RULE, apply_bill_adjustment, aggregate_validation,
+    calculate_channel_line, resolve_rule_settings, voucher_cost_for_storage,
+)
+from app.services.channel_revenue_basis import (
+    POST_DISCOUNT, PRE_DISCOUNT, effective_billing_flow, is_aiqu_record, revenue_basis,
+)
 from app.services.bill_write_preflight import prepare_bill_financial_update, set_bill_audit_reason
 from app.services.bill_lifecycle import normalize_status
 from app.services.bill_partner_search import matching_customer_keyword_exists
@@ -154,7 +161,7 @@ def _sync_denormalized_totals(row: ChannelRecord, db: Session) -> None:
     )
     if not items:
         return
-    row.billing_flow = round(sum(float(i.billing_flow or 0) * float(i.discount_factor or 1) for i in items), 2)
+    row.billing_flow = round(sum(float(effective_billing_flow(i)) for i in items), 2)
     row.voucher_cost = float(sum(float(i.voucher_cost or 0) for i in items))
     row.no_worry_cost = float(sum(float(i.no_worry_cost or 0) for i in items))
     row.refund_cost = float(sum(float(i.refund_cost or 0) for i in items))
@@ -237,6 +244,82 @@ def _channel_inputs_equal(before, after) -> bool:
         return a.is_finite() and b.is_finite() and a == b
     except (TypeError, ValueError, InvalidOperation):
         return before == after
+
+
+def _restore_omitted_revenue_basis(db: Session, row: ChannelRecord, incoming: dict) -> dict:
+    """An older editor may omit metadata, but must never reset a saved basis."""
+    raw_items = incoming.get("items")
+    if not isinstance(raw_items, list) or not raw_items or all("revenue_basis" in item for item in raw_items):
+        return incoming
+    existing = db.execute(select(ChannelRecordLineItem).where(
+        ChannelRecordLineItem.channel_record_id == row.id,
+    )).scalars().all()
+    by_id = {str(line.id): line for line in existing}
+    has_post_discount = any(revenue_basis(line) == POST_DISCOUNT for line in existing)
+    prepared = []
+    for item in raw_items:
+        item = dict(item)
+        if "revenue_basis" not in item:
+            saved = by_id.get(str(item.get("id") or ""))
+            if saved is not None:
+                item["revenue_basis"] = revenue_basis(saved)
+            elif has_post_discount:
+                raise HTTPException(status_code=422, detail={
+                    "error": "channel_revenue_basis_identity_required",
+                    "message": "账单已有折后流水明细，旧版编辑请求缺少明细 ID 和流水口径。请刷新账单后保存，未修改任何金额。",
+                })
+        prepared.append(item)
+    return {**incoming, "items": prepared}
+
+
+def _validate_revenue_bases(record, items) -> None:
+    for item in items:
+        if revenue_basis(item) != POST_DISCOUNT:
+            continue
+        if not is_aiqu_record(record):
+            raise HTTPException(status_code=422, detail={
+                "error": "channel_revenue_basis_not_allowed",
+                "message": "折后实付流水口径仅限“爱趣”渠道且客户为“昆山爱趣网络科技有限公司”；其他渠道保持原规则。",
+            })
+        if resolve_rule_settings(item, record)["rule_code"] in {
+            ANJIU_PRE_DISCOUNT_DEDUCTION_RULE, HONOR_UPFRONT_PERCENT_FEE_RULE,
+            XIAN_WEIZHEN_9917_RULE,
+        }:
+            raise HTTPException(status_code=422, detail={
+                "error": "channel_revenue_basis_rule_conflict",
+                "message": "爱趣折后流水不能与其他渠道专属扣减规则混用，请保留爱趣原合同分成、通道费和税率。",
+            })
+
+
+def _protect_received_revenue_bases(db: Session, row: ChannelRecord, existing, submitted) -> None:
+    old = {str(item.id): revenue_basis(item) for item in existing}
+    # Explicit ID is the only authority for matching a saved financial line.
+    changed = any(
+        revenue_basis(item) != old.get(str(item.id or ""), PRE_DISCOUNT)
+        for item in submitted
+    ) or any(
+        basis == POST_DISCOUNT and line_id not in {str(item.id or "") for item in submitted}
+        for line_id, basis in old.items()
+    )
+    if not changed:
+        return
+    has_receipt = db.execute(select(ChannelReceipt.id).where(
+        ChannelReceipt.channel_record_id == row.id,
+    ).limit(1)).scalar_one_or_none() is not None
+    has_bank_match = False
+    if inspect(db.connection()).has_table(BankReconciliationMatch.__tablename__):
+        has_bank_match = db.execute(select(BankReconciliationMatch.id).where(
+            BankReconciliationMatch.bill_type == "channel",
+            BankReconciliationMatch.bill_id == row.id,
+            BankReconciliationMatch.status == "confirmed",
+        ).limit(1)).scalar_one_or_none() is not None
+    # A zero-receivable draft is displayed as paid even without any collection.
+    # Only receipt facts, a nonzero rollup or active bank evidence create a lock.
+    if has_receipt or has_bank_match or abs(float(row.received_amount or 0)) > RECEIPT_EPS:
+        raise HTTPException(status_code=409, detail={
+            "error": "channel_revenue_basis_received_locked",
+            "message": "已有收款或核销的账单不能切换流水口径。本次未修改账单、收款或核销，请先走已有财务复核流程。",
+        })
 
 
 def _channel_line_inputs_match(
@@ -524,6 +607,7 @@ def create_channel_record(payload: ChannelRecordCreate, db: Session = Depends(ge
     )
     if not payload.items: raise HTTPException(status_code=422, detail={"error": "items_required", "message": "至少录入一行游戏明细"})
     row = ChannelRecord(id=str(uuid4()), **payload.model_dump(exclude={"items"}))
+    _validate_revenue_bases(row, payload.items)
     desired, previous = prepare_channel_contract_bindings(db, row, payload.items, [], preserve_ids=False)
     db.add(row); db.flush()
     saved_lines = _replace_line_items(db, row, payload.items)
@@ -544,8 +628,22 @@ def update_channel_record(record_id: str, payload: ChannelRecordUpdate, db: Sess
     if row is None: raise HTTPException(status_code=404, detail={"error": "not_found", "id": record_id})
     # Check the current DB status and editor revision while holding the row lock.
     # Do not touch ORM fields or child lines before this unified check succeeds.
-    incoming = _remark_only_channel_update(db, row, payload.model_dump(exclude_unset=True))
+    incoming = payload.model_dump(exclude_unset=True)
+    raw_items = incoming.get("items")
+    can_prove_remark_only = (
+        "remark" in incoming and isinstance(raw_items, list)
+        and bool(raw_items) and all(item.get("id") for item in raw_items)
+    )
+    if can_prove_remark_only:
+        # The existing narrow remark compatibility path proves that full-form
+        # inputs are unchanged. Restore omitted metadata only for that proof.
+        incoming = _restore_omitted_revenue_basis(db, row, incoming)
+        incoming = _remark_only_channel_update(db, row, incoming)
     data = prepare_bill_financial_update("channel", row, incoming)
+    if not can_prove_remark_only:
+        # Ordinary financial writes must encounter the lifecycle/revision lock
+        # before reading or preparing any submitted line data.
+        data = _restore_omitted_revenue_basis(db, row, data)
     set_bill_audit_reason(db, data.pop("audit_reason", None))
     items_payload = data.pop("items", None)
     adjustment_touched = bool(SETTLEMENT_ADJUSTMENT_FIELDS.intersection(data))
@@ -567,6 +665,8 @@ def update_channel_record(record_id: str, payload: ChannelRecordUpdate, db: Sess
             field: data.get(field, getattr(row, field))
             for field in _CHANNEL_RULE_CONTEXT_FIELDS
         })
+        _validate_revenue_bases(projected, parsed_items)
+        _protect_received_revenue_bases(db, row, existing_lines, parsed_items)
         with db.no_autoflush:
             binding_plan = prepare_channel_contract_bindings(
                 db, projected, parsed_items, existing_lines, preserve_ids=preserve_ids,
@@ -585,6 +685,7 @@ def update_channel_record(record_id: str, payload: ChannelRecordUpdate, db: Sess
             field: data.get(field, getattr(row, field))
             for field in _CHANNEL_RULE_CONTEXT_FIELDS
         })
+        _validate_revenue_bases(projected, existing_payload)
         with db.no_autoflush:
             prepare_channel_contract_bindings(
                 db, projected, existing_payload, existing_lines, preserve_ids=True,

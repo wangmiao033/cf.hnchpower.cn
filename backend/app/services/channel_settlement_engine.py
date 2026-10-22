@@ -5,6 +5,8 @@ from __future__ import annotations
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Any
 
+from app.services.channel_revenue_basis import effective_billing_flow
+
 XIAN_WEIZHEN_9917_RULE = "xian_weizhen_9917"
 HONOR_UPFRONT_PERCENT_FEE_RULE = "honor_upfront_percent_fee"
 ANJIU_PRE_DISCOUNT_DEDUCTION_RULE = "anjiu_pre_discount_deduction"
@@ -170,7 +172,7 @@ def _calculate_channel_line_raw(item: Any, record: Any) -> tuple[dict[str, Any],
     discount = _d(getattr(item, "discount_factor", None), "1")
     if discount <= 0:
         discount = Decimal("1")
-    effective_flow = _money(flow * discount)
+    effective_flow = _money(effective_billing_flow(item))
     deduction_fields = (
         XIAN_WEIZHEN_9917_DEDUCTION_FIELDS
         if settings["rule_code"] == XIAN_WEIZHEN_9917_RULE

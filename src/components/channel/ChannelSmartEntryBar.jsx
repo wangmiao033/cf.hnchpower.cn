@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { initialLineItem, normalizeChannelSettlementCycle } from '@/domain/channel/channelBillingForm.js'
+import { isAiquChannel, resolveRevenueBasis } from '@/domain/channel/channelRevenueBasis.js'
 import {
   loadAliasMemory,
   normalizeInlineKey,
@@ -106,10 +107,11 @@ function blankMonthlyAmounts(row) {
   }
 }
 
-function newSmartLine(gameName, settlementMonth, previousLine = null) {
+export function newSmartLine(gameName, settlementMonth, previousLine = null) {
   const base = initialLineItem()
   const inherited = previousLine
     ? {
+        revenueBasis: resolveRevenueBasis(previousLine),
         discountFactor: previousLine.discountFactor ?? base.discountFactor,
         shareRate: previousLine.shareRate ?? base.shareRate,
         taxRate: previousLine.taxRate ?? base.taxRate,
@@ -260,11 +262,14 @@ export default function ChannelSmartEntryBar({
   const previousRecord = useMemo(() => {
     if (!partnerName || !targetMonth) return null
     return (channelRecords || [])
+      // Monetary basis must not be inherited across similarly named or aliased
+      // companies. Only the exact Aiqu channel/legal entity can seed Aiqu rows.
+      .filter((item) => !(isAiquChannel(record) || isAiquChannel(item)) || (isAiquChannel(record) && isAiquChannel(item)))
       .filter((item) => samePartner(item, partnerName, canonicalChannelName, aliasMemory))
       .map((item) => ({ record: item, month: recordMonth(item) }))
       .filter((item) => item.month && item.month < targetMonth)
       .sort((a, b) => b.month.localeCompare(a.month))[0]?.record || null
-  }, [channelRecords, partnerName, canonicalChannelName, targetMonth, aliasMemory])
+  }, [channelRecords, record?.partnerName, record?.channelName, partnerName, canonicalChannelName, targetMonth, aliasMemory])
 
   const previousLines = useMemo(() => namedLines(previousRecord), [previousRecord])
 

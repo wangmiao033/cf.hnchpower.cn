@@ -163,7 +163,8 @@ def _raw_channel_bill(conn: psycopg.Connection, bill_id: str) -> tuple[dict, dic
 
     rows = conn.execute(
         """
-        SELECT id, billing_flow, discount_factor, voucher_cost, no_worry_cost,
+        SELECT id, billing_flow, discount_factor, revenue_basis,
+               voucher_face_value, voucher_direct_cost, voucher_cost, no_worry_cost,
                refund_cost, test_cost, welfare_cost, coin_cost, share_rate,
                tax_rate, gateway_cost, settlement_amount
         FROM channel_record_line_items
@@ -183,10 +184,13 @@ def _raw_channel_bill(conn: psycopg.Connection, bill_id: str) -> tuple[dict, dic
             str(row["id"]): {
                 "line_id": str(row["id"]),
                 "billing_flow": _float(row.get("billing_flow")),
-                # Persisted line flow is converted by its stored factor, just as
-                # the channel settlement engine does; game names are not input.
-                "billing_flow_basis": "raw",
+                # Explicit line representation takes precedence over both game
+                # discount identity and textual contract settlement wording.
+                "revenue_basis": str(row.get("revenue_basis") or "pre_discount"),
+                "billing_flow_basis": "actual_paid" if row.get("revenue_basis") == "post_discount" else "raw",
                 "discount_factor": _float(row.get("discount_factor"), 1.0),
+                "voucher_face_value": row.get("voucher_face_value"),
+                "voucher_direct_cost": row.get("voucher_direct_cost"),
                 "voucher_cost": _float(row.get("voucher_cost")),
                 "no_worry_cost": _float(row.get("no_worry_cost")),
                 "refund_amount": _float(row.get("refund_cost")),

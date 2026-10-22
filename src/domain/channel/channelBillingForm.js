@@ -1,3 +1,4 @@
+import { resolveRevenueBasis, validateRevenueBasis } from './channelRevenueBasis.js'
 /** 渠道账单表单计算与规则校验。 */
 import { getChannelLineItems } from '@/domain/channel/channelAggregates.js'
 import {
@@ -30,7 +31,7 @@ export const initialHeaderForm = {
 
 export function initialLineItem() {
   return {
-    id: '', settlementCycle: '', gameName: '', flow: '', discountFactor: '1', voucherCost: '', voucherFaceValue: null, voucherDirectCost: null, noWorryCost: '', refundCost: '', testCost: '', welfareCost: '', coinCost: '',
+    id: '', settlementCycle: '', gameName: '', flow: '', revenueBasis: 'pre_discount', discountFactor: '1', voucherCost: '', voucherFaceValue: null, voucherDirectCost: null, noWorryCost: '', refundCost: '', testCost: '', welfareCost: '', coinCost: '',
     shareRate: '30', taxRate: '5', gatewayCost: '', platformSettlementAmount: '', systemSettlementAmount: '', settlementDifference: '', validationStatus: 'unvalidated', settlementAmount: '',
     settlementRuleCode: '', channelFeeMode: '', channelFeeRate: '', taxMode: '', validationTolerance: ''
   }
@@ -208,7 +209,7 @@ export function applyAnjiuVoucherInference(row, header = initialHeaderForm) {
   if (inferred == null) return row
   return { ...row, voucherCost: String(inferred) }
 }
-export function effectiveLineFlowFromFormData(data) { return round2(Number(data.flow || 0) * resolveDiscountFactor(data)) }
+export function effectiveLineFlowFromFormData(data) { return round2(Number(data.flow || 0) * (resolveRevenueBasis(data) === 'post_discount' ? 1 : resolveDiscountFactor(data))) }
 
 /** Both null indicates an untouched historical voucher_cost (never convert it). */
 export function hasSplitVoucherFields(data) {
@@ -239,6 +240,7 @@ function deductionFieldsForHeader(header = initialHeaderForm) {
 }
 
 export function calculateBillingAmount(data, header = initialHeaderForm) {
+  validateRevenueBasis(data, header)
   const effectiveHeader = resolveChannelLineRuleHeader(data, header)
   const effectiveFlow = effectiveLineFlowFromFormData(data)
   const split = hasSplitVoucherFields(data)
@@ -293,7 +295,7 @@ export function buildLineRecordFromForm(fd, headerForm = initialHeaderForm) {
     ...(fd.id ? { id: String(fd.id) } : {}),
     ...(Object.prototype.hasOwnProperty.call(fd, 'contractAccessItemId') ? { contractAccessItemId: fd.contractAccessItemId } : {}),
     settlementCycle: normalizeChannelSettlementCycle(fd.settlementCycle || fd.settlementMonth), gameName: fd.gameName != null ? String(fd.gameName) : '',
-    flow: Number(fd.flow || 0), discountFactor: resolveDiscountFactor(fd), effectiveFlow: effectiveLineFlowFromFormData(fd),
+    flow: Number(fd.flow || 0), revenueBasis: resolveRevenueBasis(fd), discountFactor: resolveDiscountFactor(fd), effectiveFlow: effectiveLineFlowFromFormData(fd),
     voucherCost: voucherCostForStorage(fd, effectiveHeader),
     // Keep NULL in the inactive mode: persisting it as 0 would lose the
     // operator's radio selection when a saved zero-value voucher is reopened.
@@ -358,7 +360,7 @@ export function recordToLineForms(record) {
   return getChannelLineItems(record).map((line) => {
     const base = {
       ...(Object.prototype.hasOwnProperty.call(line, 'contractAccessItemId') ? { contractAccessItemId: line.contractAccessItemId } : {}),
-      id: line.id != null ? String(line.id) : '', settlementCycle: normalizeChannelSettlementCycle(line.settlementCycle || record.settlementMonth), gameName: line.gameName || '', flow: String(line.flow ?? ''), discountFactor: line.discountFactor != null ? String(line.discountFactor) : '1', voucherCost: String(line.voucherCost ?? ''), voucherFaceValue: line.voucherFaceValue == null ? null : String(line.voucherFaceValue), voucherDirectCost: line.voucherDirectCost == null ? null : String(line.voucherDirectCost), noWorryCost: String(line.noWorryCost ?? ''), refundCost: String(line.refundCost ?? ''), testCost: String(line.testCost ?? ''), welfareCost: String(line.welfareCost ?? ''), coinCost: String(line.coinCost ?? ''), shareRate: String(line.shareRate ?? '30'), taxRate: String(line.taxRate ?? '5'), gatewayCost: String(line.gatewayCost ?? ''), platformSettlementAmount: line.platformSettlementAmount != null ? String(line.platformSettlementAmount) : '', systemSettlementAmount: String(line.systemSettlementAmount ?? ''), settlementDifference: line.settlementDifference != null ? String(line.settlementDifference) : '', validationStatus: line.validationStatus || 'unvalidated', settlementAmount: String(line.settlementAmount ?? ''),
+      id: line.id != null ? String(line.id) : '', settlementCycle: normalizeChannelSettlementCycle(line.settlementCycle || record.settlementMonth), gameName: line.gameName || '', flow: String(line.flow ?? ''), revenueBasis: resolveRevenueBasis(line), discountFactor: line.discountFactor != null ? String(line.discountFactor) : '1', voucherCost: String(line.voucherCost ?? ''), voucherFaceValue: line.voucherFaceValue == null ? null : String(line.voucherFaceValue), voucherDirectCost: line.voucherDirectCost == null ? null : String(line.voucherDirectCost), noWorryCost: String(line.noWorryCost ?? ''), refundCost: String(line.refundCost ?? ''), testCost: String(line.testCost ?? ''), welfareCost: String(line.welfareCost ?? ''), coinCost: String(line.coinCost ?? ''), shareRate: String(line.shareRate ?? '30'), taxRate: String(line.taxRate ?? '5'), gatewayCost: String(line.gatewayCost ?? ''), platformSettlementAmount: line.platformSettlementAmount != null ? String(line.platformSettlementAmount) : '', systemSettlementAmount: String(line.systemSettlementAmount ?? ''), settlementDifference: line.settlementDifference != null ? String(line.settlementDifference) : '', validationStatus: line.validationStatus || 'unvalidated', settlementAmount: String(line.settlementAmount ?? ''),
       settlementRuleCode: line.settlementRuleCode || '', channelFeeMode: line.channelFeeMode || '', channelFeeRate: line.channelFeeRate != null ? String(line.channelFeeRate) : '', taxMode: line.taxMode || '', validationTolerance: line.validationTolerance != null ? String(line.validationTolerance) : ''
     }
     return applyAnjiuVoucherInference(applyCommercialDiscountFromGameName(base), header)

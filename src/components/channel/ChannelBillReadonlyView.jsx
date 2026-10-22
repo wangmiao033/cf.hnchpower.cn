@@ -20,6 +20,7 @@ const LINE_COLUMNS = [
   ['结算月份', 'settlementCycle'],
   ['游戏', 'gameName'],
   ['后台流水', 'flow', 'money'],
+  ['流水口径', 'revenueBasis', 'revenueBasis'],
   ['折扣系数', 'discountFactor', 'number'],
   ['计费金额', 'billingAmount', 'money'],
   ['代金券', 'voucherCost', 'money'],
@@ -43,6 +44,7 @@ const LINE_COLUMNS = [
 const BRIEF_COLUMNS = [
   ['游戏', 'gameName'],
   ['后台流水', 'flow', 'money'],
+  ['流水口径', 'revenueBasis', 'revenueBasis'],
   ['代金券', 'voucherCost', 'money'],
   ['分成比例', 'shareRate', 'percent'],
   ['通道费率', 'channelFeeRate', 'percent'],
@@ -76,7 +78,14 @@ const TAX_MODE_LABELS = {
   after_fee: '通道费后扣税'
 }
 
+export function displayRevenueBasis(value) {
+  if (value == null || value === '' || value === 'pre_discount') return '折前原始流水（按折扣换算）'
+  if (value === 'post_discount') return '已折后流水（不再乘游戏折扣）'
+  return '未知流水口径（请核对）'
+}
+
 function display(value, format) {
+  if (format === 'revenueBasis') return displayRevenueBasis(value)
   if (value === null || value === undefined || value === '') return '-'
   if (format === 'validation') return VALIDATION_LABELS[value] || String(value)
   if (format === 'money') {

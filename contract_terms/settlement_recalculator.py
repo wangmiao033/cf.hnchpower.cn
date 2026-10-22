@@ -376,8 +376,13 @@ def calculate_channel_contract_amount(
 
     raw_flow = _num(line.get("billing_flow"))
     discount = _num(line.get("discount_factor"), 1.0)
-    effective_flow = raw_flow * discount
+    post_discount = line.get("revenue_basis") == "post_discount"
+    effective_flow = raw_flow if post_discount else raw_flow * discount
     voucher = _num(line.get("voucher_cost"))
+    # Keep raw face-value vouchers distinct from direct paid-yuan deductions.
+    # Do not let the flow basis turn a game's face-value factor into 1.
+    if post_discount and any(line.get(field) is not None for field in ("voucher_face_value", "voucher_direct_cost")):
+        voucher = _num(line.get("voucher_face_value")) * (discount if discount > 0 else 1.0) + _num(line.get("voucher_direct_cost"))
     no_worry = _num(line.get("no_worry_cost"))
     refund = _num(line.get("refund_amount"))
     welfare = _num(line.get("welfare_cost"))
@@ -402,6 +407,7 @@ def calculate_channel_contract_amount(
             "breakdown": {
                 "raw_flow": _round2(raw_flow),
                 "discount_factor": round(discount, 6),
+                "revenue_basis": line.get("revenue_basis") or "pre_discount",
                 "effective_flow": _round2(effective_flow),
                 "voucher_cost": _round2(voucher),
                 "no_worry_cost": _round2(no_worry),

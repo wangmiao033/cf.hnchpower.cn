@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 MIGRATION_DIR = Path(__file__).resolve().parents[2] / "sql"
 MIGRATION_FILES = (
-    *tuple(f"{number:03d}" for number in range(1, 76)),
+    *tuple(f"{number:03d}" for number in range(1, 77)),
     "neon_repair_missing_columns.sql",
 )
 
@@ -42,10 +42,17 @@ def should_run_migrations() -> bool:
     return context in {"deploy", "manual", "cli"}
 
 
-def run_schema_migrations() -> None:
+def run_schema_migrations(*, only: str | None = None) -> None:
     """Apply each SQL file once, serialized with a PostgreSQL advisory lock."""
     if not should_run_migrations():
         return
+
+    paths = _migration_paths()
+    if only is not None:
+        selected = [path for path in paths if path.name == only]
+        if len(selected) != 1:
+            raise ValueError("Target must be the exact filename of one registered migration")
+        paths = selected
 
     with get_engine().begin() as connection:
         connection.execute(
@@ -63,7 +70,7 @@ def run_schema_migrations() -> None:
             text("SELECT pg_advisory_xact_lock(hashtext('caiwu_schema_migrations'))")
         )
 
-        for path in _migration_paths():
+        for path in paths:
             script = path.read_text(encoding="utf-8")
             checksum = hashlib.sha256(script.encode("utf-8")).hexdigest()
             applied = connection.execute(
