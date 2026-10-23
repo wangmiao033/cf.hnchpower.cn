@@ -8,6 +8,7 @@ import mainSource from '/src/main.jsx?raw'
 for (const [, path] of mainSource.matchAll(/import ['"](.+\.css)['"]/g)) {
   await import(/* @vite-ignore */ '/src/' + path.replace(/^\.\//, ''))
 }
+const fixtureParams = new URLSearchParams(window.location.search)
 const records = ['百分', '八门'].flatMap(channelName => Array.from({ length: 14 }, (_, i) => ({
   id: `${channelName}-${i}`, channelName, partnerName: `${channelName}合作方`,
   settlementMonth: i < 7 ? '2026-09' : '2026-08', status: 'confirmed',
@@ -40,9 +41,21 @@ if (new URLSearchParams(window.location.search).has('legacy-aliases')) {
   )
 }
 
+if (fixtureParams.has('cumulative')) {
+  records.splice(0, records.length, ...[
+    ['threshold-pending', 'pending', 0], ['threshold-active', 'confirmed', 0],
+    ['threshold-ready', 'confirmed', 0], ['threshold-paid', 'completed', 100],
+    ['threshold-archived', 'completed', 100], ['threshold-cancelled', 'cancelled', 0], ['periodic', 'pending', 0],
+    ['disabled-policy', 'confirmed', 0], ['missing-mode', 'confirmed', 0]
+  ].map(([id, status, receivedAmount]) => ({
+    ...records[0], id, billNumber: id, statementNo: id, channelName: '合成渠道', partnerName: '合成合作方',
+    settlementMonth: '2026-07', status, receivedAmount, remark: '累计中（仅备注，不作为类型）',
+    items: [{ gameName: '测试游戏', settlementCycle: '2026-07' }]
+  })))
+}
 const noop = () => {}
 const value = {
-  recon: { channelRecords: records, records: [], channelApiEnabled: false },
+  recon: { channelRecords: records, records: [], channelApiEnabled: fixtureParams.has('cumulative') },
   settings: {}, showToast: noop, setActiveView: noop, openBill360: noop,
   openChannelReconciliationEdit: noop
 }

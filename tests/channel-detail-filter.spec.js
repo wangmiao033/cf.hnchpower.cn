@@ -227,3 +227,136 @@ test('coverage audit shares the historical 游海/麦游 search with channel bil
   await expect(page.locator('.channel-month-audit__matrix')).toContainText('游海')
   await expect(page.locator('.channel-month-audit__matrix')).not.toContainText('麦游</strong>')
 })
+
+for (const { width, height, zoom } of [
+  { width: 1600, height: 900, zoom: 1 },
+  { width: 1280, height: 720, zoom: 1.25 },
+  { width: 1000, height: 800, zoom: 2 },
+  { width: 390, height: 844, zoom: 1 }
+]) {
+  test(`filter chips remain inside toolbar above review shortcuts at ${width}px / ${zoom * 100}%`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width, height })
+    await open(page)
+    // Match the production shell's constrained flex column; auto-height fixtures
+    // cannot expose toolbar shrinkage when a long ledger fills the viewport.
+    await page.locator('main').evaluate((element, scale) => {
+      element.style.cssText += `;height:100vh;display:flex;flex-direction:column;overflow:auto;zoom:${scale}`
+    }, zoom)
+    await page.getByLabel('筛选明细结算月份').selectOption('2026-08')
+    await page.getByLabel('筛选明细渠道').selectOption('百分')
+    const checkGeometry = async () => {
+      const geometry = await page.evaluate(() => {
+        const box = selector => {
+          const rect = document.querySelector(selector).getBoundingClientRect()
+          return { top: rect.top, bottom: rect.bottom, left: rect.left, right: rect.right }
+        }
+        return { toolbar: box('.core-recon-workbar'), filters: box('.channel-ledger-filters'),
+          active: box('.channel-ledger-filters__active'), review: box('.channel-ledger-review-filter') }
+      })
+      expect(geometry.toolbar.bottom, JSON.stringify(geometry)).toBeGreaterThanOrEqual(geometry.filters.bottom - 1)
+      expect(geometry.review.top, JSON.stringify(geometry)).toBeGreaterThan(geometry.active.bottom)
+    }
+    await checkGeometry()
+    await page.getByRole('button', { name: '更多筛选', exact: true }).click()
+    await page.getByLabel('游戏名称', { exact: true }).fill('用于验证筛选条件自然换行的长游戏名称'.repeat(3))
+    await page.getByLabel('排序方式', { exact: true }).selectOption('month-asc')
+    await checkGeometry()
+    await page.getByRole('button', { name: /收起筛选/ }).click()
+    await checkGeometry()
+    await page.screenshot({ path: testInfo.outputPath('filters-wrapped-conditions.png') })
+    await page.getByLabel('清除游戏筛选', { exact: true }).click()
+    await expect(page.locator(rows)).toHaveCount(7)
+    await page.screenshot({ path: testInfo.outputPath('filters-no-overlap.png') })
+  })
+}
+
+async function openCumulative(page, { fail = false, hold } = {}) {
+  const reads = []
+  const writes = []
+  await page.route(url => url.pathname.startsWith('/api/'), async route => {
+    const request = route.request()
+    const url = new URL(request.url())
+    if (request.method() !== 'GET') writes.push(request.method() + ' ' + url.pathname)
+    if (url.pathname.endsWith('/bill-statuses')) {
+      const ids = url.searchParams.get('bill_ids').split(',')
+      reads.push(ids)
+      if (hold) await hold
+      if (fail) return route.fulfill({ status: 503, json: { detail: 'unavailable' } })
+      return route.fulfill({ json: { items: ids.map(bill_id => ({
+        bill_id,
+        mode: bill_id === 'missing-mode' ? undefined : bill_id.startsWith('threshold-') ? 'threshold' : 'periodic',
+        state: bill_id === 'threshold-active' ? 'accumulating' : bill_id === 'threshold-ready' ? 'ready' : 'normal',
+        deferred: ['threshold-active', 'threshold-ready'].includes(bill_id),
+        policy: { enabled: bill_id !== 'disabled-policy', settlement_mode: 'threshold' }
+      })), total: ids.length } })
+    }
+    if (url.pathname === '/api/bill-lifecycle/archive')
+      return route.fulfill({ json: { archived_ids: ['threshold-archived'], eligible_ids: [], items: [] } })
+    if (url.pathname === '/api/auth/me') return route.fulfill({ json: { role: 'admin', permissions: [] } })
+    return route.fulfill({ json: { items: [], total: 0 } })
+  })
+  page.on('pageerror', error => { throw error })
+  await page.goto('/tests/fixtures/channel-detail.html?cumulative=1')
+  await expect(page.locator(rows)).toHaveCount(7)
+  return { reads, writes }
+}
+
+const billRow = (page, id) => page.locator(rows).filter({ has: page.locator('.channel-flat-ledger__game small', { hasText: id }) })
+
+test('cumulative column uses explicit mode for pending, paid and archived bills without changing actions', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  const { reads, writes } = await openCumulative(page)
+  await expect(page.locator(`${ledger} thead th`)).toHaveText([
+    '', '结算月份', '渠道 / 合作方', '游戏 / 账单编号', '渠道应收', '已收', '未收', '核对状态', '累计结算', '收款状态', '操作'
+  ])
+  for (const id of ['threshold-pending', 'threshold-active', 'threshold-ready', 'threshold-paid']) {
+    await expect(billRow(page, id).getByRole('group', { name: '累计结算：累计结算', exact: true })).toBeVisible()
+  }
+  await expect(billRow(page, 'periodic').getByRole('group', { name: '累计结算：/', exact: true })).toHaveText('/')
+  await expect(billRow(page, 'disabled-policy').getByRole('group', { name: '累计结算：/', exact: true })).toHaveText('/')
+  await expect(billRow(page, 'missing-mode').getByRole('group', { name: '累计结算：待确认', exact: true })).toBeVisible()
+  await expect(billRow(page, 'threshold-active').getByText('累计中', { exact: true })).toHaveCount(1)
+  await expect(billRow(page, 'threshold-ready').getByText('累计达标', { exact: true })).toBeVisible()
+  await expect(billRow(page, 'threshold-active').getByRole('group', { name: '收款状态：未收款', exact: true })).toHaveText('未收款')
+  await expect(billRow(page, 'threshold-active').getByRole('button', { name: '收款', exact: true })).toBeDisabled()
+  await expect(billRow(page, 'periodic').getByRole('button', { name: '收款', exact: true })).toBeEnabled()
+  await expect(billRow(page, 'threshold-paid').getByRole('button', { name: '已结清', exact: true })).toBeDisabled()
+  await expect(billRow(page, 'threshold-pending').getByRole('group', { name: '核对状态：待核对', exact: true })).toBeVisible()
+  await page.screenshot({ path: testInfo.outputPath('cumulative-column-desktop.png') })
+  await page.getByRole('button', { name: /归档账单/ }).click()
+  await expect(billRow(page, 'threshold-archived').getByRole('group', { name: '累计结算：累计结算', exact: true })).toBeVisible()
+  await expect(billRow(page, 'threshold-archived').getByRole('button', { name: '取消归档', exact: true })).toBeEnabled()
+  await page.getByRole('button', { name: /垃圾桶/ }).click()
+  await expect(billRow(page, 'threshold-cancelled').getByRole('group', { name: '累计结算：累计结算', exact: true })).toBeVisible()
+  await expect(billRow(page, 'threshold-cancelled').getByRole('button', { name: '恢复', exact: true })).toBeEnabled()
+  expect(reads.some(ids => ids.includes('threshold-paid'))).toBe(true)
+  expect(reads.some(ids => ids.includes('threshold-archived'))).toBe(true)
+  expect(writes).toEqual([])
+})
+
+test('missing cumulative API data is never presented as ordinary settlement', async ({ page }) => {
+  const { writes } = await openCumulative(page, { fail: true })
+  await expect(page.getByText('累计状态读取失败，收款仍由后台校验')).toBeVisible()
+  await expect(page.locator('.channel-flat-ledger__cumulative-cell')).toHaveText(Array(7).fill('待确认'))
+  expect(writes).toEqual([])
+})
+
+test('cumulative type waits for its source and fits a narrow horizontally scrollable table', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  let release
+  const hold = new Promise(resolve => { release = resolve })
+  await openCumulative(page, { hold })
+  await expect(page.locator('.channel-flat-ledger__cumulative-cell').first()).toHaveText('读取中…')
+  release()
+  await expect(billRow(page, 'periodic').getByRole('group', { name: '累计结算：/', exact: true })).toHaveText('/')
+  const heading = page.getByRole('columnheader', { name: '累计结算', exact: true })
+  await billRow(page, 'threshold-pending').getByRole('group', { name: '累计结算：累计结算', exact: true })
+    .evaluate(element => element.scrollIntoView({ block: 'center', inline: 'center' }))
+  await heading.evaluate(element => {
+    const scroller = element.closest('.channel-flat-ledger__scroll')
+    scroller.scrollLeft += element.getBoundingClientRect().left - scroller.getBoundingClientRect().left - 20
+  })
+  await expect(heading).toBeInViewport()
+  await expect(billRow(page, 'threshold-pending').getByRole('group', { name: '累计结算：累计结算', exact: true })).toBeInViewport()
+  await page.screenshot({ path: testInfo.outputPath('cumulative-column-mobile.png') })
+})

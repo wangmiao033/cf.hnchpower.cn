@@ -8,7 +8,7 @@
 .channel-flat-ledger__head-actions label{display:flex;align-items:center;gap:7px;font-size:11px;color:#68788a}
 .channel-flat-ledger__head-actions select{height:30px;padding:0 8px;background:#fff;border:1px solid #d1deeb;border-radius:6px;color:#3a516a;font-size:11px}
 .channel-flat-ledger__scroll{max-height:min(68vh,740px);overflow:auto;scrollbar-gutter:stable}
-.channel-flat-ledger__table{border-collapse:separate;border-spacing:0;width:100%;min-width:1265px;table-layout:fixed}
+.channel-flat-ledger__table{border-collapse:separate;border-spacing:0;width:100%;min-width:1365px;table-layout:fixed}
 .channel-flat-ledger__table th,.channel-flat-ledger__table td{border-bottom:1px solid #e9eef4;padding:11px 9px;text-align:left;font-size:11px;line-height:1.4;vertical-align:middle}
 .channel-flat-ledger__table thead th{position:sticky;top:0;z-index:3;background:#f3f7fb;color:#6b7b8e;font-size:10px;font-weight:800;white-space:nowrap}
 .channel-flat-ledger__table tr:last-child td{border-bottom:0}
@@ -23,8 +23,9 @@
 .channel-flat-ledger__table th:nth-child(6){width:98px}
 .channel-flat-ledger__table th:nth-child(7){width:108px}
 .channel-flat-ledger__table th:nth-child(8){width:104px}
-.channel-flat-ledger__table th:nth-child(9){width:118px}
-.channel-flat-ledger__table th:nth-child(10){width:230px}
+.channel-flat-ledger__table th:nth-child(9){width:100px}
+.channel-flat-ledger__table th:nth-child(10){width:118px}
+.channel-flat-ledger__table th:nth-child(11){width:230px}
 .channel-flat-ledger__check{text-align:center!important}
 .channel-flat-ledger__check input{width:14px;height:14px;accent-color:#306fba;cursor:pointer}
 .channel-flat-ledger__period{font-variant-numeric:tabular-nums;white-space:nowrap;color:#3d516b;font-weight:700}

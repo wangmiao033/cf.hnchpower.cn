@@ -60,13 +60,9 @@ export default function ChannelFlatLedger({
   const effectivePage = Math.min(Math.max(1, page), totalPages)
   const offset = (effectivePage - 1) * pageSize
   const visibleRows = useMemo(() => rows.slice(offset, offset + pageSize), [rows, offset, pageSize])
-  // Fully paid, archived and cancelled bills cannot enter a new cumulative
-  // pool. Querying only unpaid active rows keeps the first flat view fast.
-  const idsKey = visibleRows
-    .filter(row => !isChannelReceiptSettled(row) &&
-      !archivedIds.has(String(row.id)) &&
-      !['cancelled', 'canceled'].includes(String(row.status || '').toLowerCase()))
-    .map(row => String(row.id)).join(',')
+  // Type is independent of receipt/lifecycle status: even a paid or archived
+  // bill needs its explicit policy mode for this display-only column.
+  const idsKey = visibleRows.map(row => String(row.id)).join(',')
   const [conditions, setConditions] = useState({})
   const [statusLoading, setStatusLoading] = useState(false)
   const [statusError, setStatusError] = useState(false)
@@ -149,6 +145,7 @@ export default function ChannelFlatLedger({
             <th className="is-numeric">已收</th>
             <th className="is-numeric">未收</th>
             <th>核对状态</th>
+            <th>累计结算</th>
             <th>收款状态</th>
             <th>操作</th>
           </tr></thead>
@@ -164,6 +161,8 @@ export default function ChannelFlatLedger({
               const difference = hasDifference(row)
               const games = ledgerBillGames(row)
               const condition = conditions[id]
+              const cumulativeType = condition?.mode === 'threshold' ? '累计结算'
+                : condition?.mode === 'periodic' ? '/' : statusLoading ? '读取中…' : '待确认'
               const cumulative = !isArchived && !isCancelled && !settled && condition?.deferred &&
                 ['accumulating', 'ready'].includes(condition.state)
               const statuses = channelBillLedgerStatuses(row, {
@@ -205,16 +204,22 @@ export default function ChannelFlatLedger({
                       ) : null}
                     </div>
                   </td>
-                  <td className="channel-flat-ledger__status-cell">
-                    <div className="channel-flat-ledger__status-stack" role="group"
-                      aria-label={'收款状态：' + statuses.receipt.label + (statuses.accumulation ? '，' + statuses.accumulation.label : '')}>
-                      <span className={'channel-flat-ledger__status is-' + statuses.receipt.tone}>{statuses.receipt.label}</span>
+                  <td className="channel-flat-ledger__status-cell channel-flat-ledger__cumulative-cell">
+                    <div className="channel-flat-ledger__status-stack" role="group" aria-label={'累计结算：' + cumulativeType}>
+                      <span title={condition?.mode ? '按合作方当前累计结算配置显示，与核对和收款状态无关' : '尚未取得可靠的累计结算类型'}>
+                        {cumulativeType}
+                      </span>
                       {statuses.accumulation ? (
                         <small className="channel-flat-ledger__status-note is-cumulative"
                           title={condition?.batch?.batch_no || '已核对、进入合作方累计结算池，尚不代表实际到账'}>
                           {statuses.accumulation.label}
                         </small>
                       ) : null}
+                    </div>
+                  </td>
+                  <td className="channel-flat-ledger__status-cell">
+                    <div className="channel-flat-ledger__status-stack" role="group" aria-label={'收款状态：' + statuses.receipt.label}>
+                      <span className={'channel-flat-ledger__status is-' + statuses.receipt.tone}>{statuses.receipt.label}</span>
                     </div>
                   </td>
                   <td>
@@ -231,7 +236,7 @@ export default function ChannelFlatLedger({
                             <button type="button" className={cumulative ? 'is-disabled' : ''}
                               disabled={settled || !apiEnabled || cumulative || (statusLoading && !statusError)}
                               title={cumulative ? '已进入累计结算池，不能按单月收款' : statusLoading ? '正在核对累计结算状态' : '登记渠道收款'}
-                              onClick={() => onReceipt?.(row)}>{settled ? '已结清' : cumulative ? '累计中' : '收款'}</button>
+                              onClick={() => onReceipt?.(row)}>{settled ? '已结清' : '收款'}</button>
                           )}
                           <button type="button" className="is-invoice" disabled={busy || !apiEnabled} onClick={() => onInvoice?.(row)} title="核对剩余可开票金额并登记正式发票">发票</button>
                           <button type="button" onClick={() => onEdit?.(row)}>{isBillLockedStatus(row.status) ? '查看/修改' : '编辑'}</button>
@@ -243,7 +248,7 @@ export default function ChannelFlatLedger({
                 </tr>
               )
             }) : (
-              <tr><td colSpan={10} className="channel-flat-ledger__empty">当前筛选条件下没有渠道账单。可修改筛选条件或进入账期巡检查看缺失月份。</td></tr>
+              <tr><td colSpan={11} className="channel-flat-ledger__empty">当前筛选条件下没有渠道账单。可修改筛选条件或进入账期巡检查看缺失月份。</td></tr>
             )}
           </tbody>
         </table>
