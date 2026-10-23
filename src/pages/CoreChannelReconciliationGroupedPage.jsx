@@ -15,6 +15,7 @@ import ChannelReceiptDrawer from '@/components/channel/ChannelReceiptDrawer.jsx'
 import ChannelFlatLedger from '@/components/channel/ChannelFlatLedger.jsx'
 import ChannelInvoiceMergeDialog from '@/components/channel/ChannelInvoiceMergeDialog.jsx'
 import { matchesChannelLedgerFilters, ledgerBillGames, sortChannelLedgerRows } from '@/domain/channel/channelFlatLedgerFilters.js'
+import { summarizeChannelReceivable } from '@/domain/channel/channelMonthlySummary.js'
 import { useAuth } from '@/features/auth/AuthContext.jsx'
 import { isChannelBillReviewed, matchesChannelReviewFilter, loadChannelLedgerFilters, saveChannelLedgerFilters } from '@/domain/channel/channelLedgerReviewFilters.js'
 import { buildCustomerBillSearchIndex } from '@/domain/reconciliation/customerBillSearchIndex.js'
@@ -377,6 +378,22 @@ function CoreChannelReconciliationGroupedPage() {
   ), [recon.channelRecords, customerSearchIndex, channelAuditGroupIndex,
     inspectedGap?.groupKey, month, fromMonth, toMonth, channel, gameQuery, status, query])
 
+  // Summary scope retains business/review filters, independently of list tabs,
+  // archive response timing and the current display page. Period slicing uses
+  // saved line amounts instead of a whole bill that merely touches the month.
+  const receivableSummary = useMemo(() => summarizeChannelReceivable(
+    (recon.channelRecords || []).filter(row =>
+      matchesChannelLedgerFilters(row, {
+        channel, game: gameQuery, status, query, customerIndex: customerSearchIndex
+      }) && matchesChannelReviewFilter(row, reviewFilter) &&
+      (!inspectedGap?.groupKey || auditIdentityForBill(row, channelAuditGroupIndex).key === inspectedGap.groupKey)
+    ), { month, fromMonth, toMonth }
+  ), [recon.channelRecords, customerSearchIndex, channelAuditGroupIndex, inspectedGap?.groupKey,
+    channel, gameQuery, status, query, reviewFilter, month, fromMonth, toMonth])
+  const summaryLoading = recon.channelDataStatus === 'loading'
+  const summaryUnavailable = recon.channelDataStatus === 'unavailable'
+  const summaryHasGaps = receivableSummary.unknownMonthCount > 0 || receivableSummary.incompleteCount > 0
+
   const trashRows = useMemo(() => scopedRows.filter(isCancelledRow), [scopedRows])
   const archivedRows = useMemo(
     () => scopedRows.filter((row) => archivedIds.has(String(row.id)) && !isCancelledRow(row)),
@@ -522,12 +539,18 @@ function CoreChannelReconciliationGroupedPage() {
     const channels = new Set(rows.map((row) => text(row.channelName, '')).filter(Boolean))
     const games = new Set(rows.flatMap(channelGames))
     return [
-      { label: '账单数量', value: rows.length },
-      { label: '渠道', value: channels.size, note: `${games.size} 个产品` },
-      { label: '渠道应收', value: money(settlement) },
-      { label: '未收', value: money(unpaid), note: `已收 ${money(received)}` }
+      { label: '列表账单数量', value: rows.length },
+      { label: '列表渠道', value: channels.size, note: `${games.size} 个产品` },
+      {
+        key: 'receivable',
+        label: `${month ? monthLabel(month) : fromMonth || toMonth ? '所选账期' : '全部账期'}渠道应收${summaryHasGaps ? '（已知）' : ''}`,
+        value: summaryLoading ? '加载中…' : summaryUnavailable ? '暂不可用' : money(receivableSummary.cents / 100),
+        note: summaryUnavailable ? '完整账单读取失败，请刷新重试'
+          : month || fromMonth || toMonth ? '含归档，按结算月份统计' : '含归档，全部账单整单合计'
+      },
+      { label: '列表未收（整单）', value: money(unpaid), note: `列表已收（整单）${money(received)}` }
     ]
-  }, [rows])
+  }, [rows, month, fromMonth, toMonth, receivableSummary, summaryLoading, summaryUnavailable, summaryHasGaps])
 
   const toggleSelected = (id) => {
     const sid = String(id)
@@ -916,7 +939,7 @@ function CoreChannelReconciliationGroupedPage() {
 
       <section className="core-recon-stats core-channel-stats-compact" aria-label="渠道账单概览">
         {stats.map((item) => (
-          <div key={item.label} className="core-channel-stat">
+          <div key={item.key || item.label} className="core-channel-stat" data-stat={item.key} aria-busy={item.key === 'receivable' ? summaryLoading : undefined}>
             <span className="core-channel-stat__label">{item.label}</span>
             <div className="core-channel-stat__bottom">
               <strong>{item.value}</strong>
@@ -925,6 +948,16 @@ function CoreChannelReconciliationGroupedPage() {
           </div>
         ))}
       </section>
+      <div className="channel-summary-scope" role="note">
+        <span>应收合计沿用上方筛选及核对状态，含归档、不含作废；收款/归档快捷筛选仅影响列表。列表已收、未收按整单统计，未按月分摊。</span>
+        {!summaryLoading && !summaryUnavailable && summaryHasGaps ? <strong>
+          {receivableSummary.unknownMonthCount ? ` ${receivableSummary.unknownMonthCount} 张账单存在无有效月份的金额，未计入分月合计。` : ''}
+          {receivableSummary.incompleteCount ? ` ${receivableSummary.incompleteCount} 张账单缺少所选账期的分月金额，仅汇总已知金额。` : ''}
+        </strong> : null}
+        {!summaryLoading && !summaryUnavailable && receivableSummary.unallocatedCount > 0 ? <strong>
+          {receivableSummary.unallocatedCount} 张跨月账单的整单金额与分月明细合计不同；此处沿用分月明细，整单调整或尾差未分摊。
+        </strong> : null}
+      </div>
 
       <nav className="channel-ledger-view-switch" role="tablist" aria-label="渠道账单查看方式">
         {[

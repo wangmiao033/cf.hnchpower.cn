@@ -26,7 +26,7 @@ import {
   frontendRecordToApiPayload
 } from '@/lib/api/reconciliation.ts'
 import {
-  listChannelRecords,
+  listAllChannelRecords,
   createChannelRecord,
   createChannelReceipt,
   deleteChannelReceipt,
@@ -112,6 +112,7 @@ export function useReconciliationStore(settings, showToast, options = {}) {
   const [channelApiEnabled, setChannelApiEnabled] = useState(false)
   const [reconciliationHydrated, setReconciliationHydrated] = useState(false)
   const [channelHydrated, setChannelHydrated] = useState(false)
+  const [channelDataStatus, setChannelDataStatus] = useState('loading')
 
   const showToastRef = useRef(showToast)
   showToastRef.current = showToast
@@ -122,8 +123,15 @@ export function useReconciliationStore(settings, showToast, options = {}) {
   }, [])
 
   const refetchChannelFromApi = useCallback(async () => {
-    const { items } = await listChannelRecords({ limit: 500, offset: 0 })
-    setChannelRecords(items.map(apiChannelRowToFrontend))
+    setChannelDataStatus('loading')
+    try {
+      const { items } = await listAllChannelRecords()
+      setChannelRecords(items.map(apiChannelRowToFrontend))
+      setChannelDataStatus('ready')
+    } catch (error) {
+      setChannelDataStatus('unavailable')
+      throw error
+    }
   }, [])
 
   useEffect(() => {
@@ -168,17 +176,19 @@ export function useReconciliationStore(settings, showToast, options = {}) {
     let cancelled = false
     ;(async () => {
       try {
-        const { items } = await listChannelRecords({ limit: 500, offset: 0 })
+        const { items } = await listAllChannelRecords()
         if (cancelled) return
         const savedChannel = storageGet(STORAGE_KEYS.CHANNEL_RECORDS)
         if (items.length === 0 && Array.isArray(savedChannel) && savedChannel.length > 0) {
           console.warn('Channel API returned no records; preserving the non-empty local cache.')
           setChannelRecords(normalizeLocalChannelRecords(savedChannel))
           setChannelApiEnabled(false)
+          setChannelDataStatus('unavailable')
           return
         }
         setChannelRecords(items.map(apiChannelRowToFrontend))
         setChannelApiEnabled(true)
+        setChannelDataStatus('ready')
       } catch (err) {
         console.warn('Channel API unavailable, falling back to local cache.', err)
         if (cancelled) return
@@ -187,6 +197,7 @@ export function useReconciliationStore(settings, showToast, options = {}) {
           setChannelRecords(normalizeLocalChannelRecords(savedChannel))
         }
         setChannelApiEnabled(false)
+        setChannelDataStatus('unavailable')
       } finally {
         if (!cancelled) setChannelHydrated(true)
       }
@@ -907,6 +918,7 @@ export function useReconciliationStore(settings, showToast, options = {}) {
     setRecords,
     channelRecords: displayChannelRecords,
     channelApiEnabled,
+    channelDataStatus,
     reconciliationApiEnabled,
     searchTerm,
     setSearchTerm,
