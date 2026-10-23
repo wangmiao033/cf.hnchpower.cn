@@ -149,7 +149,7 @@ def _raw_rd_bill(conn: psycopg.Connection, bill_id: str) -> tuple[dict, dict[str
 def _raw_channel_bill(conn: psycopg.Connection, bill_id: str) -> tuple[dict, dict[str, dict]]:
     record = conn.execute(
         """
-        SELECT id, channel_fee_rate, channel_fee_mode, tax_mode,
+        SELECT id, partner_name, channel_name, settlement_rule_code, channel_fee_rate, channel_fee_mode, tax_mode,
                validation_tolerance, billing_flow, voucher_cost, no_worry_cost,
                refund_cost, test_cost, welfare_cost, coin_cost, share_rate,
                tax_rate, gateway_cost, settlement_amount
@@ -163,7 +163,7 @@ def _raw_channel_bill(conn: psycopg.Connection, bill_id: str) -> tuple[dict, dic
 
     rows = conn.execute(
         """
-        SELECT id, billing_flow, discount_factor, voucher_cost, no_worry_cost,
+        SELECT id, settlement_rule_code, billing_flow, discount_factor, voucher_cost, no_worry_cost,
                refund_cost, test_cost, welfare_cost, coin_cost, share_rate,
                tax_rate, gateway_cost, settlement_amount
         FROM channel_record_line_items
@@ -175,6 +175,9 @@ def _raw_channel_bill(conn: psycopg.Connection, bill_id: str) -> tuple[dict, dic
     bill = {
         "channel_fee_rate": _float(record.get("channel_fee_rate")),
         "channel_fee_mode": str(record.get("channel_fee_mode") or "fixed"),
+        "partner_name": record.get("partner_name"),
+        "channel_name": record.get("channel_name"),
+        "settlement_rule_code": record.get("settlement_rule_code"),
         "tax_mode": str(record.get("tax_mode") or "share"),
         "validation_tolerance": max(0.0, _float(record.get("validation_tolerance"), DEFAULT_TOLERANCE)),
     }
@@ -182,6 +185,7 @@ def _raw_channel_bill(conn: psycopg.Connection, bill_id: str) -> tuple[dict, dic
         return bill, {
             str(row["id"]): {
                 "line_id": str(row["id"]),
+                "settlement_rule_code": row.get("settlement_rule_code"),
                 "billing_flow": _float(row.get("billing_flow")),
                 # Persisted line flow is converted by its stored factor, just as
                 # the channel settlement engine does; game names are not input.

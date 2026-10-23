@@ -1,3 +1,4 @@
+import { isSamsungRule, preserveSamsungRule } from './samsungSettlement.js'
 import { recommendChannelContractRules } from '@/lib/api/contractTerms.ts'
 
 function hasValue(value) {
@@ -45,6 +46,7 @@ export function isSmartGeneratedMessage(message = '') {
 }
 
 export function clearInheritedRuleFields(line) {
+  if (isSamsungRule(line)) return { ...line, gatewayCost: '' }
   return {
     ...line,
     shareRate: '',
@@ -81,6 +83,7 @@ export function applyContractRecommendation(record, recommendation, { generated 
       return line
     }
     matched += 1
+    if (isSamsungRule(line, source)) return preserveSamsungRule(line, line, source)
     return {
       ...line,
       shareRate: hasValue(recommended.share_rate) ? recommended.share_rate : '',

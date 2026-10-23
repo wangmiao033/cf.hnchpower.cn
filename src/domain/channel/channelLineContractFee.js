@@ -10,6 +10,8 @@ import {
   resolveChannelLineRuleHeader
 } from '@/domain/channel/channelBillingForm.js'
 
+import { isSamsungRule } from './samsungSettlement.js'
+
 function round2(value) {
   return Math.round((Number(value) + Number.EPSILON) * 100) / 100
 }
@@ -47,6 +49,7 @@ function stampRowWithResolvedRule(row, resolved) {
  * align under share_only while the header rule would apply a gateway percent.
  */
 export function inferLineContractFeeFromPlatform(row, header = initialHeaderForm) {
+  if (isSamsungRule(row, header)) return row
   // A verified chosen cooperation item is authority; an amount coincidence is not.
   if (row?.contractAccessItemId) return row
   const platformRaw = row?.platformSettlementAmount

@@ -62,7 +62,7 @@ test('July stays 60,950.09 across normal/archive tabs, pagination and grouped vi
   await page.getByRole('tab', { name: '按渠道汇总', exact: true }).click()
   await expect(page.locator(amount)).toHaveText('¥ 60,950.09')
   await page.getByRole('tab', { name: '账单明细', exact: true }).click()
-  await page.getByRole('button', { name: /^全部 39/ }).click()
+  await page.getByLabel('账单快捷筛选').getByRole('button', { name: /^全部 39/ }).click()
   await expect(page.locator(rows)).toHaveCount(25)
   await page.setViewportSize({ width: 390, height: 844 })
   await page.screenshot({ path: testInfo.outputPath('july-normal-mobile.png'), fullPage: true })

@@ -1,4 +1,5 @@
 /** 渠道账单表单计算与规则校验。 */
+import { SAMSUNG_STATEMENT_FEE_RULE, isSamsungIdentity, isSamsungRule, samsungRuleFields } from './samsungSettlement.js'
 import { getChannelLineItems } from '@/domain/channel/channelAggregates.js'
 import {
   applyCommercialDiscountFromGameName,
@@ -10,6 +11,7 @@ export const HONOR_UPFRONT_PERCENT_FEE_RULE = 'honor_upfront_percent_fee'
 export const ANJIU_PRE_DISCOUNT_DEDUCTION_RULE = 'anjiu_pre_discount_deduction'
 
 export const CHANNEL_RULE_PRESETS = {
+  [SAMSUNG_STATEMENT_FEE_RULE]: { label: '三星：原账单通道费金额先扣后分成', feeMode: 'fixed', taxMode: 'none', feeRate: 4 },
   legacy_fixed_fee_tax: { label: '固定通道费 + 分成税（旧规则）', feeMode: 'fixed', taxMode: 'share' },
   five_percent_gateway_share: { label: '5%支付通道费后分成（不扣税）', feeMode: 'percent', taxMode: 'none', feeRate: 5 },
   [HONOR_UPFRONT_PERCENT_FEE_RULE]: { label: '荣耀：流水先扣通道费后分成', feeMode: 'percent', taxMode: 'none', feeRate: 5 },
@@ -54,6 +56,7 @@ export function detectChannelRulePreset(name) {
 }
 
 export function applyChannelRulePreset(header, code) {
+  if (code === SAMSUNG_STATEMENT_FEE_RULE && !isSamsungIdentity(header)) throw new Error('此规则仅限三星指定法人渠道')
   const preset = CHANNEL_RULE_PRESETS[code] || CHANNEL_RULE_PRESETS.custom
   return {
     ...header,
@@ -79,6 +82,10 @@ export function applyTargetedChannelRule(header = initialHeaderForm) {
 
 export function resolveChannelLineRuleHeader(data = {}, header = initialHeaderForm) {
   const effectiveHeader = applyTargetedChannelRule(header)
+  if (isSamsungRule(data, effectiveHeader)) {
+    if (!isSamsungIdentity(effectiveHeader)) throw new Error('此规则仅限三星指定法人渠道')
+    return { ...effectiveHeader, ...samsungRuleFields() }
+  }
   if (effectiveHeader.settlementRuleCode === XIAN_WEIZHEN_9917_RULE) return effectiveHeader
 
   const hasLineRule = ['settlementRuleCode', 'channelFeeMode', 'channelFeeRate', 'taxMode', 'validationTolerance']
@@ -118,6 +125,7 @@ export function resolveChannelLineRuleHeader(data = {}, header = initialHeaderFo
 }
 
 export function ruleFormulaText(header) {
+  if (isSamsungRule(header)) return '三星：（流水折算后金额 - 代金券等扣减 - 原账单完整通道费金额）× 分成比例；4%仅记录，含税拆分不再扣税'
   const effectiveHeader = applyTargetedChannelRule(header)
   if (effectiveHeader.settlementRuleCode === XIAN_WEIZHEN_9917_RULE) {
     return '西安维真9917：代金券/福利币仅记录；其余原扣减项参与 × 分成比例 × (1 - 5%通道费)，税率仅记录'
@@ -257,6 +265,7 @@ export function calculateBillingAmount(data, header = initialHeaderForm) {
     const upfrontChannelFee = effectiveFlow * Number(effectiveHeader.channelFeeRate || 0) / 100
     return effectiveFlow - upfrontChannelFee - deductions - splitDeduction
   }
+  if (isSamsungRule(effectiveHeader)) return effectiveFlow - deductions - splitDeduction - Number(data.gatewayCost || 0)
   // This targeted contract records vouchers without deducting them.
   return effectiveFlow - deductions - (effectiveHeader.settlementRuleCode === XIAN_WEIZHEN_9917_RULE ? 0 : splitDeduction)
 }
@@ -268,7 +277,7 @@ function calculateSettlementRaw(data, header = initialHeaderForm) {
   const feeMode = effectiveHeader.channelFeeMode || 'fixed'; const taxMode = effectiveHeader.taxMode || 'share'
   let afterFee = shareAmount
   if (feeMode === 'percent' && effectiveHeader.settlementRuleCode !== HONOR_UPFRONT_PERCENT_FEE_RULE) afterFee = shareAmount * (1 - Number(effectiveHeader.channelFeeRate || 0) / 100)
-  else if (feeMode === 'fixed') afterFee = shareAmount - Number(data.gatewayCost || 0)
+  else if (feeMode === 'fixed' && !isSamsungRule(effectiveHeader)) afterFee = shareAmount - Number(data.gatewayCost || 0)
   const taxRate = Number(data.taxRate || 0) / 100
   if (taxMode === 'share') return afterFee - shareAmount * taxRate
   if (taxMode === 'after_fee') return afterFee * (1 - taxRate)
