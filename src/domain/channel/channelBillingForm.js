@@ -10,6 +10,7 @@ import {
 export const XIAN_WEIZHEN_9917_RULE = 'xian_weizhen_9917'
 export const HONOR_UPFRONT_PERCENT_FEE_RULE = 'honor_upfront_percent_fee'
 export const ANJIU_PRE_DISCOUNT_DEDUCTION_RULE = 'anjiu_pre_discount_deduction'
+export const DAXIONG_NET_RECEIPT_RULE = 'daxiong_net_receipt'
 
 export const CHANNEL_RULE_PRESETS = {
   [SAMSUNG_STATEMENT_FEE_RULE]: { label: '三星：原账单通道费金额先扣后分成', feeMode: 'fixed', taxMode: 'none', feeRate: 4 },
@@ -19,6 +20,7 @@ export const CHANNEL_RULE_PRESETS = {
   xiaomi_percent_fee: { label: '百分比渠道费，税率仅记录（小米类）', feeMode: 'percent', taxMode: 'none', feeRate: 5 },
   [XIAN_WEIZHEN_9917_RULE]: { label: '西安维真（9917）专属规则', feeMode: 'percent', taxMode: 'none', feeRate: 5 },
   [ANJIU_PRE_DISCOUNT_DEDUCTION_RULE]: { label: '广东安久 / 游戏fan：扣减后再折扣', feeMode: 'percent', taxMode: 'share' },
+  [DAXIONG_NET_RECEIPT_RULE]: { label: '大熊游戏：实收直接结算', feeMode: 'none', taxMode: 'none', feeRate: 0 },
   percent_fee_after_tax: { label: '百分比渠道费后再扣税', feeMode: 'percent', taxMode: 'after_fee' },
   share_only: { label: '仅按可分成金额 × 分成比例', feeMode: 'none', taxMode: 'none' },
   custom: { label: '自定义规则', feeMode: 'fixed', taxMode: 'share' }
@@ -53,6 +55,7 @@ export function detectChannelRulePreset(name) {
   if (text.includes('西安维真') || text.includes('维真视界')) return XIAN_WEIZHEN_9917_RULE
   if (text === '荣耀' || /^荣耀(渠道|软件|游戏|应用|商店|公司)/.test(text) || text.includes('深圳市荣耀软件技术') || text === 'honor' || text.startsWith('honor(') || text.startsWith('honor（')) return HONOR_UPFRONT_PERCENT_FEE_RULE
   if (text.includes('广东安久科技有限公司') || text.includes('游戏fan（安久）') || text.includes('游戏fan(安久)')) return ANJIU_PRE_DISCOUNT_DEDUCTION_RULE
+  if (text.includes('大熊游戏') || text.includes('大熊') || text.includes('daxiong')) return DAXIONG_NET_RECEIPT_RULE
   return text.includes('小米') || text.includes('xiaomi') || text.includes('瓦力') ? 'xiaomi_percent_fee' : ''
 }
 
@@ -71,7 +74,7 @@ export function applyChannelRulePreset(header, code) {
 export function applyTargetedChannelRule(header = initialHeaderForm) {
   // Keep legacy recognition unchanged for all non-Honor channels.
   const preset = detectChannelRulePreset(header.partnerName || header.channelName)
-  if ([XIAN_WEIZHEN_9917_RULE, ANJIU_PRE_DISCOUNT_DEDUCTION_RULE].includes(preset)) {
+  if ([XIAN_WEIZHEN_9917_RULE, ANJIU_PRE_DISCOUNT_DEDUCTION_RULE, DAXIONG_NET_RECEIPT_RULE].includes(preset)) {
     return applyChannelRulePreset(header, preset)
   }
   // A channel explicitly named 荣耀 must match even if partnerName is a different legal entity.
@@ -135,6 +138,9 @@ export function ruleFormulaText(header) {
   }
   if (effectiveHeader.settlementRuleCode === ANJIU_PRE_DISCOUNT_DEDUCTION_RULE) {
     return '广东安久 / 游戏fan：（后台流水 - 代金券/退款/测试费等扣减）× 折扣系数 × 分成比例 ×（1 - 渠道费率 - 税费率）'
+  }
+  if (effectiveHeader.settlementRuleCode === DAXIONG_NET_RECEIPT_RULE) {
+    return '大熊游戏：系统结算 = 实收合计；分成比例仅台账记录，不参与计算；竹B/月卡等实收=0行不参与结算汇总'
   }
   if (effectiveHeader.settlementRuleCode === HONOR_UPFRONT_PERCENT_FEE_RULE) {
     return `荣耀： (总流水 - 总流水 × ${Number(effectiveHeader.channelFeeRate || 0)}%通道费 - 代金券/退款等扣减) × 分成比例；税率按合同记录`
@@ -294,6 +300,13 @@ export function calculateSettlementDetails(data, header = initialHeaderForm) {
   const system = round2(calculateSettlementRaw(data, effectiveHeader))
   const platform = optionalNumber(data.platformSettlementAmount)
   if (is233Incomplete(data, header)) return { systemSettlementAmount: 0, platformSettlementAmount: platform, settlementDifference: null, validationStatus: 'incomplete', settlementAmount: round2(platform ?? 0) }
+  // 大熊游戏：系统结算 = 实收合计（net receipt），非公式计算
+  if (effectiveHeader.settlementRuleCode === DAXIONG_NET_RECEIPT_RULE) {
+    if (platform != null) {
+      return { systemSettlementAmount: platform, platformSettlementAmount: platform, settlementDifference: 0, validationStatus: 'pass', settlementAmount: round2(platform) }
+    }
+    return { systemSettlementAmount: 0, platformSettlementAmount: null, settlementDifference: null, validationStatus: 'unvalidated', settlementAmount: 0 }
+  }
   const difference = platform == null ? null : round2(system - platform)
   const tolerance = Math.max(0, Number(effectiveHeader.validationTolerance || 0.05))
   const validationStatus = platform == null ? 'unvalidated' : Math.abs(difference) <= tolerance ? 'pass' : 'fail'
