@@ -61,8 +61,7 @@ export const SIDEBAR_GROUPS = [
     items: [
       { view: VIEWS.RECON_RD, label: '研发账单' },
       { view: VIEWS.RECON_PROGRESS, label: '对账进度' },
-      { view: VIEWS.RECON_CHANNEL, label: '渠道账单' },
-      { view: VIEWS.SELF_OPERATED, label: '大熊游戏' }
+      { view: VIEWS.RECON_CHANNEL, label: '渠道账单' }
     ]
   },
   {
