@@ -36,3 +36,9 @@
 .channel-rule-summary .is-advisory strong{color:#215a89}
 @media(max-width:850px){.channel-difference-review__fields{grid-template-columns:1fr 1fr}.channel-difference-review__fields button{grid-column:1/-1}}
 @media(max-width:560px){.channel-difference-review__heading{align-items:flex-start;flex-direction:column}.channel-difference-review__fields{grid-template-columns:1fr}.channel-difference-review__fields button{grid-column:auto;width:100%}}
+
+/* Only the explicit 233 completion editor accepts manual missing operands. */
+.channel-233-completion .channel-line-items-table tbody td:nth-child(12) input.admin-input,
+.channel-233-completion .channel-line-items-table tbody td:nth-child(13) input.admin-input { pointer-events: auto; caret-color: auto; user-select: text; cursor: text; border: 1px solid #cbd5e1 !important; background: white !important; }
+.channel-233-draft-notice { margin: 12px 0; padding: 14px; border: 1px solid #d6ad58; background: #fff9ea; border-radius: 8px; }
+.channel-233-draft-notice label { display: grid; gap: 6px; }

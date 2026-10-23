@@ -2,6 +2,7 @@
  * Explain channel/platform reconciliation gaps without changing payment totals.
  * A platform amount entered on each line is already used by the settlement engine.
  */
+import { is233Incomplete } from './channel233Incomplete.js'
 const NOTE_MARKER = '【渠道差异核对】'
 
 function roundMoney(value) {
@@ -31,6 +32,7 @@ export function describeChannelDifference(record = {}) {
   const delta = platform == null ? null : roundMoney(platform - system)
   const base = { system, platform, delta, absoluteDifference: Math.abs(delta || 0), games: [], complete: false }
 
+  if (is233Incomplete(record)) return { ...base, system: null, delta: null, absoluteDifference: 0, kind: 'unvalidated' }
   if (!supplied.length) return { ...base, kind: 'unvalidated' }
   if (supplied.length < items.length) return { ...base, kind: 'partial' }
 

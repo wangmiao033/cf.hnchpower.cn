@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Any
+from app.services.channel_233_incomplete import CODE as INCOMPLETE_233, incomplete
 from app.services.samsung_settlement import SAMSUNG_STATEMENT_FEE_RULE, is_samsung_identity, samsung_billing_base
 
 XIAN_WEIZHEN_9917_RULE = "xian_weizhen_9917"
@@ -11,6 +12,7 @@ HONOR_UPFRONT_PERCENT_FEE_RULE = "honor_upfront_percent_fee"
 ANJIU_PRE_DISCOUNT_DEDUCTION_RULE = "anjiu_pre_discount_deduction"
 ROUNDING_TAIL = Decimal("0.01")
 VALID_RULES = {
+    INCOMPLETE_233,
     SAMSUNG_STATEMENT_FEE_RULE,
     "legacy_fixed_fee_tax",
     "xiaomi_percent_fee",
@@ -173,6 +175,8 @@ def _calculate_channel_line_raw(item: Any, record: Any) -> tuple[dict[str, Any],
     calculate each row at full precision and round only the final total.
     """
     settings = resolve_rule_settings(item, record)
+    if incomplete(item, record):
+        return settings, Decimal("0"), Decimal("0"), Decimal("0")
     flow = _d(getattr(item, "billing_flow", None))
     discount = _d(getattr(item, "discount_factor", None), "1")
     if discount <= 0:
@@ -246,7 +250,10 @@ def calculate_channel_line(item: Any, record: Any) -> dict[str, Any]:
     system_amount = _money(system_raw)
     platform_raw = getattr(item, "platform_settlement_amount", None)
     platform_amount = None if platform_raw in (None, "") else _money(_d(platform_raw))
-    if platform_amount is None:
+    if incomplete(item, record):
+        difference, validation_status = None, "incomplete"
+        final_amount = platform_amount if platform_amount is not None else Decimal("0")
+    elif platform_amount is None:
         difference = None
         validation_status = "unvalidated"
         final_amount = system_amount
@@ -276,6 +283,11 @@ def aggregate_validation(items: list[Any], record: Any = None) -> dict[str, Any]
             "settlement_total": Decimal("0"),
             "rounding_tail_applied": False,
         }
+
+    if incomplete(record) or any(incomplete(item) for item in items):
+        platform = _money(sum((_d(getattr(item, "platform_settlement_amount", None)) for item in items), Decimal("0")))
+        return {"system_total": Decimal("0"), "platform_total": platform, "difference_total": None,
+                "validation_status": "incomplete", "settlement_total": platform, "rounding_tail_applied": False}
 
     rounded_line_system_total = _money(
         sum((_d(getattr(item, "system_settlement_amount", None)) for item in items), Decimal("0"))

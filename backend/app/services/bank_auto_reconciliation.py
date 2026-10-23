@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from app.models.bank_reconciliation_match import BankReconciliationMatch
 from app.models.bank_transaction import BankTransaction
 from app.models.channel import ChannelReceipt, ChannelRecord
+from app.services.channel_233_incomplete import incomplete, assert_complete
 from app.models.reconciliation import ReconciliationRecord
 from app.models.user import AuthUser
 from app.services.monthly_business_dashboard import month_key
@@ -184,7 +185,7 @@ def _channel_candidates(db: Session) -> list[dict]:
     rows = db.execute(select(ChannelRecord).order_by(ChannelRecord.created_at.desc())).scalars().all()
     out: list[dict] = []
     for row in rows:
-        if not _active_bill(row):
+        if not _active_bill(row) or incomplete(row):
             continue
         bill_amount = abs(_num(row.settlement_amount))
         received = max(0.0, _num(row.received_amount))
@@ -423,6 +424,7 @@ def _load_specific_candidate(db: Session, tx: BankTransaction, direction: str, a
         row = db.get(ChannelRecord, bill_id)
         if row is None or not _active_bill(row):
             raise HTTPException(status_code=404, detail="渠道账单不存在或已取消")
+        assert_complete(row)
         bill_amount = abs(_num(row.settlement_amount))
         outstanding = max(0.0, bill_amount - max(0.0, _num(row.received_amount)))
         candidate = {

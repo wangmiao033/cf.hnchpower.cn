@@ -312,6 +312,11 @@ def calculate_channel_contract_amount(
     tolerance: float = DEFAULT_TOLERANCE,
 ) -> dict:
     result = _base_result(line.get("settlement_amount"), tolerance)
+    if (line.get("settlement_rule_code") or bill.get("settlement_rule_code")) == "channel_233_incomplete":
+        result.update({"status": "unvalidated", "supported": False, "deterministic": False,
+                       "expected_amount": None, "difference_amount": None,
+                       "message": "233资料未齐，原始充值和分成待补，不能计算合同标准结算金额。"})
+        return result
     guarded = _guard_complex_contract(result, candidate)
     if guarded is not None:
         return guarded
