@@ -129,3 +129,11 @@
 .core-channel-recon-page .core-recon-stats.core-channel-stats-compact .core-channel-stat__bottom small {
   white-space: normal;
 }
+
+/* The shell constrains this flex column to the viewport. A shrinking toolbar
+   paints its wrapping chips underneath the following review bar. Keep these
+   sections in normal flow so the released height cannot squeeze the summary
+   or ledger instead. Existing page/table scroll containers handle overflow. */
+.core-channel-recon-page .page-container-body > * {
+  flex-shrink: 0;
+}
