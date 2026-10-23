@@ -41,6 +41,31 @@ export function listChannelRecords(params?: { search?: string; settlement_month?
   const q = new URLSearchParams(); if (params?.search) q.set('search', params.search); if (params?.settlement_month) q.set('settlement_month', params.settlement_month); if (params?.channel_name) q.set('channel_name', params.channel_name); if (params?.game_name) q.set('game_name', params.game_name); if (params?.status) q.set('status', params.status); if (params?.limit != null) q.set('limit', String(params.limit)); if (params?.offset != null) q.set('offset', String(params.offset)); const qs = q.toString(); return apiGet<ChannelListResponse>(`${PATH}${qs ? `?${qs}` : ''}`)
 }
 export function getChannelRecord(id: string): Promise<ApiChannelRow> { return apiGet<ApiChannelRow>(`${PATH}/${encodeURIComponent(id)}`) }
+
+/** Publish only a complete ledger; a failed/changed page must not look like a total. */
+export async function listAllChannelRecords(): Promise<ChannelListResponse> {
+  const items: ApiChannelRow[] = []
+  const seen = new Set<string>()
+  let total: number | undefined
+  do {
+    const page = await listChannelRecords({ limit: 500, offset: items.length })
+    if (!Number.isSafeInteger(page.total) || page.total < 0 || !Array.isArray(page.items) ||
+        (total !== undefined && page.total !== total)) {
+      throw new Error('渠道账单读取期间发生变化，请刷新重试')
+    }
+    total = page.total
+    for (const row of page.items) {
+      const id = String(row.id ?? '').trim()
+      if (!id || seen.has(id)) throw new Error('渠道账单分页重复或缺少标识，请刷新重试')
+      seen.add(id)
+      items.push(row)
+    }
+    if (items.length > total || (!page.items.length && items.length < total)) {
+      throw new Error('渠道账单分页不完整，请刷新重试')
+    }
+  } while (items.length < total)
+  return { items, total }
+}
 export function createChannelRecord(payload: ChannelRecordPayload): Promise<ApiChannelRow> { return apiPost<ApiChannelRow>(PATH, payload) }
 export function updateChannelRecord(id: string, payload: ChannelRecordUpdatePayload): Promise<ApiChannelRow> { return apiPut<ApiChannelRow>(`${PATH}/${encodeURIComponent(id)}`, payload) }
 export function deleteChannelRecord(id: string): Promise<void> { return apiDelete(`${PATH}/${encodeURIComponent(id)}`) }
