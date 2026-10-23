@@ -38,6 +38,7 @@ from app.services.channel_settlement_engine import apply_bill_adjustment, aggreg
 from app.services.bill_write_preflight import prepare_bill_financial_update, set_bill_audit_reason
 from app.services.bill_lifecycle import normalize_status
 from app.services.bill_partner_search import matching_customer_keyword_exists
+from app.services.samsung_settlement_guard import preserve_samsung_inputs, validate_samsung_write
 from app.services.channel_contract_binding import (
     LINE_BINDING_FIELDS, load_channel_contract_links,
     prepare_channel_contract_bindings, save_channel_contract_bindings,
@@ -524,6 +525,7 @@ def create_channel_record(payload: ChannelRecordCreate, db: Session = Depends(ge
     )
     if not payload.items: raise HTTPException(status_code=422, detail={"error": "items_required", "message": "至少录入一行游戏明细"})
     row = ChannelRecord(id=str(uuid4()), **payload.model_dump(exclude={"items"}))
+    validate_samsung_write(db, row, payload.items)
     desired, previous = prepare_channel_contract_bindings(db, row, payload.items, [], preserve_ids=False)
     db.add(row); db.flush()
     saved_lines = _replace_line_items(db, row, payload.items)
@@ -544,7 +546,12 @@ def update_channel_record(record_id: str, payload: ChannelRecordUpdate, db: Sess
     if row is None: raise HTTPException(status_code=404, detail={"error": "not_found", "id": record_id})
     # Check the current DB status and editor revision while holding the row lock.
     # Do not touch ORM fields or child lines before this unified check succeeds.
-    incoming = _remark_only_channel_update(db, row, payload.model_dump(exclude_unset=True))
+    incoming = payload.model_dump(exclude_unset=True)
+    if getattr(row, "settlement_rule_code", None) == "samsung_statement_fee":
+        saved_rule_lines = db.execute(select(ChannelRecordLineItem).where(
+            ChannelRecordLineItem.channel_record_id == record_id)).scalars().all()
+        incoming = preserve_samsung_inputs(incoming, saved_rule_lines, row)
+    incoming = _remark_only_channel_update(db, row, incoming)
     data = prepare_bill_financial_update("channel", row, incoming)
     set_bill_audit_reason(db, data.pop("audit_reason", None))
     items_payload = data.pop("items", None)
@@ -567,6 +574,7 @@ def update_channel_record(record_id: str, payload: ChannelRecordUpdate, db: Sess
             field: data.get(field, getattr(row, field))
             for field in _CHANNEL_RULE_CONTEXT_FIELDS
         })
+        validate_samsung_write(db, projected, parsed_items)
         with db.no_autoflush:
             binding_plan = prepare_channel_contract_bindings(
                 db, projected, parsed_items, existing_lines, preserve_ids=preserve_ids,
@@ -585,6 +593,7 @@ def update_channel_record(record_id: str, payload: ChannelRecordUpdate, db: Sess
             field: data.get(field, getattr(row, field))
             for field in _CHANNEL_RULE_CONTEXT_FIELDS
         })
+        validate_samsung_write(db, projected, existing_payload)
         with db.no_autoflush:
             prepare_channel_contract_bindings(
                 db, projected, existing_payload, existing_lines, preserve_ids=True,

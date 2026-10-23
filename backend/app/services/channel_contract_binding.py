@@ -17,6 +17,7 @@ from fastapi import HTTPException
 from sqlalchemy import bindparam, inspect, text
 
 from app.services.channel_settlement_engine import resolve_rule_settings
+from app.services.samsung_settlement import SAMSUNG_STATEMENT_FEE_RULE, is_samsung_identity
 
 LINE_BINDING_FIELDS = {"id", "contract_access_item_id"}
 _HARD_INVALID = {
@@ -159,6 +160,11 @@ def validate_contract_binding(bill, line, candidate: dict, partner: dict) -> Non
             (fee <= 0.01 and mode == "none" and (line_fee is None or abs(float(line_fee)) <= 0.01))
             or (mode == "percent" and line_fee is not None and abs(float(line_fee) - fee) <= 0.0001)
         )
+        if effective["rule_code"] == SAMSUNG_STATEMENT_FEE_RULE and is_samsung_identity(bill.partner_name, bill.channel_name):
+            # Only the explicitly saved Samsung statement fee supersedes the
+            # generic contract fee. Contract ownership, game, term and share
+            # checks above/below remain mandatory; no contract is modified.
+            matches_fee = mode == "fixed" and float(line_fee) == 4
         matches_share = abs(float(line.share_rate) - share) <= 0.0001
     except (ValueError, TypeError):
         matches_fee, matches_share = False, False

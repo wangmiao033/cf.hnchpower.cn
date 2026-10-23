@@ -4,12 +4,14 @@ from __future__ import annotations
 
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Any
+from app.services.samsung_settlement import SAMSUNG_STATEMENT_FEE_RULE, is_samsung_identity, samsung_billing_base
 
 XIAN_WEIZHEN_9917_RULE = "xian_weizhen_9917"
 HONOR_UPFRONT_PERCENT_FEE_RULE = "honor_upfront_percent_fee"
 ANJIU_PRE_DISCOUNT_DEDUCTION_RULE = "anjiu_pre_discount_deduction"
 ROUNDING_TAIL = Decimal("0.01")
 VALID_RULES = {
+    SAMSUNG_STATEMENT_FEE_RULE,
     "legacy_fixed_fee_tax",
     "xiaomi_percent_fee",
     "five_percent_gateway_share",
@@ -118,7 +120,12 @@ def resolve_rule_settings(record: Any, fallback: Any = None) -> dict[str, Any]:
     fee_rate = _d(_value(record, "channel_fee_rate", fallback))
     tolerance = max(Decimal("0"), _d(_value(record, "validation_tolerance", fallback), "0.05"))
 
-    if code == XIAN_WEIZHEN_9917_RULE:
+    if code == SAMSUNG_STATEMENT_FEE_RULE:
+        owner = fallback if fallback is not None else record
+        if not is_samsung_identity(getattr(owner, "partner_name", None), getattr(owner, "channel_name", None)):
+            raise ValueError("三星原账单规则仅限已确认的三星法人及渠道")
+        fee_mode, tax_mode, fee_rate = "fixed", "none", Decimal("4")
+    elif code == XIAN_WEIZHEN_9917_RULE:
         # 西安维真（客户 9917）平台账单口径：
         # 代金券、福利币仅记录，不从可分成金额扣减；
         # 其余原扣减项仍参与；分成后统一扣 5% 通道费；税率仅记录。
@@ -209,13 +216,16 @@ def _calculate_channel_line_raw(item: Any, record: Any) -> tuple[dict[str, Any],
         else:
             billing_amount = effective_flow - other_deductions - converted
 
+    if settings["rule_code"] == SAMSUNG_STATEMENT_FEE_RULE:
+        billing_amount = samsung_billing_base(billing_amount, getattr(item, "gateway_cost", None))
+
     share_rate = _d(getattr(item, "share_rate", None)) / Decimal("100")
     share_amount = billing_amount * share_rate
 
     after_fee = share_amount
     if settings["fee_mode"] == "percent" and settings["rule_code"] != HONOR_UPFRONT_PERCENT_FEE_RULE:
         after_fee = share_amount * (Decimal("1") - settings["fee_rate"] / Decimal("100"))
-    elif settings["fee_mode"] == "fixed":
+    elif settings["fee_mode"] == "fixed" and settings["rule_code"] != SAMSUNG_STATEMENT_FEE_RULE:
         after_fee = share_amount - _d(getattr(item, "gateway_cost", None))
 
     tax_rate = _d(getattr(item, "tax_rate", None)) / Decimal("100")

@@ -15,6 +15,10 @@ evidence that the header fee must not be used as the line fee.
 from __future__ import annotations
 
 from typing import Any
+try:
+    from .samsung_settlement import SAMSUNG_STATEMENT_FEE_RULE, is_samsung_identity
+except ImportError:
+    from samsung_settlement import SAMSUNG_STATEMENT_FEE_RULE, is_samsung_identity
 
 FEE_TOLERANCE = 0.01
 ANJIU_PRE_DISCOUNT_DEDUCTION_RULE = "anjiu_pre_discount_deduction"
@@ -171,6 +175,17 @@ def normalize_channel_line_fee_check(line: dict, rule: dict | None) -> dict:
     """Return one line with a header-fee false positive removed when justified."""
     updated = dict(line)
     updated["checks"] = [dict(check) for check in (line.get("checks") or [])]
+    if (rule and rule.get("settlement_rule_code") == SAMSUNG_STATEMENT_FEE_RULE
+            and is_samsung_identity(rule.get("partner_name"), rule.get("channel_name"))):
+        for special_check in updated["checks"]:
+            if special_check.get("key") in {"channel_fee_rate", "tax_rate"}:
+                # Retain both values and their difference as evidence. This
+                # explicit statement rule supersedes fee/tax arithmetic only.
+                special_check["status"] = "pass"
+                special_check["rule_override"] = SAMSUNG_STATEMENT_FEE_RULE
+                special_check["message"] = "三星已显式采用原账单通道费金额先扣后分成；通用合同费率与税率保留记录，含税拆分不重复扣税。"
+        _recompute_line_status(updated)
+        return updated
     check = _fee_check(updated)
     if check is None:
         return updated
@@ -236,7 +251,9 @@ def apply_channel_line_fee_authority(
                tax_mode, validation_tolerance,
                billing_flow, discount_factor, voucher_cost, no_worry_cost,
                refund_cost, test_cost, welfare_cost, coin_cost,
-               share_rate, tax_rate, gateway_cost, settlement_amount
+               share_rate, tax_rate, gateway_cost, settlement_amount,
+               (SELECT partner_name FROM channel_records WHERE id = channel_record_id) AS partner_name,
+               (SELECT channel_name FROM channel_records WHERE id = channel_record_id) AS channel_name
         FROM channel_record_line_items
         WHERE channel_record_id = %s
         """,

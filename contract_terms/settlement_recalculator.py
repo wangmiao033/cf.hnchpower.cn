@@ -14,6 +14,11 @@ blocking amount-difference failure.
 from __future__ import annotations
 
 from typing import Any
+from decimal import Decimal
+try:
+    from .samsung_settlement import SAMSUNG_STATEMENT_FEE_RULE, is_samsung_identity, samsung_billing_base, money
+except ImportError:
+    from samsung_settlement import SAMSUNG_STATEMENT_FEE_RULE, is_samsung_identity, samsung_billing_base, money
 
 EPS = 0.01
 DEFAULT_TOLERANCE = 0.05
@@ -321,6 +326,30 @@ def calculate_channel_contract_amount(
             }
         )
         return result
+
+    if (line.get("settlement_rule_code") or bill.get("settlement_rule_code")) == SAMSUNG_STATEMENT_FEE_RULE:
+        if not is_samsung_identity(bill.get("partner_name"), bill.get("channel_name")):
+            result["message"] = "三星原账单规则身份不匹配，不能重算"
+            return result
+        assumptions = []
+        testing_fee, deterministic = _contract_testing_fee(line, candidate, assumptions)
+        deterministic = deterministic and _deduction_is_machine_verifiable(line, candidate, assumptions)
+        discount = _num(line.get("discount_factor"), 1) or 1
+        before_fee = money(_num(line.get("billing_flow")) * discount) - sum(
+            (money(_num(line.get(key))) for key in ("voucher_cost", "no_worry_cost", "refund_amount", "welfare_cost", "coin_cost")), money(0)) - money(testing_fee)
+        try:
+            base = samsung_billing_base(before_fee, line.get("gateway_cost"))
+        except (ValueError, ArithmeticError, TypeError):
+            result["message"] = "三星原账单通道费金额无效，不能重算"
+            return result
+        expected = money(base * Decimal(str(share_rate)) / 100)
+        result.update({"formula_code": SAMSUNG_STATEMENT_FEE_RULE,
+                       "formula_label": "三星：原账单通道费先扣后分成",
+                       "breakdown": {"before_fee": float(before_fee), "statement_gateway_cost": float(line["gateway_cost"]),
+                                     "billing_base": float(base), "contract_share_rate": share_rate, "tax_mode": "none"},
+                       "assumptions": assumptions})
+        return _finish(result, expected=float(expected), deterministic=deterministic,
+                       message="按已保存三星原账单通道费及合同分成重算；含税拆分不重复扣税")
 
     assumptions: list[str] = []
     deterministic = True

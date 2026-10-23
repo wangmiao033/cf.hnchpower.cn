@@ -1,3 +1,4 @@
+import { SAMSUNG_STATEMENT_FEE_RULE, isSamsungIdentity, isSamsungRule, samsungRuleFields } from '@/domain/channel/samsungSettlement.js'
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import {
   CHANNEL_RULE_PRESETS,
@@ -170,6 +171,7 @@ function clearLineContractRule(row) {
 }
 
 function applyContractRecommendationToLine(row, recommendation) {
+  if (isSamsungRule(row)) return row
   if (!recommendation) return clearLineContractRule(row)
   return {
     ...row,
@@ -278,6 +280,7 @@ function ChannelBillingForm({
     return null
   }, [partners, partnerId, header.partnerName, header.channelName, mode])
 
+  const samsungActive = isSamsungRule(header)
   const effectiveRuleHeader = applyTargetedChannelRule(header)
   const feeMode = effectiveRuleHeader.channelFeeMode || 'fixed'
   const targetedRuleLocked = effectiveRuleHeader.settlementRuleCode === XIAN_WEIZHEN_9917_RULE
@@ -308,6 +311,7 @@ function ChannelBillingForm({
       if (!rec) continue
       const rowRule = resolveChannelLineRuleHeader(row, effectiveRuleHeader)
       if (rec.share_rate != null && !sameNumber(row.shareRate, rec.share_rate)) return true
+      if (isSamsungRule(row, effectiveRuleHeader)) continue
       if (rec.tax_rate != null && !sameNumber(row.taxRate, rec.tax_rate)) return true
       if (rec.channel_fee_mode && rowRule.channelFeeMode !== rec.channel_fee_mode) return true
       if (rec.channel_fee_rate != null && !sameNumber(rowRule.channelFeeRate, rec.channel_fee_rate)) return true
@@ -402,7 +406,7 @@ function ChannelBillingForm({
           ])]
           setLastContractRuleKey(requestKey)
 
-          const targeted = detectChannelRulePreset(header.partnerName || header.channelName) === XIAN_WEIZHEN_9917_RULE
+          const targeted = isSamsungRule(header) || detectChannelRulePreset(header.partnerName || header.channelName) === XIAN_WEIZHEN_9917_RULE
           const preciseHeader = result.auto_apply && result.header_recommendation ? result.header_recommendation : null
           // A uniform partner-level rate is not evidence that an unmatched
           // game's rate is the same. Only use a baseline before a game is set.
@@ -430,6 +434,7 @@ function ChannelBillingForm({
             setLines((current) => current.map((row, index) => {
               const preciseRec = lineRecommendations.get(index)
               let next = row
+              if (isSamsungRule(row, header)) return { ...row, ...samsungRuleFields() }
               if (preciseRec) next = applyContractRecommendationToLine(row, preciseRec)
               else if (mode === 'add' && baseline && !String(row.gameName || '').trim()) next = applyContractRecommendationToLine(row, baseline)
               next = applyCommercialDiscountFromGameName(next)
@@ -492,9 +497,7 @@ function ChannelBillingForm({
                 taxMode: 'none'
               }))
               setLines((current) => current.map((row) => ({
-                ...clearLineContractRule(row),
-                shareRate: '',
-                taxRate: ''
+                ...(isSamsungRule(row, header) ? row : { ...clearLineContractRule(row), shareRate: '', taxRate: '' })
               })))
             }
             setContractRuleState({
@@ -555,7 +558,7 @@ function ChannelBillingForm({
       cancelled = true
       window.clearTimeout(timer)
     }
-  }, [contractAwareMode, mode, partnerId, header.partnerName, header.channelName, header.status, lines, contractRuleRevision, lastContractRuleKey, autoApplyContractRules])
+  }, [contractAwareMode, mode, partnerId, header.partnerName, header.channelName, header.status, header.settlementRuleCode, lines, contractRuleRevision, lastContractRuleKey, autoApplyContractRules])
 
   const handleHeaderChange = (field, value) => setHeader((current) => ({ ...current, [field]: value }))
   const clearAllLineContractRules = () => setLines((current) => current.map(clearLineContractRule))
@@ -564,7 +567,9 @@ function ChannelBillingForm({
     setHeader((current) => ({ ...current, settlementRuleCode: 'custom', [field]: value }))
   }
   const handleRulePresetChange = (code) => {
-    clearAllLineContractRules()
+    if (code === SAMSUNG_STATEMENT_FEE_RULE) {
+      setLines((current) => current.map((row) => ({ ...row, ...samsungRuleFields(), gatewayCost: '' })))
+    } else clearAllLineContractRules()
     setHeader((current) => applyChannelRulePreset(current, code))
   }
 
@@ -576,6 +581,12 @@ function ChannelBillingForm({
       currentId: partnerId, nextId: nextPartnerId,
       resolvedCurrentId: selectedPartner?.id, selected
     })
+    if (isSamsungRule(header) && !restoringSameCustomer) {
+      const message = '三星原账单规则已绑定当前法人，请保留合作方身份。'
+      if (onError) onError(message)
+      else window.alert(message)
+      return
+    }
     setPartnerId(nextPartnerId)
     setLastContractRuleKey('')
     setContractRuleState(emptyContractRuleState())
@@ -715,6 +726,16 @@ function ChannelBillingForm({
 
   const handleSubmit = async (event) => {
     event.preventDefault()
+    for (const [index, row] of lines.entries()) {
+      if (!isSamsungRule(row, header)) continue
+      const fee = Number(row.gatewayCost)
+      if (!isSamsungIdentity(header) || String(row.gatewayCost ?? '').trim() === '' || !Number.isFinite(fee) || fee < 0 || Math.abs(fee * 100 - Math.round(fee * 100)) > 1e-7 || calculateBillingAmount(row, header) < 0) {
+        const msg = `第 ${index + 1} 行：请核对三星身份并填写有效原账单通道费金额（含零），不能超过扣减后流水。`
+        if (onError) onError(msg)
+        else window.alert(msg)
+        return
+      }
+    }
     if (!(header.partnerName || header.channelName)?.trim()) {
       const msg = '请填写合作方'; onError?.(msg) ?? window.alert(msg); return
     }
@@ -883,12 +904,13 @@ function ChannelBillingForm({
             </div>
           ) : null}
           <div className="channel-rule-grid">
-            <label><span>规则模板</span><select value={effectiveRuleHeader.settlementRuleCode} disabled={targetedRuleLocked} onChange={(e) => handleRulePresetChange(e.target.value)}>{Object.entries(CHANNEL_RULE_PRESETS).map(([key, preset]) => <option key={key} value={key}>{preset.label}</option>)}</select></label>
-            <label><span>渠道费模式</span><select value={effectiveRuleHeader.channelFeeMode} disabled={targetedRuleLocked || mixedLineContractRules} onChange={(e) => handleRuleFieldChange('channelFeeMode', e.target.value)}><option value="none">不扣渠道费</option><option value="percent">百分比</option><option value="fixed">固定金额/行</option></select></label>
-            <label><span>渠道费率%</span><input type="number" step="0.01" min="0" max="100" value={effectiveRuleHeader.channelFeeRate} disabled={targetedRuleLocked || mixedLineContractRules || feeMode !== 'percent'} onChange={(e) => handleRuleFieldChange('channelFeeRate', e.target.value)} placeholder={feeMode === 'percent' ? '如 5' : '当前不使用'} /></label>
-            <label><span>税处理</span><select value={effectiveRuleHeader.taxMode} disabled={targetedRuleLocked || mixedLineContractRules} onChange={(e) => handleRuleFieldChange('taxMode', e.target.value)}><option value="none">仅记录，不参与</option><option value="share">按分成额扣税</option><option value="after_fee">渠道费后再扣税</option></select></label>
-            <label><span>差异容差（元）</span><input type="number" step="0.01" min="0" value={header.validationTolerance} onChange={(e) => handleRuleFieldChange('validationTolerance', e.target.value)} /></label>
+            <label><span>规则模板</span><select value={effectiveRuleHeader.settlementRuleCode} disabled={targetedRuleLocked || (mode === 'edit' && isSamsungRule(sourceRecord))} onChange={(e) => handleRulePresetChange(e.target.value)}>{Object.entries(CHANNEL_RULE_PRESETS).filter(([key]) => key !== SAMSUNG_STATEMENT_FEE_RULE || isSamsungIdentity(header)).map(([key, preset]) => <option key={key} value={key}>{preset.label}</option>)}</select></label>
+            <label><span>渠道费模式</span><select value={effectiveRuleHeader.channelFeeMode} disabled={targetedRuleLocked || samsungActive || mixedLineContractRules} onChange={(e) => handleRuleFieldChange('channelFeeMode', e.target.value)}><option value="none">不扣渠道费</option><option value="percent">百分比</option><option value="fixed">固定金额/行</option></select></label>
+            <label><span>渠道费率%</span><input type="number" step="0.01" min="0" max="100" value={effectiveRuleHeader.channelFeeRate} disabled={targetedRuleLocked || samsungActive || mixedLineContractRules || feeMode !== 'percent'} onChange={(e) => handleRuleFieldChange('channelFeeRate', e.target.value)} placeholder={feeMode === 'percent' ? '如 5' : '当前不使用'} /></label>
+            <label><span>税处理</span><select value={effectiveRuleHeader.taxMode} disabled={targetedRuleLocked || samsungActive || mixedLineContractRules} onChange={(e) => handleRuleFieldChange('taxMode', e.target.value)}><option value="none">仅记录，不参与</option><option value="share">按分成额扣税</option><option value="after_fee">渠道费后再扣税</option></select></label>
+            <label><span>差异容差（元）</span><input type="number" step="0.01" min="0" value={header.validationTolerance} disabled={samsungActive} onChange={(e) => handleRuleFieldChange('validationTolerance', e.target.value)} /></label>
           </div>
+          {samsungActive ? <p role="note">三星原账单口径已启用：逐行填写原账单完整通道费（含零）；不会按平台金额倒推，不会自动沿用上月金额。4%为原账单标示费率；含税拆分仅作记录。合同刷新保留此口径和已填金额。</p> : null}
           <div className="channel-rule-formula"><span>当前公式</span><strong>{mixedLineContractRules ? '按每行合同规则分别计算（分成、通道费、税处理均以明细匹配结果为准）' : ruleFormulaText(effectiveRuleHeader)}</strong></div>
         </section>
       </div>
@@ -958,7 +980,7 @@ function ChannelBillingForm({
                   <td><input type="number" step="0.01" className="admin-input" value={row.shareRate} onChange={(e) => handleLineChange(index, 'shareRate', e.target.value)} placeholder="合同带入/人工填写" /></td>
                   <td><input type="number" step="0.01" className="admin-input" value={row.taxRate} onChange={(e) => handleLineChange(index, 'taxRate', e.target.value)} placeholder="合同带入/填0" /></td>
                   {rowFeeMode === 'fixed' ? (
-                    <td><input type="number" step="0.01" className="admin-input" value={row.gatewayCost} onChange={(e) => handleLineChange(index, 'gatewayCost', e.target.value)} placeholder="元" /></td>
+                    <td><input type="number" step="0.01" className="admin-input" aria-label={isSamsungRule(row, effectiveRuleHeader) ? `第${index + 1}行原账单通道费金额` : undefined} required={isSamsungRule(row, effectiveRuleHeader)} min={isSamsungRule(row, effectiveRuleHeader) ? 0 : undefined} value={row.gatewayCost} onChange={(e) => handleLineChange(index, 'gatewayCost', e.target.value)} placeholder="元" /></td>
                   ) : (
                     <td className="channel-line-num">{rowFeeMode === 'percent' ? `${Number(rowRuleHeader.channelFeeRate || 0)}%` : '不扣'}</td>
                   )}
