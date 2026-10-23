@@ -10,6 +10,7 @@ from app.services.samsung_settlement import SAMSUNG_STATEMENT_FEE_RULE, is_samsu
 XIAN_WEIZHEN_9917_RULE = "xian_weizhen_9917"
 HONOR_UPFRONT_PERCENT_FEE_RULE = "honor_upfront_percent_fee"
 ANJIU_PRE_DISCOUNT_DEDUCTION_RULE = "anjiu_pre_discount_deduction"
+DAXIONG_NET_RECEIPT_RULE = "daxiong_net_receipt"
 ROUNDING_TAIL = Decimal("0.01")
 VALID_RULES = {
     INCOMPLETE_233,
@@ -22,6 +23,7 @@ VALID_RULES = {
     XIAN_WEIZHEN_9917_RULE,
     HONOR_UPFRONT_PERCENT_FEE_RULE,
     ANJIU_PRE_DISCOUNT_DEDUCTION_RULE,
+    DAXIONG_NET_RECEIPT_RULE,
     "custom",
 }
 VALID_FEE_MODES = {"none", "percent", "fixed"}
@@ -142,6 +144,11 @@ def resolve_rule_settings(record: Any, fallback: Any = None) -> dict[str, Any]:
         # 广东安久 / 游戏fan：扣减项必须先从后台流水扣除，再乘折扣系数。
         # 该专属规则的税处理固定为“按分成额扣税”；渠道费模式/费率仍以合同明细为准。
         tax_mode = "share"
+    elif code == DAXIONG_NET_RECEIPT_RULE:
+        # 大熊游戏：系统结算 = 实收合计（net receipt），非（流水−扣减）×分成公式。
+        # 通道费 0.9%（支付宝/微信），默认实收已扣除通道费，不再重复扣。
+        # 分成比例仅台账记录，不参与计算。
+        fee_mode, tax_mode, fee_rate = "none", "none", Decimal("0")
     elif code in {"xiaomi_percent_fee", "five_percent_gateway_share"}:
         fee_mode, tax_mode = "percent", "none"
         explicit_mode = str(_value(record, "channel_fee_mode", None) or "").strip()
@@ -250,6 +257,29 @@ def calculate_channel_line(item: Any, record: Any) -> dict[str, Any]:
     system_amount = _money(system_raw)
     platform_raw = getattr(item, "platform_settlement_amount", None)
     platform_amount = None if platform_raw in (None, "") else _money(_d(platform_raw))
+
+    # 大熊游戏：系统结算 = 实收合计（net receipt），非（流水−扣减）×分成公式。
+    # 竹B/月卡等实收=0的行：不参与结算汇总，仅记录。
+    if settings["rule_code"] == DAXIONG_NET_RECEIPT_RULE:
+        if platform_amount is not None:
+            system_amount = platform_amount
+            difference = Decimal("0")
+            validation_status = "pass"
+            final_amount = platform_amount
+        else:
+            difference = None
+            validation_status = "unvalidated"
+            final_amount = Decimal("0")
+        return {
+            "billing_amount": _money(billing_amount),
+            "share_amount": _money(share_amount),
+            "system_settlement_amount": system_amount,
+            "platform_settlement_amount": platform_amount,
+            "settlement_difference": difference,
+            "validation_status": validation_status,
+            "settlement_amount": final_amount,
+        }
+
     if incomplete(item, record):
         difference, validation_status = None, "incomplete"
         final_amount = platform_amount if platform_amount is not None else Decimal("0")
