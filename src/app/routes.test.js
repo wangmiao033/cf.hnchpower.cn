@@ -53,13 +53,16 @@ describe('统一对账进度路由', () => {
     expect(group.items.map((item) => item.view)).toEqual([
       VIEWS.RECON_RD,
       VIEWS.RECON_PROGRESS,
-      VIEWS.RECON_CHANNEL,
-      VIEWS.SELF_OPERATED
+      VIEWS.RECON_CHANNEL
     ])
     expect(getTabView(VIEWS.RECON_PROGRESS)).toBe(VIEWS.RECON_PROGRESS)
-    expect(getGroupForView(VIEWS.SELF_OPERATED)?.id).toBe('reconciliation')
+  })
+
+  it('SELF_OPERATED 视图保留路由常量与页面标题，不在侧栏展示', () => {
+    expect(VIEWS.SELF_OPERATED).toBe('self-operated-daxiong')
     expect(getPageTitle(VIEWS.SELF_OPERATED)).toBe('大熊游戏')
-    expect(getGroupForView(VIEWS.SELF_OPERATED)?.items.find(item => item.view === VIEWS.SELF_OPERATED)?.label).toBe('大熊游戏')
+    const reconGroup = SIDEBAR_GROUPS.find(g => g.id === 'reconciliation')
+    expect(reconGroup?.items.some(item => item.view === VIEWS.SELF_OPERATED)).toBe(false)
   })
 
   it('渠道智能补齐留在新增账单页，左侧不再显示重复入口', () => {
