@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 from app.models.bank_reconciliation_match import BankReconciliationMatch
 from app.models.bank_transaction import BankTransaction
 from app.models.channel import ChannelReceipt, ChannelRecord
+from app.services.channel_233_incomplete import incomplete, assert_complete
 from app.models.reconciliation import ReconciliationRecord
 from app.models.user import AuthUser
 from app.services.bank_auto_reconciliation import (
@@ -350,6 +351,7 @@ def _specific_bill(db: Session, direction: str, bill_type: str, bill_id: str) ->
         row = db.get(ChannelRecord, bill_id)
         if row is None or not _active_bill(row):
             raise HTTPException(status_code=404, detail="渠道账单不存在或已取消")
+        assert_complete(row)
         bill_amount = abs(_num(row.settlement_amount))
         received_raw = db.execute(
             select(func.coalesce(func.sum(ChannelReceipt.amount), 0)).where(

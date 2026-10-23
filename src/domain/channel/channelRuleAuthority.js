@@ -1,4 +1,5 @@
 import { isSamsungRule, preserveSamsungRule } from './samsungSettlement.js'
+import { is233Incomplete } from './channel233Incomplete.js'
 import { recommendChannelContractRules } from '@/lib/api/contractTerms.ts'
 
 function hasValue(value) {
@@ -46,6 +47,7 @@ export function isSmartGeneratedMessage(message = '') {
 }
 
 export function clearInheritedRuleFields(line) {
+  if (is233Incomplete(line)) return { ...line, platformSettlementAmount: '' }
   if (isSamsungRule(line)) return { ...line, gatewayCost: '' }
   return {
     ...line,
@@ -75,6 +77,7 @@ export function applyContractRecommendation(record, recommendation, { generated 
   let needsConfirmation = 0
 
   const nextItems = (Array.isArray(source?.items) ? source.items : []).map((line, index) => {
+    if (is233Incomplete(line, source)) return line
     if (!String(line?.gameName || '').trim()) return line
     const result = recommendationLines.find((item) => Number(item?.line_index) === index)
     const recommended = result?.recommended
@@ -185,7 +188,7 @@ export async function resolveChannelContractAuthority(record, { generated = fals
     }))
     .filter((line) => line.game_name)
 
-  if (!partnerName || !lines.length) {
+  if (is233Incomplete(record) || !partnerName || !lines.length) {
     return {
       record: generated ? sanitizeGeneratedHistoryRules(record) : record,
       summary: { total: lines.length, matched: 0, unmatched: lines.length, needsConfirmation: 0, skipped: true }

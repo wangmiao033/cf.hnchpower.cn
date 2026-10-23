@@ -374,6 +374,9 @@ def _transition_guard(
     target: str,
     user: AuthUser,
 ) -> str | None:
+    from app.services.channel_233_incomplete import incomplete, MESSAGE
+    if bill_type == "channel" and incomplete(bill) and target not in {"pending", "cancelled"}:
+        return MESSAGE
     allowed = BASE_TRANSITIONS.get(current, ())
     if target not in allowed:
         return f"不能从“{status_label(current)}”直接流转到“{status_label(target)}”。"

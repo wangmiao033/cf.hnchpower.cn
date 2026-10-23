@@ -1,4 +1,5 @@
 /** 渠道账单表单计算与规则校验。 */
+import { is233Incomplete, incomplete233Fields, incomplete233Line } from './channel233Incomplete.js'
 import { SAMSUNG_STATEMENT_FEE_RULE, isSamsungIdentity, isSamsungRule, samsungRuleFields } from './samsungSettlement.js'
 import { getChannelLineItems } from '@/domain/channel/channelAggregates.js'
 import {
@@ -82,6 +83,7 @@ export function applyTargetedChannelRule(header = initialHeaderForm) {
 
 export function resolveChannelLineRuleHeader(data = {}, header = initialHeaderForm) {
   const effectiveHeader = applyTargetedChannelRule(header)
+  if (is233Incomplete(data, effectiveHeader)) return { ...effectiveHeader, ...incomplete233Fields() }
   if (isSamsungRule(data, effectiveHeader)) {
     if (!isSamsungIdentity(effectiveHeader)) throw new Error('此规则仅限三星指定法人渠道')
     return { ...effectiveHeader, ...samsungRuleFields() }
@@ -125,6 +127,7 @@ export function resolveChannelLineRuleHeader(data = {}, header = initialHeaderFo
 }
 
 export function ruleFormulaText(header) {
+  if (is233Incomplete(header)) return '233资料未齐：仅暂存真实平台结算，原始充值与分成待补，不进行公式校验'
   if (isSamsungRule(header)) return '三星：（流水折算后金额 - 代金券等扣减 - 原账单完整通道费金额）× 分成比例；4%仅记录，含税拆分不再扣税'
   const effectiveHeader = applyTargetedChannelRule(header)
   if (effectiveHeader.settlementRuleCode === XIAN_WEIZHEN_9917_RULE) {
@@ -247,6 +250,7 @@ function deductionFieldsForHeader(header = initialHeaderForm) {
 }
 
 export function calculateBillingAmount(data, header = initialHeaderForm) {
+  if (is233Incomplete(data, header)) return 0
   const effectiveHeader = resolveChannelLineRuleHeader(data, header)
   const effectiveFlow = effectiveLineFlowFromFormData(data)
   const split = hasSplitVoucherFields(data)
@@ -272,6 +276,7 @@ export function calculateBillingAmount(data, header = initialHeaderForm) {
 export function calculateShareAmount(data, header = initialHeaderForm) { return calculateBillingAmount(data, header) * Number(data.shareRate || 0) / 100 }
 
 function calculateSettlementRaw(data, header = initialHeaderForm) {
+  if (is233Incomplete(data, header)) return 0
   const effectiveHeader = resolveChannelLineRuleHeader(data, header)
   const shareAmount = calculateShareAmount(data, effectiveHeader)
   const feeMode = effectiveHeader.channelFeeMode || 'fixed'; const taxMode = effectiveHeader.taxMode || 'share'
@@ -288,6 +293,7 @@ export function calculateSettlementDetails(data, header = initialHeaderForm) {
   const effectiveHeader = resolveChannelLineRuleHeader(data, header)
   const system = round2(calculateSettlementRaw(data, effectiveHeader))
   const platform = optionalNumber(data.platformSettlementAmount)
+  if (is233Incomplete(data, header)) return { systemSettlementAmount: 0, platformSettlementAmount: platform, settlementDifference: null, validationStatus: 'incomplete', settlementAmount: round2(platform ?? 0) }
   const difference = platform == null ? null : round2(system - platform)
   const tolerance = Math.max(0, Number(effectiveHeader.validationTolerance || 0.05))
   const validationStatus = platform == null ? 'unvalidated' : Math.abs(difference) <= tolerance ? 'pass' : 'fail'
@@ -296,6 +302,7 @@ export function calculateSettlementDetails(data, header = initialHeaderForm) {
 export function calculateSettlement(data, header = initialHeaderForm) { return calculateSettlementRaw(data, header) }
 
 export function buildLineRecordFromForm(fd, headerForm = initialHeaderForm) {
+  if (is233Incomplete(fd, headerForm)) fd = incomplete233Line(fd)
   const effectiveHeader = resolveChannelLineRuleHeader(fd, headerForm)
   const details = calculateSettlementDetails(fd, effectiveHeader)
   return {
@@ -328,8 +335,8 @@ export function buildFullChannelRecord(headerForm, lineFormList) {
   const everyLineMatchesRoundedPlatform = items.length > 0 && platformRows.length === items.length && items.every((item) => item.settlementDifference != null && cents(item.settlementDifference) === 0)
   const roundingTailApplied = everyLineMatchesRoundedPlatform && platformTotal != null && cents(platformTotal) === cents(roundedLineSystemTotal) && Math.abs(cents(precisionSystemTotal) - cents(roundedLineSystemTotal)) === 1
   const systemTotal = roundingTailApplied ? precisionSystemTotal : roundedLineSystemTotal
-  const differenceTotal = platformTotal == null ? null : round2(systemTotal - platformTotal)
-  const validationStatus = items.some((i) => i.validationStatus === 'fail') ? 'fail' : items.length && items.every((i) => i.validationStatus === 'pass') ? 'pass' : platformRows.length ? 'partial' : 'unvalidated'
+  const differenceTotal = is233Incomplete(effectiveHeader) || platformTotal == null ? null : round2(systemTotal - platformTotal)
+  const validationStatus = is233Incomplete(effectiveHeader) ? 'incomplete' : items.some((i) => i.validationStatus === 'fail') ? 'fail' : items.length && items.every((i) => i.validationStatus === 'pass') ? 'pass' : platformRows.length ? 'partial' : 'unvalidated'
   const settlementTotal = roundingTailApplied ? precisionSystemTotal : sum('settlementAmount')
   const businessSettlementAmount = settlementTotal
   const settlementAdjustmentAmount = round2(Number(effectiveHeader.settlementAdjustmentAmount || 0))
@@ -338,6 +345,7 @@ export function buildFullChannelRecord(headerForm, lineFormList) {
   const finalSettlementAmount = finalOverride == null ? settlementCalculatedAfterAdjustment : round2(finalOverride)
   const settlementAdjustmentTail = round2(finalSettlementAmount - settlementCalculatedAfterAdjustment)
   return {
+    ...(effectiveHeader.completeIncompleteDraft ? { completeIncompleteDraft: true, incompleteCompletionReason: effectiveHeader.incompleteCompletionReason || '' } : {}),
     channelName: effectiveHeader.channelName, partnerName: effectiveHeader.partnerName || '', settlementMonth: period.settlementMonth || normalizeChannelSettlementCycle(effectiveHeader.settlementMonth), invoiceStatus: effectiveHeader.invoiceStatus || 'pending_invoice', invoice_status: effectiveHeader.invoiceStatus || 'pending_invoice',
     startDate: period.startDate || effectiveHeader.startDate || '', endDate: period.endDate || effectiveHeader.endDate || '', remark: effectiveHeader.remark || '', status: effectiveHeader.status || 'pending', serverCost: parseOptionalNum(effectiveHeader.serverCost), discountType: effectiveHeader.discountType || null,
     settlementAdjustmentType: effectiveHeader.settlementAdjustmentType || '', settlementAdjustmentSourceMonth: normalizeChannelSettlementCycle(effectiveHeader.settlementAdjustmentSourceMonth), settlementAdjustmentAmount, settlementAdjustmentReason: effectiveHeader.settlementAdjustmentReason || '', settlementFinalOverride: finalOverride, businessSettlementAmount, settlementCalculatedAfterAdjustment, settlementAdjustmentTail,
@@ -356,8 +364,9 @@ export function buildRecordFromForm(fd) { const line = buildLineRecordFromForm(f
 
 export function recordToHeaderForm(record) {
   const base = {
+    ...(record.completeIncompleteDraft ? { completeIncompleteDraft: true, incompleteCompletionReason: record.incompleteCompletionReason || '' } : {}),
     channelName: record.channelName || '', partnerName: record.partnerName || '', settlementMonth: record.settlementMonth || '', invoiceStatus: record.invoiceStatus || record.invoice_status || 'pending_invoice', startDate: record.startDate || '', endDate: record.endDate || '', remark: record.remark || '', status: record.status || 'pending', serverCost: record.serverCost != null ? String(record.serverCost) : '', discountType: record.discountType || '', channelFeeRate: record.channelFeeRate != null ? String(record.channelFeeRate) : '', devShareRate: record.devShareRate != null ? String(record.devShareRate) : '', profitRate: record.profitRate != null ? String(record.profitRate) : '',
-    settlementRuleCode: record.settlementRuleCode || 'legacy_fixed_fee_tax', channelFeeMode: record.channelFeeMode || 'fixed', taxMode: record.taxMode || 'share', validationTolerance: record.validationTolerance != null ? String(record.validationTolerance) : '0.05', settlementAdjustmentType: record.settlementAdjustmentType || '', settlementAdjustmentSourceMonth: normalizeChannelSettlementCycle(record.settlementAdjustmentSourceMonth), settlementAdjustmentAmount: record.settlementAdjustmentAmount != null && Number(record.settlementAdjustmentAmount) !== 0 ? String(record.settlementAdjustmentAmount) : '', settlementAdjustmentReason: record.settlementAdjustmentReason || '', settlementFinalOverride: record.settlementFinalOverride != null ? String(record.settlementFinalOverride) : ''
+    settlementRuleCode: record.completeIncompleteDraft ? record.settlementRuleCode || '' : record.settlementRuleCode || 'legacy_fixed_fee_tax', channelFeeMode: record.channelFeeMode || 'fixed', taxMode: record.taxMode || 'share', validationTolerance: record.validationTolerance != null ? String(record.validationTolerance) : '0.05', settlementAdjustmentType: record.settlementAdjustmentType || '', settlementAdjustmentSourceMonth: normalizeChannelSettlementCycle(record.settlementAdjustmentSourceMonth), settlementAdjustmentAmount: record.settlementAdjustmentAmount != null && Number(record.settlementAdjustmentAmount) !== 0 ? String(record.settlementAdjustmentAmount) : '', settlementAdjustmentReason: record.settlementAdjustmentReason || '', settlementFinalOverride: record.settlementFinalOverride != null ? String(record.settlementFinalOverride) : ''
   }
   return applyTargetedChannelRule(base)
 }
@@ -370,6 +379,7 @@ export function recordToLineForms(record) {
       id: line.id != null ? String(line.id) : '', settlementCycle: normalizeChannelSettlementCycle(line.settlementCycle || record.settlementMonth), gameName: line.gameName || '', flow: String(line.flow ?? ''), discountFactor: line.discountFactor != null ? String(line.discountFactor) : '1', voucherCost: String(line.voucherCost ?? ''), voucherFaceValue: line.voucherFaceValue == null ? null : String(line.voucherFaceValue), voucherDirectCost: line.voucherDirectCost == null ? null : String(line.voucherDirectCost), noWorryCost: String(line.noWorryCost ?? ''), refundCost: String(line.refundCost ?? ''), testCost: String(line.testCost ?? ''), welfareCost: String(line.welfareCost ?? ''), coinCost: String(line.coinCost ?? ''), shareRate: String(line.shareRate ?? '30'), taxRate: String(line.taxRate ?? '5'), gatewayCost: String(line.gatewayCost ?? ''), platformSettlementAmount: line.platformSettlementAmount != null ? String(line.platformSettlementAmount) : '', systemSettlementAmount: String(line.systemSettlementAmount ?? ''), settlementDifference: line.settlementDifference != null ? String(line.settlementDifference) : '', validationStatus: line.validationStatus || 'unvalidated', settlementAmount: String(line.settlementAmount ?? ''),
       settlementRuleCode: line.settlementRuleCode || '', channelFeeMode: line.channelFeeMode || '', channelFeeRate: line.channelFeeRate != null ? String(line.channelFeeRate) : '', taxMode: line.taxMode || '', validationTolerance: line.validationTolerance != null ? String(line.validationTolerance) : ''
     }
+    if (is233Incomplete(base, header)) return incomplete233Line(base)
     return applyAnjiuVoucherInference(applyCommercialDiscountFromGameName(base), header)
   })
 }

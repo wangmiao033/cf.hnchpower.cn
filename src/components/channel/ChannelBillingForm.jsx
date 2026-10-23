@@ -1,3 +1,4 @@
+import { INCOMPLETE_233_NOTE, is233Customer, is233Incomplete, incomplete233Fields, incomplete233Line, incomplete233Validation } from '@/domain/channel/channel233Incomplete.js'
 import { SAMSUNG_STATEMENT_FEE_RULE, isSamsungIdentity, isSamsungRule, samsungRuleFields } from '@/domain/channel/samsungSettlement.js'
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import {
@@ -280,6 +281,8 @@ function ChannelBillingForm({
     return null
   }, [partners, partnerId, header.partnerName, header.channelName, mode])
 
+  const incomplete233 = is233Incomplete(header)
+  const completing233 = Boolean(header.completeIncompleteDraft)
   const samsungActive = isSamsungRule(header)
   const effectiveRuleHeader = applyTargetedChannelRule(header)
   const feeMode = effectiveRuleHeader.channelFeeMode || 'fixed'
@@ -366,7 +369,7 @@ function ChannelBillingForm({
   }, [partners, header.partnerName, header.channelName, partnerId, mode])
 
   useEffect(() => {
-    if (!contractAwareMode) return undefined
+    if (!contractAwareMode || is233Incomplete(header)) return undefined
     const partnerName = String(header.partnerName || '').trim()
     if (!partnerName) return undefined
     if (mode === 'add' && !partnerId) {
@@ -562,6 +565,20 @@ function ChannelBillingForm({
 
   const handleHeaderChange = (field, value) => setHeader((current) => ({ ...current, [field]: value }))
   const clearAllLineContractRules = () => setLines((current) => current.map(clearLineContractRule))
+  const enableIncomplete233 = () => {
+    if (!is233Customer(header) || lines.some(row => row.contractAccessItemId)) {
+      onError?.('资料未齐暂存仅限233未绑定合同的草稿'); return
+    }
+    setHeader(current => ({ ...current, ...incomplete233Fields(), status: 'pending', remark: [current.remark, INCOMPLETE_233_NOTE].filter(Boolean).join('；') }))
+    setLines(current => current.map(incomplete233Line))
+    setContractRuleState(emptyContractRuleState())
+  }
+  const startComplete233 = () => {
+    setHeader(current => ({ ...current, settlementRuleCode: '', channelFeeMode: 'fixed', channelFeeRate: '', taxMode: 'share', completeIncompleteDraft: true, incompleteCompletionReason: '' }))
+    setLines(current => current.map(row => ({ ...clearLineContractRule(row), flow: '', shareRate: '', taxRate: '', gatewayCost: '' })))
+    setLastContractRuleKey('')
+    setContractRuleRevision(value => value + 1)
+  }
   const handleRuleFieldChange = (field, value) => {
     clearAllLineContractRules()
     setHeader((current) => ({ ...current, settlementRuleCode: 'custom', [field]: value }))
@@ -580,9 +597,11 @@ function ChannelBillingForm({
       mode, currentName: header.partnerName, nextName: partnerName,
       currentId: partnerId, nextId: nextPartnerId,
       resolvedCurrentId: selectedPartner?.id, selected
-    })
-    if (isSamsungRule(header) && !restoringSameCustomer) {
-      const message = '三星原账单规则已绑定当前法人，请保留合作方身份。'
+    }) || ((incomplete233 || completing233) && !partnerId && Boolean(nextPartnerId)
+      && partnerName === header.partnerName && selected?.name === header.partnerName
+      && selected?.shortName === header.channelName)
+    if ((isSamsungRule(header) || incomplete233 || completing233) && !restoringSameCustomer) {
+      const message = incomplete233 || completing233 ? '233资料未齐账单已绑定当前法人，请保留合作方身份。' : '三星原账单规则已绑定当前法人，请保留合作方身份。'
       if (onError) onError(message)
       else window.alert(message)
       return
@@ -695,6 +714,8 @@ function ChannelBillingForm({
         next.taxRate = ''
       }
     }
+    if (incomplete233) next = incomplete233Line(next)
+    if (completing233) next = { ...next, flow: '', shareRate: '', taxRate: '' }
     setLines((current) => [...current, next])
   }
   const removeLine = (index) => {
@@ -721,11 +742,15 @@ function ChannelBillingForm({
     }
   }
 
-  const formStateRecord = useMemo(() => ({ ...fullRecord, ...(recordId != null ? { id: recordId } : {}) }), [fullRecord, recordId])
+  const formStateRecord = useMemo(() => ({ ...fullRecord, ...(recordId != null ? { id: recordId } : {}),
+    ...(completing233 ? { settlementRuleCode: header.settlementRuleCode, items: fullRecord.items.map((item, index) => ({ ...item, flow: lines[index].flow, shareRate: lines[index].shareRate, taxRate: lines[index].taxRate })) } : {})
+  }), [fullRecord, recordId, completing233, lines, header.settlementRuleCode])
   useEffect(() => { onFormStateChange?.(formStateRecord) }, [formStateRecord, onFormStateChange])
 
   const handleSubmit = async (event) => {
     event.preventDefault()
+    const incompleteError = incomplete233Validation(header, lines, submitIntentRef?.current ?? 'back')
+    if (incompleteError) { onError?.(incompleteError) ?? window.alert(incompleteError); return }
     for (const [index, row] of lines.entries()) {
       if (!isSamsungRule(row, header)) continue
       const fee = Number(row.gatewayCost)
@@ -749,8 +774,8 @@ function ChannelBillingForm({
       if (!cycle) { const msg = `第 ${i + 1} 行：请选择结算月份`; onError?.(msg) ?? window.alert(msg); return }
       if (cycle > currentMonthKey) { const msg = `第 ${i + 1} 行：结算月份 ${monthListLabel([cycle])} 晚于当前月份 ${monthListLabel([currentMonthKey])}，未来账期不能保存`; onError?.(msg) ?? window.alert(msg); return }
       if (!row.gameName?.trim()) { const msg = `第 ${i + 1} 行：请填写游戏名称`; onError?.(msg) ?? window.alert(msg); return }
-      if (mode === 'add' && !targetedRuleLocked && String(row.shareRate ?? '').trim() === '') { const msg = `第 ${i + 1} 行：分成比例尚未由合同确定，请等待合同匹配或人工填写`; onError?.(msg) ?? window.alert(msg); return }
-      if (mode === 'add' && !targetedRuleLocked && String(row.taxRate ?? '').trim() === '') { const msg = `第 ${i + 1} 行：税率尚未由合同确定，请等待合同匹配或人工填写 0`; onError?.(msg) ?? window.alert(msg); return }
+      if (mode === 'add' && !incomplete233 && !targetedRuleLocked && String(row.shareRate ?? '').trim() === '') { const msg = `第 ${i + 1} 行：分成比例尚未由合同确定，请等待合同匹配或人工填写`; onError?.(msg) ?? window.alert(msg); return }
+      if (mode === 'add' && !incomplete233 && !targetedRuleLocked && String(row.taxRate ?? '').trim() === '') { const msg = `第 ${i + 1} 行：税率尚未由合同确定，请等待合同匹配或人工填写 0`; onError?.(msg) ?? window.alert(msg); return }
     }
 
     if (adjustmentActive && !String(header.settlementAdjustmentReason || '').trim()) {
@@ -786,7 +811,7 @@ function ChannelBillingForm({
       }
     }
 
-    if (contractAwareMode && !targetedRuleLocked) {
+    if (contractAwareMode && !incomplete233 && !targetedRuleLocked) {
       // Save validation must use the same customer-scoped identity as the contract lookup.
       const currentFingerprint = recommendationFingerprint(header.partnerName, header.channelName, lines, partnerId)
       if (contractRuleState.loading || contractRuleState.fingerprint !== currentFingerprint) {
@@ -810,7 +835,7 @@ function ChannelBillingForm({
     const recordHeader = {
       ...header,
       status: channelStatusForSubmit(header.status, intent),
-      remark: [String(header.remark || '').trim(), overrideNote].filter(Boolean).join('；')
+      remark: [String(header.remark || '').trim(), overrideNote, completing233 ? `233资料补齐依据：${header.incompleteCompletionReason}` : ''].filter(Boolean).join('；')
     }
     const submissionLines = linesWithChannelLineContractFees(lines, header).map(line => {
       if (mode === 'edit') return line
@@ -845,7 +870,12 @@ function ChannelBillingForm({
     : totals.validationStatus === 'pass' ? 'is-good' : ''
 
   return (
-    <form id={formId} onSubmit={handleSubmit} className={`channel-form channel-form--page ${className}`}>
+    <form id={formId} onSubmit={handleSubmit} className={`channel-form channel-form--page ${completing233 ? 'channel-233-completion' : ''} ${className}`}>
+      {is233Customer(header) ? <section className="channel-233-draft-notice" aria-label="233资料未齐暂存">
+        {incomplete233 ? <><strong>资料未齐 · 待补 · 未收款</strong><p>{INCOMPLETE_233_NOTE}</p>{mode === 'edit' && is233Incomplete(sourceRecord) ? <button type="button" onClick={startComplete233}>补齐资料并转正常规则</button> : null}</>
+          : completing233 ? <><strong>正在补齐233资料</strong><p>请核对正常结算规则，明确填写原始充值、分成及税率。保存后仍为待核对。</p><label>补齐资料来源说明<input value={header.incompleteCompletionReason || ''} onChange={event => setHeader(current => ({ ...current, incompleteCompletionReason: event.target.value }))} /></label></>
+          : mode === 'add' ? <><p>仅有CP分成后金额、缺原充值和分成比例时，可逐月暂存真实平台结算。</p><button type="button" onClick={enableIncomplete233}>启用233资料未齐暂存</button></> : null}
+      </section> : null}
       <div className="channel-form-section channel-bill-meta-section">
         <div className="form-section-title">1）账单信息</div>
         <div className="channel-bill-meta-grid">
@@ -855,7 +885,7 @@ function ChannelBillingForm({
           </div>
         </div>
 
-        <section className="channel-rule-panel">
+        {!incomplete233 && <section className="channel-rule-panel">
           <div className="channel-rule-panel__head">
             <div><span>结算规则引擎</span><strong>{targetedRuleLocked ? '渠道专属规则已锁定' : mixedLineContractRules ? '已按游戏明细分别套用合同规则' : '合同清单优先，人工覆盖需留痕'}</strong></div>
             <small>{targetedRuleLocked ? '西安维真（客户 9917）：代金券、福利币仅记录；其余原扣减项保持现有规则，分成后扣 5% 通道费，税率仅记录。' : mixedLineContractRules ? '同一张账单可以包含不同分成/通道费口径；系统按每行对应合同独立计算，上方规则只作为未匹配明细的兜底。' : '明确选择合作方后先读取合同清单统一规则；填写游戏和账期后再锁定具体合作清单。旧 30%/5% 默认值不会再冒充合同值。'}</small>
@@ -904,7 +934,7 @@ function ChannelBillingForm({
             </div>
           ) : null}
           <div className="channel-rule-grid">
-            <label><span>规则模板</span><select value={effectiveRuleHeader.settlementRuleCode} disabled={targetedRuleLocked || (mode === 'edit' && isSamsungRule(sourceRecord))} onChange={(e) => handleRulePresetChange(e.target.value)}>{Object.entries(CHANNEL_RULE_PRESETS).filter(([key]) => key !== SAMSUNG_STATEMENT_FEE_RULE || isSamsungIdentity(header)).map(([key, preset]) => <option key={key} value={key}>{preset.label}</option>)}</select></label>
+            <label><span>规则模板</span><select value={effectiveRuleHeader.settlementRuleCode} disabled={targetedRuleLocked || (mode === 'edit' && isSamsungRule(sourceRecord))} onChange={(e) => handleRulePresetChange(e.target.value)}>{completing233 && !header.settlementRuleCode ? <option value="">请选择补齐后的结算规则</option> : null}{Object.entries(CHANNEL_RULE_PRESETS).filter(([key]) => key !== SAMSUNG_STATEMENT_FEE_RULE || isSamsungIdentity(header)).map(([key, preset]) => <option key={key} value={key}>{preset.label}</option>)}</select></label>
             <label><span>渠道费模式</span><select value={effectiveRuleHeader.channelFeeMode} disabled={targetedRuleLocked || samsungActive || mixedLineContractRules} onChange={(e) => handleRuleFieldChange('channelFeeMode', e.target.value)}><option value="none">不扣渠道费</option><option value="percent">百分比</option><option value="fixed">固定金额/行</option></select></label>
             <label><span>渠道费率%</span><input type="number" step="0.01" min="0" max="100" value={effectiveRuleHeader.channelFeeRate} disabled={targetedRuleLocked || samsungActive || mixedLineContractRules || feeMode !== 'percent'} onChange={(e) => handleRuleFieldChange('channelFeeRate', e.target.value)} placeholder={feeMode === 'percent' ? '如 5' : '当前不使用'} /></label>
             <label><span>税处理</span><select value={effectiveRuleHeader.taxMode} disabled={targetedRuleLocked || samsungActive || mixedLineContractRules} onChange={(e) => handleRuleFieldChange('taxMode', e.target.value)}><option value="none">仅记录，不参与</option><option value="share">按分成额扣税</option><option value="after_fee">渠道费后再扣税</option></select></label>
@@ -912,7 +942,7 @@ function ChannelBillingForm({
           </div>
           {samsungActive ? <p role="note">三星原账单口径已启用：逐行填写原账单完整通道费（含零）；不会按平台金额倒推，不会自动沿用上月金额。4%为原账单标示费率；含税拆分仅作记录。合同刷新保留此口径和已填金额。</p> : null}
           <div className="channel-rule-formula"><span>当前公式</span><strong>{mixedLineContractRules ? '按每行合同规则分别计算（分成、通道费、税处理均以明细匹配结果为准）' : ruleFormulaText(effectiveRuleHeader)}</strong></div>
-        </section>
+        </section>}
       </div>
 
       <div className="channel-form-section">
@@ -938,9 +968,9 @@ function ChannelBillingForm({
                     </div>
                   </td>
                   <td><input type="text" className="admin-input" value={row.gameName} onChange={(e) => handleLineChange(index, 'gameName', e.target.value)} placeholder="必填" /></td>
-                  <td><input type="number" step="0.01" className="admin-input" value={row.flow} onChange={(e) => handleLineChange(index, 'flow', e.target.value)} /></td>
+                  <td>{incomplete233 ? '待补' : <input type="number" step="0.01" className="admin-input" value={row.flow} onChange={(e) => handleLineChange(index, 'flow', e.target.value)} />}</td>
                   <td><input type="number" step="0.000001" min="0" className="admin-input" value={row.discountFactor} onChange={(e) => handleLineChange(index, 'discountFactor', e.target.value)} placeholder="默认1" /></td>
-                  <td className="channel-line-num">{effectiveLineFlowFromFormData(row).toFixed(2)}</td>
+                  <td className="channel-line-num">{incomplete233 ? '待补' : effectiveLineFlowFromFormData(row).toFixed(2)}</td>
                   <td className="channel-voucher-cell">
                     <div className="channel-voucher-editor" title={voucherPreview.label}>
                       <div className={'channel-voucher-editor__inline' + (dualVoucherEditing ? ' is-dual' : '')}>
@@ -977,19 +1007,19 @@ function ChannelBillingForm({
                   <td><input type="number" step="0.01" className="admin-input" value={row.testCost} onChange={(e) => handleLineChange(index, 'testCost', e.target.value)} /></td>
                   <td><input type="number" step="0.01" className="admin-input" value={row.welfareCost} onChange={(e) => handleLineChange(index, 'welfareCost', e.target.value)} /></td>
                   <td><input type="number" step="0.01" className="admin-input" value={row.coinCost} onChange={(e) => handleLineChange(index, 'coinCost', e.target.value)} /></td>
-                  <td><input type="number" step="0.01" className="admin-input" value={row.shareRate} onChange={(e) => handleLineChange(index, 'shareRate', e.target.value)} placeholder="合同带入/人工填写" /></td>
-                  <td><input type="number" step="0.01" className="admin-input" value={row.taxRate} onChange={(e) => handleLineChange(index, 'taxRate', e.target.value)} placeholder="合同带入/填0" /></td>
+                  <td>{incomplete233 ? '待补' : <input type="number" step="0.01" className="admin-input" value={row.shareRate} onChange={(e) => handleLineChange(index, 'shareRate', e.target.value)} placeholder="合同带入/人工填写" />}</td>
+                  <td>{incomplete233 ? '待补' : <input type="number" step="0.01" className="admin-input" value={row.taxRate} onChange={(e) => handleLineChange(index, 'taxRate', e.target.value)} placeholder="合同带入/填0" />}</td>
                   {rowFeeMode === 'fixed' ? (
                     <td><input type="number" step="0.01" className="admin-input" aria-label={isSamsungRule(row, effectiveRuleHeader) ? `第${index + 1}行原账单通道费金额` : undefined} required={isSamsungRule(row, effectiveRuleHeader)} min={isSamsungRule(row, effectiveRuleHeader) ? 0 : undefined} value={row.gatewayCost} onChange={(e) => handleLineChange(index, 'gatewayCost', e.target.value)} placeholder="元" /></td>
                   ) : (
-                    <td className="channel-line-num">{rowFeeMode === 'percent' ? `${Number(rowRuleHeader.channelFeeRate || 0)}%` : '不扣'}</td>
+                    <td className="channel-line-num">{incomplete233 ? '待补' : rowFeeMode === 'percent' ? `${Number(rowRuleHeader.channelFeeRate || 0)}%` : '不扣'}</td>
                   )}
-                  <td className="channel-line-num">{formatMoney(calculateBillingAmount(row, rowRuleHeader))}</td>
-                  <td className="channel-line-num">{formatMoney(calculateShareAmount(row, rowRuleHeader))}</td>
-                  <td className="channel-system-amount">{formatMoney(details.systemSettlementAmount)}</td>
+                  <td className="channel-line-num">{incomplete233 ? '待补' : formatMoney(calculateBillingAmount(row, rowRuleHeader))}</td>
+                  <td className="channel-line-num">{incomplete233 ? '待补' : formatMoney(calculateShareAmount(row, rowRuleHeader))}</td>
+                  <td className="channel-system-amount">{incomplete233 ? '待补' : formatMoney(details.systemSettlementAmount)}</td>
                   <td><input type="number" step="0.01" className="admin-input channel-platform-input" value={row.platformSettlementAmount} onChange={(e) => handleLineChange(index, 'platformSettlementAmount', e.target.value)} placeholder="平台账单金额" /></td>
                   <td className={`channel-line-diff is-${details.validationStatus}`}>{details.settlementDifference == null ? '-' : `${details.settlementDifference >= 0 ? '+' : ''}${formatMoney(details.settlementDifference)}`}</td>
-                  <td><span className={`channel-validation-badge is-${details.validationStatus}`}>{validationText(details.validationStatus)}</span></td>
+                  <td><span className={`channel-validation-badge is-${details.validationStatus}`}>{incomplete233 ? '资料待补' : validationText(details.validationStatus)}</span></td>
                   <td><button type="button" className="rec-btn rec-btn--ghost rec-btn--small" onClick={addLine}>+</button><button type="button" className="rec-btn rec-btn--ghost rec-btn--small" onClick={() => removeLine(index)} disabled={lines.length <= 1}>-</button></td>
                 </tr>
               )
@@ -1001,8 +1031,8 @@ function ChannelBillingForm({
       <div className="channel-form-section">
         <div className="form-section-title">3）汇总</div>
         <div className="channel-line-items-summary channel-line-items-summary--channel">
-          <div className="summary-item summary-item--accent"><div className="label">原始后台流水</div><div className="value">{formatMoney(totals.rawFlow)}</div></div>
-          <div className="summary-item summary-item--accent"><div className="label">折算后总流水</div><div className="value">{formatMoney(totals.effectiveFlow)}</div></div>
+          <div className="summary-item summary-item--accent"><div className="label">原始后台流水</div><div className="value">{incomplete233 ? '待补' : formatMoney(totals.rawFlow)}</div></div>
+          <div className="summary-item summary-item--accent"><div className="label">折算后总流水</div><div className="value">{incomplete233 ? '待补' : formatMoney(totals.effectiveFlow)}</div></div>
           <div className="summary-item"><div className="label">总代金券</div><div className="value">{formatMoney(totals.voucher)}</div></div>
           <div className="summary-item"><div className="label">总退款</div><div className="value">{formatMoney(totals.refund)}</div></div>
           <div className="summary-item summary-item--hero"><div className="label">{adjustmentActive ? '最终应收' : '实际结算金额'}</div><div className="value">{formatMoney(totals.settlement)}</div></div>
@@ -1116,10 +1146,10 @@ function ChannelBillingForm({
           ) : null}
         </div>
         <div className="channel-rule-summary">
-          <div><span>系统计算合计</span><strong>{formatMoney(totals.system)}</strong></div>
+          <div><span>系统计算合计</span><strong>{incomplete233 ? '待补' : formatMoney(totals.system)}</strong></div>
           <div><span>平台结算合计</span><strong>{totals.platform == null ? '未录入' : formatMoney(totals.platform)}</strong></div>
           <div className={validationTone}><span>系统 - 平台（仅用于核对）</span><strong>{totals.difference == null ? '-' : `${totals.difference >= 0 ? '+' : ''}${formatMoney(totals.difference)}`}</strong></div>
-          <div className={validationTone}><span>校验状态</span><strong>{validationText(totals.validationStatus)}</strong></div>
+          <div className={validationTone}><span>校验状态</span><strong>{incomplete233 ? '资料待补' : validationText(totals.validationStatus)}</strong></div>
           <div><span>允许误差</span><strong>±{formatMoney(header.validationTolerance)}</strong></div>
         </div>
       </div>

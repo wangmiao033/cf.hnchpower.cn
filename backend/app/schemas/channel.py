@@ -179,6 +179,8 @@ class ChannelRecordCreate(BaseModel):
 
 
 class ChannelRecordUpdate(BaseModel):
+    # Explicit transport-only acknowledgement; saved rule is the missing-data marker.
+    complete_incomplete_draft: bool = False
     audit_reason: str | None = Field(default=None, max_length=2000)
     # Optional optimistic concurrency token supplied by the edit page.
     expected_updated_at: datetime | None = None

@@ -1,3 +1,4 @@
+import { is233UnknownField } from '@/domain/channel/channel233Incomplete.js'
 import BillActorSummary from '@/components/reconciliation/BillActorSummary.jsx'
 import React, { useEffect, useState } from 'react'
 import { apiChannelRowToFrontend, getChannelRecord } from '@/lib/api/channel.ts'
@@ -51,6 +52,7 @@ const BRIEF_COLUMNS = [
 ]
 
 const VALIDATION_LABELS = {
+  incomplete: '资料待补',
   pass: '一致',
   fail: '存在差异',
   partial: '部分校验',
@@ -211,7 +213,7 @@ export default function ChannelBillReadonlyView({ recordId, fallbackRecord }) {
                 <tr key={line.id || index}>
                   {BRIEF_COLUMNS.map(([label, key, format]) => (
                     <td key={key} className={format === 'money' || format === 'percent' ? 'is-numeric' : ''}>
-                      {display(key === 'channelFeeRate' ? line.channelFeeRate ?? snapshot.channelFeeRate : line[key], format)}
+                      {is233UnknownField(line, key, snapshot) ? '待补' : display(key === 'channelFeeRate' ? line.channelFeeRate ?? snapshot.channelFeeRate : line[key], format)}
                     </td>
                   ))}
                 </tr>
@@ -247,7 +249,7 @@ export default function ChannelBillReadonlyView({ recordId, fallbackRecord }) {
                     <tr key={line.id || index}>
                       {LINE_COLUMNS.map(([label, key, format]) => (
                         <td key={key} className={format === 'money' || format === 'percent' || format === 'number' ? 'is-numeric' : ''}>
-                          {display(line[key], format)}
+                          {is233UnknownField(line, key, snapshot) ? '待补' : display(line[key], format)}
                         </td>
                       ))}
                     </tr>
@@ -303,7 +305,7 @@ export default function ChannelBillReadonlyView({ recordId, fallbackRecord }) {
         <dl className="channel-readonly-metrics">
           {MONEY_FIELDS.map(([label, field]) => (
             <div key={field} className={field === 'settlementAmount' ? 'channel-readonly-metric is-primary' : 'channel-readonly-metric'}>
-              <dt>{label}</dt><dd>{display(snapshot[field], 'money')}</dd>
+              <dt>{label}</dt><dd>{is233UnknownField(snapshot, field) ? '待补' : display(snapshot[field], 'money')}</dd>
             </div>
           ))}
         </dl>

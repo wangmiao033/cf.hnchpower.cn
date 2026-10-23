@@ -32,6 +32,7 @@ from app.schemas.channel import (
     ChannelRecordRead,
     ChannelRecordUpdate,
 )
+from app.services.channel_233_incomplete import incomplete, validate_write as validate_233_write, prepare_update as prepare_233_update
 from app.services.channel_cumulative_batch import refresh_batches_for_bill
 from app.services.channel_cumulative_invoice import assert_single_bill_collection_allowed
 from app.services.channel_settlement_engine import apply_bill_adjustment, aggregate_validation, calculate_channel_line, voucher_cost_for_storage
@@ -80,6 +81,9 @@ def _recompute_receipt_rollup(db: Session, row: ChannelRecord) -> None:
         select(func.coalesce(func.sum(ChannelReceipt.amount), 0)).where(ChannelReceipt.channel_record_id == row.id)
     ).scalar_one()
     row.received_amount = float(total_raw or 0)
+    if incomplete(row):
+        row.receipt_status = "unpaid"
+        return
     receivable = max(0.0, float(row.settlement_amount or 0))
     recv = row.received_amount
     if receivable <= RECEIPT_EPS:
@@ -525,6 +529,7 @@ def create_channel_record(payload: ChannelRecordCreate, db: Session = Depends(ge
     )
     if not payload.items: raise HTTPException(status_code=422, detail={"error": "items_required", "message": "至少录入一行游戏明细"})
     row = ChannelRecord(id=str(uuid4()), **payload.model_dump(exclude={"items"}))
+    validate_233_write(db, row, payload.items)
     validate_samsung_write(db, row, payload.items)
     desired, previous = prepare_channel_contract_bindings(db, row, payload.items, [], preserve_ids=False)
     db.add(row); db.flush()
@@ -546,7 +551,7 @@ def update_channel_record(record_id: str, payload: ChannelRecordUpdate, db: Sess
     if row is None: raise HTTPException(status_code=404, detail={"error": "not_found", "id": record_id})
     # Check the current DB status and editor revision while holding the row lock.
     # Do not touch ORM fields or child lines before this unified check succeeds.
-    incoming = payload.model_dump(exclude_unset=True)
+    incoming = prepare_233_update(db, row, payload.model_dump(exclude_unset=True))
     if getattr(row, "settlement_rule_code", None) == "samsung_statement_fee":
         saved_rule_lines = db.execute(select(ChannelRecordLineItem).where(
             ChannelRecordLineItem.channel_record_id == record_id)).scalars().all()

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { is233Incomplete, INCOMPLETE_233_BLOCK } from '@/domain/channel/channel233Incomplete.js'
 import { useAppState } from '@/app/AppStateContext.jsx'
 import PageContainer from '@/components/layout/PageContainer.jsx'
 import BillScanAttachments from '@/components/billing/BillScanAttachments.jsx'
@@ -108,6 +109,7 @@ function hasChannelFeeConfiguration(record) {
 }
 
 function reviewValidation(record) {
+  if (is233Incomplete(record) || record?.completeIncompleteDraft) return INCOMPLETE_233_BLOCK
   if (!String(record?.partnerName || record?.channelName || '').trim()) return '请先选择合作方。'
   if (!String(record?.settlementMonth || '').trim()) return '请先选择账单月份。'
   const items = Array.isArray(record?.items) ? record.items : []

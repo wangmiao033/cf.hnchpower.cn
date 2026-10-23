@@ -49,6 +49,8 @@ def _deferred_message(condition: dict, *, action: str) -> str:
 
 
 def assert_single_bill_invoice_allowed(db: Session, bill: ChannelRecord) -> None:
+    from app.services.channel_233_incomplete import assert_complete
+    assert_complete(bill)
     condition = bill_condition(db, bill)
     state = str(condition.get("state") or "normal")
     if condition.get("deferred"):
@@ -71,6 +73,8 @@ def assert_single_bill_invoice_allowed(db: Session, bill: ChannelRecord) -> None
 
 
 def assert_single_bill_collection_allowed(db: Session, bill: ChannelRecord) -> None:
+    from app.services.channel_233_incomplete import assert_complete
+    assert_complete(bill)
     condition = bill_condition(db, bill)
     if not condition.get("deferred"):
         return
