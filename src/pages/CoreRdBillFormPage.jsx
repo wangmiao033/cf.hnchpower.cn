@@ -64,6 +64,7 @@ function CoreRdBillFormPage({ mode }) {
   const [auditReason, setAuditReason] = useState('')
   useEffect(() => setAuditReason(''), [reconEditRecordId, mode])
   const [previewAmount, setPreviewAmount] = useState(0)
+  const [previewDetail, setPreviewDetail] = useState(null)
   const [remoteRecord, setRemoteRecord] = useState(null)
   const [loading, setLoading] = useState(isEdit)
   const [loadError, setLoadError] = useState('')
@@ -205,8 +206,12 @@ function CoreRdBillFormPage({ mode }) {
       showToast(validationMessage, 'error')
       return
     }
+    const deduction = Number(previewDetail?.deduction || 0)
+    const amountText = deduction > 0.009
+      ? `研发应结：${money(previewDetail.settlement)}\n预付款抵扣：${money(deduction)}\n实际应付：${money(previewDetail.actualPayable)}`
+      : `结算金额：${money(candidate?.settlementAmount || previewAmount)}`
     const confirmed = window.confirm(
-      `确认核对这张研发账单吗？\n\n结算金额：${money(candidate?.settlementAmount || previewAmount)}\n\n系统将先保存账单，再执行确认核对；若发现明确的合同差异，会提示处理后再确认。`
+      `确认核对这张研发账单吗？\n\n${amountText}\n\n系统将先保存账单，再执行确认核对；若发现明确的合同差异，会提示处理后再确认。`
     )
     if (!confirmed) return
 
@@ -312,8 +317,11 @@ function CoreRdBillFormPage({ mode }) {
           </div>
         </div>
         <div className="core-bill-form-total" aria-live="polite">
-          <span>当前账单结算</span>
-          <strong>{money(previewAmount)}</strong>
+          <span>{Number(previewDetail?.deduction || 0) > 0.009 ? '当前应付' : '当前账单结算'}</span>
+          <strong>{money(Number(previewDetail?.deduction || 0) > 0.009 ? previewDetail.actualPayable : previewAmount)}</strong>
+          {Number(previewDetail?.deduction || 0) > 0.009 ? (
+            <small className="core-bill-form-total__note">研发应结 {money(previewDetail.settlement)} · 预付款抵扣 {money(previewDetail.deduction)}</small>
+          ) : null}
         </div>
       </section>
 
@@ -338,7 +346,10 @@ function CoreRdBillFormPage({ mode }) {
           draftRecord={contractSmartRecord || (isEdit || !recon.quickFillData ? safety.draftRecord : null)}
           showSubmitButton={false}
           submitIntentRef={submitIntentRef}
-          onPreviewChange={setPreviewAmount}
+          onPreviewChange={(amount, detail) => {
+            setPreviewAmount(Number(amount) || 0)
+            setPreviewDetail(detail && typeof detail === 'object' ? detail : null)
+          }}
           onFormStateChange={handleRdFormStateChange}
           onSubmitted={handleSubmitted}
           onAddRecord={recon.addRecord}
@@ -394,8 +405,8 @@ function CoreRdBillFormPage({ mode }) {
 
       <section className="core-bill-footer">
         <div className="core-bill-footer-summary">
-          <span>当前结算</span>
-          <strong>{money(previewAmount)}</strong>
+          <span>{Number(previewDetail?.deduction || 0) > 0.009 ? '当前应付' : '当前结算'}</span>
+          <strong>{money(Number(previewDetail?.deduction || 0) > 0.009 ? previewDetail.actualPayable : previewAmount)}</strong>
         </div>
         <div className="core-bill-footer-actions">
           {safety.dirty ? (

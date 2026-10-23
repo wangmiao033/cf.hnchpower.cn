@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ReconciliationLineItemsForm from './ReconciliationLineItemsForm.jsx'
 import { calculateRdSettlementRow } from '@/domain/settlement/calculateSettlementAmount.js'
+import { allocateStatementPrepayment } from '@/domain/reconciliation/rdPrepaymentPreview.js'
 import { nextSettlementNumberForRecord } from '@/utils/settlementNumber.js'
 import { useAuth } from '@/features/auth/AuthContext.jsx'
 import { listContracts, updateContractAccessItem } from '@/lib/api/contract.ts'
@@ -313,6 +314,7 @@ export default function ContractDrivenRdEntry(props) {
         const rec = item?.recommended || {}
         return [item.line_index, {
           enabled: Boolean(rec.prepayment_enabled),
+          accessItemId: String(item?.match?.access_item_id || ''),
           agreedAmount: num(rec.prepayment_agreed_amount),
           usedAmount: num(rec.prepayment_used_amount),
           availableBefore: num(rec.prepayment_available_before),
@@ -323,8 +325,18 @@ export default function ContractDrivenRdEntry(props) {
       })
     )
   }, [recommendation, recommendationCurrent])
+  const statementAllocationsFor = useCallback((record) => {
+    if (record?.statementPrepaymentTouched !== true) return null
+    const rows = Array.isArray(record?.items) ? record.items : []
+    return allocateStatementPrepayment(
+      rows.map((line) => calculateRdSettlementRow(line, record?.channelFeeRate).settlementAmount),
+      record?.statementPrepaymentDeduction
+    )
+  }, [])
+
   const buildAuditMetadata = useCallback((record, activeRecommendation) => {
     const rows = Array.isArray(record?.items) ? record.items : []
+    const statementAllocations = statementAllocationsFor(record)
     return rows.map((line, index) => {
       const result = activeRecommendation?.lines?.find((item) => item.line_index === index)
       const match = result?.match
@@ -371,12 +383,26 @@ export default function ContractDrivenRdEntry(props) {
         prepayment_deduction: recommended?.prepayment_deduction ?? 0,
         prepayment_available_after: recommended?.prepayment_available_after ?? 0,
         actual_payable: recommended?.actual_payable ?? result?.contract_amount?.expected_amount ?? 0,
+        ...(statementAllocations ? { statement_prepayment_deduction: statementAllocations[index] ?? 0 } : {}),
         deviations,
         override_reason: String(overrideReasons[index] || '').trim(),
         recommendation_generated_at: activeRecommendation?.generated_at || null
       }
     })
-  }, [overrideReasons])
+  }, [overrideReasons, statementAllocationsFor])
+
+  const buildStatementPrepaymentMetadata = useCallback((record) => {
+    const rows = Array.isArray(record?.items) ? record.items : []
+    const allocations = statementAllocationsFor(record) || []
+    return rows.map((line, index) => ({
+      line_index: index,
+      game_name: String(line?.gameName || '').trim(),
+      settlement_cycle: String(line?.settlementCycle || record?.settlementMonth || '').trim(),
+      access_item_id: null,
+      binding_allowed: false,
+      statement_prepayment_deduction: allocations[index] ?? 0
+    }))
+  }, [statementAllocationsFor])
 
 
   const validateContractEntry = useCallback((record, activeRecommendation) => {
@@ -412,13 +438,20 @@ export default function ContractDrivenRdEntry(props) {
       settlementNumberFormat
     )
     const preparedRecord = { ...record, settlementNumber: statementNo }
-    if (activeRecommendation) {
+    const statementTouched = preparedRecord.statementPrepaymentTouched === true
+    if (activeRecommendation || statementTouched) {
       // Do not persist a stale contract match as evidence for newly edited bill data.
-      const metadata = buildAuditMetadata(preparedRecord, activeRecommendation)
+      const metadata = activeRecommendation
+        ? buildAuditMetadata(preparedRecord, activeRecommendation)
+        : buildStatementPrepaymentMetadata(preparedRecord)
       await prepareRdContractEntry({ statement_no: statementNo, metadata })
     }
-    return { preparedRecord, statementNo, hasContractRecommendation: Boolean(activeRecommendation) }
-  }, [buildAuditMetadata, existingRecords, recommendation, recommendationLoading, settlementNumberFormat, validateContractEntry])
+    return {
+      preparedRecord,
+      statementNo,
+      hasContractRecommendation: Boolean(activeRecommendation) || statementTouched
+    }
+  }, [buildAuditMetadata, buildStatementPrepaymentMetadata, existingRecords, recommendation, recommendationLoading, settlementNumberFormat, validateContractEntry])
 
   const handleAddRecord = useCallback(async (record) => {
     let prepared

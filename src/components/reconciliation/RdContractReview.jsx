@@ -36,6 +36,7 @@ export default function RdContractReview({ record, recommendation, current, load
                   <div><dt>{entry.comparable ? '合同应结' : '参考试算（未确认）'}</dt><dd>{rdMoney(entry.expected)}</dd></div>
                   <div><dt>合同分成</dt><dd>{rec?.share_ratio == null ? '待确认' : `${rec.share_ratio}%`}</dd></div>
                   <div><dt>合同税率 / 通道费 / 测试费</dt><dd>{rec?.tax_rate == null ? '未明确' : `${rec.tax_rate}%`} / {rec?.channel_fee_rate == null ? '未明确' : `${rec.channel_fee_rate}%`} / {rdMoney(rec?.test_fee)}</dd></div>
+                  {rec?.prepayment_enabled ? <div><dt>预付款</dt><dd>可用 {rdMoney(rec.prepayment_available_before)} · 本期抵扣 {rdMoney(rec.prepayment_deduction)} · 抵扣后应付 {rdMoney(rec.actual_payable)}</dd></div> : null}
                 </dl>
                 {rec?.settlement_basis ? <p>合同结算依据：{rec.settlement_basis}</p> : null}
                 {rec?.discount_policy === 'reference_only' ? <p>产品折扣仅作业务参考，合同按实付 / 实收结算。</p> : null}
