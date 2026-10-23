@@ -1,3 +1,13 @@
+## 2026-10-23 19:00（北京时间）｜龙威233资料未齐暂存正式发布
+- **类型 / 需求**：发布；仅龙威233原单缺原充值及分成时，允许显式保存真实平台结算为资料未齐账单，不伪造分成率。
+- **影响范围**：精确法人北京龙威互动科技有限公司、渠道龙威233并匹配唯一客户库记录。三星、大熊、其他渠道及既有历史账单不自动改变；本任务未操作生产财务数据、合同、收款或用户浏览器。
+- **关联代码**：[PR #299](https://github.com/wangmiao033/cf.hnchpower.cn/pull/299)，功能提交 [a6677e4](https://github.com/wangmiao033/cf.hnchpower.cn/commit/a6677e404465053a8a3893b84f7867fce960a543)，最终审阅 head `1c20523b4dc97ce6fce5e562d09159eaf305d74a`；正式应用提交 [e519122797ee0537bdb77cfddf2b2c34f8cdf81f](https://github.com/wangmiao033/cf.hnchpower.cn/commit/e519122797ee0537bdb77cfddf2b2c34f8cdf81f)。发布前已获得本次233单独上线许可。
+- **最终验证**：本地前端623项、后端425项、合同服务257项、全量浏览器125项、Python编译和生产构建均通过。覆盖未齐保存/重开/本地草稿恢复/重复月份拒绝/显式补齐、负数及零额、确认与收款/核销拦截、合同刷新保护及非233回归。[最终 PR CI 39942346327](https://github.com/wangmiao033/cf.hnchpower.cn/actions/runs/39942346327) 与 [main 质量门禁 39942892251](https://github.com/wangmiao033/cf.hnchpower.cn/actions/runs/39942892251) 全部成功；合成测试不代表真实原单已经录入或业务验收。
+- **生产部署**：[Production Deploy 39942892328](https://github.com/wangmiao033/cf.hnchpower.cn/actions/runs/39942892328) 成功；Vercel Production [dpl_B9LY4B7SMHuGyQLPjL6firYu2BPJ](https://vercel.com/wangmiao033s-projects/cf-hnchpower-cn/B9LY4B7SMHuGyQLPjL6firYu2BPJ) 于北京时间19:00:57为 READY。部署元数据SHA精确为上述应用提交，别名含正式域名 [cf.hnchpower.cn](https://cf.hnchpower.cn/)。
+- **健康与数据边界**：流水线和发布后独立只读复核首页、`/health`、`/health/db` 均为HTTP 200，数据库connected；仅该部署的error/fatal分组查询无记录。构建明确跳过数据库迁移，旧部署清理为DRY RUN，未执行数据写入或资源删除。
+- **实际业务待办**：选中指定客户后显式点击“启用233资料未齐暂存”，按真实月份及游戏平台结算保存，缺失计算字段显示待补，负结算保留；保持待核对、未收款，不进入已核对累计池，不能确认、锁定或核销。已有7月账单保留不重复录入；15个月真实录入和保存后回读由父任务另行执行。补齐须明确选择正常规则、真实计算输入和来源说明，保存后仍待核对。
+- **文档 / 回退边界**：本条仅补记发布证据，现有工作流忽略纯CHANGELOG推送，不触发再次部署。出现资料未齐标记后，旧引擎不能按未知值语义处理，修复应保留标记和保护；不得将占位值当成已核齐金额。
+
 ## 2026-10-23 18:48（北京时间）｜渠道账单：龙威233资料未齐暂存（待发布）
 - **类型**：新增（仅233内购，显式启用）
 - **修改目的**：原单只提供分成后流水和平台结算、缺原始充值及分成比例时，可以逐月保存真实平台应收，含负退款；不伪造合同分成。
