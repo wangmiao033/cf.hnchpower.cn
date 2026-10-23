@@ -4,6 +4,7 @@
 - **关联代码**：[PR #303](https://github.com/wangmiao033/cf.hnchpower.cn/pull/303)，审阅提交 `075f2404a7eab45ec9f293238cabf6d09133435a`；正式合并提交 [38a0a26](https://github.com/wangmiao033/cf.hnchpower.cn/commit/38a0a26d9c6ef80c45a4e3f1f134b18caf2f690c)。
 - **测试 / 发布流程**：[PR 质量门禁 39955826448](https://github.com/wangmiao033/cf.hnchpower.cn/actions/runs/39955826448) 全部通过：630项前端单测、132项浏览器回归、430项后端、257项合同测试、生产构建及Python编译。[生产发布流程 39957939309](https://github.com/wangmiao033/cf.hnchpower.cn/actions/runs/39957939309) 全部成功，含配置预检、合同AI回归及线上健康检查；未跳过检查。
 - **发布信息**：2026-10-23 21:04:06（UTC+8）Vercel Production `READY`，Deployment ID `dpl_5zTczQGbegP8f13dhKAYjetzvR9o`，对应上述合并提交。正式域名 https://cf.hnchpower.cn 已指向该部署；沿用现有发布流程，无数据库迁移或配置修改。
+- **合并后门禁**：[main质量门禁 39957939425](https://github.com/wangmiao033/cf.hnchpower.cn/actions/runs/39957939425) 对正式合并提交再次全部通过，含630项前端、132项浏览器、430项后端、257项合同测试及构建/编译。
 - **线上只读核验**：21:06起独立检查首页、`/health`、`/health/db`均为HTTP 200，数据库返回`connected`。正式首页引用的`CoreChannelReconciliationPage-gcwWFU6N.js`与`CoreChannelReconciliationPage-CY757MwV.css`均200；确认累计列、threshold/periodic显示分支、普通“/”、未知提示及`flex-shrink:0`布局规则已上线，JS哈希与本地验证构建一致。
 - **待验证 / 已知边界**：独立浏览器实际看到登录页，未持有生产登录会话，尚未完成登录后真实账单列表的新列、累计标记、普通“/”、条件换行和缩放视觉验收；本地合成截图不视为生产业务验收。Neon告警项目与cf生产连接的对应关系仍未证实，未绕过资源权限或升级付费。
 - **日志补记**：本条为CHANGELOG单文件发布记录；仓库生产工作流以`paths-ignore`排除此文件，避免再次部署。原工作区7个无关构建生成差异保留，不纳入发布提交。
