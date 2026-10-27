@@ -1,3 +1,13 @@
+## 2026-10-27 12:25（北京时间）｜研发账单：显式零收入明细修复正式发布
+- **类型 / 问题**：修复发布；原研发表单拒绝零流水，现可将明确填写 0 的游戏保存为正式月度明细，不再只能写入备注。
+- **变更 / 影响范围**：零收入明细在保存回读、月份列表、Excel 导出和对账进度中保留；空白、遗漏、负数和非法收入继续拒绝。分成、折扣、通道费、税费公式及确认核对/付款/安全权限保持原有规则；不迁移数据库，不改写已付历史账单。
+- **关联提交**：[PR #305](https://github.com/wangmiao033/cf.hnchpower.cn/pull/305)，功能 head [da2241c](https://github.com/wangmiao033/cf.hnchpower.cn/commit/da2241cd90aa4eb1427cb38af1cdb0198eb8b8cf)，生产合并 SHA [de2941e672911825618fd4de732e61cfbd0d3b5a](https://github.com/wangmiao033/cf.hnchpower.cn/commit/de2941e672911825618fd4de732e61cfbd0d3b5a)。合并前重新读取 main 确认无并行新增提交；合并树与已通过 PR CI 的功能树完全相同。
+- **测试 / 发布门禁**：[PR 完整质量工作流 40449272742](https://github.com/wangmiao033/cf.hnchpower.cn/actions/runs/40449272742) 全绿后才合并：656 项前端、134 项浏览器、435 项后端、257 项合同服务、构建及 Python 编译全部通过。本地另通过 Contract AI 10 项。[生产工作流 40449523568](https://github.com/wangmiao033/cf.hnchpower.cn/actions/runs/40449523568) 全部成功，含配置预检、Contract AI 专项、前后端测试/构建和线上健康检查，未绕过任何失败检查。
+- **部署信息**：2026-10-27 12:25:59（UTC+8），Vercel Production [dpl_E9aPjDDDJ7bVRshBEtkU1kiSSFNs](https://vercel.com/wangmiao033s-projects/cf-hnchpower-cn/E9aPjDDDJ7bVRshBEtkU1kiSSFNs) 为 `READY`；部署元数据 SHA 精确为上述生产提交，正式域名 [cf.hnchpower.cn](https://cf.hnchpower.cn/) 已指向此部署，aliasError 为空。前后端随既有单一发布工作流一起发布；部署未执行数据库迁移，旧部署清理仅为 DRY RUN。
+- **上线只读核验**：12:26 首页、`/health`、`/health/db` 均为 HTTP 200，数据库返回 `connected`。部署 READY 至 12:26:37 的 error/fatal 日志查询无记录；该短窗口不替代后续业务验收。
+- **验收 / 回退边界**：本修复任务未操作生产账单；真实零收入明细补录由业务操作任务通过正规 UI 执行，须回读确认行数、原合计、待核对和未付款状态，不确认锁定、不付款。发布前已核实原生产部署 `dpl_5zTczQGbegP8f13dhKAYjetzvR9o`（应用 SHA `38a0a26d9c6ef80c45a4e3f1f134b18caf2f690c`）为 READY；如需回退应先重新确认该部署仍存在，应用回退不回写账单数据。
+- **日志回填**：本条为 CHANGELOG 单文件发布记录；既有生产工作流明确忽略此类提交，不触发再次部署。本地首轮浏览器 133/134 的既有页面等待超时及全量复跑结果保留于下一条，不抹去失败历史。
+
 ## 2026-10-27 12:08（北京时间）｜研发账单：允许显式零收入明细保存（待发布）
 - **类型 / 问题**：修复；研发表单拒绝零流水，导致当月无收入游戏只能写备注，不能作为正式明细展示。
 - **变更内容**：游戏明细明确填写合法非负数字即可保存，支持 0；新建行及合同加入游戏保持空白等待输入。空值、缺失值、负数、非数字和非有限值不得隐式转成 0。草稿比较区分空白与零，未使用的空行不提交。
