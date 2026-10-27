@@ -9,11 +9,11 @@ from app.schemas.reconciliation import ReconciliationCreate, ReconciliationLineI
 class BillInputBoundsTest(unittest.TestCase):
     def test_rd_line_percentage_bounds(self):
         with self.assertRaises(ValidationError):
-            ReconciliationLineItemIn(game_name="测试", discount_rate=1.01)
+            ReconciliationLineItemIn(game_name="测试", revenue=1, discount_rate=1.01)
         with self.assertRaises(ValidationError):
-            ReconciliationLineItemIn(game_name="测试", share_ratio=100.01)
+            ReconciliationLineItemIn(game_name="测试", revenue=1, share_ratio=100.01)
         with self.assertRaises(ValidationError):
-            ReconciliationLineItemIn(game_name="测试", tax_rate=-0.01)
+            ReconciliationLineItemIn(game_name="测试", revenue=1, tax_rate=-0.01)
 
     def test_rd_header_percentage_bounds(self):
         with self.assertRaises(ValidationError):

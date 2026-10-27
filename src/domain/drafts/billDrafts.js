@@ -11,7 +11,7 @@ function monthKey(value) {
 }
 
 function normalizeRdLine(line = {}) {
-  return { settlementCycle: text(line.settlementCycle), gameName: text(line.gameName), revenue: number(line.revenue), discountRate: number(line.discountRate, 1), couponAmount: number(line.couponAmount), testFee: number(line.testFee), extraFee: number(line.extraFee), shareRatio: number(line.shareRatio, 15), taxRate: number(line.taxRate), sortOrder: Number.isFinite(Number(line.sortOrder)) ? Number(line.sortOrder) : 0 }
+  return { settlementCycle: text(line.settlementCycle), gameName: text(line.gameName), revenue: text(line.revenue) === '' ? '' : number(line.revenue, text(line.revenue)), discountRate: number(line.discountRate, 1), couponAmount: number(line.couponAmount), testFee: number(line.testFee), extraFee: number(line.extraFee), shareRatio: number(line.shareRatio, 15), taxRate: number(line.taxRate), sortOrder: Number.isFinite(Number(line.sortOrder)) ? Number(line.sortOrder) : 0 }
 }
 
 function normalizeChannelLine(line = {}, parentMonth = '') {
@@ -37,7 +37,7 @@ export function normalizeChannelDraft(record = {}) {
 export function isMeaningfulRdDraft(record = {}) {
   const normalized = normalizeRdDraft(record)
   if (normalized.settlementNumber || normalized.partnerId || normalized.partner || normalized.memo || normalized.channelFeeRate !== 0) return true
-  return normalized.items.some((line) => line.gameName || line.revenue !== 0 || line.couponAmount !== 0 || line.testFee !== 0 || line.extraFee !== 0 || line.shareRatio !== 15 || line.taxRate !== 0 || line.discountRate !== 1)
+  return normalized.items.some((line) => line.gameName || (line.revenue !== '' && line.revenue !== 0) || line.couponAmount !== 0 || line.testFee !== 0 || line.extraFee !== 0 || line.shareRatio !== 15 || line.taxRate !== 0 || line.discountRate !== 1)
 }
 
 export function isMeaningfulChannelDraft(record = {}) {

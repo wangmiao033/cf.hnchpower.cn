@@ -25,6 +25,7 @@ import {
   normalizeRdDraft
 } from '@/domain/drafts/billDrafts.js'
 import { useBillFormSafety } from '@/hooks/useBillFormSafety.js'
+import { parseRdRevenue } from '@/domain/reconciliation/rdRevenue.js'
 import './CoreBillFormPages.css'
 import '@/components/reconciliation/reconciliation-admin.css'
 import '@/styles/SimplifiedBillReview.css'
@@ -41,7 +42,7 @@ function reviewValidation(record) {
   const items = Array.isArray(record?.items) ? record.items : []
   const validItems = items.filter((item) => String(item?.gameName || '').trim())
   if (!validItems.length) return '请至少填写一条游戏明细。'
-  if (validItems.some((item) => Number(item?.revenue || 0) <= 0)) return '游戏后台流水必须大于 0。'
+  if (validItems.some((item) => parseRdRevenue(item?.revenue) === null)) return '游戏后台流水须明确填写有效的非负数字（零收入请填 0）。'
   if (Number(record?.settlementAmount || 0) <= 0) return '结算金额必须大于 0 才能确认核对。'
   return ''
 }
