@@ -7,6 +7,7 @@ import {
   calculateRdSettlementRow
 } from '@/domain/settlement/calculateSettlementAmount.js'
 import { rdCompatibilitySettlementMonth } from '@/domain/reconciliation/rdSettlementPeriods.js'
+import { parseRdRevenue } from '@/domain/reconciliation/rdRevenue.js'
 import {
   dateToInputValue,
   inheritRdSettlementCycle,
@@ -27,7 +28,7 @@ export function createEmptyRdLine(sortOrder = 0, settlementCycle = '') {
     id: `new-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
     settlementCycle,
     gameName: '',
-    revenue: '0',
+    revenue: '',
     discountRate: '1',
     couponAmount: '0',
     testFee: '0',
@@ -50,7 +51,7 @@ function cloneItemsFromRecord(record) {
             ? String(record.settlementMonth)
             : '',
       gameName: line.gameName != null ? String(line.gameName) : '',
-      revenue: line.revenue != null ? String(line.revenue) : '0',
+      revenue: line.revenue != null ? String(line.revenue) : '',
       discountRate: line.discountRate != null ? String(line.discountRate) : '1',
       couponAmount: line.couponAmount != null ? String(line.couponAmount) : '0',
       testFee: line.testFee != null ? String(line.testFee) : '0',
@@ -365,10 +366,10 @@ function ReconciliationLineItemsForm({
       return '通道费率必须在0-100%之间'
     }
     const okLine = lines.some(
-      (l) => l.gameName && String(l.gameName).trim() && parseFloat(l.revenue || 0) > 0
+      (l) => l.gameName && String(l.gameName).trim()
     )
     if (!okLine) {
-      return '请至少为一行填写游戏名称，且后台流水大于 0'
+      return '请至少填写一条游戏明细'
     }
     for (const l of lines) {
       if (!l.gameName || !String(l.gameName).trim()) continue
@@ -376,9 +377,8 @@ function ReconciliationLineItemsForm({
       if (!cycle) {
         return `游戏「${l.gameName}」必须填写自己的结算周期`
       }
-      const r = parseFloat(l.revenue || 0)
-      if (Number.isNaN(r) || r <= 0) {
-        return `游戏「${l.gameName}」的后台流水须大于 0`
+      if (parseRdRevenue(l.revenue) === null) {
+        return `游戏「${l.gameName}」的后台流水须明确填写有效的非负数字（零收入请填 0）`
       }
       const sr = parseFloat(l.shareRatio || 0)
       if (Number.isNaN(sr) || sr < 0 || sr > 100) {
@@ -404,6 +404,8 @@ function ReconciliationLineItemsForm({
       return
     }
     const merged = mergedRecordForSubmit()
+    // Unused rows are placeholders; a named zero-income row is a real detail.
+    merged.items = merged.items.filter((line) => String(line.gameName || '').trim())
 
     if (mode === 'edit' && editRecord && onUpdateRecord) {
       const result = onUpdateRecord(editRecord.id, { ...editRecord, ...merged, id: editRecord.id })
@@ -832,6 +834,7 @@ function ReconciliationLineItemsForm({
                       <input
                         type="number"
                         step="0.01"
+                        placeholder="零收入请填 0"
                         aria-label={`第 ${index + 1} 行后台流水`}
                         className="admin-input channel-input-num"
                         value={line.revenue}

@@ -332,7 +332,7 @@ export default function RdContractSmartEntry({
       id: `contract-${Date.now()}`,
       settlementCycle: cycle,
       gameName: text(pair.accessItem.product_name),
-      revenue: '0',
+      revenue: '',
       discountRate: '1',
       couponAmount: '0',
       testFee: '0',

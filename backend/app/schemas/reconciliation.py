@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.schemas.bank_transaction import BankTransactionRead
 
@@ -14,7 +14,7 @@ class ReconciliationLineItemIn(BaseModel):
 
     settlement_cycle: str | None = None
     game_name: str | None = None
-    revenue: float = Field(default=0, ge=0)
+    revenue: float = Field(ge=0, allow_inf_nan=False)
     discount_rate: float = Field(default=1, ge=0, le=1)
     coupon_amount: float = 0
     test_fee: float = 0
@@ -22,6 +22,13 @@ class ReconciliationLineItemIn(BaseModel):
     share_ratio: float = Field(default=0, ge=0, le=100)
     tax_rate: float = Field(default=0, ge=0, le=100)
     sort_order: int = 0
+
+    @field_validator("revenue", mode="before")
+    @classmethod
+    def require_explicit_revenue(cls, value):
+        if isinstance(value, bool):
+            raise ValueError("后台流水须明确填写非负数字，零收入请填 0")
+        return value
 
 
 class ReconciliationLineItemRead(BaseModel):

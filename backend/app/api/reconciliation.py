@@ -82,8 +82,7 @@ def _resolve_record_settlement_month(payload_month: str | None, items_in: list[R
     cycles: list[str] = []
     for item in items_in:
         game_name = str(item.game_name or "").strip()
-        revenue = float(item.revenue or 0)
-        if not game_name or revenue <= 0:
+        if not game_name:
             continue
         cycle = _normalize_settlement_cycle(item.settlement_cycle or normalized_payload)
         if cycle:
@@ -100,8 +99,7 @@ def _resolve_row_display_settlement_month(row: ReconciliationRecord) -> str | No
     cycles: list[str] = []
     for item in row.line_items:
         game_name = str(item.game_name or "").strip()
-        revenue = float(item.revenue or 0)
-        if not game_name or revenue <= 0:
+        if not game_name:
             continue
         cycle = _normalize_settlement_cycle(item.settlement_cycle or normalized_payload)
         if cycle:

@@ -1,3 +1,5 @@
+import { parseRdRevenue } from './rdRevenue.js'
+
 const RECONCILED_STATUSES = new Set([
   'confirmed',
   'completed',
@@ -68,9 +70,18 @@ function paymentComplete(record, settlementAmount) {
   )
 }
 
-function unresolvedReason(record, flow, partner, reconciled) {
+function hasRecordedFlow(record) {
+  const items = Array.isArray(record?.items) ? record.items : []
+  if (items.length) {
+    const named = items.filter((item) => cleanText(item?.gameName))
+    return named.length > 0 && named.every((item) => parseRdRevenue(item?.revenue) !== null)
+  }
+  return parseRdRevenue(record?.gameFlow) !== null
+}
+
+function unresolvedReason(record, hasFlow, partner, reconciled) {
   const reasons = []
-  if (flow <= 0) reasons.push('缺少流水')
+  if (!hasFlow) reasons.push('缺少流水')
   if (partner === '未关联客户') reasons.push('未关联客户')
   if (!reconciled) reasons.push('待核对')
   return reasons.join('、') || '待完善'
@@ -87,6 +98,7 @@ export function summarizeRdReconciliationProgress(records, options = {}) {
     const settlementAmount = recordSettlement(record, resolver)
     const settlementWeight = Math.abs(settlementAmount)
     const flow = recordFlow(record)
+    const hasFlow = hasRecordedFlow(record)
     const partner = recordPartner(record)
     const reconciled = RECONCILED_STATUSES.has(status)
     const settled = SETTLED_STATUSES.has(status)
@@ -108,8 +120,8 @@ export function summarizeRdReconciliationProgress(records, options = {}) {
       reconciled,
       settled,
       paid,
-      hasFlow: flow > 0,
-      reason: unresolvedReason(record, flow, partner, reconciled)
+      hasFlow,
+      reason: unresolvedReason(record, hasFlow, partner, reconciled)
     }
   })
 

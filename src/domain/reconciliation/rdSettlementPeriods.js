@@ -1,4 +1,5 @@
 import { calculateRdSettlementRow } from '@/domain/settlement/calculateSettlementAmount.js'
+import { parseRdRevenue } from './rdRevenue.js'
 
 function clean(value) {
   return value == null ? '' : String(value).trim()
@@ -155,7 +156,7 @@ export function buildRdMonthlyProgressRecords(records, period) {
 export function rdCompatibilitySettlementMonth(items, fallback = '') {
   const periods = uniqueRdSettlementPeriods(
     (items || [])
-      .filter((item) => clean(item?.gameName) && number(item?.revenue) > 0)
+      .filter((item) => clean(item?.gameName) && parseRdRevenue(item?.revenue) !== null)
       .map((item) => item?.settlementCycle || fallback)
   )
   return periods[0] || normalizeRdSettlementPeriod(fallback)

@@ -1,6 +1,7 @@
 /**
  * 研发对账 REST API
  */
+import { requireRdRevenue } from '@/domain/reconciliation/rdRevenue.js'
 
 import {
   apiDelete,
@@ -335,7 +336,7 @@ function apiLineToFrontend(line: ApiReconciliationLineItemRow, parentSettlementM
         ? String(line.settlement_cycle)
         : parentSettlementMonth || '',
     gameName: line.game_name != null ? String(line.game_name) : '',
-    revenue: String(line.revenue ?? 0),
+    revenue: line.revenue == null ? '' : String(line.revenue),
     discountRate: String(line.discount_rate ?? 1),
     netRevenue: Number(line.net_revenue ?? 0),
     couponAmount: String(line.coupon_amount ?? 0),
@@ -355,7 +356,7 @@ function legacyItemsFromApiRow(row: ApiReconciliationRow) {
       id: `legacy-${row.id}`,
       settlementCycle: row.settlement_month ?? '',
       gameName: row.game_name != null ? String(row.game_name) : '',
-      revenue: String(row.game_flow ?? 0),
+      revenue: row.game_flow == null ? '' : String(row.game_flow),
       discountRate: String(row.discount_value ?? 1),
       netRevenue: Number(row.game_flow ?? 0) * Number(row.discount_value ?? 1),
       couponAmount: String(row.voucher_cost ?? 0),
@@ -443,7 +444,7 @@ export function frontendRecordToApiPayload(
             line.gameName != null && String(line.gameName).trim() !== ''
               ? String(line.gameName).trim()
               : null,
-          revenue: finiteNumber(line.revenue),
+          revenue: requireRdRevenue(line.revenue),
           discount_rate: finiteNumber(line.discountRate, 1),
           coupon_amount: finiteNumber(line.couponAmount),
           test_fee: finiteNumber(line.testFee),
