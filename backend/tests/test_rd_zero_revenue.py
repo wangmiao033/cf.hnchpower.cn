@@ -26,6 +26,23 @@ class RdZeroRevenueTest(unittest.TestCase):
         for value in (0, '0', '0.00', 100):
             self.assertEqual(ReconciliationLineItemIn(revenue=value).revenue, float(value))
 
+    def test_create_and_update_distinguish_missing_detail_revenue_from_zero(self):
+        for schema in (ReconciliationCreate, ReconciliationUpdate):
+            with self.subTest(schema=schema.__name__):
+                with self.assertRaises(ValidationError) as missing:
+                    schema(items=[{'game_name': '合成游戏'}])
+                self.assertEqual(missing.exception.errors()[0]['loc'], ('items', 0, 'revenue'))
+                for revenue in (0, '0', 123.45):
+                    payload = schema(items=[{'game_name': '合成游戏', 'revenue': revenue}])
+                    self.assertEqual(payload.items[0].revenue, float(revenue))
+
+    def test_legacy_header_import_and_partial_updates_do_not_require_items(self):
+        legacy = ReconciliationCreate(game_name='旧正数游戏', game_flow=100, settlement_amount=20)
+        self.assertIsNone(legacy.items)
+        self.assertEqual(legacy.game_flow, 100)
+        self.assertEqual(ReconciliationUpdate(remark='补充备注').model_dump(exclude_unset=True), {'remark': '补充备注'})
+        self.assertEqual(ReconciliationUpdate(game_flow=100).model_dump(exclude_unset=True), {'game_flow': 100})
+
     def test_mixed_details_survive_create_update_reload_and_period_list_without_duplicates(self):
         engine = create_engine('sqlite+pysqlite:///:memory:')
         ReconciliationRecord.__table__.create(engine)

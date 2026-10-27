@@ -50,4 +50,20 @@ describe('explicit zero RD revenue', () => {
     expect(areNormalizedDraftsEqual(draft('0.00'), draft(0), normalizeRdDraft)).toBe(true)
     expect(isMeaningfulRdDraft({ items: [{ revenue: '', shareRatio: 15, discountRate: 1 }] })).toBe(false)
   })
+  it('keeps legacy positive header-only imports and server-restored edits compatible', () => {
+    const imported = { game: '旧正数游戏', gameFlow: '100', settlementAmount: '20', revenueShareRatio: '20' }
+    const payload = frontendRecordToApiPayload(imported)
+    expect(payload).toMatchObject({ game_name: '旧正数游戏', game_flow: 100, settlement_amount: 20 })
+    expect(payload).not.toHaveProperty('items')
+    const restored = apiRowToFrontend({ ...payload, id: 'legacy-positive' })
+    expect(frontendRecordToApiPayload(restored).items[0].revenue).toBe(100)
+    expect(frontendRecordToApiPayload({ ...restored, memo: '补充备注' }).items[0].revenue).toBe(100)
+  })
+  it('does not turn omitted or null detail revenue from the server into zero', () => {
+    for (const revenue of [undefined, null]) {
+      const restored = apiRowToFrontend({ id: 'invalid-detail', items: [{ game_name: '待补游戏', revenue }] })
+      expect(restored.items[0].revenue).toBe('')
+      expect(() => frontendRecordToApiPayload(restored)).toThrow('后台流水')
+    }
+  })
 })
