@@ -21,7 +21,10 @@ from fastapi.responses import Response, StreamingResponse
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
-from neon_database_url import ProductionDatabaseGuardError, resolve_runtime_database_url
+try:
+    from .neon_database_url import ProductionDatabaseGuardError, resolve_runtime_database_url
+except ImportError:  # Vercel service root loads main.py as a top-level module.
+    from neon_database_url import ProductionDatabaseGuardError, resolve_runtime_database_url
 
 app = FastAPI(title="caiwu-data-service", docs_url=None, redoc_url=None)
 

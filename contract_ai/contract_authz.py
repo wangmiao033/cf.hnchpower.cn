@@ -10,7 +10,10 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 from psycopg.rows import dict_row
 
-from neon_database_url import ProductionDatabaseGuardError, resolve_runtime_database_url
+try:
+    from .neon_database_url import ProductionDatabaseGuardError, resolve_runtime_database_url
+except ImportError:  # Vercel service root loads this module by filename.
+    from neon_database_url import ProductionDatabaseGuardError, resolve_runtime_database_url
 
 AUTH_JWT_SECRET = os.environ.get("AUTH_JWT_SECRET", "").strip()
 UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}

@@ -12,7 +12,10 @@ from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import Response
 from psycopg.rows import dict_row
 
-from neon_database_url import ProductionDatabaseGuardError, resolve_runtime_database_url
+try:
+    from .neon_database_url import ProductionDatabaseGuardError, resolve_runtime_database_url
+except ImportError:  # Vercel service root loads main.py as a top-level module.
+    from neon_database_url import ProductionDatabaseGuardError, resolve_runtime_database_url
 
 app = FastAPI(title="contract-structured-terms", docs_url=None, redoc_url=None)
 AUTH_JWT_SECRET = os.environ.get("AUTH_JWT_SECRET", "").strip()
