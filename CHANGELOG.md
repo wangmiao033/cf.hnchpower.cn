@@ -3,7 +3,7 @@
 - **问题或需求**：质量门禁的后端测试使用 `PYTHONPATH=backend:.`。合同条款被当成包导入时，`contract_terms/main.py` 用顶层名字 `neon_database_url` 找模块，仓库根目录没有这个文件，导入失败。相对导入失败后回退到 `backend/main.py`，合同结算回归因此没有执行。
 - **变更内容**：合同条款、数据服务和合同识别在作为包导入时使用同目录的 `neon_database_url`；Vercel 仍按服务根目录做顶层导入。连接池、预览拦截和窄列读取不变。
 - **影响范围**：仅模块导入。结算公式、确认锁定、收付款和累计门槛不变。
-- **代码提交**：见分支 `cursor/neon-egress-read-limits-2e36` 的本次修复提交。
+- **代码提交**：[8e6c17b0](https://github.com/wangmiao033/cf.hnchpower.cn/commit/8e6c17b0)，PR [#307](https://github.com/wangmiao033/cf.hnchpower.cn/pull/307)。
 - **测试/验证**：`PYTHONPATH=backend:. python -m unittest discover -s backend/tests -p 'test_*.py'` 446 项通过。`PYTHONPATH=contract_terms:. python -m unittest discover -s contract_terms/tests -p 'test_*.py'` 257 项通过。未连接生产库，未部署。
 - **发布环境与部署状态**：未部署。Vercel Deployment ID 不适用。
 - **待验证/已知问题**：质量门禁需在本 PR 上重新跑过。未合并。
