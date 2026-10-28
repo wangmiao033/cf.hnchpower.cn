@@ -10,7 +10,7 @@ from collections import defaultdict
 from datetime import datetime, timezone
 
 from sqlalchemy import func, select, text
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, load_only
 
 from app.models.bank_reconciliation_match import BankReconciliationMatch
 from app.models.bank_transaction import BankTransaction
@@ -126,8 +126,28 @@ def _summarize(items: list[dict], bills_scanned: int, allocations_scanned: int, 
 
 def build_data_consistency_audit(db: Session, *, limit: int = 500, include_payroll: bool = False) -> dict:
     """Return cross-module consistency issues without mutating any source fact."""
-    rd_rows = list(db.execute(select(ReconciliationRecord)).scalars().all())
-    channel_rows = list(db.execute(select(ChannelRecord)).scalars().all())
+    rd_rows = list(db.execute(
+        select(ReconciliationRecord).options(load_only(
+            ReconciliationRecord.id,
+            ReconciliationRecord.status,
+            ReconciliationRecord.statement_no,
+            ReconciliationRecord.partner_name,
+            ReconciliationRecord.settlement_month,
+            ReconciliationRecord.settlement_amount,
+        ))
+    ).scalars().all())
+    channel_rows = list(db.execute(
+        select(ChannelRecord).options(load_only(
+            ChannelRecord.id,
+            ChannelRecord.status,
+            ChannelRecord.statement_no,
+            ChannelRecord.partner_name,
+            ChannelRecord.channel_name,
+            ChannelRecord.settlement_month,
+            ChannelRecord.settlement_amount,
+            ChannelRecord.received_amount,
+        ))
+    ).scalars().all())
     bills: dict[tuple[str, str], object] = {
         **{("rd", str(row.id)): row for row in rd_rows},
         **{("channel", str(row.id)): row for row in channel_rows},
@@ -153,7 +173,18 @@ def build_data_consistency_audit(db: Session, *, limit: int = 500, include_payro
     invoices = {
         str(row.id): row
         for row in (
-            db.execute(select(InvoiceRecord).where(InvoiceRecord.id.in_(invoice_ids))).scalars().all()
+            db.execute(
+                select(InvoiceRecord)
+                .options(load_only(
+                    InvoiceRecord.id,
+                    InvoiceRecord.amount_with_tax,
+                    InvoiceRecord.invoice_amount,
+                    InvoiceRecord.tax_amount,
+                    InvoiceRecord.tax_status,
+                    InvoiceRecord.status,
+                ))
+                .where(InvoiceRecord.id.in_(invoice_ids))
+            ).scalars().all()
             if invoice_ids else []
         )
     }
@@ -268,7 +299,16 @@ def build_data_consistency_audit(db: Session, *, limit: int = 500, include_payro
     transactions = {
         str(row.id): row
         for row in (
-            db.execute(select(BankTransaction).where(BankTransaction.id.in_(tx_ids))).scalars().all()
+            db.execute(
+                select(BankTransaction)
+                .options(load_only(
+                    BankTransaction.id,
+                    BankTransaction.income_amount,
+                    BankTransaction.expense_amount,
+                    BankTransaction.amount,
+                ))
+                .where(BankTransaction.id.in_(tx_ids))
+            ).scalars().all()
             if tx_ids else []
         )
     }

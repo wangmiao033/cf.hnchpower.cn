@@ -13,13 +13,17 @@ from fastapi import FastAPI, HTTPException, Request
 from psycopg.rows import dict_row
 
 try:
+    from .neon_database_url import ProductionDatabaseGuardError, resolve_runtime_database_url
+except ImportError:  # Vercel service root loads main.py as a top-level module.
+    from neon_database_url import ProductionDatabaseGuardError, resolve_runtime_database_url
+
+try:
     from .extraction import CONTRACT_SCAN_SCHEMA, SYSTEM_PROMPT, normalize_contract_scan_result, parse_model_json
 except ImportError:  # Vercel service root loads main.py as a top-level module.
     from extraction import CONTRACT_SCAN_SCHEMA, SYSTEM_PROMPT, normalize_contract_scan_result, parse_model_json
 
 app = FastAPI(title="contract-smart-intake", docs_url=None, redoc_url=None)
 
-DATABASE_URL = os.environ.get("QUICKSDK_DATABASE_URL", "").strip() or os.environ.get("DATABASE_URL", "").strip()
 AUTH_JWT_SECRET = os.environ.get("AUTH_JWT_SECRET", "").strip()
 AI_GATEWAY_API_KEY = os.environ.get("AI_GATEWAY_API_KEY", "").strip()
 CONTRACT_SCAN_MODEL = os.environ.get("CONTRACT_SCAN_MODEL", "openai/gpt-5.4-mini").strip() or "openai/gpt-5.4-mini"
@@ -36,9 +40,12 @@ ROLE_DEFAULT_CONTRACT_PERMISSIONS = {
 
 
 def _database_url() -> str:
-    if not DATABASE_URL:
-        raise HTTPException(status_code=503, detail="合同智能识别数据库连接尚未配置")
-    return DATABASE_URL
+    try:
+        return resolve_runtime_database_url()
+    except ProductionDatabaseGuardError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail="合同智能识别数据库连接尚未配置") from exc
 
 
 def _safe_filename(request: Request) -> str:

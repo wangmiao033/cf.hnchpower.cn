@@ -10,7 +10,8 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 from psycopg.rows import dict_row
 
-DATABASE_URL = os.environ.get("QUICKSDK_DATABASE_URL", "").strip() or os.environ.get("DATABASE_URL", "").strip()
+from neon_database_url import ProductionDatabaseGuardError, resolve_runtime_database_url
+
 AUTH_JWT_SECRET = os.environ.get("AUTH_JWT_SECRET", "").strip()
 UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 ROLE_ALIASES = {"user": "operator"}
@@ -30,9 +31,19 @@ def _error(status_code: int, detail: str, *, permission: str | None = None) -> J
     return JSONResponse(status_code=status_code, content=payload)
 
 
-def _resolve_permissions(request: Request) -> tuple[set[str] | None, JSONResponse | None]:
-    if not DATABASE_URL:
+def _runtime_database_url() -> tuple[str | None, JSONResponse | None]:
+    try:
+        return resolve_runtime_database_url(), None
+    except ProductionDatabaseGuardError as exc:
+        return None, _error(503, str(exc))
+    except RuntimeError:
         return None, _error(503, "合同权限服务数据库尚未配置")
+
+
+def _resolve_permissions(request: Request) -> tuple[set[str] | None, JSONResponse | None]:
+    database_url, database_error = _runtime_database_url()
+    if database_error is not None or not database_url:
+        return None, database_error or _error(503, "合同权限服务数据库尚未配置")
     token = request.cookies.get("caiwu_session", "").strip()
     if not token or not AUTH_JWT_SECRET:
         return None, _error(401, "请先登录")
@@ -48,7 +59,7 @@ def _resolve_permissions(request: Request) -> tuple[set[str] | None, JSONRespons
         return None, _error(401, "请先登录")
 
     try:
-        with psycopg.connect(DATABASE_URL, connect_timeout=15, row_factory=dict_row) as conn:
+        with psycopg.connect(database_url, connect_timeout=15, row_factory=dict_row) as conn:
             user = conn.execute(
                 """
                 SELECT auth_user.id, auth_user.role

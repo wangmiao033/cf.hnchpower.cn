@@ -31,10 +31,20 @@ def normalize_database_url(url: str) -> str:
 
 
 def get_database_url() -> str:
-    """Return the shared PostgreSQL URI used by both Vercel services."""
-    raw = os.environ.get("DATABASE_URL") or os.environ.get("QUICKSDK_DATABASE_URL")
-    if raw is None or not str(raw).strip():
-        raise RuntimeError(
-            "DATABASE_URL and QUICKSDK_DATABASE_URL are both missing or empty."
-        )
-    return normalize_database_url(str(raw))
+    """Return the shared PostgreSQL URI used by both Vercel services.
+
+    API runtimes use the Neon pooled host. Explicit migration jobs use the
+    direct host so DDL is not sent through the pooler.
+    """
+    from app.core.neon_database_url import (
+        migration_context_active,
+        resolve_migration_database_url,
+        resolve_runtime_database_url,
+    )
+
+    raw = (
+        resolve_migration_database_url()
+        if migration_context_active()
+        else resolve_runtime_database_url()
+    )
+    return normalize_database_url(raw)

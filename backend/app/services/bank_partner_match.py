@@ -8,7 +8,7 @@ import re
 from typing import Any
 
 from sqlalchemy import select, text
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, load_only
 
 from app.models.bank_transaction import BankTransaction
 from app.services.bank_auto_reconciliation import transaction_direction
@@ -349,6 +349,17 @@ def customer_match_center(db: Session) -> dict:
     resolver = BankPartnerResolver(db)
     rows = db.execute(
         select(BankTransaction)
+        .options(load_only(
+            BankTransaction.id,
+            BankTransaction.trade_date,
+            BankTransaction.income_amount,
+            BankTransaction.expense_amount,
+            BankTransaction.amount,
+            BankTransaction.payer_name,
+            BankTransaction.payer_account,
+            BankTransaction.payee_name,
+            BankTransaction.payee_account,
+        ))
         .where(BankTransaction.type == "statement_import")
         .order_by(BankTransaction.trade_date.desc().nullslast(), BankTransaction.created_at.desc())
     ).scalars().all()

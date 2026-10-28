@@ -9,7 +9,7 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import delete, func, or_, select
 from sqlalchemy.exc import IntegrityError, OperationalError, ProgrammingError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, load_only, selectinload
 
 from app.core.deps import get_db
 from app.models.bank_payment import BankPaymentRecord
@@ -254,7 +254,14 @@ def list_reconciliation(
     limit: int = Query(200, ge=1, le=500),
     offset: int = Query(0, ge=0),
 ) -> ReconciliationListResponse:
-    base = select(ReconciliationRecord)
+    base = select(ReconciliationRecord).options(
+        selectinload(ReconciliationRecord.line_items).load_only(
+            ReconciliationLineItem.id,
+            ReconciliationLineItem.reconciliation_id,
+            ReconciliationLineItem.game_name,
+            ReconciliationLineItem.settlement_cycle,
+        )
+    )
     base = _apply_filters(
         base,
         search=search,

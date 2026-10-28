@@ -11,7 +11,7 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, load_only
 
 from app.core.deps import get_db
 from app.models.invoice import InvoiceRecord
@@ -213,9 +213,31 @@ def delete_invoice_payment_link(link_id: str, db: Session = Depends(get_db)) -> 
 def auto_match_invoice_payments(
     body: AutoMatchRequest, db: Session = Depends(get_db)
 ) -> AutoMatchResponse:
-    invoices = db.execute(select(InvoiceRecord)).scalars().all()
-    payments = db.execute(select(PaymentRecord)).scalars().all()
-    links = db.execute(select(InvoicePaymentLink)).scalars().all()
+    invoices = db.execute(
+        select(InvoiceRecord).options(load_only(
+            InvoiceRecord.id,
+            InvoiceRecord.invoice_amount,
+            InvoiceRecord.title,
+            InvoiceRecord.invoice_date,
+        ))
+    ).scalars().all()
+    payments = db.execute(
+        select(PaymentRecord).options(load_only(
+            PaymentRecord.id,
+            PaymentRecord.delivery_no,
+            PaymentRecord.company,
+            PaymentRecord.customer,
+            PaymentRecord.recipient,
+            PaymentRecord.remark,
+            PaymentRecord.send_date,
+        ))
+    ).scalars().all()
+    links = db.execute(
+        select(InvoicePaymentLink).options(load_only(
+            InvoicePaymentLink.invoice_id,
+            InvoicePaymentLink.payment_id,
+        ))
+    ).scalars().all()
     linked_pairs = {(l.invoice_id, l.payment_id) for l in links}
 
     candidates: list[AutoMatchCandidate] = []

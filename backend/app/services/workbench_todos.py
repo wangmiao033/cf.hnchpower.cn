@@ -7,7 +7,7 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 from sqlalchemy import and_, func, or_, select, text
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, load_only
 
 from app.models.bill_invoice_allocation import BillInvoiceAllocation
 from app.models.channel import ChannelRecord
@@ -270,8 +270,21 @@ def build_workbench_todos(
     rd_rows: list[ReconciliationRecord] = []
     channel_rows: list[ChannelRecord] = []
     if can_recon or can_funds or can_invoices or can_anomalies:
-        rd_rows = list(db.execute(select(ReconciliationRecord)).scalars().all())
-        channel_rows = list(db.execute(select(ChannelRecord)).scalars().all())
+        rd_rows = list(db.execute(
+            select(ReconciliationRecord).options(load_only(
+                ReconciliationRecord.id,
+                ReconciliationRecord.status,
+                ReconciliationRecord.settlement_amount,
+            ))
+        ).scalars().all())
+        channel_rows = list(db.execute(
+            select(ChannelRecord).options(load_only(
+                ChannelRecord.id,
+                ChannelRecord.status,
+                ChannelRecord.settlement_amount,
+                ChannelRecord.received_amount,
+            ))
+        ).scalars().all())
 
     active_rd = [row for row in rd_rows if _active_bill(row)]
     active_channel = [row for row in channel_rows if _active_bill(row)]

@@ -8,11 +8,11 @@ from datetime import datetime
 import re
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session, load_only, selectinload
 
 from app.models.bank_transaction import BankTransaction
-from app.models.channel import ChannelReceipt, ChannelRecord
-from app.models.reconciliation import ReconciliationRecord
+from app.models.channel import ChannelReceipt, ChannelRecord, ChannelRecordLineItem
+from app.models.reconciliation import ReconciliationLineItem, ReconciliationRecord
 
 _BLOCKED_STATUSES = {
     "cancelled", "canceled", "deleted", "void", "archived",
@@ -259,17 +259,67 @@ def build_monthly_business_dashboard(
 ) -> dict:
     rd_records = db.execute(
         select(ReconciliationRecord)
-        .options(selectinload(ReconciliationRecord.line_items))
+        .options(
+            load_only(
+                ReconciliationRecord.id,
+                ReconciliationRecord.status,
+                ReconciliationRecord.settlement_month,
+                ReconciliationRecord.settlement_amount,
+                ReconciliationRecord.game_name,
+                ReconciliationRecord.game_flow,
+            ),
+            selectinload(ReconciliationRecord.line_items).load_only(
+                ReconciliationLineItem.id,
+                ReconciliationLineItem.reconciliation_id,
+                ReconciliationLineItem.settlement_cycle,
+                ReconciliationLineItem.settlement_amount,
+                ReconciliationLineItem.revenue,
+                ReconciliationLineItem.game_name,
+            ),
+        )
         .order_by(ReconciliationRecord.created_at.asc())
     ).scalars().all()
     channel_records = db.execute(
         select(ChannelRecord)
-        .options(selectinload(ChannelRecord.line_items))
+        .options(
+            load_only(
+                ChannelRecord.id,
+                ChannelRecord.status,
+                ChannelRecord.settlement_month,
+                ChannelRecord.settlement_amount,
+                ChannelRecord.game_name,
+                ChannelRecord.billing_flow,
+                ChannelRecord.server_cost,
+                ChannelRecord.received_amount,
+            ),
+            selectinload(ChannelRecord.line_items).load_only(
+                ChannelRecordLineItem.id,
+                ChannelRecordLineItem.channel_record_id,
+                ChannelRecordLineItem.settlement_cycle,
+                ChannelRecordLineItem.settlement_amount,
+                ChannelRecordLineItem.game_name,
+                ChannelRecordLineItem.billing_flow,
+            ),
+        )
         .order_by(ChannelRecord.created_at.asc())
     ).scalars().all()
-    channel_receipts = db.execute(select(ChannelReceipt).order_by(ChannelReceipt.created_at.asc())).scalars().all()
+    channel_receipts = db.execute(
+        select(ChannelReceipt)
+        .options(load_only(ChannelReceipt.id, ChannelReceipt.receipt_date, ChannelReceipt.amount))
+        .order_by(ChannelReceipt.created_at.asc())
+    ).scalars().all()
     rd_transactions = db.execute(
-        select(BankTransaction).where(
+        select(BankTransaction)
+        .options(load_only(
+            BankTransaction.id,
+            BankTransaction.type,
+            BankTransaction.reconciliation_type,
+            BankTransaction.trade_date,
+            BankTransaction.linked_amount,
+            BankTransaction.expense_amount,
+            BankTransaction.amount,
+        ))
+        .where(
             BankTransaction.type == "payment_register",
             BankTransaction.reconciliation_type == "rd",
         ).order_by(BankTransaction.created_at.asc())
