@@ -77,23 +77,45 @@ class NeonDatabaseUrlTests(unittest.TestCase):
         self.assertIn("@ep-example.eu-central-1.aws.neon.tech", stripped)
         self.assertNotIn("-pooler", stripped)
 
-    def test_non_production_refuses_the_shared_production_endpoint(self):
+    def test_production_node_requires_an_explicit_production_marker(self):
         with self.assertRaises(ProductionDatabaseGuardError) as raised:
-            assert_runtime_database_scope(PRODUCTION, {"VERCEL_ENV": "preview"})
+            assert_runtime_database_scope(PRODUCTION, {})
         message = str(raised.exception)
         self.assertNotIn("secret", message)
         self.assertNotIn("postgresql://", message)
+        self.assertNotIn("withered-mouse", message)
+
+        for env in (
+            {"VERCEL_ENV": "preview"},
+            {"VERCEL_ENV": "development"},
+            {"APP_ENV": "development"},
+            {"APP_ENV": "dev"},
+            {"APP_ENV": "preview"},
+            {"APP_ENV": "staging"},
+            {"VERCEL_ENV": "preview", "APP_ENV": "production"},
+        ):
+            with self.assertRaises(ProductionDatabaseGuardError):
+                resolve_runtime_database_url({**env, "DATABASE_URL": PRODUCTION})
+
         assert_runtime_database_scope(PRODUCTION, {"VERCEL_ENV": "production"})
-        assert_runtime_database_scope(PRODUCTION, {})
+        assert_runtime_database_scope(PRODUCTION, {"APP_ENV": "production"})
+        allowed = resolve_runtime_database_url({
+            "APP_ENV": "production",
+            "DATABASE_URL": PRODUCTION,
+        })
+        self.assertIn("withered-mouse-06737032-pooler", allowed)
+
+        overridden = resolve_runtime_database_url({
+            "ALLOW_SHARED_PRODUCTION_DATABASE": "1",
+            "DATABASE_URL": PRODUCTION,
+        })
+        self.assertIn("-pooler", overridden)
         assert_runtime_database_scope(PRODUCTION, {
             "APP_ENV": "development",
-            "ALLOW_SHARED_PRODUCTION_DATABASE": "1",
+            "ALLOW_SHARED_PRODUCTION_DATABASE": "true",
         })
         with self.assertRaises(ProductionDatabaseGuardError):
-            resolve_runtime_database_url({
-                "APP_ENV": "staging",
-                "DATABASE_URL": PRODUCTION,
-            })
+            resolve_migration_database_url({"DATABASE_URL": PRODUCTION})
 
     def test_config_switches_pooler_with_migration_context(self):
         runtime_env = {

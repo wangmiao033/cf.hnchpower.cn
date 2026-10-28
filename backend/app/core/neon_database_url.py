@@ -1,9 +1,10 @@
 """Resolve Neon connection strings for runtime traffic versus migrations.
 
 Runtime prefers a pooled host (the endpoint label ends with ``-pooler``).
-Schema migrations keep a direct/unpooled host. Preview and other non-production
-runtimes refuse the known production compute endpoint unless an operator sets
-``ALLOW_SHARED_PRODUCTION_DATABASE=1``. Connection strings are never logged.
+Schema migrations keep a direct/unpooled host. The shared production compute
+endpoint is allowed only when ``VERCEL_ENV`` or ``APP_ENV`` is exactly
+``production``, or when ``ALLOW_SHARED_PRODUCTION_DATABASE=1``. Unset markers
+are not production. Connection strings are never logged.
 """
 
 from __future__ import annotations
@@ -14,7 +15,6 @@ from urllib.parse import urlsplit, urlunsplit
 
 # Public compute id of the shared production project. Not a credential.
 PRODUCTION_ENDPOINT_MARKERS = ("withered-mouse-06737032",)
-_NON_PRODUCTION_RUNTIMES = {"preview", "development", "dev", "test", "staging"}
 _MIGRATION_CONTEXTS = {"deploy", "manual", "cli"}
 _TRUTHY = {"1", "true", "yes", "on"}
 
@@ -36,15 +36,19 @@ def _first_present(env: Mapping[str, str], names: tuple[str, ...]) -> str:
 
 
 def runtime_name(env: Mapping[str, str] | None = None) -> str:
-    """Return production, preview, development, or another explicit app runtime."""
+    """Return the explicit runtime name, or ``unmarked`` when neither marker is set.
+
+    ``VERCEL_ENV`` wins when it is present. An empty ``APP_ENV`` is not treated
+    as production.
+    """
     source = env if env is not None else os.environ
-    vercel_env = _env_value(source, "VERCEL_ENV")
+    vercel_env = _env_value(source, "VERCEL_ENV").lower()
     if vercel_env:
-        return vercel_env.lower()
+        return vercel_env
     app_env = _env_value(source, "APP_ENV").lower()
-    if app_env in _NON_PRODUCTION_RUNTIMES:
+    if app_env:
         return app_env
-    return "production"
+    return "unmarked"
 
 
 def migration_context_active(env: Mapping[str, str] | None = None) -> bool:
@@ -84,17 +88,18 @@ def _uses_production_endpoint(url: str) -> bool:
 
 
 def assert_runtime_database_scope(url: str, env: Mapping[str, str] | None = None) -> None:
-    """Refuse preview/dev use of the production compute unless explicitly allowed."""
+    """Allow the production compute only for an explicit production marker or the override."""
     source = env if env is not None else os.environ
-    if runtime_name(source) not in _NON_PRODUCTION_RUNTIMES:
-        return
     if _env_value(source, "ALLOW_SHARED_PRODUCTION_DATABASE").lower() in _TRUTHY:
         return
     if not _uses_production_endpoint(url):
         return
+    if runtime_name(source) == "production":
+        return
     raise ProductionDatabaseGuardError(
-        "非生产环境不能连接生产 Neon 计算节点。"
-        "请改用 Neon 分支连接串；确需临时共用时设置 ALLOW_SHARED_PRODUCTION_DATABASE=1。"
+        "只有 VERCEL_ENV=production 或 APP_ENV=production 可以连接生产 Neon 计算节点。"
+        "未设置环境、本地、预览和开发默认拒绝。请改用 Neon 分支；"
+        "确需临时共用时设置 ALLOW_SHARED_PRODUCTION_DATABASE=1。"
         "不要把生产连接串写入仓库。"
     )
 
@@ -134,4 +139,6 @@ def resolve_migration_database_url(env: Mapping[str, str] | None = None) -> str:
         raw = quicksdk_direct or quicksdk_url
     else:
         raise _missing_database_url()
-    return rewrite_neon_endpoint(raw, pooled=False)
+    direct = rewrite_neon_endpoint(raw, pooled=False)
+    assert_runtime_database_scope(direct, source)
+    return direct

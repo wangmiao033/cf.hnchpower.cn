@@ -21,7 +21,7 @@
 
 生产环境不应设置宽泛的 `CORS_EXTRA_ORIGINS`。需要新增来源时，应逐个填写完整 HTTPS Origin。
 
-Preview 与本地开发不要复用生产计算节点 `withered-mouse-06737032`。`VERCEL_ENV` 为 `preview`/`development`，或 `APP_ENV` 为 `development`/`preview`/`test`/`staging` 时，运行时会拒绝该主机。确需临时共用时设置 `ALLOW_SHARED_PRODUCTION_DATABASE=1`，不要把生产连接串写入仓库。未设置 `VERCEL_ENV` 且 `APP_ENV` 为空或 `production` 时，按生产运行，不拦截该主机。
+生产计算节点 `withered-mouse-06737032` 只允许 `VERCEL_ENV=production` 或 `APP_ENV=production` 连接。Vercel 生产部署会设置 `VERCEL_ENV=production`。未设置环境、本地和 Preview 默认拒绝该主机；临时共用才设置 `ALLOW_SHARED_PRODUCTION_DATABASE=1`。不要把生产连接串写入仓库。GitHub 上的生产迁移脚本只在进程内补上 `APP_ENV=production`，因为它拉取的是 Production 目标的数据库变量，不改 Vercel 上的环境配置。
 
 ## 2. 发布前检查
 

@@ -192,6 +192,10 @@ def main() -> int:
     for key, value in values.items():
         os.environ[key] = value
     os.environ["MIGRATION_EXECUTION_CONTEXT"] = "deploy"
+    # This process only received Production-targeted database URLs. Mark it
+    # explicitly so an unset runner environment is not treated as non-production.
+    if not str(os.environ.get("VERCEL_ENV") or "").strip() and not str(os.environ.get("APP_ENV") or "").strip():
+        os.environ["APP_ENV"] = "production"
 
     from app.core.migrations import run_schema_migrations
 

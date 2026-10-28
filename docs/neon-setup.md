@@ -33,9 +33,12 @@ FastAPI、QuickSDK 数据服务和合同服务在运行时通过同一套规则�
 
 ## 预览与本地不要连生产计算节点
 
-生产计算节点的公开标识是 `withered-mouse-06737032`。当 `VERCEL_ENV` 为 `preview` 或 `development`，或者未设置 `VERCEL_ENV` 但 `APP_ENV` 为 `development`、`dev`、`preview`、`test`、`staging` 时，运行时拒绝该主机。请改用 Neon 分支。只有临时排障才设置 `ALLOW_SHARED_PRODUCTION_DATABASE=1`。
+生产计算节点的公开标识是 `withered-mouse-06737032`。运行时和迁移都只在下面两种情况允许该主机：
 
-未设置 `VERCEL_ENV`、且 `APP_ENV` 为空或 `production` 时，视为生产运行，不拦截该主机。拒绝信息不会包含连接串。
+- `VERCEL_ENV=production`，或未设置 `VERCEL_ENV` 且 `APP_ENV=production`
+- `ALLOW_SHARED_PRODUCTION_DATABASE=1`
+
+未设置这两个环境变量时按未标明环境处理，直接拒绝，不会当成生产。本地、预览、`development`、`dev`、`preview`、`test`、`staging` 同样拒绝。`VERCEL_ENV` 有值时以它为准，所以 Preview 上即使带了 `APP_ENV=production` 也不会放行。请改用 Neon 分支。拒绝信息不会包含连接串。
 
 仓库根目录 `.env.example` 中提供了：
 
@@ -95,5 +98,5 @@ export DATABASE_URL="postgresql://USER:PASSWORD@HOST/DATABASE?sslmode=require"
 | `QUICKSDK_DATABASE_URL` | `DATABASE_URL` 为空时的运行时主连接，同样自动 pooled |
 | `QUICKSDK_DATABASE_URL_POOLED` / `QUICKSDK_DATABASE_URL_DIRECT` | 只作用于 QuickSDK 主连接 |
 | `MIGRATION_EXECUTION_CONTEXT` | `deploy`、`manual`、`cli` 时走直连 |
-| `ALLOW_SHARED_PRODUCTION_DATABASE` | 设为 `1` 才允许非生产环境连接生产计算节点 |
-| `VERCEL_ENV` / `APP_ENV` | 用来判断是否拦截生产计算节点。`VERCEL_ENV` 优先 |
+| `ALLOW_SHARED_PRODUCTION_DATABASE` | 设为 `1` 才允许未标明或非生产环境连接生产计算节点 |
+| `VERCEL_ENV` / `APP_ENV` | 只有值为 `production` 才放行生产计算节点。未设置不算生产。`VERCEL_ENV` 优先 |

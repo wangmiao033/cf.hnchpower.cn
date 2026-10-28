@@ -1,3 +1,13 @@
+## 2026-10-28 16:24（北京时间）｜数据库：未标明环境默认拒绝生产计算节点
+- **类型**：修复
+- **问题或需求**：环境变量都未设置时，连接守卫把进程当成生产，本地未标明环境仍可连上生产计算节点 `withered-mouse-06737032`。
+- **变更内容**：只有 `VERCEL_ENV=production` 或 `APP_ENV=production` 可以连接该节点；未设置、本地、预览和开发默认拒绝。`ALLOW_SHARED_PRODUCTION_DATABASE=1` 仍可临时放行。迁移使用同一条守卫。生产迁移脚本只在自己的进程里补上 `APP_ENV=production`，因为它拉取的是 Production 目标的数据库变量，不修改 Vercel 环境。示例和 Neon 文档改为说明未设置不等于生产。
+- **影响范围**：数据库连接守卫和说明。结算公式、确认锁定、收付款、累计门槛、窄列读取和连接池改写不变。
+- **代码提交**：见分支 `cursor/neon-egress-read-limits-2e36` 的本次提交，PR [#307](https://github.com/wangmiao033/cf.hnchpower.cn/pull/307)。
+- **测试/验证**：`PYTHONPATH=backend:. python -m unittest discover -s backend/tests -p 'test_*.py'` 446 项通过。`PYTHONPATH=contract_terms:. python -m unittest discover -s contract_terms/tests -p 'test_*.py'` 257 项通过。覆盖未设置拒绝、预览/开发拒绝、生产标记放行、共用开关放行。未连接生产库，未部署。
+- **发布环境与部署状态**：未部署。Vercel Deployment ID 不适用。未合并。
+- **待验证/已知问题**：本地若仍把生产连接串配进未设置 `APP_ENV` 的环境，相关接口会返回 503，需改用 Neon 分支、标明 `APP_ENV=production`，或显式允许共用。
+
 ## 2026-10-28 16:15（北京时间）｜数据库：修复合同测试无法导入连接串模块
 - **类型**：修复
 - **问题或需求**：质量门禁的后端测试使用 `PYTHONPATH=backend:.`。合同条款被当成包导入时，`contract_terms/main.py` 用顶层名字 `neon_database_url` 找模块，仓库根目录没有这个文件，导入失败。相对导入失败后回退到 `backend/main.py`，合同结算回归因此没有执行。
