@@ -6,7 +6,7 @@ from collections import defaultdict
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import and_, func, or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, load_only
 
 from app.core.deps import get_db
 from app.core.security import require_current_user
@@ -75,13 +75,17 @@ def list_bill_invoice_overviews(
 
     if rd_ids:
         for row in db.execute(
-            select(ReconciliationRecord).where(ReconciliationRecord.id.in_(rd_ids))
+            select(ReconciliationRecord)
+            .options(load_only(ReconciliationRecord.id, ReconciliationRecord.settlement_amount))
+            .where(ReconciliationRecord.id.in_(rd_ids))
         ).scalars().all():
             bill_amounts[("rd", str(row.id))] = round(abs(float(row.settlement_amount or 0)), 2)
 
     if channel_ids:
         for row in db.execute(
-            select(ChannelRecord).where(ChannelRecord.id.in_(channel_ids))
+            select(ChannelRecord)
+            .options(load_only(ChannelRecord.id, ChannelRecord.settlement_amount))
+            .where(ChannelRecord.id.in_(channel_ids))
         ).scalars().all():
             bill_amounts[("channel", str(row.id))] = round(abs(float(row.settlement_amount or 0)), 2)
 

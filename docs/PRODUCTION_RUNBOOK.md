@@ -9,7 +9,7 @@
 | 变量 | 必需 | 说明 |
 | --- | --- | --- |
 | `APP_ENV=production` | 是 | 启用生产环境安全行为 |
-| `DATABASE_URL` | 是 | PostgreSQL 连接串，建议使用连接池地址 |
+| `DATABASE_URL` | 是 | PostgreSQL 运行时连接串。Neon 主机会自动改为 pooled（主机名含 `-pooler`）。迁移使用 `DATABASE_URL_DIRECT`，或在迁移任务里去掉 `-pooler`。只配置了 `QUICKSDK_DATABASE_URL` 时，它才是运行时主连接，并同样走 pooled |
 | `AUTH_JWT_SECRET` | 是 | 足够长的随机会话签名密钥 |
 | `AUTH_BUILTIN_ACCOUNT` | 建议 | 首个管理员账号名 |
 | `AUTH_BUILTIN_PASSWORDS` | 首次初始化必需 | 首个管理员初始密码；完成初始化后应轮换 |
@@ -20,6 +20,8 @@
 | `AUTO_MIGRATE_DB=1` | 按部署策略 | 允许启动时执行数据库迁移 |
 
 生产环境不应设置宽泛的 `CORS_EXTRA_ORIGINS`。需要新增来源时，应逐个填写完整 HTTPS Origin。
+
+生产计算节点 `withered-mouse-06737032` 只允许 `VERCEL_ENV=production` 或 `APP_ENV=production` 连接。Vercel 生产部署会设置 `VERCEL_ENV=production`。未设置环境、本地和 Preview 默认拒绝该主机；临时共用才设置 `ALLOW_SHARED_PRODUCTION_DATABASE=1`。不要把生产连接串写入仓库。GitHub 上的生产迁移脚本只在进程内补上 `APP_ENV=production`，因为它拉取的是 Production 目标的数据库变量，不改 Vercel 上的环境配置。
 
 ## 2. 发布前检查
 

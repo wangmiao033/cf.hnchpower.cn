@@ -212,7 +212,7 @@ export default function BankCenterPageV2() {
   const [ledgerSearch, setLedgerSearch] = useState('')
   const [ledgerDirection, setLedgerDirection] = useState('all')
   const [ledgerLinked, setLedgerLinked] = useState('all')
-  const [ledgerRangeMode, setLedgerRangeMode] = useState('all')
+  const [ledgerRangeMode, setLedgerRangeMode] = useState('this-month')
   const [ledgerDateFrom, setLedgerDateFrom] = useState('')
   const [ledgerDateTo, setLedgerDateTo] = useState('')
   const [accountFilter, setAccountFilter] = useState('')

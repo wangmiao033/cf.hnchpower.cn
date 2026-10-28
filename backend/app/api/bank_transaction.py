@@ -12,8 +12,8 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy import Numeric, cast, func, or_, select, text
-from sqlalchemy.orm import Session
+from sqlalchemy import Numeric, cast, func, inspect as sa_inspect, or_, select, text
+from sqlalchemy.orm import Session, defer
 
 from app.core.blob_storage import private_blob_response, read_limited_attachment, upload_private_blob
 from app.core.deps import get_db
@@ -38,8 +38,16 @@ _ALLOWED_TYPES = frozenset({"statement_import", "payment_register", "collection_
 _MATCH_SAFE_UPDATE_FIELDS = frozenset({"remark", "attachment_url"})
 
 
-def _row_to_read(row: BankTransaction) -> BankTransactionRead:
-    return BankTransactionRead.model_validate(row)
+def _row_to_read(row: BankTransaction, *, include_raw_text: bool = True) -> BankTransactionRead:
+    if include_raw_text:
+        return BankTransactionRead.model_validate(row)
+    # 列表默认不回传 raw_text。即使关键字命中了原文，也不要 getattr 触发延迟加载。
+    unloaded = set(sa_inspect(row).unloaded)
+    payload = {
+        name: None if name == "raw_text" or name in unloaded else getattr(row, name)
+        for name in BankTransactionRead.model_fields
+    }
+    return BankTransactionRead.model_validate(payload)
 
 
 def _clean_text(value: object | None) -> str:
@@ -106,10 +114,14 @@ def list_bank_transactions(
     source_bank: str | None = Query(None),
     source_file_name: str | None = Query(None),
     import_batch_id: str | None = Query(None),
+    include_raw_text: bool = Query(False),
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
 ) -> BankTransactionListResponse:
+    # 台账列表不回传导入原文。详情接口仍返回 raw_text，编辑页打开时单独读取。
     stmt = select(BankTransaction)
+    if not include_raw_text:
+        stmt = stmt.options(defer(BankTransaction.raw_text))
     if transaction_type and transaction_type.strip():
         t = transaction_type.strip()
         if t not in _ALLOWED_TYPES:
@@ -150,9 +162,18 @@ def list_bank_transactions(
                 BankTransaction.reconciliation_no.ilike(term),
             )
         )
-    total = int(db.execute(select(func.count()).select_from(stmt.subquery())).scalar_one())
+    total = int(
+        db.execute(
+            select(func.count()).select_from(
+                stmt.with_only_columns(BankTransaction.id).order_by(None).subquery()
+            )
+        ).scalar_one()
+    )
     rows = db.execute(stmt.order_by(BankTransaction.trade_date.desc().nullslast(), BankTransaction.created_at.desc(), BankTransaction.id.desc()).limit(limit).offset(offset)).scalars().all()
-    return BankTransactionListResponse(items=[_row_to_read(r) for r in rows], total=total)
+    return BankTransactionListResponse(
+        items=[_row_to_read(r, include_raw_text=include_raw_text) for r in rows],
+        total=total,
+    )
 
 
 @router.get("/import-batches", response_model=BankImportBatchListResponse)

@@ -7,7 +7,7 @@ import unicodedata
 from typing import Any, Iterable
 
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, load_only
 
 from app.models.bill_invoice_allocation import BillInvoiceAllocation
 from app.models.channel import ChannelRecord
@@ -128,7 +128,20 @@ def invoice_touched_bill_ids(db: Session, bill_ids: list[str]) -> set[str]:
 def pool_candidates(db: Session, policy: ChannelCumulativeSettlementPolicy) -> list[ChannelRecord]:
     key = str(policy.partner_key)
     rows = db.execute(
-        select(ChannelRecord).where(
+        select(ChannelRecord)
+        .options(load_only(
+            ChannelRecord.id,
+            ChannelRecord.status,
+            ChannelRecord.partner_name,
+            ChannelRecord.channel_name,
+            ChannelRecord.settlement_amount,
+            ChannelRecord.received_amount,
+            ChannelRecord.settlement_month,
+            ChannelRecord.statement_no,
+            ChannelRecord.game_name,
+            ChannelRecord.billing_flow,
+        ))
+        .where(
             func.lower(func.coalesce(ChannelRecord.status, "pending")).in_(("confirmed", "completed")),
             ChannelRecord.settlement_amount >= 0,
         ).order_by(ChannelRecord.settlement_month.asc(), ChannelRecord.created_at.asc())

@@ -8,7 +8,7 @@ from uuid import uuid4
 
 from fastapi import HTTPException, status
 from sqlalchemy import func, or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, load_only
 
 from app.models.bank_reconciliation_match import BankReconciliationMatch
 from app.models.bank_transaction import BankTransaction
@@ -182,7 +182,22 @@ def _score_candidate(row: BankTransaction, direction: str, amount: float, candid
 
 
 def _channel_candidates(db: Session) -> list[dict]:
-    rows = db.execute(select(ChannelRecord).order_by(ChannelRecord.created_at.desc())).scalars().all()
+    rows = db.execute(
+        select(ChannelRecord)
+        .options(load_only(
+            ChannelRecord.id,
+            ChannelRecord.status,
+            ChannelRecord.settlement_rule_code,
+            ChannelRecord.settlement_amount,
+            ChannelRecord.received_amount,
+            ChannelRecord.statement_no,
+            ChannelRecord.partner_name,
+            ChannelRecord.channel_name,
+            ChannelRecord.settlement_month,
+            ChannelRecord.game_name,
+        ))
+        .order_by(ChannelRecord.created_at.desc())
+    ).scalars().all()
     out: list[dict] = []
     for row in rows:
         if not _active_bill(row) or incomplete(row):
@@ -210,7 +225,19 @@ def _channel_candidates(db: Session) -> list[dict]:
 
 
 def _rd_candidates(db: Session) -> list[dict]:
-    rows = db.execute(select(ReconciliationRecord).order_by(ReconciliationRecord.created_at.desc())).scalars().all()
+    rows = db.execute(
+        select(ReconciliationRecord)
+        .options(load_only(
+            ReconciliationRecord.id,
+            ReconciliationRecord.status,
+            ReconciliationRecord.settlement_amount,
+            ReconciliationRecord.statement_no,
+            ReconciliationRecord.partner_name,
+            ReconciliationRecord.settlement_month,
+            ReconciliationRecord.game_name,
+        ))
+        .order_by(ReconciliationRecord.created_at.desc())
+    ).scalars().all()
     active_rows = [row for row in rows if _active_bill(row)]
     aggregate_map = aggregate_rd_payments_for_ids(db, [str(row.id) for row in active_rows])
     out: list[dict] = []

@@ -12,9 +12,12 @@ from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import Response
 from psycopg.rows import dict_row
 
-app = FastAPI(title="contract-structured-terms", docs_url=None, redoc_url=None)
+try:
+    from .neon_database_url import ProductionDatabaseGuardError, resolve_runtime_database_url
+except ImportError:  # Vercel service root loads main.py as a top-level module.
+    from neon_database_url import ProductionDatabaseGuardError, resolve_runtime_database_url
 
-DATABASE_URL = os.environ.get("QUICKSDK_DATABASE_URL", "").strip() or os.environ.get("DATABASE_URL", "").strip()
+app = FastAPI(title="contract-structured-terms", docs_url=None, redoc_url=None)
 AUTH_JWT_SECRET = os.environ.get("AUTH_JWT_SECRET", "").strip()
 ROLE_ALIASES = {"user": "operator"}
 ROLE_CONTRACT_PERMISSIONS = {
@@ -48,9 +51,12 @@ _VARIANT_RE = re.compile(r"(?<!\d)(\d+(?:[.]\d+)?)\s*折", re.IGNORECASE)
 
 
 def _database_url() -> str:
-    if not DATABASE_URL:
-        raise HTTPException(status_code=503, detail="合同条款数据库尚未配置")
-    return DATABASE_URL
+    try:
+        return resolve_runtime_database_url()
+    except ProductionDatabaseGuardError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail="合同条款数据库尚未配置") from exc
 
 
 def _require_permission(request: Request, permission: str) -> str:

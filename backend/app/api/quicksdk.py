@@ -285,6 +285,16 @@ def list_quicksdk_flows(
     offset: int = Query(0, ge=0),
 ) -> QuickSdkFlowListResponse:
     month = _normalize_month(settlement_month)
+    if not any([
+        month,
+        str(game_name or "").strip(),
+        str(channel_name or "").strip(),
+        str(q or "").strip(),
+    ]):
+        raise HTTPException(
+            status_code=422,
+            detail="请指定结算月份或筛选条件后再读取流水明细，避免一次传出全部历史日报。",
+        )
     stmt = select(QuickSdkFlow)
     count_stmt = select(func.count(QuickSdkFlow.id))
 

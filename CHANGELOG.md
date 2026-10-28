@@ -1,3 +1,43 @@
+## 2026-10-28 16:30（北京时间）｜数据库：本地环境模板不再默认标成生产
+- **类型**：修复
+- **问题或需求**：`backend/.env.example` 仍写着 `APP_ENV=production`。复制到本地后会变成明确的生产标记，从而绕过“未标明环境拒绝生产计算节点”的守卫。
+- **变更内容**：根目录和 `backend/.env.example` 的有效值改为 `APP_ENV=development`。`APP_ENV=production` 只保留为注释，并写明只用于真正的 Production。仓库里没有其他把生产写成本地默认值的示例文件。
+- **影响范围**：环境变量模板。连接守卫、结算公式、确认锁定、收付款和累计门槛不变。
+- **代码提交**：[11cedfc2](https://github.com/wangmiao033/cf.hnchpower.cn/commit/11cedfc2)，PR [#307](https://github.com/wangmiao033/cf.hnchpower.cn/pull/307)。
+- **测试/验证**：只改模板和日志，未改运行时代码，因此没有重跑 446 / 257 项测试。未连接生产库，未部署。
+- **发布环境与部署状态**：未部署。Vercel Deployment ID 不适用。未合并。
+- **待验证/已知问题**：已经复制旧模板并留下 `APP_ENV=production` 的本地 `.env` 不会被这次修改自动改掉。
+
+## 2026-10-28 16:24（北京时间）｜数据库：未标明环境默认拒绝生产计算节点
+- **类型**：修复
+- **问题或需求**：环境变量都未设置时，连接守卫把进程当成生产，本地未标明环境仍可连上生产计算节点 `withered-mouse-06737032`。
+- **变更内容**：只有 `VERCEL_ENV=production` 或 `APP_ENV=production` 可以连接该节点；未设置、本地、预览和开发默认拒绝。`ALLOW_SHARED_PRODUCTION_DATABASE=1` 仍可临时放行。迁移使用同一条守卫。生产迁移脚本只在自己的进程里补上 `APP_ENV=production`，因为它拉取的是 Production 目标的数据库变量，不修改 Vercel 环境。示例和 Neon 文档改为说明未设置不等于生产。
+- **影响范围**：数据库连接守卫和说明。结算公式、确认锁定、收付款、累计门槛、窄列读取和连接池改写不变。
+- **代码提交**：[c51c1a90](https://github.com/wangmiao033/cf.hnchpower.cn/commit/c51c1a90)，PR [#307](https://github.com/wangmiao033/cf.hnchpower.cn/pull/307)。
+- **测试/验证**：`PYTHONPATH=backend:. python -m unittest discover -s backend/tests -p 'test_*.py'` 446 项通过。`PYTHONPATH=contract_terms:. python -m unittest discover -s contract_terms/tests -p 'test_*.py'` 257 项通过。覆盖未设置拒绝、预览/开发拒绝、生产标记放行、共用开关放行。未连接生产库，未部署。
+- **发布环境与部署状态**：未部署。Vercel Deployment ID 不适用。未合并。
+- **待验证/已知问题**：本地若仍把生产连接串配进未设置 `APP_ENV` 的环境，相关接口会返回 503，需改用 Neon 分支、标明 `APP_ENV=production`，或显式允许共用。
+
+## 2026-10-28 16:15（北京时间）｜数据库：修复合同测试无法导入连接串模块
+- **类型**：修复
+- **问题或需求**：质量门禁的后端测试使用 `PYTHONPATH=backend:.`。合同条款被当成包导入时，`contract_terms/main.py` 用顶层名字 `neon_database_url` 找模块，仓库根目录没有这个文件，导入失败。相对导入失败后回退到 `backend/main.py`，合同结算回归因此没有执行。
+- **变更内容**：合同条款、数据服务和合同识别在作为包导入时使用同目录的 `neon_database_url`；Vercel 仍按服务根目录做顶层导入。连接池、预览拦截和窄列读取不变。
+- **影响范围**：仅模块导入。结算公式、确认锁定、收付款和累计门槛不变。
+- **代码提交**：[8e6c17b0](https://github.com/wangmiao033/cf.hnchpower.cn/commit/8e6c17b0)，PR [#307](https://github.com/wangmiao033/cf.hnchpower.cn/pull/307)。
+- **测试/验证**：`PYTHONPATH=backend:. python -m unittest discover -s backend/tests -p 'test_*.py'` 446 项通过。`PYTHONPATH=contract_terms:. python -m unittest discover -s contract_terms/tests -p 'test_*.py'` 257 项通过。未连接生产库，未部署。
+- **发布环境与部署状态**：未部署。Vercel Deployment ID 不适用。
+- **待验证/已知问题**：质量门禁需在本 PR 上重新跑过。未合并。
+
+## 2026-10-28 16:01（北京时间）｜数据库：减少 Neon 公网出站读取
+- **类型**：优化
+- **问题或需求**：生产库与 QuickSDK 共用 Neon Free 5GB/月公网出站额度，2026 年 10 月已用满。本次只减少结果集体积，不升级套餐，不拆库，不改结算公式。
+- **变更内容**：经营驾驶舱、待办、一致性检查、渠道累计候选、银行客户匹配、发票自动匹配和异常账单金额改为按用到的列读取，避开备注、原文和发票 JSON。银行流水列表默认不返回 `raw_text`，打开台账默认只看本月；详情和编辑仍读取原文。研发列表仍返回账单头，但月份展示只读取明细的游戏名和结算周期。QuickSDK 月度建议和单游戏流水改为库内按月汇总；没有月份也没有筛选条件时，原始流水接口返回 422。合同列表附件不再查出 blob 地址，单条下载仍读取该行。运行时 Neon 主机自动改为 `-pooler`，迁移使用直连；预览/开发拒绝生产计算节点 `withered-mouse-06737032`，除非 `ALLOW_SHARED_PRODUCTION_DATABASE=1`。
+- **影响范围**：银行台账默认日期、QuickSDK 汇总完整性、预览环境数据库连接。渠道/研发交互台账仍会按页取全量历史，结算、确认、收款和累计门槛算法不变。清空月份且无其他筛选时不再能一次导出全部 QuickSDK 日报。
+- **代码提交**：[cfbea1f5](https://github.com/wangmiao033/cf.hnchpower.cn/commit/cfbea1f5)（分支 `cursor/neon-egress-read-limits-2e36`）。本条日志若另有文档提交，以该功能提交为准。
+- **测试/验证**：后端新增连接串、窄列 SQL 与 QuickSDK 名称折叠测试，并回归驾驶舱、待办、一致性、银行匹配和渠道累计相关用例。前端 `npm test` 657 项通过，`npm run build` 通过。未连接生产库。银行台账默认本月只核对了源码初始状态，未在浏览器里点选。
+- **发布环境与部署状态**：未部署。Vercel Deployment ID 不适用。不得视为正式发布。
+- **待验证/已知问题**：现有 Preview 若仍指向生产计算节点，部署后相关接口会返回 503，需改用 Neon 分支或显式允许共用。银行“全部”和重置仍会分页拉取最多 40×500 条流水，只是不再带原文。渠道账单列表仍按 500 条分页取全量，因为页面筛选和累计结算需要完整集合。
+
 ## 2026-10-27 12:25（北京时间）｜研发账单：显式零收入明细修复正式发布
 - **类型 / 问题**：修复发布；原研发表单拒绝零流水，现可将明确填写 0 的游戏保存为正式月度明细，不再只能写入备注。
 - **变更 / 影响范围**：零收入明细在保存回读、月份列表、Excel 导出和对账进度中保留；空白、遗漏、负数和非法收入继续拒绝。分成、折扣、通道费、税费公式及确认核对/付款/安全权限保持原有规则；不迁移数据库，不改写已付历史账单。

@@ -21,9 +21,13 @@ from fastapi.responses import Response, StreamingResponse
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
+try:
+    from .neon_database_url import ProductionDatabaseGuardError, resolve_runtime_database_url
+except ImportError:  # Vercel service root loads main.py as a top-level module.
+    from neon_database_url import ProductionDatabaseGuardError, resolve_runtime_database_url
+
 app = FastAPI(title="caiwu-data-service", docs_url=None, redoc_url=None)
 
-QUICKSDK_DATABASE_URL = os.environ.get("QUICKSDK_DATABASE_URL", "").strip()
 AUTH_JWT_SECRET = os.environ.get("AUTH_JWT_SECRET", "").strip()
 BLOB_READ_WRITE_TOKEN = os.environ.get("BLOB_READ_WRITE_TOKEN", "").strip()
 BLOB_API_ORIGIN = "https://vercel.com/api/blob"
@@ -82,9 +86,12 @@ async def _require_authenticated(request: Request) -> str:
 
 
 def _database_url() -> str:
-    if not QUICKSDK_DATABASE_URL:
-        raise HTTPException(status_code=503, detail="QuickSDK 数据库尚未配置")
-    return QUICKSDK_DATABASE_URL
+    try:
+        return resolve_runtime_database_url()
+    except ProductionDatabaseGuardError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail="QuickSDK 数据库尚未配置") from exc
 
 
 def _month_filter(month: str | None) -> tuple[str, list[str]]:
@@ -92,6 +99,30 @@ def _month_filter(month: str | None) -> tuple[str, list[str]]:
     if not normalized:
         return "", []
     return ' AND d."reportDate" LIKE %s', [f"{normalized}%"]
+
+
+def _normalize_quick_product_name(raw: object) -> str:
+    """Match the billing UI's product-name folding before a flow total is shown."""
+    text = str(raw or "").strip()
+    text = re.sub(r"005专服\d+.*$", "", text)
+    text = re.sub(r"005折混服.*$", "", text)
+    text = re.sub(r"005$", "", text)
+    return text.strip()
+
+
+def _require_quick_flow_scope(
+    *,
+    settlement_month: str | None,
+    game_name: str | None = None,
+    channel_name: str | None = None,
+    q: str | None = None,
+) -> None:
+    if any(str(value or "").strip() for value in (settlement_month, game_name, channel_name, q)):
+        return
+    raise HTTPException(
+        status_code=422,
+        detail="请指定结算月份或筛选条件后再读取流水明细，避免一次传出全部历史日报。",
+    )
 
 
 PARTNER_CATEGORIES = {"研发商", "发行商", "渠道", "供应商", "其他"}
@@ -1093,7 +1124,8 @@ def _attach_contract_files(conn: psycopg.Connection, rows: list[dict]) -> None:
     if contract_ids:
         attachment_rows = conn.execute(
             """
-            SELECT *
+            SELECT id, contract_id, expected_name, file_name, content_type,
+                   size_bytes, source, created_at
             FROM cf_contract_attachment_files
             WHERE contract_id = ANY(%s)
             ORDER BY created_at, file_name
@@ -2367,6 +2399,144 @@ async def quicksdk_batches(
     }
 
 
+def _quick_flow_groups(
+    conn: psycopg.Connection,
+    *,
+    settlement_month: str,
+    game_name: str | None = None,
+) -> list[dict]:
+    filters = ["d.source = 'quickgame'", 'd."reportDate" LIKE %s']
+    params: list[object] = [f"{settlement_month.strip()}%"]
+    if game_name and game_name.strip():
+        filters.append("g.name ILIKE %s")
+        params.append(f"%{game_name.strip()}%")
+    where = " AND ".join(filters)
+    return list(
+        conn.execute(
+            f"""
+              SELECT g.name AS game_name,
+                     COALESCE(d.channel, '') AS channel_name,
+                     COUNT(*) AS row_count,
+                     COALESCE(SUM(d."payAmount"), 0) AS gross_flow
+              FROM "DailyReport" d
+              JOIN "Game" g ON g.id = d."gameId"
+              WHERE {where}
+              GROUP BY g.name, COALESCE(d.channel, '')
+            """,
+            params,
+        ).fetchall()
+    )
+
+
+def _fold_quick_rd_lines(rows: list[dict], *, settlement_month: str, q: str | None) -> list[dict]:
+    keyword = str(q or "").strip().lower()
+    grouped: dict[str, dict] = {}
+    for row in rows:
+        source_game = str(row.get("game_name") or "").strip()
+        if not source_game:
+            continue
+        game_name = _normalize_quick_product_name(source_game)
+        if not game_name:
+            continue
+        if keyword and keyword not in game_name.lower() and keyword not in source_game.lower():
+            continue
+        channel_name = str(row.get("channel_name") or "").strip() or "未填渠道"
+        flow = float(row.get("gross_flow") or 0)
+        item = grouped.setdefault(
+            game_name,
+            {
+                "game_name": game_name,
+                "settlement_month": settlement_month,
+                "row_count": 0,
+                "total_flow": 0.0,
+                "source_games": set(),
+                "channels": {},
+            },
+        )
+        item["row_count"] += int(row.get("row_count") or 0)
+        item["total_flow"] += flow
+        item["source_games"].add(source_game)
+        item["channels"][channel_name] = float(item["channels"].get(channel_name) or 0) + flow
+    items = []
+    for item in grouped.values():
+        top_channel, top_flow = max(item["channels"].items(), key=lambda pair: pair[1], default=(None, 0))
+        items.append(
+            {
+                "game_name": item["game_name"],
+                "settlement_month": item["settlement_month"],
+                "row_count": item["row_count"],
+                "channel_count": len(item["channels"]),
+                "source_game_count": len(item["source_games"]),
+                "total_flow": round(item["total_flow"], 2),
+                "top_channel": top_channel,
+                "top_channel_flow": round(float(top_flow or 0), 2),
+            }
+        )
+    items.sort(key=lambda item: (-float(item["total_flow"]), item["game_name"]))
+    return items
+
+
+@app.get("/api/quicksdk/rd-lines")
+async def quicksdk_rd_lines(
+    request: Request,
+    settlement_month: str | None = Query(None),
+    q: str | None = Query(None),
+    limit: int = Query(300, ge=1, le=500),
+) -> dict:
+    """Month-scoped game totals. Raw daily rows stay in Neon."""
+    await _require_authenticated(request)
+    month = str(settlement_month or "").strip()
+    if not month:
+        raise HTTPException(status_code=422, detail="请先选择结算月份后再汇总流水")
+    with psycopg.connect(_database_url(), connect_timeout=15, row_factory=dict_row) as conn:
+        rows = _quick_flow_groups(conn, settlement_month=month)
+    items = _fold_quick_rd_lines(rows, settlement_month=month[:7], q=q)
+    return {"items": items[:limit], "total": len(items)}
+
+
+@app.get("/api/quicksdk/game-flow")
+async def quicksdk_game_flow(
+    request: Request,
+    game_name: str = Query(...),
+    settlement_month: str | None = Query(None),
+) -> dict:
+    """One product's month total, aggregated before it leaves Neon."""
+    await _require_authenticated(request)
+    month = str(settlement_month or "").strip()
+    target = str(game_name or "").strip()
+    if not month or not target:
+        raise HTTPException(status_code=422, detail="请同时提供结算月份和游戏名称")
+    with psycopg.connect(_database_url(), connect_timeout=15, row_factory=dict_row) as conn:
+        rows = _quick_flow_groups(conn, settlement_month=month, game_name=target)
+    needle = target.lower()
+    source_games: set[str] = set()
+    channels: dict[str, float] = {}
+    total_flow = 0.0
+    row_count = 0
+    for row in rows:
+        source_game = str(row.get("game_name") or "").strip()
+        if not source_game or needle not in source_game.lower():
+            continue
+        flow = float(row.get("gross_flow") or 0)
+        channel_name = str(row.get("channel_name") or "").strip()
+        source_games.add(source_game)
+        total_flow += flow
+        row_count += int(row.get("row_count") or 0)
+        if channel_name:
+            channels[channel_name] = channels.get(channel_name, 0.0) + flow
+    top_channel, top_flow = max(channels.items(), key=lambda pair: pair[1], default=(None, 0))
+    return {
+        "game_name": target,
+        "settlement_month": month[:7],
+        "row_count": row_count,
+        "channel_count": len(channels),
+        "source_game_count": len(source_games),
+        "total_flow": round(total_flow, 2),
+        "top_channel": top_channel,
+        "top_channel_flow": round(float(top_flow or 0), 2),
+    }
+
+
 @app.get("/api/quicksdk/flows")
 async def quicksdk_flows(
     request: Request,
@@ -2378,6 +2548,12 @@ async def quicksdk_flows(
     offset: int = Query(0, ge=0),
 ) -> dict:
     await _require_authenticated(request)
+    _require_quick_flow_scope(
+        settlement_month=settlement_month,
+        game_name=game_name,
+        channel_name=channel_name,
+        q=q,
+    )
     filters = ["d.source = 'quickgame'"]
     params: list[object] = []
     if settlement_month:

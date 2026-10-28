@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Any
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, load_only
 
 from app.models.channel import ChannelRecord
 from app.models.channel_cumulative_settlement import ChannelCumulativeSettlementPolicy
@@ -49,7 +49,16 @@ def build_workbench_todos(
 
     confirmed_rows = list(
         db.execute(
-            select(ChannelRecord).where(ChannelRecord.status == "confirmed")
+            select(ChannelRecord)
+            .options(load_only(
+                ChannelRecord.id,
+                ChannelRecord.status,
+                ChannelRecord.partner_name,
+                ChannelRecord.channel_name,
+                ChannelRecord.settlement_amount,
+                ChannelRecord.received_amount,
+            ))
+            .where(ChannelRecord.status == "confirmed")
         ).scalars().all()
     )
     deferred_ids = deferred_bill_ids(db, confirmed_rows)
